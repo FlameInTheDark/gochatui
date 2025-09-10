@@ -1,0 +1,17 @@
+import { writable } from 'svelte/store';
+import type { DtoChannel, DtoMessage } from '$lib/api';
+
+export const selectedGuildId = writable<string | null>(null);
+export const selectedChannelId = writable<string | null>(null);
+
+export const channelsByGuild = writable<Record<string, DtoChannel[]>>({});
+export const messagesByChannel = writable<Record<string, DtoMessage[]>>({});
+
+export const searchOpen = writable(false);
+export const searchQuery = writable('');
+
+// Remember last visited channel per guild
+export const lastChannelByGuild = writable<Record<string, string>>({});
+
+// Gate to control when MessageList is allowed to fetch
+export const channelReady = writable(false);
