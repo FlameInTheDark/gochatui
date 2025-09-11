@@ -8,10 +8,10 @@
   let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
   let isEditing = false;
   let draft = message.content ?? '';
-  let Saving… false;
+  let saving = false;
   const dispatch = createEventDispatcher<{ deleted: void }>();
 
-  const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0); // 2008-11-10T23:00:00Z
+  const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
 
   function snowflakeToDate(id: any): Date | null {
     if (id == null) return null;
@@ -21,9 +21,7 @@
       const v = BigInt(s);
       const ms = Number(v >> 22n);
       return new Date(EPOCH_MS + ms);
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   function fmtMsgTime(m: DtoMessage) {
@@ -35,34 +33,24 @@
   function fmtMsgFull(m: DtoMessage) {
     const d = snowflakeToDate((m as any).id) || (m.updated_at ? new Date(m.updated_at) : null);
     if (!d || Number.isNaN(d.getTime())) return '';
-    return new Intl.DateTimeFormat(undefined, {
-      year: 'numeric', month: 'short', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    }).format(d);
+    return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(d);
   }
 
   async function saveEdit() {
     if (!$selectedChannelId || !message.id) return;
-    Saving… true;
+    saving = true;
     try {
-      await auth.api.message.messageChannelChannelIdMessageIdPatch({
-        channelId: $selectedChannelId as any,
-        messageId: message.id as any,
-        messageUpdateMessageRequest: { content: draft }
-      });
+      await auth.api.message.messageChannelChannelIdMessageIdPatch({ channelId: $selectedChannelId as any, messageId: message.id as any, messageUpdateMessageRequest: { content: draft } });
       message.content = draft;
       isEditing = false;
     } finally {
-      Saving… false;
+      saving = false;
     }
   }
 
   async function deleteMsg() {
     if (!$selectedChannelId || !message.id) return;
-    await auth.api.message.messageChannelChannelIdMessageIdDelete({
-      channelId: $selectedChannelId as any,
-      messageId: message.id as any
-    });
+    await auth.api.message.messageChannelChannelIdMessageIdDelete({ channelId: $selectedChannelId as any, messageId: message.id as any });
     dispatch('deleted');
   }
 
@@ -82,13 +70,9 @@
 
 <div class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`} on:contextmenu={openMenu}>
   {#if compact}
-    <div class="w-10 shrink-0 pr-1 text-[10px] text-[var(--muted)] leading-tight pt-0.5 text-right opacity-0 group-hover/message:opacity-100 transition-opacity" title={fmtMsgFull(message)}>
-      {fmtMsgTime(message)}
-    </div>
+    <div class="w-10 shrink-0 pr-1 text-[10px] text-[var(--muted)] leading-tight pt-0.5 text-right opacity-0 group-hover/message:opacity-100 transition-opacity" title={fmtMsgFull(message)}>{fmtMsgTime(message)}</div>
   {:else}
-    <div class="w-10 h-10 shrink-0 rounded-full bg-[var(--panel-strong)] border border-[var(--stroke)] grid place-items-center text-sm">
-      {(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
-    </div>
+    <div class="w-10 h-10 shrink-0 rounded-full bg-[var(--panel-strong)] border border-[var(--stroke)] grid place-items-center text-sm">{(message.author?.name ?? '?').slice(0, 2).toUpperCase()}</div>
   {/if}
   <div class="flex-1 min-w-0 relative">
     {#if !isEditing}
@@ -101,24 +85,17 @@
         </button>
       </div>
     {/if}
-
     {#if !compact}
       <div class="flex items-baseline gap-2 pr-20">
-        <div class="font-semibold truncate" on:contextmenu|preventDefault={(e)=>{
-          const uid = String(((message as any)?.author as any)?.id ?? '');
-          contextMenu.openFromEvent(e,[
-            { label: 'Copy user ID', action: () => copyToClipboard(uid), disabled: !uid }
-          ]);
-        }}>{message.author?.name ?? 'User'}</div>
+        <div class="font-semibold truncate" on:contextmenu|preventDefault={(e)=>{ const uid = String(((message as any)?.author as any)?.id ?? ''); contextMenu.openFromEvent(e,[{ label: 'Copy user ID', action: () => copyToClipboard(uid), disabled: !uid }]); }}>{message.author?.name ?? 'User'}</div>
         <div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>{fmtMsgTime(message)}</div>
       </div>
     {/if}
-
     {#if isEditing}
       <div class="mt-1">
         <textarea class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2" bind:value={draft} rows={3}></textarea>
         <div class="mt-1 flex gap-2 text-sm">
-          <button class="px-2 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)]" disabled={Saving…on:click={saveEdit}>{Saving… 'Saving…¦' : 'Save'}</button>
+          <button class="px-2 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)]" disabled={saving} on:click={saveEdit}>{saving ? 'Savingâ€¦' : 'Save'}</button>
           <button class="px-2 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (isEditing = false)}>Cancel</button>
         </div>
       </div>
@@ -127,12 +104,11 @@
       {#if message.attachments?.length}
         <div class={compact ? 'mt-1 flex flex-wrap gap-2' : 'mt-1.5 flex flex-wrap gap-2'}>
           {#each message.attachments as a}
-            <div class="px-2 py-0.5 rounded border border-[var(--stroke)] text-xs bg-[var(--panel)]">
-              {a.filename}
-            </div>
+            <div class="px-2 py-0.5 rounded border border-[var(--stroke)] text-xs bg-[var(--panel)]">{a.filename}</div>
           {/each}
         </div>
       {/if}
     {/if}
   </div>
 </div>
+
