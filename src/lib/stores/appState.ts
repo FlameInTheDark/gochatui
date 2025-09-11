@@ -9,6 +9,7 @@ export const messagesByChannel = writable<Record<string, DtoMessage[]>>({});
 
 export const searchOpen = writable(false);
 export const searchQuery = writable('');
+export const searchAnchor = writable<{ x: number; y: number } | null>(null);
 
 // Remember last visited channel per guild
 export const lastChannelByGuild = writable<Record<string, string>>({});

@@ -12,6 +12,7 @@
   --col1: 80px;
   --col2: 300px;
   --col4: 280px;
+  --header-h: 3.5rem; /* unify top bar height */
 }
 
 [data-theme="dark"] {

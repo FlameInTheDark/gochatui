@@ -20,14 +20,11 @@
   <div class="h-screen w-screen grid" style="grid-template-columns: var(--col1) var(--col2) 1fr;">
     <ServerBar />
     <div class="flex flex-col">
-      <div class="h-14 border-b border-[var(--stroke)] flex items-center justify-between px-3">
+      <div class="h-[var(--header-h)] flex-shrink-0 border-b border-[var(--stroke)] flex items-center justify-between px-3 box-border overflow-hidden">
           <div class="flex items-center gap-2">
             <DmCreate />
           </div>
           <div class="flex items-center gap-2">
-            <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => searchOpen.set(true)} title="Search" aria-label="Search">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm-8 6a8 8 0 1 1 14.32 4.906l3.387 3.387-1.414 1.414-3.387-3.387A8 8 0 0 1 2 10z"/></svg>
-            </button>
             <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
               {#if theme === 'dark'}
                 <!-- Sun icon -->

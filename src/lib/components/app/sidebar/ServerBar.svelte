@@ -114,7 +114,6 @@
 </script>
 
 <div class="h-full w-[var(--col1)] flex flex-col items-center gap-2 p-2 border-r border-[var(--stroke)] overflow-hidden">
-  <div class="text-[10px] leading-none text-[var(--muted)] mt-1 mb-1">Servers</div>
   <div class="flex-1 flex flex-col gap-2 overflow-y-auto overflow-x-hidden pt-1">
     {#each $guilds as g}
       <div class="relative group">

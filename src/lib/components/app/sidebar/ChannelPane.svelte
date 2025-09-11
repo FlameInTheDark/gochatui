@@ -179,7 +179,7 @@
 </script>
 
 <div class="h-full w-[var(--col2)] border-r border-[var(--stroke)] flex flex-col">
-  <div class="h-14 border-b border-[var(--stroke)] flex items-center justify-between px-3">
+  <div class="h-[var(--header-h)] flex-shrink-0 border-b border-[var(--stroke)] flex items-center justify-between px-3 box-border overflow-hidden">
     <div class="font-semibold truncate">{($guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name) ?? 'Select server'}</div>
     {#if $selectedGuildId}
       <div class="flex items-center gap-2">
