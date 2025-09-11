@@ -47,7 +47,9 @@
 </script>
 
 <div>
-  <button class="px-2 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (open = true)}>New DM</button>
+  <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (open = true)} title="New DM" aria-label="New DM">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M4 4h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6l-4 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+  </button>
   {#if open}
     <div class="fixed inset-0 bg-black/40 grid place-items-center z-40" on:click={() => (open = false)}>
       <div class="panel w-full max-w-md p-4" on:click|stopPropagation>

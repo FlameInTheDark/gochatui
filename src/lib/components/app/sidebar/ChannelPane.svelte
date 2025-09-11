@@ -3,6 +3,7 @@
   import { selectedGuildId, selectedChannelId, channelsByGuild, lastChannelByGuild, channelReady } from '$lib/stores/appState';
   import type { DtoChannel } from '$lib/api';
   import { subscribeWS } from '$lib/client/ws';
+  import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
   const guilds = auth.guilds;
 
   let creatingChannel = false;
@@ -22,16 +23,30 @@
   }
 
   async function refreshChannels() {
-    if (!$selectedGuildId) return;
-    const res = await auth.api.guild.guildGuildIdChannelGet({ guildId: $selectedGuildId as any });
+    const gid = $selectedGuildId ? String($selectedGuildId) : '';
+    if (!gid) return;
+    const res = await auth.api.guild.guildGuildIdChannelGet({ guildId: gid as any });
     const list = res.data ?? [];
-    channelsByGuild.update((m) => ({ ...m, [$selectedGuildId!]: list }));
-    if (!$selectedChannelId && list.length) {
-      const first = list.find((c:any) => (c?.type) === 0) ?? null;
-      const firstId = first ? String((first as any).id) : '';
-      if (firstId) {
+    channelsByGuild.update((m) => ({ ...m, [gid]: list }));
+    // If selected channel is not present in this guild or not a text channel, auto-fix.
+    const textChannels = list.filter((c:any) => (c?.type) === 0);
+    const sel = $selectedChannelId ? String($selectedChannelId) : '';
+    const selValid = sel && textChannels.some((c:any) => String((c as any).id) === sel);
+    if (!selValid) {
+      const first = textChannels[0] as any;
+      const firstId = first ? String(first.id) : '';
+      if (firstId && $selectedGuildId === gid) {
         selectedChannelId.set(firstId);
-        if ($selectedGuildId) subscribeWS([$selectedGuildId], firstId);
+        subscribeWS([gid], firstId);
+        // persist last visited for this guild
+        lastChannelByGuild.update((map) => {
+          const next = { ...map, [gid]: firstId } as Record<string, string>;
+          try { localStorage.setItem('lastChannels', JSON.stringify(next)); } catch {}
+          return next;
+        });
+      } else {
+        // no valid text channels; keep selection empty
+        selectedChannelId.set(null);
       }
     }
   }
@@ -76,17 +91,43 @@
   }
 
   function selectChannel(id: string) {
-    selectedChannelId.set(id);
-    if ($selectedGuildId) {
-      subscribeWS([$selectedGuildId], id);
-      const g = $selectedGuildId;
-      lastChannelByGuild.update((map) => {
-        const next = { ...map, [g]: id } as Record<string, string>;
-        try { localStorage.setItem('lastChannels', JSON.stringify(next)); } catch {}
-        return next;
-      });
-      channelReady.set(true);
-    }
+    const gid = $selectedGuildId ? String($selectedGuildId) : '';
+    if (!gid) return;
+    // validate the channel belongs to current guild and is a text channel
+    const list = $channelsByGuild[gid] ?? [];
+    const ok = list.some((c:any) => String((c as any).id) === String(id) && (c as any)?.type === 0);
+    if (!ok) return;
+    selectedChannelId.set(String(id));
+    subscribeWS([gid], id);
+    lastChannelByGuild.update((map) => ({ ...map, [gid]: String(id) }));
+    try {
+      const raw = localStorage.getItem('lastChannels');
+      const saved = raw ? JSON.parse(raw) : {};
+      saved[gid] = String(id);
+      localStorage.setItem('lastChannels', JSON.stringify(saved));
+    } catch {}
+    channelReady.set(true);
+  }
+
+  function openChannelMenu(e: MouseEvent, ch: any) {
+    const gid = $selectedGuildId ? String($selectedGuildId) : '';
+    const id = String(ch?.id ?? '');
+    const type = (ch as any)?.type;
+    const isText = type === 0;
+    const items = [
+      { label: 'Copy channel ID', action: () => copyToClipboard(id), disabled: !id },
+      { label: 'Open channel', action: () => selectChannel(id), disabled: !isText },
+      { label: 'Delete channel', action: () => deleteChannel(id), danger: true, disabled: !isText }
+    ];
+    contextMenu.openFromEvent(e, items);
+  }
+
+  function openPaneMenu(e: MouseEvent) {
+    const items = [
+      { label: 'New channel', action: () => { creatingChannel = true; creatingChannelParent = null; } },
+      { label: 'New category', action: () => { creatingCategory = true; } }
+    ];
+    contextMenu.openFromEvent(e, items);
   }
 
   async function createCategory() {
@@ -142,10 +183,18 @@
     <div class="font-semibold truncate">{($guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name) ?? 'Select server'}</div>
     {#if $selectedGuildId}
       <div class="flex items-center gap-2">
-        <button class="text-sm underline" on:click={() => (creatingChannel = true)}>+ channel</button>
-        <button class="text-sm underline" on:click={() => (creatingCategory = true)}>+ category</button>
-        <button class="text-sm underline" on:click={renameGuild}>Rename</button>
-        <button class="text-sm text-red-400 underline" on:click={leaveGuild}>Leave</button>
+        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (creatingChannel = true)} title="New channel" aria-label="New channel">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M11 5h2v14h-2z"/><path d="M5 11h14v2H5z"/></svg>
+        </button>
+        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (creatingCategory = true)} title="New category" aria-label="New category">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M4 6h8l2 2h6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/><path d="M8 11h8v2H8z"/></svg>
+        </button>
+        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={renameGuild} title="Rename server" aria-label="Rename server">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/><path d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        </button>
+        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)] text-red-400" on:click={leaveGuild} title="Leave server" aria-label="Leave server">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/><path d="M4 4h8v2H6v12h6v2H4z"/></svg>
+        </button>
       </div>
     {/if}
   </div>
@@ -153,17 +202,17 @@
     <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm" placeholder="Filter channels" bind:value={filter} />
   </div>
   {#if error}<div class="p-2 text-red-500 text-sm">{error}</div>{/if}
-  <div class="flex-1 overflow-y-auto p-2 space-y-2">
+  <div class="flex-1 overflow-y-auto scroll-area p-2 space-y-2" on:contextmenu|preventDefault={openPaneMenu}>
     {#if $selectedGuildId}
       {@const sections = computeSections(currentGuildChannels())}
       {#if sections.topLevel.length}
         <div>
           <div class="text-xs uppercase tracking-wide text-[var(--muted)] px-2">Uncategorized</div>
           {#each sections.topLevel.filter((c)=> (c.name || '').toLowerCase().includes(filter.toLowerCase())) as ch}
-            <div class="group px-2 py-1 rounded hover:bg-[var(--panel)] flex items-center justify-between cursor-pointer { $selectedChannelId===String((ch as any).id) ? 'bg-[var(--panel)]' : '' }" on:click={() => selectChannel(String((ch as any).id))}>
+            <div class="group px-2 py-1 rounded hover:bg-[var(--panel)] flex items-center justify-between cursor-pointer { $selectedChannelId===String((ch as any).id) ? 'bg-[var(--panel)]' : '' }" on:click={() => selectChannel(String((ch as any).id))} on:contextmenu|preventDefault={(e)=>openChannelMenu(e,ch)}>
               <div class="truncate flex items-center gap-2"><span class="opacity-70">#</span> {ch.name}</div>
               <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                <button class="text-xs text-red-400" title="Delete" on:click|stopPropagation={() => deleteChannel(String((ch as any).id))}>🗑</button>
+                <button class="text-xs text-red-400" title="Delete" on:click|stopPropagation={() => deleteChannel(String((ch as any).id))}>✕</button>
               </div>
             </div>
           {/each}
@@ -173,20 +222,20 @@
         <div class="mt-2">
           <div class="flex items-center justify-between text-xs uppercase tracking-wide text-[var(--muted)] px-2">
             <button class="flex items-center gap-2" on:click={() => toggleCollapse(String((sec.cat as any)?.id))}>
-              <span class="inline-block transform transition-transform {collapsed[String((sec.cat as any)?.id)] ? '-rotate-90' : 'rotate-0'}">▾</span>
+              <span class="inline-block">{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span>
               <div class="truncate">{sec.cat?.name ?? 'Category'}</div>
             </button>
             <div class="flex items-center gap-2">
-              <button class="text-xs" title="New channel" on:click={() => { creatingChannel = true; creatingChannelParent = String((sec.cat as any)?.id); }}>＋</button>
-              <button class="text-xs text-red-400" title="Delete category" on:click={() => deleteCategory(String((sec.cat as any)?.id))}>🗑</button>
+              <button class="text-xs" title="New channel" on:click={() => { creatingChannel = true; creatingChannelParent = String((sec.cat as any)?.id); }}>+</button>
+              <button class="text-xs text-red-400" title="Delete category" on:click={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button>
             </div>
           </div>
           {#if !collapsed[String((sec.cat as any)?.id)]}
             {#each sec.items.filter((c)=> (c.name || '').toLowerCase().includes(filter.toLowerCase())) as ch}
-              <div class="group px-2 py-1 rounded hover/bg-[var(--panel)] flex items-center justify-between cursor-pointer { $selectedChannelId===String((ch as any).id) ? 'bg-[var(--panel)]' : '' }" on:click={() => { const id = String((ch as any).id); selectedChannelId.set(id); if ($selectedGuildId) { subscribeWS([$selectedGuildId], id); const g = $selectedGuildId; import('$lib/stores/appState').then(m => { m.lastChannelByGuild.update((map)=>({ ...map, [g]: id })); m.channelReady.set(true); try { const snapshot = { .../*store removed*/lastChanMap, [g]: id }; localStorage.setItem('lastChannels', JSON.stringify(snapshot)); } catch {} }); } }}>
+              <div class="group px-2 py-1 rounded hover:bg-[var(--panel)] flex items-center justify-between cursor-pointer { $selectedChannelId===String((ch as any).id) ? 'bg-[var(--panel)]' : '' }" on:click={() => selectChannel(String((ch as any).id))} on:contextmenu|preventDefault={(e)=>openChannelMenu(e,ch)}>
                 <div class="truncate flex items-center gap-2"><span class="opacity-70">#</span> {ch.name}</div>
                 <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                  <button class="text-xs text-red-400" title="Delete" on:click|stopPropagation={() => deleteChannel(String((ch as any).id))}>🗑</button>
+                  <button class="text-xs text-red-400" title="Delete" on:click|stopPropagation={() => deleteChannel(String((ch as any).id))}>✕</button>
                 </div>
               </div>
             {/each}
@@ -223,4 +272,3 @@
     </div>
   {/if}
 </div>
-

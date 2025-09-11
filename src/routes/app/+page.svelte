@@ -6,6 +6,7 @@
   import SearchPanel from '$lib/components/app/search/SearchPanel.svelte';
   import DmCreate from '$lib/components/app/dm/DmCreate.svelte';
   import ProfileEdit from '$lib/components/app/user/ProfileEdit.svelte';
+  import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import { searchOpen, selectedChannelId } from '$lib/stores/appState';
   import '$lib/client/ws';
 
@@ -24,9 +25,21 @@
             <DmCreate />
           </div>
           <div class="flex items-center gap-2">
-            <button class="px-2 py-1 rounded-md border border-[var(--stroke)]" on:click={() => searchOpen.set(true)}>Search</button>
-            <button class="px-2 py-1 rounded-md border border-[var(--stroke)]" on:click={toggleTheme}>{theme === 'dark' ? 'Light' : 'Dark'}</button>
-            <button class="px-2 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (showProfile = !showProfile)}>Profile</button>
+            <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => searchOpen.set(true)} title="Search" aria-label="Search">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm-8 6a8 8 0 1 1 14.32 4.906l3.387 3.387-1.414 1.414-3.387-3.387A8 8 0 0 1 2 10z"/></svg>
+            </button>
+            <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
+              {#if theme === 'dark'}
+                <!-- Sun icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.8 1.42-1.42zm10.48 0l1.8-1.79 1.41 1.41-1.79 1.8-1.42-1.42zM12 4h0-1 1V2h0zm0 18h0-1 1v-2h0zM4 13H2v-2h2v2zm18 0h-2v-2h2v2zM6.76 19.16l-1.8 1.79-1.41-1.41 1.79-1.8 1.42 1.42zm10.48 0l1.8 1.79 1.41-1.41-1.79-1.8-1.42 1.42zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+              {:else}
+                <!-- Moon icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              {/if}
+            </button>
+            <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (showProfile = !showProfile)} title="Profile" aria-label="Profile">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"/><path d="M4 20a8 8 0 0 1 16 0v1H4v-1z"/></svg>
+            </button>
           </div>
         </div>
       <ChannelPane />
@@ -39,6 +52,7 @@
       </div>
     {/if}
   </div>
+  <ContextMenu />
 </AuthGate>
 
 <svelte:window on:keydown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); searchOpen.set(true); } }} />

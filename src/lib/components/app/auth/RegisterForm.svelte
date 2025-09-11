@@ -34,3 +34,4 @@
     {loading ? 'Sending…' : 'Register'}
   </button>
 </form>
+
