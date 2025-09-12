@@ -1,46 +1,74 @@
 ﻿<script lang="ts">
-  import { auth } from '$lib/stores/auth';
-  import { m } from '$lib/paraglide/messages.js';
-  let id: number | null = null;
-  let token = '';
-  let password = '';
-  let loading = false;
-  let message: string | null = null;
-  let error: string | null = null;
+	import { auth } from '$lib/stores/auth';
+	import { m } from '$lib/paraglide/messages.js';
+	let id = $state<number | null>(null);
+	let token = $state('');
+	let password = $state('');
+	let loading = $state(false);
+	let message: string | null = $state(null);
+	let error: string | null = $state(null);
 
-  async function onSubmit() {
-    loading = true; error = null; message = null;
-    try {
-      await auth.reset({ id: id ?? undefined, token, password });
-      message = m.auth_reset_success();
-    } catch (e: any) {
-      error = e?.response?.data?.message ?? e?.message ?? m.auth_reset_failed();
-    } finally {
-      loading = false;
-    }
-  }
+	async function onSubmit() {
+		loading = true;
+		error = null;
+		message = null;
+		try {
+			await auth.reset({ id: id ?? undefined, token, password });
+			message = m.auth_reset_success();
+		} catch (e: any) {
+			error = e?.response?.data?.message ?? e?.message ?? m.auth_reset_failed();
+		} finally {
+			loading = false;
+		}
+	}
 </script>
 
-<form class="space-y-3" on:submit|preventDefault={onSubmit}>
-  <div class="text-lg font-semibold">{m.auth_reset_password()}</div>
-  {#if message}<div class="text-green-500 text-sm">{message}</div>{/if}
-  {#if error}<div class="text-red-500 text-sm">{error}</div>{/if}
-  <div class="grid grid-cols-2 gap-2">
-    <div class="space-y-1">
-      <label class="text-sm text-[var(--muted)]">{m.auth_user_id()}</label>
-      <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2" type="number" bind:value={id} required />
-    </div>
-    <div class="space-y-1">
-      <label class="text-sm text-[var(--muted)]">{m.auth_token()}</label>
-      <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2" type="text" bind:value={token} required />
-    </div>
-  </div>
-  <div class="space-y-1">
-    <label class="text-sm text-[var(--muted)]">{m.auth_new_password()}</label>
-    <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2" type="password" bind:value={password} required />
-  </div>
-  <button class="w-full rounded-md bg-[var(--brand)] text-[var(--bg)] py-2 font-medium disabled:opacity-50" disabled={loading}>
-    {loading ? m.auth_reseting() : m.auth_reset_password_btn()}
-  </button>
+<form
+	class="space-y-3"
+	onsubmit={(e) => {
+		e.preventDefault();
+		onSubmit();
+	}}
+>
+	<div class="text-lg font-semibold">{m.auth_reset_password()}</div>
+	{#if message}<div class="text-sm text-green-500">{message}</div>{/if}
+	{#if error}<div class="text-sm text-red-500">{error}</div>{/if}
+	<div class="grid grid-cols-2 gap-2">
+		<div class="space-y-1">
+			<label for="reset-id" class="text-sm text-[var(--muted)]">{m.auth_user_id()}</label>
+			<input
+				id="reset-id"
+				class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+				type="number"
+				bind:value={id}
+				required
+			/>
+		</div>
+		<div class="space-y-1">
+			<label for="reset-token" class="text-sm text-[var(--muted)]">{m.auth_token()}</label>
+			<input
+				id="reset-token"
+				class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+				type="text"
+				bind:value={token}
+				required
+			/>
+		</div>
+	</div>
+	<div class="space-y-1">
+		<label for="reset-password" class="text-sm text-[var(--muted)]">{m.auth_new_password()}</label>
+		<input
+			id="reset-password"
+			class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+			type="password"
+			bind:value={password}
+			required
+		/>
+	</div>
+	<button
+		class="w-full rounded-md bg-[var(--brand)] py-2 font-medium text-[var(--bg)] disabled:opacity-50"
+		disabled={loading}
+	>
+		{loading ? m.auth_reseting() : m.auth_reset_password_btn()}
+	</button>
 </form>
-

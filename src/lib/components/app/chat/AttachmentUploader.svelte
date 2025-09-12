@@ -7,8 +7,8 @@
 		attachments: (number | string)[];
 		inline?: boolean;
 	}>();
-	let loading = false;
-	let error: string | null = null;
+	let loading = $state(false);
+	let error: string | null = $state(null);
 	const dispatch = createEventDispatcher<{ updated: void }>();
 
 	async function pickFiles(e: Event) {
@@ -73,6 +73,8 @@
 
 <div
 	class="flex items-center gap-2"
+	role="button"
+	tabindex="0"
 	ondragover={(e: DragEvent) => e.preventDefault()}
 	ondrop={(e: DragEvent) => {
 		e.preventDefault();
