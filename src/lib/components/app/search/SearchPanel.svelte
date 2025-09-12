@@ -80,6 +80,12 @@
 
 	$effect(() => {
 		if ($searchOpen) {
+			query = '';
+			results = [];
+			error = null;
+			page = 0;
+			pages = 0;
+			pageItems = [];
 			updatePosition();
 		}
 	});
@@ -122,7 +128,7 @@
 		role="button"
 		tabindex="0"
 		onpointerdown={() => searchOpen.set(false)}
-		onkeydown={(e) => (e.key === 'Escape' || e.key === 'Enter') && searchOpen.set(false)}
+		onkeydown={(e) => e.key === 'Escape' && searchOpen.set(false)}
 	>
 		<div
 			bind:this={panelEl}
