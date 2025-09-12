@@ -121,7 +121,7 @@
 		class="fixed inset-0 z-[1000]"
 		role="button"
 		tabindex="0"
-		onclick={() => searchOpen.set(false)}
+		onpointerdown={() => searchOpen.set(false)}
 		onkeydown={(e) => (e.key === 'Escape' || e.key === 'Enter') && searchOpen.set(false)}
 	>
 		<div
