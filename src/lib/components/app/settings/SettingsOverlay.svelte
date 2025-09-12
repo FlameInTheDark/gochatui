@@ -14,9 +14,16 @@
 {#if $settingsOpen}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" on:click={close}>
 		<div
-			class="flex h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg bg-[var(--bg)]"
+			class="relative flex h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg bg-[var(--bg)] shadow-xl"
 			on:click|stopPropagation
 		>
+			<button
+				aria-label={m.close()}
+				class="absolute top-3 right-3 rounded p-1 text-xl leading-none hover:bg-[var(--panel)]"
+				on:click={close}
+			>
+				&times;
+			</button>
 			<aside class="w-48 space-y-2 border-r border-[var(--stroke)] p-4">
 				<button
 					class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'general'
@@ -48,36 +55,43 @@
 				{#if category === 'general'}
 					<div>
 						<label class="mb-2 block">{m.language()}</label>
-						<select
-							class="rounded border px-2 py-1"
-							value={$locale}
-							on:change={(e) => locale.set((e.target as HTMLSelectElement).value)}
-						>
-							<option value="en">English</option>
-							<option value="ru">Русский</option>
-						</select>
+						<div class="relative">
+							<select
+								class="w-full appearance-none rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+								value={$locale}
+								on:change={(e) => locale.set((e.target as HTMLSelectElement).value)}
+							>
+								<option value="en">English</option>
+								<option value="ru">Русский</option>
+							</select>
+							<span
+								class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[var(--fg-muted)]"
+								>▾</span
+							>
+						</div>
 					</div>
 				{:else if category === 'appearance'}
 					<div>
 						<label class="mb-2 block">{m.theme()}</label>
-						<select
-							class="rounded border px-2 py-1"
-							value={$theme}
-							on:change={(e) => theme.set((e.target as HTMLSelectElement).value as Theme)}
-						>
-							<option value="system">{m.system()}</option>
-							<option value="light">{m.light()}</option>
-							<option value="dark">{m.dark()}</option>
-						</select>
+						<div class="relative">
+							<select
+								class="w-full appearance-none rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+								value={$theme}
+								on:change={(e) => theme.set((e.target as HTMLSelectElement).value as Theme)}
+							>
+								<option value="system">{m.system()}</option>
+								<option value="light">{m.light()}</option>
+								<option value="dark">{m.dark()}</option>
+							</select>
+							<span
+								class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[var(--fg-muted)]"
+								>▾</span
+							>
+						</div>
 					</div>
 				{:else}
 					<p>{m.other()}...</p>
 				{/if}
-				<div>
-					<button class="mt-4 rounded border border-[var(--stroke)] px-4 py-2" on:click={close}
-						>{m.close()}</button
-					>
-				</div>
 			</section>
 		</div>
 	</div>
