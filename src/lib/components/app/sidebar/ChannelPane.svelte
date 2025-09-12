@@ -441,8 +441,8 @@
 
 	<UserPanel />
 
-	{#if creatingChannel}
-		<div class="panel absolute top-16 left-[calc(var(--col1)+var(--col2))] ml-4 w-72 p-3">
+        {#if creatingChannel}
+                <div class="panel fixed z-50 top-16 left-[calc(var(--col1)+var(--col2))] ml-4 w-72 p-3">
 			<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
 			<input
 				class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
@@ -465,8 +465,8 @@
 		</div>
 	{/if}
 
-	{#if creatingCategory}
-		<div class="panel absolute top-44 left-[calc(var(--col1)+var(--col2))] ml-4 w-72 p-3">
+        {#if creatingCategory}
+                <div class="panel fixed z-50 top-44 left-[calc(var(--col1)+var(--col2))] ml-4 w-72 p-3">
 			<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
 			<input
 				class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
