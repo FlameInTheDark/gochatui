@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { settingsOpen, theme, locale } from '$lib/stores/settings';
 	import { m } from '$lib/paraglide/messages.js';
-	import type { Theme } from '$lib/stores/settings';
+	import type { Theme, Locale } from '$lib/stores/settings';
 
 	let category = $state<'general' | 'appearance' | 'other'>('general');
 
@@ -63,7 +63,7 @@
 								id="language-select"
 								class="w-full appearance-none rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 								value={$locale}
-								onchange={(e) => locale.set((e.target as HTMLSelectElement).value)}
+								onchange={(e) => locale.set((e.target as HTMLSelectElement).value as Locale)}
 							>
 								<option value="en">English</option>
 								<option value="ru">Русский</option>
