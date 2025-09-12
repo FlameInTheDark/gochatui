@@ -3,7 +3,7 @@
 	import type { ContextMenuItem } from '$lib/stores/contextMenu';
 	import { tick } from 'svelte';
 
-	let menuEl: HTMLDivElement | null = null;
+	let menuEl: HTMLDivElement | null = $state(null);
 	let posX = $state(0);
 	let posY = $state(0);
 
@@ -49,7 +49,7 @@
 			role="menu"
 			tabindex="-1"
 			style={`left:${posX}px; top:${posY}px`}
-			onclick={(e) => e.stopPropagation()}
+			onpointerdown={(e) => e.stopPropagation()}
 			oncontextmenu={(e) => e.stopPropagation()}
 		>
 			<div class="rounded-lg backdrop-blur-md">

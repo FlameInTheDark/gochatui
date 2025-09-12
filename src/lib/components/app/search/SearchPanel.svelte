@@ -18,7 +18,7 @@
 	let pages = $state(0);
 	let pageItems: (number | string)[] = $state([]);
 
-	let panelEl: HTMLDivElement | null = null;
+	let panelEl: HTMLDivElement | null = $state(null);
 	let posX = $state(0);
 	let posY = $state(0);
 	function clamp(v: number, min: number, max: number) {
@@ -130,7 +130,7 @@
 			role="dialog"
 			tabindex="-1"
 			style={`left:${posX}px; top:${posY}px`}
-			onclick={(e) => e.stopPropagation()}
+			onpointerdown={(e) => e.stopPropagation()}
 		>
 			<div class="flex gap-2">
 				<input

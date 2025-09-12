@@ -211,7 +211,7 @@
 				class="panel absolute bottom-6 left-[var(--col1)] ml-4 w-64 p-3"
 				role="document"
 				tabindex="-1"
-				onclick={(e) => e.stopPropagation()}
+				onpointerdown={(e) => e.stopPropagation()}
 			>
 				<div class="mb-2 text-sm font-medium">{m.new_server()}</div>
 				{#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}

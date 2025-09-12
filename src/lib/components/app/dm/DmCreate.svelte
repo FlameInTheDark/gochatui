@@ -92,7 +92,7 @@
 				class="panel w-full max-w-md p-4"
 				role="dialog"
 				tabindex="-1"
-				onclick={(e) => e.stopPropagation()}
+				onpointerdown={(e) => e.stopPropagation()}
 			>
 				<div class="mb-2 text-sm font-medium">{m.create_dm()}</div>
 				{#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}
