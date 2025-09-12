@@ -31,7 +31,7 @@
 				class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {muted
 					? 'text-red-400'
 					: ''}"
-				on:click={toggleMute}
+				onclick={toggleMute}
 				title={muted ? m.unmute() : m.mute()}
 				aria-label={muted ? m.unmute() : m.mute()}
 			>
@@ -52,7 +52,7 @@
 				class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {deafened
 					? 'text-red-400'
 					: ''}"
-				on:click={toggleDeafen}
+				onclick={toggleDeafen}
 				title={deafened ? m.undeafen() : m.deafen()}
 				aria-label={deafened ? m.undeafen() : m.deafen()}
 			>
@@ -70,7 +70,7 @@
 			</button>
 			<button
 				class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)]"
-				on:click={() => settingsOpen.set(true)}
+				onclick={() => settingsOpen.set(true)}
 				title={m.settings()}
 				aria-label={m.settings()}
 			>
