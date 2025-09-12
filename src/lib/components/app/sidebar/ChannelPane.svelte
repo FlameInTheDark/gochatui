@@ -14,14 +14,14 @@
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	const guilds = auth.guilds;
 
-	let creatingChannel = false;
-	let creatingCategory = false;
-	let newChannelName = '';
-	let newCategoryName = '';
-	let error: string | null = null;
+	let creatingChannel = $state(false);
+	let creatingCategory = $state(false);
+	let newChannelName = $state('');
+	let newCategoryName = $state('');
+	let error: string | null = $state(null);
 	let filter = $state('');
 	let collapsed = $state<Record<string, boolean>>({});
-	let creatingChannelParent: string | null = null;
+	let creatingChannelParent: string | null = $state(null);
 
 	$effect(() => {
 		error = null;
@@ -242,7 +242,7 @@
 			<div class="flex items-center gap-2">
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					on:click={() => (creatingChannel = true)}
+					onclick={() => (creatingChannel = true)}
 					title={m.new_channel()}
 					aria-label={m.new_channel()}
 				>
@@ -256,7 +256,7 @@
 				</button>
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					on:click={() => (creatingCategory = true)}
+					onclick={() => (creatingCategory = true)}
 					title={m.new_category()}
 					aria-label={m.new_category()}
 				>
@@ -273,7 +273,7 @@
 				</button>
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					on:click={renameGuild}
+					onclick={renameGuild}
 					title={m.rename_server()}
 					aria-label={m.rename_server()}
 				>
@@ -290,7 +290,7 @@
 				</button>
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] text-red-400 hover:bg-[var(--panel)]"
-					on:click={leaveGuild}
+					onclick={leaveGuild}
 					title={m.leave_server()}
 					aria-label={m.leave_server()}
 				>
@@ -316,7 +316,11 @@
 	{#if error}<div class="p-2 text-sm text-red-500">{error}</div>{/if}
 	<div
 		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
-		on:contextmenu|preventDefault={openPaneMenu}
+		role="region"
+		oncontextmenu={(e) => {
+			e.preventDefault();
+			openPaneMenu(e);
+		}}
 	>
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
@@ -331,8 +335,15 @@
 							String((ch as any).id)
 								? 'bg-[var(--panel)]'
 								: ''}"
-							on:click={() => selectChannel(String((ch as any).id))}
-							on:contextmenu|preventDefault={(e) => openChannelMenu(e, ch)}
+							role="button"
+							tabindex="0"
+							onclick={() => selectChannel(String((ch as any).id))}
+							onkeydown={(e) =>
+								(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
+							oncontextmenu={(e) => {
+								e.preventDefault();
+								openChannelMenu(e, ch);
+							}}
 						>
 							<div class="flex items-center gap-2 truncate">
 								<span class="opacity-70">#</span>
@@ -344,7 +355,10 @@
 								<button
 									class="text-xs text-red-400"
 									title="Delete"
-									on:click|stopPropagation={() => deleteChannel(String((ch as any).id))}>✕</button
+									onclick={(e) => {
+										e.stopPropagation();
+										deleteChannel(String((ch as any).id));
+									}}>✕</button
 								>
 							</div>
 						</div>
@@ -358,7 +372,7 @@
 					>
 						<button
 							class="flex items-center gap-2"
-							on:click={() => toggleCollapse(String((sec.cat as any)?.id))}
+							onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
 						>
 							<span class="inline-block">{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
 							>
@@ -368,7 +382,7 @@
 							<button
 								class="text-xs"
 								title={m.new_channel()}
-								on:click={() => {
+								onclick={() => {
 									creatingChannel = true;
 									creatingChannelParent = String((sec.cat as any)?.id);
 								}}>+</button
@@ -376,7 +390,7 @@
 							<button
 								class="text-xs text-red-400"
 								title="Delete category"
-								on:click={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button
+								onclick={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button
 							>
 						</div>
 					</div>
@@ -389,8 +403,15 @@
 								String((ch as any).id)
 									? 'bg-[var(--panel)]'
 									: ''}"
-								on:click={() => selectChannel(String((ch as any).id))}
-								on:contextmenu|preventDefault={(e) => openChannelMenu(e, ch)}
+								role="button"
+								tabindex="0"
+								onclick={() => selectChannel(String((ch as any).id))}
+								onkeydown={(e) =>
+									(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
+								oncontextmenu={(e) => {
+									e.preventDefault();
+									openChannelMenu(e, ch);
+								}}
 							>
 								<div class="flex items-center gap-2 truncate">
 									<span class="opacity-70">#</span>
@@ -402,7 +423,10 @@
 									<button
 										class="text-xs text-red-400"
 										title="Delete"
-										on:click|stopPropagation={() => deleteChannel(String((ch as any).id))}>✕</button
+										onclick={(e) => {
+											e.stopPropagation();
+											deleteChannel(String((ch as any).id));
+										}}>✕</button
 									>
 								</div>
 							</div>
@@ -431,11 +455,11 @@
 			<div class="flex justify-end gap-2">
 				<button
 					class="rounded-md border border-[var(--stroke)] px-3 py-1"
-					on:click={() => (creatingChannel = false)}>{m.cancel()}</button
+					onclick={() => (creatingChannel = false)}>{m.cancel()}</button
 				>
 				<button
 					class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-					on:click={createChannel}>{m.create()}</button
+					onclick={createChannel}>{m.create()}</button
 				>
 			</div>
 		</div>
@@ -452,11 +476,11 @@
 			<div class="flex justify-end gap-2">
 				<button
 					class="rounded-md border border-[var(--stroke)] px-3 py-1"
-					on:click={() => (creatingCategory = false)}>{m.cancel()}</button
+					onclick={() => (creatingCategory = false)}>{m.cancel()}</button
 				>
 				<button
 					class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-					on:click={createCategory}>{m.create()}</button
+					onclick={createCategory}>{m.create()}</button
 				>
 			</div>
 		</div>
