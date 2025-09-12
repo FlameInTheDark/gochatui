@@ -2,6 +2,7 @@
   import { auth } from '$lib/stores/auth';
   import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
   import { subscribeWS } from '$lib/client/ws';
+  import { m } from '$lib/paraglide/messages.js';
   let open = false;
   let singleId: string = '';
   let groupIds = '';
@@ -47,27 +48,27 @@
 </script>
 
 <div>
-  <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (open = true)} title="New DM" aria-label="New DM">
+  <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (open = true)} title={m.new_dm()} aria-label={m.new_dm()}>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M4 4h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6l-4 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
   </button>
   {#if open}
     <div class="fixed inset-0 bg-black/40 grid place-items-center z-40" on:click={() => (open = false)}>
       <div class="panel w-full max-w-md p-4" on:click|stopPropagation>
-        <div class="text-sm font-medium mb-2">Create DM</div>
+        <div class="text-sm font-medium mb-2">{m.create_dm()}</div>
         {#if error}<div class="text-red-500 text-sm mb-2">{error}</div>{/if}
         <div class="space-y-2">
           <div>
-            <div class="text-xs text-[var(--muted)] mb-1">Recipient user ID</div>
+            <div class="text-xs text-[var(--muted)] mb-1">{m.recipient_user_id()}</div>
             <input type="number" class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2" bind:value={singleId} />
             <div class="mt-2 flex justify-end">
-              <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50" disabled={loading} on:click={createSingle}>Create DM</button>
+              <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50" disabled={loading} on:click={createSingle}>{m.create_dm()}</button>
             </div>
           </div>
           <div class="border-t border-[var(--stroke)] pt-2">
-            <div class="text-xs text-[var(--muted)] mb-1">Group recipients (comma-separated user IDs)</div>
+            <div class="text-xs text-[var(--muted)] mb-1">{m.group_recipients()}</div>
             <input type="text" class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2" bind:value={groupIds} />
             <div class="mt-2 flex justify-end">
-              <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50" disabled={loading} on:click={createGroup}>Create Group DM</button>
+              <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50" disabled={loading} on:click={createGroup}>{m.create_group_dm()}</button>
             </div>
           </div>
         </div>

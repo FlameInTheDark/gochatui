@@ -9,6 +9,8 @@
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import { searchOpen, selectedChannelId } from '$lib/stores/appState';
   import '$lib/client/ws';
+  import { setLocale } from '$lib/paraglide/runtime';
+  import { m } from '$lib/paraglide/messages.js';
 
   let showProfile = false;
   let theme = $state<string>((typeof localStorage !== 'undefined' && localStorage.getItem('theme')) || 'dark');
@@ -25,7 +27,11 @@
             <DmCreate />
           </div>
           <div class="flex items-center gap-2">
-            <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
+            <div class="flex items-center gap-1">
+              <button class="px-2 h-8 rounded-md border border-[var(--stroke)] text-xs" on:click={() => setLocale('en')} title="English" aria-label="English">EN</button>
+              <button class="px-2 h-8 rounded-md border border-[var(--stroke)] text-xs" on:click={() => setLocale('ru')} title="Русский" aria-label="Русский">RU</button>
+            </div>
+            <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={toggleTheme} title={m.toggle_theme()} aria-label={m.toggle_theme()}>
               {#if theme === 'dark'}
                 <!-- Sun icon -->
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.8 1.42-1.42zm10.48 0l1.8-1.79 1.41 1.41-1.79 1.8-1.42-1.42zM12 4h0-1 1V2h0zm0 18h0-1 1v-2h0zM4 13H2v-2h2v2zm18 0h-2v-2h2v2zM6.76 19.16l-1.8 1.79-1.41-1.41 1.79-1.8 1.42 1.42zm10.48 0l1.8 1.79 1.41-1.41-1.79-1.8-1.42 1.42zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
@@ -34,7 +40,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               {/if}
             </button>
-            <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (showProfile = !showProfile)} title="Profile" aria-label="Profile">
+            <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (showProfile = !showProfile)} title={m.profile()} aria-label={m.profile()}>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"/><path d="M4 20a8 8 0 0 1 16 0v1H4v-1z"/></svg>
             </button>
           </div>

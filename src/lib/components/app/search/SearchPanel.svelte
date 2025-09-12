@@ -3,6 +3,7 @@
   import { selectedGuildId, searchOpen, searchAnchor, selectedChannelId } from '$lib/stores/appState';
   type SearchResult = { id: string; channel_id?: string };
   import { tick } from 'svelte';
+  import { m } from '$lib/paraglide/messages.js';
 
   let query = '';
   let loading = false;
@@ -87,16 +88,16 @@
   <div class="fixed inset-0 z-[1000]" on:click={() => searchOpen.set(false)}>
     <div bind:this={panelEl} class="absolute panel w-[min(80vw,640px)] p-4" style={`left:${posX}px; top:${posY}px`} on:click|stopPropagation>
       <div class="flex gap-2">
-        <input class="flex-1 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2" placeholder="Search messages" bind:value={query} on:keydown={(e)=>{ if(e.key==='Enter') { page = 0; doSearch(); } }} />
-        <button class="px-3 py-2 rounded-md bg-[var(--brand)] text-[var(--bg)]" on:click={() => { page = 0; doSearch(); }}>Search</button>
+        <input class="flex-1 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2" placeholder={m.search_placeholder()} bind:value={query} on:keydown={(e)=>{ if(e.key==='Enter') { page = 0; doSearch(); } }} />
+        <button class="px-3 py-2 rounded-md bg-[var(--brand)] text-[var(--bg)]" on:click={() => { page = 0; doSearch(); }}>{m.search()}</button>
       </div>
       {#if error}<div class="mt-2 text-red-500 text-sm">{error}</div>{/if}
 
       <div class="mt-3 max-h-[60vh] overflow-y-auto space-y-2">
         {#if loading}
-          <div class="text-sm text-[var(--muted)]">Searching...</div>
+          <div class="text-sm text-[var(--muted)]">{m.searching()}</div>
         {:else if results.length === 0}
-          <div class="text-sm text-[var(--muted)]">No results</div>
+          <div class="text-sm text-[var(--muted)]">{m.no_results()}</div>
         {:else}
           {#each results as m}
             <div class="p-2 rounded hover:bg-[var(--panel)] cursor-pointer" on:click={() => openMessage(m)}>
@@ -111,7 +112,7 @@
         <div class="mt-3 flex items-center justify-center gap-1">
           <button
             class="px-2 py-1 rounded-md border border-[var(--stroke)] disabled:opacity-50"
-            aria-label="Previous page"
+            aria-label={m.pager_prev()}
             disabled={loading || page <= 0}
             on:click={() => { if (page > 0) { page -= 1; doSearch(); } }}
           >
@@ -135,7 +136,7 @@
 
           <button
             class="px-2 py-1 rounded-md border border-[var(--stroke)] disabled:opacity-50"
-            aria-label="Next page"
+            aria-label={m.pager_next()}
             disabled={loading || (pages ? page >= pages - 1 : false)}
             on:click={() => { if (!pages || page < pages - 1) { page += 1; doSearch(); } }}
           >

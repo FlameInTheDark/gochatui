@@ -4,6 +4,7 @@
   import { subscribeWS } from '$lib/client/ws';
   import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
   const guilds = auth.guilds;
+  import { m } from '$lib/paraglide/messages.js';
   import { onMount } from 'svelte';
   onMount(() => {
     const unsub = guilds.subscribe((arr) => {
@@ -106,7 +107,7 @@
   }
 
   async function renameGuildDirect(gid: string, currentName: string) {
-    const name = prompt('Rename server to:', currentName || '');
+    const name = prompt(m.rename_server_prompt(), currentName || '');
     if (!name) return;
     try { await auth.api.guild.guildGuildIdPatch({ guildId: gid as any, guildUpdateGuildRequest: { name } }); await auth.loadGuilds(); }
     catch {}
@@ -127,9 +128,9 @@
             const gid = String((g as any).id);
             const name = String((g as any).name ?? 'Server');
             contextMenu.openFromEvent(e, [
-              { label: 'Copy server ID', action: () => copyToClipboard(gid) },
-              { label: 'Rename server', action: () => renameGuildDirect(gid, name) },
-              { label: 'Leave server', action: () => leaveGuildDirect(gid), danger: true }
+              { label: m.copy_server_id(), action: () => copyToClipboard(gid) },
+              { label: m.rename_server(), action: () => renameGuildDirect(gid, name) },
+              { label: m.leave_server(), action: () => leaveGuildDirect(gid), danger: true }
             ]);
           }}
         >
@@ -139,7 +140,7 @@
     {/each}
   </div>
   <div>
-    <button class="w-12 h-12 grid place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (creating = !creating)} title="New server" aria-label="New server">
+    <button class="w-12 h-12 grid place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (creating = !creating)} title={m.new_server()} aria-label={m.new_server()}>
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M11 5h2v14h-2z"/><path d="M5 11h14v2H5z"/></svg>
     </button>
   </div>
@@ -148,12 +149,12 @@
     <div class="fixed inset-0 z-50" on:click={() => (creating = false)} on:keydown={(e) => { if (e.key==='Escape') creating=false }}>
       <div class="absolute inset-0 bg-black/40"></div>
       <div class="absolute left-[var(--col1)] ml-4 bottom-6 panel p-3 w-64" on:click|stopPropagation>
-        <div class="text-sm font-medium mb-2">New Server</div>
+        <div class="text-sm font-medium mb-2">{m.new_server()}</div>
         {#if error}<div class="text-red-500 text-sm mb-2">{error}</div>{/if}
-        <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 mb-2" placeholder="Server name" bind:value={newGuildName} />
+        <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 mb-2" placeholder={m.server_name()} bind:value={newGuildName} />
         <div class="flex gap-2 justify-end">
-          <button class="px-3 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (creating = false)}>Cancel</button>
-          <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)]" on:click={createGuild}>Create</button>
+          <button class="px-3 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (creating = false)}>{m.cancel()}</button>
+          <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)]" on:click={createGuild}>{m.create()}</button>
         </div>
       </div>
     </div>

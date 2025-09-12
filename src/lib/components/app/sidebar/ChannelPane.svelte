@@ -4,6 +4,7 @@
   import type { DtoChannel } from '$lib/api';
   import { subscribeWS } from '$lib/client/ws';
   import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+  import { m } from '$lib/paraglide/messages.js';
   const guilds = auth.guilds;
 
   let creatingChannel = false;
@@ -115,17 +116,17 @@
     const type = (ch as any)?.type;
     const isText = type === 0;
     const items = [
-      { label: 'Copy channel ID', action: () => copyToClipboard(id), disabled: !id },
-      { label: 'Open channel', action: () => selectChannel(id), disabled: !isText },
-      { label: 'Delete channel', action: () => deleteChannel(id), danger: true, disabled: !isText }
+      { label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id },
+      { label: m.open_channel(), action: () => selectChannel(id), disabled: !isText },
+      { label: m.delete_channel(), action: () => deleteChannel(id), danger: true, disabled: !isText }
     ];
     contextMenu.openFromEvent(e, items);
   }
 
   function openPaneMenu(e: MouseEvent) {
     const items = [
-      { label: 'New channel', action: () => { creatingChannel = true; creatingChannelParent = null; } },
-      { label: 'New category', action: () => { creatingCategory = true; } }
+      { label: m.new_channel(), action: () => { creatingChannel = true; creatingChannelParent = null; } },
+      { label: m.new_category(), action: () => { creatingCategory = true; } }
     ];
     contextMenu.openFromEvent(e, items);
   }
@@ -169,7 +170,7 @@
   async function renameGuild() {
     if (!$selectedGuildId) return;
     const current = $guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name ?? '';
-    const name = prompt('Rename server to:', current);
+    const name = prompt(m.rename_server_prompt(), current);
     if (!name) return;
     try {
       await auth.api.guild.guildGuildIdPatch({ guildId: $selectedGuildId as any, guildUpdateGuildRequest: { name } });
@@ -178,28 +179,28 @@
   }
 </script>
 
-<div class="h-full w-[var(--col2)] border-r border-[var(--stroke)] flex flex-col">
+  <div class="h-full w-[var(--col2)] border-r border-[var(--stroke)] flex flex-col">
   <div class="h-[var(--header-h)] flex-shrink-0 border-b border-[var(--stroke)] flex items-center justify-between px-3 box-border overflow-hidden">
-    <div class="font-semibold truncate">{($guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name) ?? 'Select server'}</div>
+    <div class="font-semibold truncate">{($guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name) ?? m.select_server()}</div>
     {#if $selectedGuildId}
       <div class="flex items-center gap-2">
-        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (creatingChannel = true)} title="New channel" aria-label="New channel">
+        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (creatingChannel = true)} title={m.new_channel()} aria-label={m.new_channel()}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M11 5h2v14h-2z"/><path d="M5 11h14v2H5z"/></svg>
         </button>
-        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (creatingCategory = true)} title="New category" aria-label="New category">
+        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={() => (creatingCategory = true)} title={m.new_category()} aria-label={m.new_category()}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M4 6h8l2 2h6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/><path d="M8 11h8v2H8z"/></svg>
         </button>
-        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={renameGuild} title="Rename server" aria-label="Rename server">
+        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]" on:click={renameGuild} title={m.rename_server()} aria-label={m.rename_server()}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/><path d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
         </button>
-        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)] text-red-400" on:click={leaveGuild} title="Leave server" aria-label="Leave server">
+        <button class="w-8 h-8 grid place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)] text-red-400" on:click={leaveGuild} title={m.leave_server()} aria-label={m.leave_server()}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/><path d="M4 4h8v2H6v12h6v2H4z"/></svg>
         </button>
       </div>
     {/if}
   </div>
   <div class="p-2 border-b border-[var(--stroke)]">
-    <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm" placeholder="Filter channels" bind:value={filter} />
+    <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm" placeholder={m.filter_channels()} bind:value={filter} />
   </div>
   {#if error}<div class="p-2 text-red-500 text-sm">{error}</div>{/if}
   <div class="flex-1 overflow-y-auto scroll-area p-2 space-y-2" on:contextmenu|preventDefault={openPaneMenu}>
@@ -226,7 +227,7 @@
               <div class="truncate">{sec.cat?.name ?? 'Category'}</div>
             </button>
             <div class="flex items-center gap-2">
-              <button class="text-xs" title="New channel" on:click={() => { creatingChannel = true; creatingChannelParent = String((sec.cat as any)?.id); }}>+</button>
+              <button class="text-xs" title={m.new_channel()} on:click={() => { creatingChannel = true; creatingChannelParent = String((sec.cat as any)?.id); }}>+</button>
               <button class="text-xs text-red-400" title="Delete category" on:click={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button>
             </div>
           </div>
@@ -249,25 +250,25 @@
 
   {#if creatingChannel}
     <div class="absolute left-[calc(var(--col1)+var(--col2))] top-16 ml-4 panel p-3 w-72">
-      <div class="text-sm font-medium mb-2">New Channel</div>
-      <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 mb-2" placeholder="Channel name" bind:value={newChannelName} />
+      <div class="text-sm font-medium mb-2">{m.new_channel()}</div>
+      <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 mb-2" placeholder={m.channel_name()} bind:value={newChannelName} />
       {#if creatingChannelParent}
         <div class="text-xs text-[var(--muted)] mb-2">in category #{creatingChannelParent}</div>
       {/if}
       <div class="flex gap-2 justify-end">
-        <button class="px-3 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (creatingChannel = false)}>Cancel</button>
-        <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)]" on:click={createChannel}>Create</button>
+        <button class="px-3 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (creatingChannel = false)}>{m.cancel()}</button>
+        <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)]" on:click={createChannel}>{m.create()}</button>
       </div>
     </div>
   {/if}
 
   {#if creatingCategory}
     <div class="absolute left-[calc(var(--col1)+var(--col2))] top-44 ml-4 panel p-3 w-72">
-      <div class="text-sm font-medium mb-2">New Category</div>
-      <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 mb-2" placeholder="Category name" bind:value={newCategoryName} />
+      <div class="text-sm font-medium mb-2">{m.new_category()}</div>
+      <input class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 mb-2" placeholder={m.category_name()} bind:value={newCategoryName} />
       <div class="flex gap-2 justify-end">
-        <button class="px-3 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (creatingCategory = false)}>Cancel</button>
-        <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)]" on:click={createCategory}>Create</button>
+        <button class="px-3 py-1 rounded-md border border-[var(--stroke)]" on:click={() => (creatingCategory = false)}>{m.cancel()}</button>
+        <button class="px-3 py-1 rounded-md bg-[var(--brand)] text-[var(--bg)]" on:click={createCategory}>{m.create()}</button>
       </div>
     </div>
   {/if}

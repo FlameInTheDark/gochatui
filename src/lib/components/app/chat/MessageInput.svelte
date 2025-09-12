@@ -1,8 +1,9 @@
 <script lang="ts">
   import { auth } from '$lib/stores/auth';
-  import { selectedChannelId } from '$lib/stores/appState';
+  import { selectedChannelId, selectedGuildId, channelsByGuild } from '$lib/stores/appState';
   import AttachmentUploader from './AttachmentUploader.svelte';
   import { createEventDispatcher, onMount, tick } from 'svelte';
+  import { m } from '$lib/paraglide/messages.js';
 
   let content = '';
   let attachments: number[] = [];
@@ -10,6 +11,16 @@
   const dispatch = createEventDispatcher<{ sent: void }>();
 
   let ta: HTMLTextAreaElement | null = null;
+
+  // Derive current channel name to show in placeholder
+  function currentChannel() {
+    const gid = $selectedGuildId ?? '';
+    return ($channelsByGuild[gid] ?? []).find((c) => String((c as any).id) === $selectedChannelId);
+  }
+  function channelName() {
+    const ch = currentChannel() as any;
+    return (ch?.name ?? '').toString();
+  }
 
   function autoResize() {
     if (!ta) return;
@@ -57,7 +68,7 @@
       bind:this={ta}
       class="flex-1 resize-none bg-transparent appearance-none border-0 focus:border-0 focus:border-transparent outline-none focus:outline-none ring-0 focus:ring-0 focus:ring-offset-0 focus:ring-transparent shadow-none focus:shadow-none px-1 py-1 min-h-[2.25rem] max-h-[40vh]"
       rows={1}
-      placeholder="Message #channel"
+      placeholder={m.message_placeholder({channel: channelName()})}
       bind:value={content}
       on:input={autoResize}
       on:keydown={(e) => {
@@ -67,7 +78,7 @@
     {#if attachments.length}
       <div class="text-xs text-[var(--muted)]">+{attachments.length}</div>
     {/if}
-    <button class="w-9 h-9 rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50 grid place-items-center" disabled={sending} on:click={send} title="Send" aria-label="Send">
+    <button class="w-9 h-9 rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50 grid place-items-center" disabled={sending} on:click={send} title={m.send()} aria-label={m.send()}>
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
     </button>
   </div>

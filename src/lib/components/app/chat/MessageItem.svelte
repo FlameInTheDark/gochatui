@@ -4,6 +4,7 @@
   import { selectedChannelId } from '$lib/stores/appState';
   import { createEventDispatcher } from 'svelte';
   import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+  import { m } from '$lib/paraglide/messages.js';
 
   let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
   let isEditing = false;
@@ -59,16 +60,16 @@
     const mid = String((message as any)?.id ?? '');
     const uid = String(((message as any)?.author as any)?.id ?? '');
     const items = [
-      { label: 'Copy message ID', action: () => copyToClipboard(mid), disabled: !mid },
-      { label: 'Copy user ID', action: () => copyToClipboard(uid), disabled: !uid },
-      { label: 'Edit message', action: () => { isEditing = true; draft = message.content ?? ''; }, disabled: !message?.id },
-      { label: 'Delete message', action: () => deleteMsg(), danger: true, disabled: !message?.id }
+      { label: m.ctx_copy_message_id(), action: () => copyToClipboard(mid), disabled: !mid },
+      { label: m.ctx_copy_user_id(), action: () => copyToClipboard(uid), disabled: !uid },
+      { label: m.ctx_edit_message(), action: () => { isEditing = true; draft = message.content ?? ''; }, disabled: !message?.id },
+      { label: m.ctx_delete_message(), action: () => deleteMsg(), danger: true, disabled: !message?.id }
     ];
     contextMenu.openFromEvent(e, items);
   }
 </script>
 
-<div class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`} on:contextmenu={openMenu}>
+<div role="listitem" class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`} on:contextmenu={openMenu}>
   {#if compact}
     <div class="w-10 shrink-0 pr-1 text-[10px] text-[var(--muted)] leading-tight pt-0.5 text-right opacity-0 group-hover/message:opacity-100 transition-opacity" title={fmtMsgFull(message)}>{fmtMsgTime(message)}</div>
   {:else}
@@ -87,7 +88,7 @@
     {/if}
     {#if !compact}
       <div class="flex items-baseline gap-2 pr-20">
-        <div class="font-semibold truncate" on:contextmenu|preventDefault={(e)=>{ const uid = String(((message as any)?.author as any)?.id ?? ''); contextMenu.openFromEvent(e,[{ label: 'Copy user ID', action: () => copyToClipboard(uid), disabled: !uid }]); }}>{message.author?.name ?? 'User'}</div>
+        <div role="contentinfo" class="font-semibold truncate text-[var(--muted)]" on:contextmenu|preventDefault={(e)=>{ const uid = String(((message as any)?.author as any)?.id ?? ''); contextMenu.openFromEvent(e,[{ label: 'Copy user ID', action: () => copyToClipboard(uid), disabled: !uid }]); }}>{message.author?.name ?? 'User'}</div>
         <div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>{fmtMsgTime(message)}</div>
       </div>
     {/if}
@@ -111,4 +112,3 @@
     {/if}
   </div>
 </div>
-

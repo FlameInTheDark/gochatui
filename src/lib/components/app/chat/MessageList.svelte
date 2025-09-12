@@ -1,9 +1,10 @@
-<script lang="ts">
+﻿<script lang="ts">
   import type { DtoMessage } from '$lib/api';
   import { auth } from '$lib/stores/auth';
   import { selectedChannelId, channelsByGuild, selectedGuildId, channelReady } from '$lib/stores/appState';
   import MessageItem from './MessageItem.svelte';
   import { wsEvent } from '$lib/client/ws';
+  import { m } from '$lib/paraglide/messages.js';
 
   let messages = $state<DtoMessage[]>([]);
   let loading = $state(false);
@@ -129,9 +130,9 @@
 
 <div class="relative flex-1 overflow-y-auto scroll-area" bind:this={scroller} on:scroll={() => { wasAtBottom = isNearBottom(); if (wasAtBottom) newCount = 0; }}>
   <div class="sticky top-0 z-10 bg-[var(--bg)]/70 backdrop-blur px-3 py-2 border-b border-[var(--stroke)] flex items-center justify-between">
-    <div class="text-xs text-[var(--muted)]">{endReached ? 'Start of history' : 'Load older messages'}</div>
+    <div class="text-xs text-[var(--muted)]">{endReached ? m.start_of_history() : m.load_older_messages()}</div>
     <button class="px-2 py-1 text-sm rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] disabled:opacity-50" disabled={loading || endReached} on:click={loadMore}>
-      {loading ? 'Loading…' : 'Load older'}
+      {loading ? m.loading() : m.load_older()}
     </button>
   </div>
   {#if error}
@@ -160,7 +161,7 @@
   <div class="pointer-events-none relative">
     <div class="pointer-events-auto absolute right-4 bottom-20">
       <button class="px-3 py-1 rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm shadow" on:click={() => { scrollToBottom(true); newCount = 0; wasAtBottom = true; }}>
-        {newCount > 0 ? `${newCount} new • Jump to present ↓` : 'Jump to present ↓'}
+        {newCount > 0 ? `${m.new_count({ count: newCount })} · ${m.jump_to_present()}` : m.jump_to_present()}
       </button>
     </div>
   </div>

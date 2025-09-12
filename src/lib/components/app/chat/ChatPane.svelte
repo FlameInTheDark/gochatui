@@ -1,6 +1,7 @@
 ﻿<script lang="ts">
   import { selectedChannelId, channelsByGuild, selectedGuildId, searchOpen, searchAnchor } from '$lib/stores/appState';
   import { tick } from 'svelte';
+  import { m } from '$lib/paraglide/messages.js';
   import MessageList from './MessageList.svelte';
   import MessageInput from './MessageInput.svelte';
   import { channelReady } from '$lib/stores/appState';
@@ -48,6 +49,6 @@
     <MessageList bind:this={listRef} />
     <MessageInput />
   {:else}
-    <div class="flex-1 grid place-items-center text-[var(--muted)]">Select a text channel to start chatting.</div>
+    <div class="flex-1 grid place-items-center text-[var(--muted)]">{m.select_text_channel()}</div>
   {/if}
 </div>

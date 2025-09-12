@@ -6,6 +6,7 @@
   import ResetForm from './ResetForm.svelte';
   import { auth } from '$lib/stores/auth';
   import { onMount } from 'svelte';
+  import { m } from '$lib/paraglide/messages.js';
 
   let mode: 'login' | 'register' | 'confirm' | 'recovery' | 'reset' = 'login';
   let { children } = $props<{ children?: () => any }>();
@@ -26,24 +27,24 @@
       {#if mode === 'login'}
         <LoginForm on:success={() => (mode = 'login')}/>
         <div class="mt-3 text-sm flex justify-between text-[var(--muted)]">
-          <button class="underline" on:click={() => (mode = 'register')}>Create account</button>
-          <button class="underline" on:click={() => (mode = 'recovery')}>Forgot?</button>
+          <button class="underline" on:click={() => (mode = 'register')}>{m.auth_create_account()}</button>
+          <button class="underline" on:click={() => (mode = 'recovery')}>{m.auth_forgot()}</button>
         </div>
         <div class="mt-2 text-xs text-[var(--muted)]">
-          Or <button class="underline" on:click={() => (mode = 'confirm')}>confirm</button> / <button class="underline" on:click={() => (mode = 'reset')}>reset</button> with token
+          Or <button class="underline" on:click={() => (mode = 'confirm')}>{m.auth_confirm_word()}</button> / <button class="underline" on:click={() => (mode = 'reset')}>{m.auth_reset_word()}</button> {m.auth_with_token()}
         </div>
       {:else if mode === 'register'}
         <RegisterForm on:sent={() => (mode = 'confirm')}/>
-        <div class="mt-3 text-sm text-[var(--muted)]"><button class="underline" on:click={() => (mode = 'login')}>Back to sign in</button></div>
+        <div class="mt-3 text-sm text-[var(--muted)]"><button class="underline" on:click={() => (mode = 'login')}>{m.auth_back_to_sign_in()}</button></div>
       {:else if mode === 'confirm'}
         <ConfirmForm on:success={() => (mode = 'login')}/>
-        <div class="mt-3 text-sm text-[var(--muted)]"><button class="underline" on:click={() => (mode = 'login')}>Back to sign in</button></div>
+        <div class="mt-3 text-sm text-[var(--muted)]"><button class="underline" on:click={() => (mode = 'login')}>{m.auth_back_to_sign_in()}</button></div>
       {:else if mode === 'recovery'}
         <RecoveryForm/>
-        <div class="mt-3 text-sm text-[var(--muted)]"><button class="underline" on:click={() => (mode = 'login')}>Back to sign in</button></div>
+        <div class="mt-3 text-sm text-[var(--muted)]"><button class="underline" on:click={() => (mode = 'login')}>{m.auth_back_to_sign_in()}</button></div>
       {:else if mode === 'reset'}
         <ResetForm/>
-        <div class="mt-3 text-sm text-[var(--muted)]"><button class="underline" on:click={() => (mode = 'login')}>Back to sign in</button></div>
+        <div class="mt-3 text-sm text-[var(--muted)]"><button class="underline" on:click={() => (mode = 'login')}>{m.auth_back_to_sign_in()}</button></div>
       {/if}
     </div>
   </div>
