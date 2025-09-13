@@ -203,12 +203,13 @@
 			tabindex="0"
 			onclick={() => (creating = false)}
 			onkeydown={(e) => {
-				if (e.key === 'Escape' || e.key === 'Enter') creating = false;
+				if (e.key === 'Escape') creating = false;
+				if (e.key === 'Enter') createGuild();
 			}}
 		>
 			<div class="absolute inset-0 bg-black/40"></div>
 			<div
-				class="panel absolute bottom-6 left-[var(--col1)] ml-4 w-64 p-3"
+				class="panel absolute top-1/2 left-1/2 w-64 -translate-x-1/2 -translate-y-1/2 p-3"
 				role="document"
 				tabindex="-1"
 				onpointerdown={(e) => e.stopPropagation()}

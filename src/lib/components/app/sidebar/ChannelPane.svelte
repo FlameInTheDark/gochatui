@@ -342,6 +342,7 @@
 								(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
 							oncontextmenu={(e) => {
 								e.preventDefault();
+								e.stopPropagation();
 								openChannelMenu(e, ch);
 							}}
 						>
@@ -410,6 +411,7 @@
 									(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
 								oncontextmenu={(e) => {
 									e.preventDefault();
+									e.stopPropagation();
 									openChannelMenu(e, ch);
 								}}
 							>
@@ -441,47 +443,81 @@
 
 	<UserPanel />
 
-        {#if creatingChannel}
-                <div class="panel fixed z-50 top-16 left-[calc(var(--col1)+var(--col2))] ml-4 w-72 p-3">
-			<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
-			<input
-				class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-				placeholder={m.channel_name()}
-				bind:value={newChannelName}
-			/>
-			{#if creatingChannelParent}
-				<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
-			{/if}
-			<div class="flex justify-end gap-2">
-				<button
-					class="rounded-md border border-[var(--stroke)] px-3 py-1"
-					onclick={() => (creatingChannel = false)}>{m.cancel()}</button
-				>
-				<button
-					class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-					onclick={createChannel}>{m.create()}</button
-				>
+	{#if creatingChannel}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onclick={() => (creatingChannel = false)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') creatingChannel = false;
+				if (e.key === 'Enter') createChannel();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.channel_name()}
+					bind:value={newChannelName}
+				/>
+				{#if creatingChannelParent}
+					<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
+				{/if}
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (creatingChannel = false)}>{m.cancel()}</button
+					>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+						onclick={createChannel}>{m.create()}</button
+					>
+				</div>
 			</div>
 		</div>
 	{/if}
 
-        {#if creatingCategory}
-                <div class="panel fixed z-50 top-44 left-[calc(var(--col1)+var(--col2))] ml-4 w-72 p-3">
-			<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
-			<input
-				class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-				placeholder={m.category_name()}
-				bind:value={newCategoryName}
-			/>
-			<div class="flex justify-end gap-2">
-				<button
-					class="rounded-md border border-[var(--stroke)] px-3 py-1"
-					onclick={() => (creatingCategory = false)}>{m.cancel()}</button
-				>
-				<button
-					class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-					onclick={createCategory}>{m.create()}</button
-				>
+	{#if creatingCategory}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onclick={() => (creatingCategory = false)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') creatingCategory = false;
+				if (e.key === 'Enter') createCategory();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.category_name()}
+					bind:value={newCategoryName}
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (creatingCategory = false)}>{m.cancel()}</button
+					>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+						onclick={createCategory}>{m.create()}</button
+					>
+				</div>
 			</div>
 		</div>
 	{/if}
