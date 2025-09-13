@@ -445,10 +445,10 @@
 
 	{#if creatingChannel}
 		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onclick={() => (creatingChannel = false)}
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onpointerdown={() => (creatingChannel = false)}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingChannel = false;
 				if (e.key === 'Enter') createChannel();
@@ -457,9 +457,9 @@
 			<div class="absolute inset-0 bg-black/40"></div>
 			<div
 				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
+                                role="document"
+                                tabindex="-1"
+                                onpointerdown={(e) => e.stopPropagation()}
 			>
 				<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
 				<input
@@ -486,10 +486,10 @@
 
 	{#if creatingCategory}
 		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onclick={() => (creatingCategory = false)}
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onpointerdown={() => (creatingCategory = false)}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingCategory = false;
 				if (e.key === 'Enter') createCategory();
@@ -498,9 +498,9 @@
 			<div class="absolute inset-0 bg-black/40"></div>
 			<div
 				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
+                                role="document"
+                                tabindex="-1"
+                                onpointerdown={(e) => e.stopPropagation()}
 			>
 				<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
 				<input
