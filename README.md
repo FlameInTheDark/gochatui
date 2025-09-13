@@ -1,38 +1,64 @@
-# sv
+# gochatui
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A SvelteKit-based UI for the GoChat service. The project uses Svelte 5, TypeScript and Tailwind CSS to deliver a modern chat experience with real-time updates.
 
-## Creating a project
+## Features
+- Channels and direct messages
+- REST and WebSocket clients
+- Internationalisation with Paraglide
+- Built with the SvelteKit static adapter
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Getting Started
 
-```sh
-# create a new project in the current directory
-npx sv create
+### Prerequisites
+- Node.js 20+
+- npm
 
-# create a new project in my-app
-npx sv create my-app
+### Installation
+```bash
+npm install
 ```
 
-## Developing
+Copy `.env.example` to `.env` and set the required environment variables:
+```env
+PUBLIC_WS_URL=
+PUBLIC_API_BASE_URL=
+```
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+### Development
+Start the development server:
+```bash
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+Run linting and type checks:
+```bash
+npm run lint
+npm run check
+```
 
-To create a production version of your app:
-
-```sh
+### Building
+Create an optimized production build:
+```bash
 npm run build
 ```
+Preview the built app locally:
+```bash
+npm run preview
+```
 
-You can preview the production build with `npm run preview`.
+## Docker
+The repository includes a multi-stage `Dockerfile` that builds the static site and serves it with Nginx.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Build the image:
+```bash
+docker build -t gochatui .
+```
+Run the container:
+```bash
+docker run -p 3000:80 gochatui
+```
+The application will be available at http://localhost:3000.
+
+## License
+This project is proprietary and does not yet specify a license.
