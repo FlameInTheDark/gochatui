@@ -18,14 +18,11 @@
 	let creatingCategory = $state(false);
 	let newChannelName = $state('');
 	let newCategoryName = $state('');
-	let error: string | null = $state(null);
+	let channelError: string | null = $state(null);
+	let categoryError: string | null = $state(null);
 	let filter = $state('');
 	let collapsed = $state<Record<string, boolean>>({});
 	let creatingChannelParent: string | null = $state(null);
-
-	$effect(() => {
-		error = null;
-	});
 
 	function currentGuildChannels(): DtoChannel[] {
 		const gid = $selectedGuildId ?? '';
@@ -107,9 +104,10 @@
 			creatingChannel = false;
 			newChannelName = '';
 			creatingChannelParent = null;
+			channelError = null;
 			await refreshChannels();
 		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
+			channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
 		}
 	}
 
@@ -158,6 +156,7 @@
 				label: m.new_channel(),
 				action: () => {
 					creatingChannel = true;
+					channelError = null;
 					creatingChannelParent = null;
 				}
 			},
@@ -165,6 +164,7 @@
 				label: m.new_category(),
 				action: () => {
 					creatingCategory = true;
+					categoryError = null;
 				}
 			}
 		];
@@ -183,9 +183,10 @@
 			});
 			creatingCategory = false;
 			newCategoryName = '';
+			categoryError = null;
 			await refreshChannels();
 		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? 'Failed to create category';
+			categoryError = e?.response?.data?.message ?? e?.message ?? 'Failed to create category';
 		}
 	}
 
@@ -246,7 +247,11 @@
 			<div class="flex items-center gap-2">
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => (creatingChannel = true)}
+					onclick={() => {
+						creatingChannel = true;
+						channelError = null;
+						creatingChannelParent = null;
+					}}
 					title={m.new_channel()}
 					aria-label={m.new_channel()}
 				>
@@ -260,7 +265,10 @@
 				</button>
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => (creatingCategory = true)}
+					onclick={() => {
+						creatingCategory = true;
+						categoryError = null;
+					}}
 					title={m.new_category()}
 					aria-label={m.new_category()}
 				>
@@ -317,7 +325,6 @@
 			bind:value={filter}
 		/>
 	</div>
-	{#if error}<div class="p-2 text-sm text-red-500">{error}</div>{/if}
 	<div
 		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
 		role="region"
@@ -389,6 +396,7 @@
 								title={m.new_channel()}
 								onclick={() => {
 									creatingChannel = true;
+									channelError = null;
 									creatingChannelParent = String((sec.cat as any)?.id);
 								}}>+</button
 							>
@@ -466,6 +474,9 @@
 				onpointerdown={(e) => e.stopPropagation()}
 			>
 				<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
+				{#if channelError}
+					<div class="mb-2 text-sm text-red-500">{channelError}</div>
+				{/if}
 				<input
 					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
 					placeholder={m.channel_name()}
@@ -507,6 +518,9 @@
 				onpointerdown={(e) => e.stopPropagation()}
 			>
 				<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
+				{#if categoryError}
+					<div class="mb-2 text-sm text-red-500">{categoryError}</div>
+				{/if}
 				<input
 					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
 					placeholder={m.category_name()}
