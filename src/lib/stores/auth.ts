@@ -1,3 +1,4 @@
+import { browser } from '$app/environment';
 import { writable, derived, get } from 'svelte/store';
 import type {
 	AuthLoginRequest,
@@ -93,8 +94,13 @@ function createAuthStore() {
 			const me = res.data ?? null;
 			user.set(me);
 			return me;
-		} catch {
+		} catch (err) {
 			user.set(null);
+			const status = (err as { response?: { status?: number } }).response?.status;
+			if (status === 401) {
+				logout();
+				if (browser) window.location.href = '/app';
+			}
 			return null;
 		}
 	}

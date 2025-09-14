@@ -18,14 +18,11 @@
 	let creatingCategory = $state(false);
 	let newChannelName = $state('');
 	let newCategoryName = $state('');
-	let error: string | null = $state(null);
+	let channelError: string | null = $state(null);
+	let categoryError: string | null = $state(null);
 	let filter = $state('');
 	let collapsed = $state<Record<string, boolean>>({});
 	let creatingChannelParent: string | null = $state(null);
-
-	$effect(() => {
-		error = null;
-	});
 
 	function currentGuildChannels(): DtoChannel[] {
 		const gid = $selectedGuildId ?? '';
@@ -100,15 +97,17 @@
 				guildId: $selectedGuildId as any,
 				guildCreateGuildChannelRequest: {
 					name: newChannelName,
-					parent_id: creatingChannelParent ? (creatingChannelParent as any) : undefined
+					parent_id: creatingChannelParent ? (creatingChannelParent as any) : undefined,
+					type: 0
 				}
 			});
 			creatingChannel = false;
 			newChannelName = '';
 			creatingChannelParent = null;
+			channelError = null;
 			await refreshChannels();
 		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
+			channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
 		}
 	}
 
@@ -157,6 +156,7 @@
 				label: m.new_channel(),
 				action: () => {
 					creatingChannel = true;
+					channelError = null;
 					creatingChannelParent = null;
 				}
 			},
@@ -164,6 +164,7 @@
 				label: m.new_category(),
 				action: () => {
 					creatingCategory = true;
+					categoryError = null;
 				}
 			}
 		];
@@ -175,13 +176,17 @@
 		try {
 			await auth.api.guild.guildGuildIdCategoryPost({
 				guildId: $selectedGuildId as any,
-				guildCreateGuildChannelCategoryRequest: { name: newCategoryName }
+				guildCreateGuildChannelCategoryRequest: {
+					name: newCategoryName,
+					type: 2
+				} as any
 			});
 			creatingCategory = false;
 			newCategoryName = '';
+			categoryError = null;
 			await refreshChannels();
 		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? 'Failed to create category';
+			categoryError = e?.response?.data?.message ?? e?.message ?? 'Failed to create category';
 		}
 	}
 
@@ -242,7 +247,11 @@
 			<div class="flex items-center gap-2">
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => (creatingChannel = true)}
+					onclick={() => {
+						creatingChannel = true;
+						channelError = null;
+						creatingChannelParent = null;
+					}}
 					title={m.new_channel()}
 					aria-label={m.new_channel()}
 				>
@@ -256,7 +265,10 @@
 				</button>
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => (creatingCategory = true)}
+					onclick={() => {
+						creatingCategory = true;
+						categoryError = null;
+					}}
 					title={m.new_category()}
 					aria-label={m.new_category()}
 				>
@@ -313,7 +325,6 @@
 			bind:value={filter}
 		/>
 	</div>
-	{#if error}<div class="p-2 text-sm text-red-500">{error}</div>{/if}
 	<div
 		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
 		role="region"
@@ -342,6 +353,7 @@
 								(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
 							oncontextmenu={(e) => {
 								e.preventDefault();
+								e.stopPropagation();
 								openChannelMenu(e, ch);
 							}}
 						>
@@ -384,6 +396,7 @@
 								title={m.new_channel()}
 								onclick={() => {
 									creatingChannel = true;
+									channelError = null;
 									creatingChannelParent = String((sec.cat as any)?.id);
 								}}>+</button
 							>
@@ -410,6 +423,7 @@
 									(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
 								oncontextmenu={(e) => {
 									e.preventDefault();
+									e.stopPropagation();
 									openChannelMenu(e, ch);
 								}}
 							>
@@ -441,47 +455,87 @@
 
 	<UserPanel />
 
-        {#if creatingChannel}
-                <div class="panel fixed z-50 top-16 left-[calc(var(--col1)+var(--col2))] ml-4 w-72 p-3">
-			<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
-			<input
-				class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-				placeholder={m.channel_name()}
-				bind:value={newChannelName}
-			/>
-			{#if creatingChannelParent}
-				<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
-			{/if}
-			<div class="flex justify-end gap-2">
-				<button
-					class="rounded-md border border-[var(--stroke)] px-3 py-1"
-					onclick={() => (creatingChannel = false)}>{m.cancel()}</button
-				>
-				<button
-					class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-					onclick={createChannel}>{m.create()}</button
-				>
+	{#if creatingChannel}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onpointerdown={() => (creatingChannel = false)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') creatingChannel = false;
+				if (e.key === 'Enter') createChannel();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
+				{#if channelError}
+					<div class="mb-2 text-sm text-red-500">{channelError}</div>
+				{/if}
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.channel_name()}
+					bind:value={newChannelName}
+				/>
+				{#if creatingChannelParent}
+					<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
+				{/if}
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (creatingChannel = false)}>{m.cancel()}</button
+					>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+						onclick={createChannel}>{m.create()}</button
+					>
+				</div>
 			</div>
 		</div>
 	{/if}
 
-        {#if creatingCategory}
-                <div class="panel fixed z-50 top-44 left-[calc(var(--col1)+var(--col2))] ml-4 w-72 p-3">
-			<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
-			<input
-				class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-				placeholder={m.category_name()}
-				bind:value={newCategoryName}
-			/>
-			<div class="flex justify-end gap-2">
-				<button
-					class="rounded-md border border-[var(--stroke)] px-3 py-1"
-					onclick={() => (creatingCategory = false)}>{m.cancel()}</button
-				>
-				<button
-					class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-					onclick={createCategory}>{m.create()}</button
-				>
+	{#if creatingCategory}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onpointerdown={() => (creatingCategory = false)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') creatingCategory = false;
+				if (e.key === 'Enter') createCategory();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
+				{#if categoryError}
+					<div class="mb-2 text-sm text-red-500">{categoryError}</div>
+				{/if}
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.category_name()}
+					bind:value={newCategoryName}
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (creatingCategory = false)}>{m.cancel()}</button
+					>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+						onclick={createCategory}>{m.create()}</button
+					>
+				</div>
 			</div>
 		</div>
 	{/if}
