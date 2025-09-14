@@ -34,15 +34,17 @@ theme.subscribe((t) => {
 const initialLocale =
 	(typeof localStorage !== 'undefined' && (localStorage.getItem('locale') as Locale)) || 'en';
 
-setLocale(initialLocale);
 export const locale = writable<Locale>(initialLocale);
 
 locale.subscribe((l: Locale) => {
-	setLocale(l);
-	try {
-		localStorage.setItem('locale', l);
-	} catch {
-		/* empty */
+	if (typeof window !== 'undefined') {
+		// Updating the locale should not trigger a page reload
+		setLocale(l, { reload: false });
+		try {
+			localStorage.setItem('locale', l);
+		} catch {
+			/* empty */
+		}
 	}
 });
 
