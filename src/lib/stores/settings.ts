@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { setLocale } from '$lib/paraglide/runtime';
+import { invalidateAll } from '$app/navigation';
 
 export type Theme = 'light' | 'dark' | 'system';
 export type Locale = 'en' | 'ru';
@@ -36,10 +37,18 @@ const initialLocale =
 
 export const locale = writable<Locale>(initialLocale);
 
+let initial = true;
 locale.subscribe((l: Locale) => {
 	if (typeof window !== 'undefined') {
 		// Updating the locale should not trigger a page reload
 		setLocale(l, { reload: false });
+
+		if (initial) {
+			initial = false;
+		} else {
+			invalidateAll();
+		}
+
 		try {
 			localStorage.setItem('locale', l);
 		} catch {
