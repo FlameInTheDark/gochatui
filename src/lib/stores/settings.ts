@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { setLocale } from '$lib/paraglide/runtime';
-import { invalidateAll } from '$app/navigation';
+import { goto } from '$app/navigation';
 
 export type Theme = 'light' | 'dark' | 'system';
 export type Locale = 'en' | 'ru';
@@ -40,13 +40,18 @@ export const locale = writable<Locale>(initialLocale);
 let initial = true;
 locale.subscribe((l: Locale) => {
 	if (typeof window !== 'undefined') {
-		// Updating the locale should not trigger a page reload
+		// Update the locale without forcing a full page reload
 		setLocale(l, { reload: false });
 
 		if (initial) {
 			initial = false;
 		} else {
-			invalidateAll();
+			// Trigger a client-side navigation to refresh translations
+			/* eslint-disable-next-line svelte/no-navigation-without-resolve */
+			goto(window.location.pathname + window.location.search, {
+				replaceState: true,
+				invalidateAll: true
+			});
 		}
 
 		try {
