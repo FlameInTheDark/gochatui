@@ -7,6 +7,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 type AnyRecord = Record<string, any>;
 
 export const wsConnected = writable(false);
+export const wsConnectionLost = writable(false);
 export const wsEvent = writable<AnyRecord | null>(null);
 
 let socket: WebSocket | null = null;
@@ -15,6 +16,8 @@ let heartbeatMs = 15000;
 let lastT = 0;
 let authed = false;
 let lastEventId = 0; // track last received/sent event id
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let shouldReconnect = true;
 
 function nextT() {
   lastT += 1;
@@ -122,17 +125,28 @@ function stopHeartbeat() {
 }
 
 export function disconnectWS() {
+  shouldReconnect = false;
   stopHeartbeat();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   if (socket) {
     try { socket.close(); } catch {}
   }
   socket = null;
   authed = false;
   wsConnected.set(false);
+  wsConnectionLost.set(false);
 }
 
 export function connectWS() {
   if (!browser) return;
+  shouldReconnect = true;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
   const url = wsUrl();
   socket = new WebSocket(url);
@@ -140,6 +154,7 @@ export function connectWS() {
 
   socket.onopen = () => {
     wsConnected.set(true);
+    wsConnectionLost.set(false);
     // Send auth (hello) immediately: op=1 with token and t
     const token = get(auth.token);
     if (token) {
@@ -179,6 +194,16 @@ export function connectWS() {
   socket.onclose = () => {
     wsConnected.set(false);
     stopHeartbeat();
+    authed = false;
+    socket = null;
+    if (!shouldReconnect) return;
+    wsConnectionLost.set(true);
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectWS();
+      }, 1000);
+    }
   };
 
   socket.onerror = () => {
