@@ -16,8 +16,9 @@
 
 	let creatingChannel = $state(false);
 	let creatingCategory = $state(false);
-	let newChannelName = $state('');
-	let newCategoryName = $state('');
+        let newChannelName = $state('');
+        let newChannelPrivate = $state(false);
+        let newCategoryName = $state('');
 	let channelError: string | null = $state(null);
 	let categoryError: string | null = $state(null);
 	let filter = $state('');
@@ -241,26 +242,28 @@
 		collapsed = { ...collapsed, [id]: !collapsed[id] };
 	}
 
-	async function createChannel() {
-		if (!newChannelName.trim() || !$selectedGuildId) return;
-		try {
-			await auth.api.guild.guildGuildIdChannelPost({
-				guildId: BigInt($selectedGuildId) as any,
-				guildCreateGuildChannelRequest: {
-					name: newChannelName,
-					parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
-					type: 0
-				}
-			});
-			creatingChannel = false;
-			newChannelName = '';
-			creatingChannelParent = null;
-			channelError = null;
-			await refreshChannels();
-		} catch (e: any) {
-			channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
-		}
-	}
+        async function createChannel() {
+                if (!newChannelName.trim() || !$selectedGuildId) return;
+                try {
+                        await auth.api.guild.guildGuildIdChannelPost({
+                                guildId: BigInt($selectedGuildId) as any,
+                                guildCreateGuildChannelRequest: {
+                                        name: newChannelName,
+                                        parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
+                                        type: 0,
+                                        private: newChannelPrivate
+                                }
+                        });
+                        creatingChannel = false;
+                        newChannelName = '';
+                        newChannelPrivate = false;
+                        creatingChannelParent = null;
+                        channelError = null;
+                        await refreshChannels();
+                } catch (e: any) {
+                        channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
+                }
+        }
 
 	function selectChannel(id: string) {
 		const gid = $selectedGuildId ? String($selectedGuildId) : '';
@@ -857,10 +860,14 @@
 					placeholder={m.channel_name()}
 					bind:value={newChannelName}
 				/>
-				{#if creatingChannelParent}
-					<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
-				{/if}
-				<div class="flex justify-end gap-2">
+                                {#if creatingChannelParent}
+                                        <div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
+                                {/if}
+                                <label class="mb-2 flex items-center gap-2 text-sm">
+                                        <input type="checkbox" bind:checked={newChannelPrivate} />
+                                        {m.channel_private()}
+                                </label>
+                                <div class="flex justify-end gap-2">
 					<button
 						class="rounded-md border border-[var(--stroke)] px-3 py-1"
 						onclick={() => (creatingChannel = false)}>{m.cancel()}</button
