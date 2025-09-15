@@ -169,13 +169,9 @@
 
 	function computeSections(channels: DtoChannel[]) {
 		const byParent: Record<string, DtoChannel[]> = {};
-		const idToChannel: Record<string, DtoChannel> = {};
-		const parentIds: string[] = [];
 		for (const c of channels) {
-			if ((c as any).id != null) idToChannel[String((c as any).id)] = c;
 			if ((c as any).parent_id != null) {
 				const pid = String((c as any).parent_id);
-				if (!byParent[pid]) parentIds.push(pid);
 				(byParent[pid] ||= []).push(c);
 			}
 		}
@@ -185,12 +181,21 @@
 			);
 		}
 		const topLevel = channels
-			.filter((c) => (c as any).parent_id == null && !parentIds.includes(String((c as any).id)))
+			.filter((c) => (c as any).parent_id == null)
 			.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
-		const categories = parentIds
-			.map((pid) => ({ cat: idToChannel[pid], items: byParent[pid] ?? [] }))
-			.sort((a, b) => ((a.cat as any)?.position ?? 0) - ((b.cat as any)?.position ?? 0));
-		return { categories, topLevel };
+		const ordered: (
+			| { type: 'channel'; ch: DtoChannel }
+			| { type: 'category'; cat: DtoChannel; items: DtoChannel[] }
+		)[] = [];
+		for (const c of topLevel) {
+			const id = String((c as any).id);
+			if ((c as any).type === 2) {
+				ordered.push({ type: 'category', cat: c, items: byParent[id] ?? [] });
+			} else {
+				ordered.push({ type: 'channel', ch: c });
+			}
+		}
+		return ordered;
 	}
 
 	function toggleCollapse(id: string) {
@@ -442,170 +447,51 @@
 	>
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
-			{#if sections.topLevel.length}
-				<div
-					ondragover={(e) => {
-						e.preventDefault();
-						dragOverContainer(null);
-					}}
-					ondrop={() => dropOnContainer(null)}
-					role="list"
-				>
-					{#each sections.topLevel.filter((c) => (c.name || '')
-							.toLowerCase()
-							.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
-						<div
-							class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-							String((ch as any).id)
-								? 'bg-[var(--panel)]'
-								: ''} {dragIndicator?.mode === 'before' &&
-							dragIndicator.target === String((ch as any).id) &&
-							dragIndicator.parent === null
-								? 'border-t-2 border-[var(--brand)]'
-								: ''}"
-							role="button"
-							tabindex="0"
-							draggable="true"
-							ondragstart={() => startDrag(ch, null)}
-							ondragover={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								dragOverChannel(String((ch as any).id), null);
-							}}
-							ondrop={(e) => {
-								e.stopPropagation();
-								dropOnChannel(String((ch as any).id), null);
-							}}
-							onclick={() => selectChannel(String((ch as any).id))}
-							onkeydown={(e) =>
-								(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
-							oncontextmenu={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								openChannelMenu(e, ch);
-							}}
-						>
-							<div class="flex items-center gap-2 truncate">
-								<span class="opacity-70">#</span>
-								{ch.name}
-							</div>
-							<div
-								class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
-							>
-								<button
-									class="text-xs text-red-400"
-									title="Delete"
-									onclick={(e) => {
-										e.stopPropagation();
-										deleteChannel(String((ch as any).id));
-									}}>✕</button
-								>
-							</div>
-						</div>
-					{/each}
-				</div>
-			{/if}
-			{#each sections.categories as sec (String((sec.cat as any)?.id))}
-				<div
-					class="mt-2"
-					ondragover={(e) => {
-						e.preventDefault();
-						dragOverContainer(String((sec.cat as any)?.id));
-					}}
-					ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
-					role="list"
-				>
-					<div
-						class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
-							'before' &&
-						dragIndicator.target === String((sec.cat as any)?.id) &&
-						dragIndicator.parent === null
-							? 'border-t-2 border-[var(--brand)]'
-							: ''} {dragIndicator?.mode === 'inside' &&
-						dragIndicator.parent === String((sec.cat as any)?.id)
-							? 'rounded-md ring-2 ring-[var(--brand)]'
-							: ''}"
-						role="button"
-						tabindex="0"
-						draggable="true"
-						ondragstart={() => startDrag(sec.cat, null)}
-						ondragover={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							if (dragging && dragging.type === 2) {
-								dragOverChannel(String((sec.cat as any)?.id), null);
-							} else {
-								dragOverContainer(String((sec.cat as any)?.id));
-							}
-						}}
-						ondrop={(e) => {
-							e.stopPropagation();
-							dropOnCategoryHeader(String((sec.cat as any)?.id));
-						}}
-					>
-						<button
-							class="flex items-center gap-2"
-							onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
-						>
-							<span class="inline-block">{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
-							>
-							<div class="truncate">{sec.cat?.name ?? 'Category'}</div>
-						</button>
-						<div class="flex items-center gap-2">
-							<button
-								class="text-xs"
-								title={m.new_channel()}
-								onclick={() => {
-									creatingChannel = true;
-									channelError = null;
-									creatingChannelParent = String((sec.cat as any)?.id);
-								}}>+</button
-							>
-							<button
-								class="text-xs text-red-400"
-								title="Delete category"
-								onclick={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button
-							>
-						</div>
-					</div>
-					{#if !collapsed[String((sec.cat as any)?.id)]}
-						{#each sec.items.filter((c) => (c.name || '')
-								.toLowerCase()
-								.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
+			<div
+				ondragover={(e) => {
+					e.preventDefault();
+					dragOverContainer(null);
+				}}
+				ondrop={() => dropOnContainer(null)}
+				role="list"
+			>
+				{#each sections as sec (String(sec.type === 'category' ? (sec.cat as any)?.id : (sec.ch as any)?.id))}
+					{#if sec.type === 'channel'}
+						{#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
 							<div
 								class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-								String((ch as any).id)
+								String((sec.ch as any).id)
 									? 'bg-[var(--panel)]'
 									: ''} {dragIndicator?.mode === 'before' &&
-								dragIndicator.target === String((ch as any).id) &&
-								dragIndicator.parent === String((sec.cat as any)?.id)
+								dragIndicator.target === String((sec.ch as any).id) &&
+								dragIndicator.parent === null
 									? 'border-t-2 border-[var(--brand)]'
 									: ''}"
 								role="button"
 								tabindex="0"
 								draggable="true"
-								ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+								ondragstart={() => startDrag(sec.ch, null)}
 								ondragover={(e) => {
 									e.preventDefault();
 									e.stopPropagation();
-									dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
+									dragOverChannel(String((sec.ch as any).id), null);
 								}}
 								ondrop={(e) => {
 									e.stopPropagation();
-									dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
+									dropOnChannel(String((sec.ch as any).id), null);
 								}}
-								onclick={() => selectChannel(String((ch as any).id))}
+								onclick={() => selectChannel(String((sec.ch as any).id))}
 								onkeydown={(e) =>
-									(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
+									(e.key === 'Enter' || e.key === ' ') && selectChannel(String((sec.ch as any).id))}
 								oncontextmenu={(e) => {
 									e.preventDefault();
 									e.stopPropagation();
-									openChannelMenu(e, ch);
+									openChannelMenu(e, sec.ch);
 								}}
 							>
 								<div class="flex items-center gap-2 truncate">
 									<span class="opacity-70">#</span>
-									{ch.name}
+									{sec.ch.name}
 								</div>
 								<div
 									class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
@@ -615,15 +501,134 @@
 										title="Delete"
 										onclick={(e) => {
 											e.stopPropagation();
-											deleteChannel(String((ch as any).id));
+											deleteChannel(String((sec.ch as any).id));
 										}}>✕</button
 									>
 								</div>
 							</div>
-						{/each}
+						{/if}
+					{:else}
+						<div
+							class="mt-2"
+							ondragover={(e) => {
+								e.preventDefault();
+								dragOverContainer(String((sec.cat as any)?.id));
+							}}
+							ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
+							role="list"
+						>
+							<div
+								class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
+									'before' &&
+								dragIndicator.target === String((sec.cat as any)?.id) &&
+								dragIndicator.parent === null
+									? 'border-t-2 border-[var(--brand)]'
+									: ''} {dragIndicator?.mode === 'inside' &&
+								dragIndicator.parent === String((sec.cat as any)?.id)
+									? 'rounded-md ring-2 ring-[var(--brand)]'
+									: ''}"
+								role="button"
+								tabindex="0"
+								draggable="true"
+								ondragstart={() => startDrag(sec.cat, null)}
+								ondragover={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									if (dragging && dragging.type === 2) {
+										dragOverChannel(String((sec.cat as any)?.id), null);
+									} else {
+										dragOverContainer(String((sec.cat as any)?.id));
+									}
+								}}
+								ondrop={(e) => {
+									e.stopPropagation();
+									dropOnCategoryHeader(String((sec.cat as any)?.id));
+								}}
+							>
+								<button
+									class="flex items-center gap-2"
+									onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
+								>
+									<span class="inline-block"
+										>{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
+									>
+									<div class="truncate">{sec.cat?.name ?? 'Category'}</div>
+								</button>
+								<div class="flex items-center gap-2">
+									<button
+										class="text-xs"
+										title={m.new_channel()}
+										onclick={() => {
+											creatingChannel = true;
+											channelError = null;
+											creatingChannelParent = String((sec.cat as any)?.id);
+										}}>+</button
+									>
+									<button
+										class="text-xs text-red-400"
+										title="Delete category"
+										onclick={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button
+									>
+								</div>
+							</div>
+							{#if !collapsed[String((sec.cat as any)?.id)]}
+								{#each sec.items.filter((c) => (c.name || '')
+										.toLowerCase()
+										.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
+									<div
+										class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+										String((ch as any).id)
+											? 'bg-[var(--panel)]'
+											: ''} {dragIndicator?.mode === 'before' &&
+										dragIndicator.target === String((ch as any).id) &&
+										dragIndicator.parent === String((sec.cat as any)?.id)
+											? 'border-t-2 border-[var(--brand)]'
+											: ''}"
+										role="button"
+										tabindex="0"
+										draggable="true"
+										ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+										ondragover={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
+										}}
+										ondrop={(e) => {
+											e.stopPropagation();
+											dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
+										}}
+										onclick={() => selectChannel(String((ch as any).id))}
+										onkeydown={(e) =>
+											(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
+										oncontextmenu={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											openChannelMenu(e, ch);
+										}}
+									>
+										<div class="flex items-center gap-2 truncate">
+											<span class="opacity-70">#</span>
+											{ch.name}
+										</div>
+										<div
+											class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
+										>
+											<button
+												class="text-xs text-red-400"
+												title="Delete"
+												onclick={(e) => {
+													e.stopPropagation();
+													deleteChannel(String((ch as any).id));
+												}}>✕</button
+											>
+										</div>
+									</div>
+								{/each}
+							{/if}
+						</div>
 					{/if}
-				</div>
-			{/each}
+				{/each}
+			</div>
 		{:else}
 			<div class="p-4 text-sm text-[var(--muted)]">Select a server to view channels.</div>
 		{/if}
