@@ -10,6 +10,7 @@
 	import MessageItem from './MessageItem.svelte';
 	import { wsEvent } from '$lib/client/ws';
 	import { m } from '$lib/paraglide/messages.js';
+	import { fly } from 'svelte/transition';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -243,7 +244,21 @@
 
 {#if !wasAtBottom && initialLoaded}
 	<div class="pointer-events-none relative">
-		<div class="pointer-events-auto absolute right-4 bottom-20">
+		<div
+			class="gradient-blur absolute inset-x-0 bottom-0 h-16"
+			transition:fly={{ y: 16, duration: 200 }}
+		>
+			<div></div>
+			<div></div>
+			<div></div>
+			<div></div>
+			<div></div>
+			<div></div>
+		</div>
+		<div
+			class="pointer-events-auto absolute right-4 bottom-20"
+			transition:fly={{ y: 16, duration: 200 }}
+		>
 			<button
 				class="rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm shadow"
 				onclick={() => {
@@ -259,3 +274,66 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.gradient-blur {
+		z-index: 5;
+		pointer-events: none;
+	}
+	.gradient-blur:after,
+	.gradient-blur:before,
+	.gradient-blur > div {
+		position: absolute;
+		inset: 0;
+	}
+	.gradient-blur:before {
+		content: '';
+		z-index: 1;
+		backdrop-filter: blur(0.5px);
+		-webkit-backdrop-filter: blur(0.5px) !important;
+		mask: linear-gradient(180deg, transparent 0, #000 12.5%, #000 25%, transparent 37.5%);
+	}
+	.gradient-blur > div:first-of-type {
+		z-index: 2;
+		backdrop-filter: blur(1px);
+		-webkit-backdrop-filter: blur(1px) !important;
+		mask: linear-gradient(180deg, transparent 12.5%, #000 25%, #000 37.5%, transparent 50%);
+	}
+	.gradient-blur > div:nth-of-type(2) {
+		z-index: 3;
+		backdrop-filter: blur(1.5px);
+		-webkit-backdrop-filter: blur(1.5px) !important;
+		mask: linear-gradient(180deg, transparent 25%, #000 37.5%, #000 50%, transparent 62.5%);
+	}
+	.gradient-blur > div:nth-of-type(3) {
+		z-index: 4;
+		backdrop-filter: blur(3px);
+		-webkit-backdrop-filter: blur(3px) !important;
+		mask: linear-gradient(180deg, transparent 37.5%, #000 50%, #000 62.5%, transparent 75%);
+	}
+	.gradient-blur > div:nth-of-type(4) {
+		z-index: 5;
+		backdrop-filter: blur(4px);
+		-webkit-backdrop-filter: blur(4px) !important;
+		mask: linear-gradient(180deg, transparent 50%, #000 62.5%, #000 75%, transparent 87.5%);
+	}
+	.gradient-blur > div:nth-of-type(5) {
+		z-index: 6;
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px) !important;
+		mask: linear-gradient(180deg, transparent 62.5%, #000 75%, #000 87.5%, transparent);
+	}
+	.gradient-blur > div:nth-of-type(6) {
+		z-index: 7;
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px) !important;
+		mask: linear-gradient(180deg, transparent 75%, #000 87.5%, #000);
+	}
+	.gradient-blur:after {
+		content: '';
+		z-index: 8;
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px) !important;
+		mask: linear-gradient(180deg, transparent 87.5%, #000);
+	}
+</style>

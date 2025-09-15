@@ -5,7 +5,8 @@
 		channelsByGuild,
 		selectedChannelId,
 		lastChannelByGuild,
-		channelReady
+		channelReady,
+		guildSettingsOpen
 	} from '$lib/stores/appState';
 	import { subscribeWS } from '$lib/client/ws';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
@@ -130,16 +131,9 @@
 		} catch {}
 	}
 
-	async function renameGuildDirect(gid: string, currentName: string) {
-		const name = prompt(m.rename_server_prompt(), currentName || '');
-		if (!name) return;
-		try {
-			await auth.api.guild.guildGuildIdPatch({
-				guildId: gid as any,
-				guildUpdateGuildRequest: { name }
-			});
-			await auth.loadGuilds();
-		} catch {}
+	function openGuildSettings(gid: string) {
+		selectGuild(gid);
+		guildSettingsOpen.set(true);
 	}
 </script>
 
@@ -169,7 +163,7 @@
 						const name = String((g as any).name ?? 'Server');
 						contextMenu.openFromEvent(e, [
 							{ label: m.copy_server_id(), action: () => copyToClipboard(gid) },
-							{ label: m.rename_server(), action: () => renameGuildDirect(gid, name) },
+							{ label: m.server_settings(), action: () => openGuildSettings(gid) },
 							{ label: m.leave_server(), action: () => leaveGuildDirect(gid), danger: true }
 						]);
 					}}
@@ -198,10 +192,10 @@
 
 	{#if creating}
 		<div
-                        class="fixed inset-0 z-50"
-                        role="dialog"
-                        tabindex="0"
-                        onpointerdown={() => (creating = false)}
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onpointerdown={() => (creating = false)}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creating = false;
 				if (e.key === 'Enter') createGuild();
@@ -210,9 +204,9 @@
 			<div class="absolute inset-0 bg-black/40"></div>
 			<div
 				class="panel absolute top-1/2 left-1/2 w-64 -translate-x-1/2 -translate-y-1/2 p-3"
-                                role="document"
-                                tabindex="-1"
-                                onpointerdown={(e) => e.stopPropagation()}
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
 			>
 				<div class="mb-2 text-sm font-medium">{m.new_server()}</div>
 				{#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}
