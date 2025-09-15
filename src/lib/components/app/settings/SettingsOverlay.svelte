@@ -3,6 +3,16 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import type { Theme, Locale } from '$lib/stores/settings';
 
+	type LanguageOption = {
+		code: Locale;
+		label: string;
+	};
+
+	const languages: LanguageOption[] = [
+		{ code: 'en', label: 'English' },
+		{ code: 'ru', label: 'Русский' }
+	];
+
 	let category = $state<'general' | 'appearance' | 'other'>('general');
 
 	function close() {
@@ -57,21 +67,45 @@
 			<section class="flex-1 space-y-4 overflow-y-auto p-4">
 				{#if category === 'general'}
 					<div>
-						<label for="language-select" class="mb-2 block">{m.language()}</label>
-						<div class="relative">
-							<select
-								id="language-select"
-								class="w-full appearance-none rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-								value={$locale}
-								onchange={(e) => locale.set((e.target as HTMLSelectElement).value as Locale)}
-							>
-								<option value="en">English</option>
-								<option value="ru">Русский</option>
-							</select>
-							<span
-								class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[var(--fg-muted)]"
-								>▾</span
-							>
+						<p id="language-group-label" class="mb-2 block">{m.language()}</p>
+						<div class="space-y-2" role="radiogroup" aria-labelledby="language-group-label">
+							{#each languages as lang (lang.code)}
+								<div>
+									<input
+										type="radio"
+										name="language"
+										id={`language-${lang.code}`}
+										class="sr-only"
+										value={lang.code}
+										checked={$locale === lang.code}
+										onchange={() => locale.set(lang.code)}
+									/>
+									<label
+										for={`language-${lang.code}`}
+										class={`flex w-full cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition select-none focus-within:ring-2 focus-within:ring-[var(--brand)]/60 focus-within:ring-offset-2 focus-within:ring-offset-[var(--bg)] ${
+											$locale === lang.code
+												? 'border-[var(--brand)] bg-[var(--panel-strong)] shadow-sm'
+												: 'border-[var(--stroke)] bg-[var(--panel)] hover:border-[var(--brand)]/60 hover:bg-[var(--panel-strong)]'
+										}`}
+									>
+										<span class="text-base font-medium">{lang.label}</span>
+										<span
+											class={`ml-4 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors duration-150 ${
+												$locale === lang.code
+													? 'border-[var(--success)]'
+													: 'border-[var(--stroke-2)]'
+											}`}
+											aria-hidden="true"
+										>
+											<span
+												class={`h-2.5 w-2.5 rounded-full transition-colors duration-150 ${
+													$locale === lang.code ? 'bg-[var(--success)]' : 'bg-transparent'
+												}`}
+											></span>
+										</span>
+									</label>
+								</div>
+							{/each}
 						</div>
 					</div>
 				{:else if category === 'appearance'}
