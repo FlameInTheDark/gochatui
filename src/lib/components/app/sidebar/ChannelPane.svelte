@@ -133,22 +133,14 @@
 			});
 		}
 
-		async function sendOrder(parent: string | null) {
-			const channels: GuildChannelOrder[] = list
-				.filter((c) => {
-					const pid = (c as any).parent_id == null ? null : String((c as any).parent_id);
-					return pid === (parent ? String(parent) : null);
-				})
-				.map((c, idx) => ({ id: BigInt((c as any).id), position: idx }) as any);
-			await auth.api.guild.guildGuildIdChannelOrderPatch({
-				guildId: BigInt(gid) as any,
-				guildPatchGuildChannelOrderRequest: { channels } as any
-			});
-		}
-
-		await sendOrder(from);
-		if (to !== from) await sendOrder(to);
-	}
+                const channels: GuildChannelOrder[] = list.map(
+                        (c, index) => ({ id: BigInt((c as any).id), position: index }) as any
+                );
+                await auth.api.guild.guildGuildIdChannelOrderPatch({
+                        guildId: BigInt(gid) as any,
+                        guildPatchGuildChannelOrderRequest: { channels } as any
+                });
+        }
 
 	function computeSections(channels: DtoChannel[]) {
 		const byParent: Record<string, DtoChannel[]> = {};
