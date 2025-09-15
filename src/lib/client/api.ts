@@ -12,6 +12,11 @@ import axios, { type AxiosInstance } from 'axios';
 import { env as publicEnv } from '$env/dynamic/public';
 import { browser } from '$app/environment';
 
+// Ensure bigint values serialize to JSON strings for API requests
+(BigInt.prototype as any).toJSON = function () {
+        return this.toString();
+};
+
 // Centralized API client factory using the generated OpenAPI client.
 // Injects the bearer token dynamically via configuration.accessToken.
 
