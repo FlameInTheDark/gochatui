@@ -125,9 +125,13 @@ export const serializeDataIfNeeded = function (value: any, requestOptions: any, 
     const needsSerialization = nonString && configuration && configuration.isJsonMime
         ? configuration.isJsonMime(requestOptions.headers['Content-Type'])
         : nonString;
-    return needsSerialization
-        ? JSON.stringify(value !== undefined ? value : {})
-        : (value || "");
+    if (needsSerialization) {
+        return JSON.stringify(
+            value !== undefined ? value : {},
+            (_: string, v: any) => (typeof v === 'bigint' ? v.toString() + '#bigint' : v)
+        ).replace(/"(-?\d+)#bigint"/g, '$1');
+    }
+    return value || "";
 }
 
 /**
