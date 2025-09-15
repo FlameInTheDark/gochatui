@@ -10,7 +10,14 @@ import {
 } from '$lib/api';
 import axios, { type AxiosInstance } from 'axios';
 import { env as publicEnv } from '$env/dynamic/public';
-import { browser } from '$app/environment';
+
+// Stringify payloads so bigint values emit as int64 numbers instead of quoted strings
+function stringifyBigInt(data: unknown): string {
+        return JSON.stringify(
+                data,
+                (_, v) => (typeof v === 'bigint' ? v.toString() + '#bigint' : v)
+        ).replace(/"(-?\d+)#bigint"/g, '$1');
+}
 
 // Centralized API client factory using the generated OpenAPI client.
 // Injects the bearer token dynamically via configuration.accessToken.
@@ -42,11 +49,20 @@ export function createApi(
 		basePath
 	});
 
-	// Create a dedicated axios instance with an auth interceptor
-	const ax: AxiosInstance = axios.create();
+        // Create a dedicated axios instance with an auth interceptor
+        const ax: AxiosInstance = axios.create();
+        ax.defaults.transformRequest = [
+                (data, headers) => {
+                        if (data != null && typeof data === 'object') {
+                                (headers as any)['Content-Type'] = 'application/json';
+                                return stringifyBigInt(data);
+                        }
+                        return data;
+                }
+        ];
 
-	// Preserve large int64 values as strings to avoid precision loss
-	function parseJSONPreserveLargeInts(data: string) {
+        // Preserve large int64 values as strings to avoid precision loss
+        function parseJSONPreserveLargeInts(data: string) {
 		let out = '';
 		let i = 0;
 		let inStr = false;

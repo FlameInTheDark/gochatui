@@ -7,8 +7,8 @@
 		lastChannelByGuild,
 		channelReady
 	} from '$lib/stores/appState';
-	import type { DtoChannel } from '$lib/api';
-	import { subscribeWS } from '$lib/client/ws';
+	import type { DtoChannel, GuildChannelOrder } from '$lib/api';
+	import { subscribeWS, wsEvent } from '$lib/client/ws';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
@@ -16,15 +16,28 @@
 
 	let creatingChannel = $state(false);
 	let creatingCategory = $state(false);
-	let newChannelName = $state('');
-	let newCategoryName = $state('');
+        let newChannelName = $state('');
+        let newChannelPrivate = $state(false);
+        let newCategoryName = $state('');
 	let channelError: string | null = $state(null);
 	let categoryError: string | null = $state(null);
 	let filter = $state('');
-        let collapsed = $state<Record<string, boolean>>({});
-        let creatingChannelParent: string | null = $state(null);
-        let dragging: { id: string; parent: string | null; type: number } | null = null;
-        let dragIndicator = $state<{ target: string | null; parent: string | null; mode: 'before' | 'inside' } | null>(null);
+	let collapsed = $state<Record<string, boolean>>({});
+	let creatingChannelParent: string | null = $state(null);
+	let editingChannel: DtoChannel | null = $state(null);
+	let editingCategory: DtoChannel | null = $state(null);
+	let editChannelName = $state('');
+	let editChannelTopic = $state('');
+	let editChannelPrivate = $state(false);
+	let editChannelError: string | null = $state(null);
+	let editCategoryName = $state('');
+	let editCategoryError: string | null = $state(null);
+	let dragging: { id: string; parent: string | null; type: number } | null = null;
+	let dragIndicator = $state<{
+		target: string | null;
+		parent: string | null;
+		mode: 'before' | 'inside';
+	} | null>(null);
 
 	function currentGuildChannels(): DtoChannel[] {
 		const gid = $selectedGuildId ?? '';
@@ -34,7 +47,9 @@
 	async function refreshChannels() {
 		const gid = $selectedGuildId ? String($selectedGuildId) : '';
 		if (!gid) return;
-		const res = await auth.api.guild.guildGuildIdChannelGet({ guildId: gid as any });
+		const res = await auth.api.guild.guildGuildIdChannelGet({
+			guildId: BigInt(gid) as any
+		});
 		const list = res.data ?? [];
 		channelsByGuild.update((m) => ({ ...m, [gid]: list }));
 		// If selected channel is not present in this guild or not a text channel, auto-fix.
@@ -62,42 +77,47 @@
 		}
 	}
 
-        function startDrag(ch: DtoChannel, parent: string | null) {
-                dragging = { id: String(ch.id as unknown as number), parent, type: (ch as any)?.type ?? 0 };
-        }
+	function startDrag(ch: DtoChannel, parent: string | null) {
+		dragging = { id: String((ch as any).id), parent, type: (ch as any)?.type ?? 0 };
+	}
 
-        function dragOverChannel(id: string, parent: string | null) {
-                dragIndicator = { target: id, parent, mode: 'before' };
-        }
+	function dragOverChannel(id: string, parent: string | null) {
+		dragIndicator = { target: id, parent, mode: 'before' };
+	}
 
-        function dragOverContainer(parent: string | null) {
-                dragIndicator = { target: null, parent, mode: 'inside' };
-        }
+	function dragOverContainer(parent: string | null) {
+		dragIndicator = { target: null, parent, mode: 'inside' };
+	}
 
-        function dropOnChannel(targetId: string, parent: string | null) {
-                if (!dragging) return;
-                moveChannel(dragging.id, dragging.parent, parent, targetId);
-                dragging = null;
-                dragIndicator = null;
-        }
+	function dropOnChannel(targetId: string, parent: string | null) {
+		if (!dragging) return;
+		if (dragging.id === targetId) return;
+		if (dragging.type === 2 && parent !== null) return;
+		moveChannel(dragging.id, dragging.parent, parent, targetId);
+		dragging = null;
+		dragIndicator = null;
+	}
 
-        function dropOnContainer(parent: string | null) {
-                if (!dragging) return;
-                moveChannel(dragging.id, dragging.parent, parent, null);
-                dragging = null;
-                dragIndicator = null;
-        }
+	function dropOnContainer(parent: string | null) {
+		if (!dragging) return;
+		if (dragging.type === 2 && parent !== null) return;
+		if (dragging.id === parent) return;
+		moveChannel(dragging.id, dragging.parent, parent, null);
+		dragging = null;
+		dragIndicator = null;
+	}
 
-        function dropOnCategoryHeader(targetId: string) {
-                if (!dragging) return;
-                if (dragging.type === 2) {
-                        moveChannel(dragging.id, dragging.parent, null, targetId);
-                } else {
-                        moveChannel(dragging.id, dragging.parent, targetId, null);
-                }
-                dragging = null;
-                dragIndicator = null;
-        }
+	function dropOnCategoryHeader(targetId: string, before: boolean) {
+		if (!dragging) return;
+		if (dragging.id === targetId) return;
+		if (dragging.type === 2 || before) {
+			moveChannel(dragging.id, dragging.parent, null, targetId);
+		} else {
+			moveChannel(dragging.id, dragging.parent, targetId, null);
+		}
+		dragging = null;
+		dragIndicator = null;
+	}
 
 	async function moveChannel(
 		id: string,
@@ -111,10 +131,14 @@
 		const idx = list.findIndex((c) => String((c as any).id) === id);
 		if (idx === -1) return;
 		const [moving] = list.splice(idx, 1);
-		(moving as any).parent_id = to ? Number(to) : null;
+		if ((moving as any).type === 2 && to !== null) {
+			return;
+		}
+		(moving as any).parent_id = to ? String(to) : null;
 
 		let insertIndex = list.length;
 		if (beforeId) {
+			if (beforeId === id) return;
 			const targetIdx = list.findIndex((c) => String((c as any).id) === beforeId);
 			if (targetIdx !== -1) insertIndex = targetIdx;
 		}
@@ -123,89 +147,123 @@
 
 		if (from !== to) {
 			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
-				guildId: Number(gid),
-				channelId: Number(id),
-				guildPatchGuildChannelRequest: { parent_id: to ? Number(to) : undefined }
+				guildId: BigInt(gid) as any,
+				channelId: BigInt(id) as any,
+				guildPatchGuildChannelRequest: { parent_id: BigInt(to ?? 0) as any } as any
 			});
 		}
 
-		async function sendOrder(parent: string | null) {
-			const ids = list
-				.filter((c) => {
-					const pid = (c as any).parent_id == null ? null : String((c as any).parent_id);
-					return pid === (parent ? String(parent) : null);
-				})
-				.map((c) => Number((c as any).id));
-                        await auth.api.guild.guildGuildIdChannelOrderPatch(
-                                { guildId: Number(gid) },
-                                { params: { parent_id: parent ? Number(parent) : undefined, channel_id: ids } as any }
-                        );
-		}
-
-		await sendOrder(from);
-		if (to !== from) await sendOrder(to);
+		const channels: GuildChannelOrder[] = list.map(
+			(c, index) => ({ id: BigInt((c as any).id), position: index }) as any
+		);
+		await auth.api.guild.guildGuildIdChannelOrderPatch({
+			guildId: BigInt(gid) as any,
+			guildPatchGuildChannelOrderRequest: { channels } as any
+		});
 	}
 
-        function computeSections(channels: DtoChannel[]) {
-                const byParent: Record<string, DtoChannel[]> = {};
-                const idToChannel: Record<string, DtoChannel> = {};
-                const parentIds: string[] = [];
-                for (const c of channels) {
-                        if ((c as any).id != null) idToChannel[String((c as any).id)] = c;
-                        if ((c as any).parent_id != null) {
-                                const pid = String((c as any).parent_id);
-                                if (!byParent[pid]) parentIds.push(pid);
-                                (byParent[pid] ||= []).push(c);
-                        }
-                }
-                for (const pid in byParent) {
-                        byParent[pid].sort(
-                                (a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0)
-                        );
-                }
-                const topLevel = channels
-                        .filter(
-                                (c) =>
-                                        (c as any).parent_id == null &&
-                                        !parentIds.includes(String((c as any).id))
-                        )
-                        .sort(
-                                (a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0)
-                        );
-                const categories = parentIds
-                        .map((pid) => ({ cat: idToChannel[pid], items: byParent[pid] ?? [] }))
-                        .sort(
-                                (a, b) =>
-                                        (((a.cat as any)?.position ?? 0) -
-                                                ((b.cat as any)?.position ?? 0))
-                        );
-                return { categories, topLevel };
-        }
+	$effect(() => {
+		const ev = $wsEvent as any;
+		if (ev?.op === 0 && ev?.d?.guild_id != null) {
+			if (ev?.t === 108 && Array.isArray(ev?.d?.channels)) {
+				const gid = String(ev.d.guild_id);
+				channelsByGuild.update((map) => {
+					const list = [...(map[gid] ?? [])];
+					const pos = new Map<string, number>();
+					for (const ch of ev.d.channels) {
+						pos.set(String(ch.id), ch.position ?? 0);
+					}
+					for (const ch of list) {
+						const p = pos.get(String((ch as any).id));
+						if (p != null) (ch as any).position = p;
+					}
+					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+					return { ...map, [gid]: list };
+				});
+			}
+
+			if ((ev?.t === 106 || ev?.t === 107) && ev?.d?.channel) {
+				const gid = String(ev.d.guild_id);
+				const updated = ev.d.channel;
+				channelsByGuild.update((map) => {
+					const list = [...(map[gid] ?? [])];
+					const id = String(updated.id);
+					const idx = list.findIndex((c) => String((c as any).id) === id);
+					if (idx !== -1) {
+						const target = list[idx] as any;
+						Object.assign(target, updated);
+						target.parent_id = updated.parent_id != null ? String(updated.parent_id) : null;
+						if (updated.position != null) target.position = updated.position;
+					} else {
+						list.push({
+							...updated,
+							parent_id: updated.parent_id != null ? String(updated.parent_id) : null
+						} as any);
+					}
+					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+					return { ...map, [gid]: list };
+				});
+			}
+		}
+	});
+
+	function computeSections(channels: DtoChannel[]) {
+		const byParent: Record<string, DtoChannel[]> = {};
+		for (const c of channels) {
+			if ((c as any).parent_id != null) {
+				const pid = String((c as any).parent_id);
+				(byParent[pid] ||= []).push(c);
+			}
+		}
+		for (const pid in byParent) {
+			byParent[pid].sort(
+				(a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0)
+			);
+		}
+		const topLevel = channels
+			.filter((c) => (c as any).parent_id == null)
+			.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+		const ordered: (
+			| { type: 'channel'; ch: DtoChannel }
+			| { type: 'category'; cat: DtoChannel; items: DtoChannel[] }
+		)[] = [];
+		for (const c of topLevel) {
+			const id = String((c as any).id);
+			if ((c as any).type === 2) {
+				ordered.push({ type: 'category', cat: c, items: byParent[id] ?? [] });
+			} else {
+				ordered.push({ type: 'channel', ch: c });
+			}
+		}
+		return ordered;
+	}
 
 	function toggleCollapse(id: string) {
 		collapsed = { ...collapsed, [id]: !collapsed[id] };
 	}
 
-	async function createChannel() {
-		if (!newChannelName.trim() || !$selectedGuildId) return;
-		try {
-			await auth.api.guild.guildGuildIdChannelPost({
-				guildId: $selectedGuildId as any,
-				guildCreateGuildChannelRequest: {
-					name: newChannelName,
-					parent_id: creatingChannelParent ? (creatingChannelParent as any) : undefined,
-					type: 0
-				}
-			});
-			creatingChannel = false;
-			newChannelName = '';
-			creatingChannelParent = null;
-			channelError = null;
-			await refreshChannels();
-		} catch (e: any) {
-			channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
-		}
-	}
+        async function createChannel() {
+                if (!newChannelName.trim() || !$selectedGuildId) return;
+                try {
+                        await auth.api.guild.guildGuildIdChannelPost({
+                                guildId: BigInt($selectedGuildId) as any,
+                                guildCreateGuildChannelRequest: {
+                                        name: newChannelName,
+                                        parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
+                                        type: 0,
+                                        private: newChannelPrivate
+                                }
+                        });
+                        creatingChannel = false;
+                        newChannelName = '';
+                        newChannelPrivate = false;
+                        creatingChannelParent = null;
+                        channelError = null;
+                        await refreshChannels();
+                } catch (e: any) {
+                        channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
+                }
+        }
 
 	function selectChannel(id: string) {
 		const gid = $selectedGuildId ? String($selectedGuildId) : '';
@@ -229,19 +287,30 @@
 	}
 
 	function openChannelMenu(e: MouseEvent, ch: any) {
-		const gid = $selectedGuildId ? String($selectedGuildId) : '';
 		const id = String(ch?.id ?? '');
 		const type = (ch as any)?.type;
-		const isText = type === 0;
 		const items = [
 			{ label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id },
-			{ label: m.open_channel(), action: () => selectChannel(id), disabled: !isText },
+			{ label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 },
+			{ label: m.edit_channel(), action: () => openEditChannel(ch) },
+			{ label: m.delete_channel(), action: () => deleteChannel(id), danger: true }
+		];
+		contextMenu.openFromEvent(e, items);
+	}
+
+	function openCategoryMenu(e: MouseEvent, cat: any) {
+		const id = String(cat?.id ?? '');
+		const items = [
 			{
-				label: m.delete_channel(),
-				action: () => deleteChannel(id),
-				danger: true,
-				disabled: !isText
-			}
+				label: m.new_channel(),
+				action: () => {
+					creatingChannel = true;
+					channelError = null;
+					creatingChannelParent = id;
+				}
+			},
+			{ label: m.edit_category(), action: () => openEditCategory(cat) },
+			{ label: m.delete_category(), action: () => deleteCategory(id), danger: true }
 		];
 		contextMenu.openFromEvent(e, items);
 	}
@@ -267,11 +336,59 @@
 		contextMenu.openFromEvent(e, items);
 	}
 
+	function openEditChannel(ch: DtoChannel) {
+		editingChannel = ch;
+		editChannelName = ch.name ?? '';
+		editChannelTopic = (ch as any).topic ?? '';
+		editChannelPrivate = !!(ch as any).private;
+		editChannelError = null;
+	}
+
+	async function saveEditChannel() {
+		if (!editingChannel || !$selectedGuildId) return;
+		try {
+			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+				guildId: BigInt($selectedGuildId) as any,
+				channelId: BigInt((editingChannel as any).id) as any,
+				guildPatchGuildChannelRequest: {
+					name: editChannelName,
+					topic: editChannelTopic,
+					private: editChannelPrivate
+				} as any
+			});
+			editingChannel = null;
+			await refreshChannels();
+		} catch (e: any) {
+			editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
+		}
+	}
+
+	function openEditCategory(cat: DtoChannel) {
+		editingCategory = cat;
+		editCategoryName = cat.name ?? '';
+		editCategoryError = null;
+	}
+
+	async function saveEditCategory() {
+		if (!editingCategory || !$selectedGuildId) return;
+		try {
+			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+				guildId: BigInt($selectedGuildId) as any,
+				channelId: BigInt((editingCategory as any).id) as any,
+				guildPatchGuildChannelRequest: { name: editCategoryName } as any
+			});
+			editingCategory = null;
+			await refreshChannels();
+		} catch (e: any) {
+			editCategoryError = e?.response?.data?.message ?? e?.message ?? 'Failed to update category';
+		}
+	}
+
 	async function createCategory() {
 		if (!newCategoryName.trim() || !$selectedGuildId) return;
 		try {
 			await auth.api.guild.guildGuildIdCategoryPost({
-				guildId: $selectedGuildId as any,
+				guildId: BigInt($selectedGuildId) as any,
 				guildCreateGuildChannelCategoryRequest: {
 					name: newCategoryName,
 					type: 2
@@ -290,8 +407,8 @@
 		if (!$selectedGuildId) return;
 		try {
 			await auth.api.guild.guildGuildIdCategoryCategoryIdDelete({
-				guildId: $selectedGuildId as any,
-				categoryId: categoryId as any
+				guildId: BigInt($selectedGuildId) as any,
+				categoryId: BigInt(categoryId) as any
 			});
 			await refreshChannels();
 		} catch (e) {}
@@ -301,8 +418,8 @@
 		if (!$selectedGuildId) return;
 		try {
 			await auth.api.guild.guildGuildIdChannelChannelIdDelete({
-				guildId: $selectedGuildId as any,
-				channelId: channelId as any
+				guildId: BigInt($selectedGuildId) as any,
+				channelId: BigInt(channelId) as any
 			});
 			await refreshChannels();
 		} catch (e) {}
@@ -311,7 +428,9 @@
 	async function leaveGuild() {
 		if (!$selectedGuildId) return;
 		try {
-			await auth.api.user.userMeGuildsGuildIdDelete({ guildId: String($selectedGuildId) });
+			await auth.api.user.userMeGuildsGuildIdDelete({
+				guildId: BigInt($selectedGuildId) as any
+			});
 			await auth.loadGuilds();
 			selectedGuildId.set(null);
 		} catch (e) {}
@@ -324,7 +443,7 @@
 		if (!name) return;
 		try {
 			await auth.api.guild.guildGuildIdPatch({
-				guildId: $selectedGuildId as any,
+				guildId: BigInt($selectedGuildId) as any,
 				guildUpdateGuildRequest: { name }
 			});
 			await auth.loadGuilds();
@@ -421,184 +540,298 @@
 			bind:value={filter}
 		/>
 	</div>
-	<div
-		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
-		role="region"
-		oncontextmenu={(e) => {
-			e.preventDefault();
-			openPaneMenu(e);
-		}}
-	>
+        <div
+                class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
+                role="region"
+                oncontextmenu={(e: MouseEvent) => {
+                        e.preventDefault();
+                        openPaneMenu(e);
+                }}
+        >
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
-                        {#if sections.topLevel.length}
-                                <div
-                                        ondragover={(e) => {
-                                                e.preventDefault();
-                                                dragOverContainer(null);
-                                        }}
-                                        ondrop={() => dropOnContainer(null)}
-                                        role="list"
-                                >
-                                        {#each sections.topLevel.filter((c) => (c.name || '')
-                                                        .toLowerCase()
-                                                        .includes(filter.toLowerCase())) as ch (String((ch as any).id))}
-                                                <div
-                                                        class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-                                                        String((ch as any).id)
-                                                                ? 'bg-[var(--panel)]'
-                                                                : ''} {dragIndicator?.mode === 'before' && dragIndicator.target === String((ch as any).id) && dragIndicator.parent === null ? 'border-t-2 border-[var(--brand)]' : ''}"
-                                                        role="button"
-                                                        tabindex="0"
-                                                        draggable="true"
-                                                        ondragstart={() => startDrag(ch, null)}
-                                                        ondragover={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                dragOverChannel(String((ch as any).id), null);
-                                                        }}
-                                                        ondrop={(e) => {
-                                                                e.stopPropagation();
-                                                                dropOnChannel(String((ch as any).id), null);
-                                                        }}
-                                                        onclick={() => selectChannel(String((ch as any).id))}
-                                                        onkeydown={(e) =>
-                                                                (e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
-                                                        oncontextmenu={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                openChannelMenu(e, ch);
-                                                        }}
-                                                >
-                                                        <div class="flex items-center gap-2 truncate">
-                                                                <span class="opacity-70">#</span>
-                                                                {ch.name}
-                                                        </div>
-                                                        <div
-                                                                class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
-                                                        >
-                                                                <button
-                                                                        class="text-xs text-red-400"
-                                                                        title="Delete"
-                                                                        onclick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                deleteChannel(String((ch as any).id));
-                                                                        }}>✕</button
-                                                                >
-                                                        </div>
-                                                </div>
-                                        {/each}
-                                </div>
-                        {/if}
-                        {#each sections.categories as sec (String((sec.cat as any)?.id))}
-                                <div
-                                        class="mt-2"
-                                        ondragover={(e) => {
-                                                e.preventDefault();
-                                                dragOverContainer(String((sec.cat as any)?.id));
-                                        }}
-                                        ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
-                                        role="list"
-                                >
-                                        <div
-                                                class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.cat as any)?.id) && dragIndicator.parent === null ? 'border-t-2 border-[var(--brand)]' : ''} {dragIndicator?.mode === 'inside' && dragIndicator.parent === String((sec.cat as any)?.id) ? 'ring-2 ring-[var(--brand)] rounded-md' : ''}"
-                                                role="button"
-                                                tabindex="0"
-                                                draggable="true"
-                                                ondragstart={() => startDrag(sec.cat, null)}
-                                                ondragover={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        if (dragging && dragging.type === 2) {
-                                                                dragOverChannel(String((sec.cat as any)?.id), null);
-                                                        } else {
-                                                                dragOverContainer(String((sec.cat as any)?.id));
-                                                        }
-                                                }}
-                                                ondrop={(e) => {
-                                                        e.stopPropagation();
-                                                        dropOnCategoryHeader(String((sec.cat as any)?.id));
-                                                }}
-                                        >
-                                                <button
-                                                        class="flex items-center gap-2"
-                                                        onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
-                                                >
-                                                        <span class="inline-block">{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span>
-                                                        <div class="truncate">{sec.cat?.name ?? 'Category'}</div>
-                                                </button>
-                                                <div class="flex items-center gap-2">
-                                                        <button
-                                                                class="text-xs"
-                                                                title={m.new_channel()}
-                                                                onclick={() => {
-                                                                        creatingChannel = true;
-                                                                        channelError = null;
-                                                                        creatingChannelParent = String((sec.cat as any)?.id);
-                                                                }}>+</button>
-                                                        <button
-                                                                class="text-xs text-red-400"
-                                                                title="Delete category"
-                                                                onclick={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button>
-                                                </div>
-                                        </div>
-                                        {#if !collapsed[String((sec.cat as any)?.id)]}
-                                                {#each sec.items.filter((c) => (c.name || '')
-                                                                .toLowerCase()
-                                                                .includes(filter.toLowerCase())) as ch (String((ch as any).id))}
-                                                        <div
-                                                                class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-                                                                String((ch as any).id)
-                                                                        ? 'bg-[var(--panel)]'
-                                                                        : ''} {dragIndicator?.mode === 'before' && dragIndicator.target === String((ch as any).id) && dragIndicator.parent === String((sec.cat as any)?.id) ? 'border-t-2 border-[var(--brand)]' : ''}"
+			<div
+				ondragover={(e) => {
+					e.preventDefault();
+					dragOverContainer(null);
+				}}
+				ondrop={() => dropOnContainer(null)}
+				role="list"
+			>
+				{#each sections as sec (String(sec.type === 'category' ? (sec.cat as any)?.id : (sec.ch as any)?.id))}
+					{#if sec.type === 'channel'}
+						{#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
+							<div
+								role="listitem"
+								class="relative"
+								ondragover={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									dragOverChannel(String((sec.ch as any).id), null);
+								}}
+								ondrop={(e) => {
+									e.stopPropagation();
+									dropOnChannel(String((sec.ch as any).id), null);
+								}}
+							>
+								{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.ch as any).id) && dragIndicator.parent === null}
+									<div
+										class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+									></div>
+								{/if}
+								<div
+                                                                class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                        String((sec.ch as any).id)
+                                                                                ? 'bg-[var(--panel)]'
+                                                                                : ''}"
                                                                 role="button"
                                                                 tabindex="0"
                                                                 draggable="true"
-                                                                ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
-                                                                ondragover={(e) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
-                                                                }}
-                                                                ondrop={(e) => {
-                                                                        e.stopPropagation();
-                                                                        dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
-                                                                }}
-                                                                onclick={() => selectChannel(String((ch as any).id))}
+                                                                ondragstart={() => startDrag(sec.ch, null)}
+                                                                onclick={() => selectChannel(String((sec.ch as any).id))}
                                                                 onkeydown={(e) =>
-                                                                        (e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
-                                                                oncontextmenu={(e) => {
+                                                                        (e.key === 'Enter' || e.key === ' ') &&
+                                                                        selectChannel(String((sec.ch as any).id))}
+                                                                oncontextmenu={(e: MouseEvent) => {
                                                                         e.preventDefault();
                                                                         e.stopPropagation();
-                                                                        openChannelMenu(e, ch);
+                                                                        openChannelMenu(e, sec.ch);
                                                                 }}
                                                         >
-                                                                <div class="flex items-center gap-2 truncate">
-                                                                        <span class="opacity-70">#</span>
-                                                                        {ch.name}
-                                                                </div>
+									<div class="flex items-center gap-2 truncate">
+										<span class="opacity-70">#</span>
+										{sec.ch.name}
+									</div>
+								</div>
+							</div>
+						{/if}
+					{:else}
+						<div
+							class="mt-2"
+							ondragover={(e) => {
+								e.preventDefault();
+								dragOverContainer(String((sec.cat as any)?.id));
+							}}
+							ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
+							role="list"
+						>
+							<div class="relative">
+								{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.cat as any)?.id) && dragIndicator.parent === null}
+									<div
+										class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+									></div>
+								{/if}
                                                                 <div
-                                                                        class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
+                                                                        class="flex items-center px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
+                                                                                'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
+                                                                                ? 'rounded-md ring-2 ring-[var(--brand)]'
+                                                                                : ''}"
+                                                                        role="button"
+                                                                        tabindex="0"
+                                                                        draggable="true"
+                                                                        ondragstart={() => startDrag(sec.cat, null)}
+                                                                        ondragover={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                                                const before = e.clientY < rect.top + rect.height / 2;
+                                                                                if (dragging?.type === 2 || before) {
+                                                                                        dragOverChannel(String((sec.cat as any)?.id), null);
+                                                                                } else {
+                                                                                        dragOverContainer(String((sec.cat as any)?.id));
+                                                                                }
+                                                                        }}
+                                                                        ondrop={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                                                const before = e.clientY < rect.top + rect.height / 2;
+                                                                                dropOnCategoryHeader(String((sec.cat as any)?.id), before);
+                                                                        }}
+                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                openCategoryMenu(e, sec.cat);
+                                                                        }}
                                                                 >
                                                                         <button
-                                                                                class="text-xs text-red-400"
-                                                                                title="Delete"
-                                                                                onclick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        deleteChannel(String((ch as any).id));
-                                                                                }}>✕</button>
+                                                                                class="flex items-center gap-2"
+                                                                                onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
+                                                                        >
+                                                                                <span class="inline-block"
+                                                                                        >{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
+                                                                                >
+                                                                                <div class="truncate">{sec.cat?.name ?? 'Category'}</div>
+                                                                        </button>
                                                                 </div>
-                                                        </div>
-                                                {/each}
-                                        {/if}
-                                </div>
-                        {/each}
+							</div>
+							{#if !collapsed[String((sec.cat as any)?.id)]}
+								{#each sec.items.filter((c) => (c.name || '')
+										.toLowerCase()
+										.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
+									<div
+										role="listitem"
+										class="relative"
+										ondragover={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
+										}}
+										ondrop={(e) => {
+											e.stopPropagation();
+											dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
+										}}
+									>
+										{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((ch as any).id) && dragIndicator.parent === String((sec.cat as any)?.id)}
+											<div
+												class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+											></div>
+										{/if}
+										<div
+                                                                                class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                                        String((ch as any).id)
+                                                                                                ? 'bg-[var(--panel)]'
+                                                                                                : ''}"
+                                                                                        role="button"
+                                                                                        tabindex="0"
+                                                                                        draggable="true"
+                                                                                        ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+                                                                                        onclick={() => selectChannel(String((ch as any).id))}
+                                                                                        onkeydown={(e) =>
+                                                                                                (e.key === 'Enter' || e.key === ' ') &&
+                                                                                                selectChannel(String((ch as any).id))}
+                                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                                e.preventDefault();
+                                                                                                e.stopPropagation();
+                                                                                                openChannelMenu(e, ch);
+                                                                                        }}
+                                                                                >
+											<div class="flex items-center gap-2 truncate">
+												<span class="opacity-70">#</span>
+												{ch.name}
+											</div>
+										</div>
+									</div>
+								{/each}
+							{/if}
+							<div
+								class="h-4"
+								role="listitem"
+								ondragover={(e) => {
+									e.preventDefault();
+									dragOverContainer(String((sec.cat as any)?.id));
+								}}
+								ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
+							></div>
+						</div>
+					{/if}
+				{/each}
+				<div
+					class="h-4"
+					role="listitem"
+					ondragover={(e) => {
+						e.preventDefault();
+						dragOverContainer(null);
+					}}
+					ondrop={() => dropOnContainer(null)}
+				></div>
+			</div>
 		{:else}
 			<div class="p-4 text-sm text-[var(--muted)]">Select a server to view channels.</div>
 		{/if}
 	</div>
 
 	<UserPanel />
+
+	{#if editingChannel}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onpointerdown={() => (editingChannel = null)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') editingChannel = null;
+				if (e.key === 'Enter') saveEditChannel();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-sm font-medium">{m.edit_channel()}</div>
+				{#if editChannelError}
+					<div class="mb-2 text-sm text-red-500">{editChannelError}</div>
+				{/if}
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.channel_name()}
+					bind:value={editChannelName}
+				/>
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.channel_topic()}
+					bind:value={editChannelTopic}
+				/>
+				<label class="mb-2 flex items-center gap-2 text-sm">
+					<input type="checkbox" bind:checked={editChannelPrivate} />
+					{m.channel_private()}
+				</label>
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (editingChannel = null)}>{m.cancel()}</button
+					>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+						onclick={saveEditChannel}>{m.save()}</button
+					>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if editingCategory}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onpointerdown={() => (editingCategory = null)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') editingCategory = null;
+				if (e.key === 'Enter') saveEditCategory();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-sm font-medium">{m.edit_category()}</div>
+				{#if editCategoryError}
+					<div class="mb-2 text-sm text-red-500">{editCategoryError}</div>
+				{/if}
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.category_name()}
+					bind:value={editCategoryName}
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (editingCategory = null)}>{m.cancel()}</button
+					>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+						onclick={saveEditCategory}>{m.save()}</button
+					>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if creatingChannel}
 		<div
@@ -627,10 +860,14 @@
 					placeholder={m.channel_name()}
 					bind:value={newChannelName}
 				/>
-				{#if creatingChannelParent}
-					<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
-				{/if}
-				<div class="flex justify-end gap-2">
+                                {#if creatingChannelParent}
+                                        <div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
+                                {/if}
+                                <label class="mb-2 flex items-center gap-2 text-sm">
+                                        <input type="checkbox" bind:checked={newChannelPrivate} />
+                                        {m.channel_private()}
+                                </label>
+                                <div class="flex justify-end gap-2">
 					<button
 						class="rounded-md border border-[var(--stroke)] px-3 py-1"
 						onclick={() => (creatingChannel = false)}>{m.cancel()}</button
