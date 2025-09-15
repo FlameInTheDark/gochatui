@@ -510,6 +510,25 @@ export interface DtoUser {
 /**
  * 
  * @export
+ * @interface GuildChannelOrder
+ */
+export interface GuildChannelOrder {
+    /**
+     * 
+     * @type {number}
+     * @memberof GuildChannelOrder
+     */
+    'id'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof GuildChannelOrder
+     */
+    'position'?: number;
+}
+/**
+ * 
+ * @export
  * @interface GuildCreateGuildChannelCategoryRequest
  */
 export interface GuildCreateGuildChannelCategoryRequest {
@@ -581,6 +600,19 @@ export interface GuildCreateGuildRequest {
      * @memberof GuildCreateGuildRequest
      */
     'public'?: boolean;
+}
+/**
+ * 
+ * @export
+ * @interface GuildPatchGuildChannelOrderRequest
+ */
+export interface GuildPatchGuildChannelOrderRequest {
+    /**
+     * 
+     * @type {Array<GuildChannelOrder>}
+     * @memberof GuildPatchGuildChannelOrderRequest
+     */
+    'channels'?: Array<GuildChannelOrder>;
 }
 /**
  * 
@@ -1940,12 +1972,15 @@ export const GuildApiAxiosParamCreator = function (configuration?: Configuration
          * 
          * @summary Change channels order
          * @param {number} guildId Guild ID
+         * @param {GuildPatchGuildChannelOrderRequest} guildPatchGuildChannelOrderRequest Update channel order data
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        guildGuildIdChannelOrderPatch: async (guildId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        guildGuildIdChannelOrderPatch: async (guildId: number, guildPatchGuildChannelOrderRequest: GuildPatchGuildChannelOrderRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'guildId' is not null or undefined
             assertParamExists('guildGuildIdChannelOrderPatch', 'guildId', guildId)
+            // verify required parameter 'guildPatchGuildChannelOrderRequest' is not null or undefined
+            assertParamExists('guildGuildIdChannelOrderPatch', 'guildPatchGuildChannelOrderRequest', guildPatchGuildChannelOrderRequest)
             const localVarPath = `/guild/{guild_id}/channel/order`
                 .replace(`{${"guild_id"}}`, encodeURIComponent(String(guildId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
@@ -1961,9 +1996,12 @@ export const GuildApiAxiosParamCreator = function (configuration?: Configuration
 
 
     
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(guildPatchGuildChannelOrderRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -2256,11 +2294,12 @@ export const GuildApiFp = function(configuration?: Configuration) {
          * 
          * @summary Change channels order
          * @param {number} guildId Guild ID
+         * @param {GuildPatchGuildChannelOrderRequest} guildPatchGuildChannelOrderRequest Update channel order data
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async guildGuildIdChannelOrderPatch(guildId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.guildGuildIdChannelOrderPatch(guildId, options);
+        async guildGuildIdChannelOrderPatch(guildId: number, guildPatchGuildChannelOrderRequest: GuildPatchGuildChannelOrderRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.guildGuildIdChannelOrderPatch(guildId, guildPatchGuildChannelOrderRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['GuildApi.guildGuildIdChannelOrderPatch']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -2411,7 +2450,7 @@ export const GuildApiFactory = function (configuration?: Configuration, basePath
          * @throws {RequiredError}
          */
         guildGuildIdChannelOrderPatch(requestParameters: GuildApiGuildGuildIdChannelOrderPatchRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.guildGuildIdChannelOrderPatch(requestParameters.guildId, options).then((request) => request(axios, basePath));
+            return localVarFp.guildGuildIdChannelOrderPatch(requestParameters.guildId, requestParameters.guildPatchGuildChannelOrderRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -2732,6 +2771,13 @@ export interface GuildApiGuildGuildIdChannelOrderPatchRequest {
      * @memberof GuildApiGuildGuildIdChannelOrderPatch
      */
     readonly guildId: number
+
+    /**
+     * Update channel order data
+     * @type {GuildPatchGuildChannelOrderRequest}
+     * @memberof GuildApiGuildGuildIdChannelOrderPatch
+     */
+    readonly guildPatchGuildChannelOrderRequest: GuildPatchGuildChannelOrderRequest
 }
 
 /**
@@ -2913,7 +2959,7 @@ export class GuildApi extends BaseAPI implements GuildApiInterface {
      * @memberof GuildApi
      */
     public guildGuildIdChannelOrderPatch(requestParameters: GuildApiGuildGuildIdChannelOrderPatchRequest, options?: RawAxiosRequestConfig) {
-        return GuildApiFp(this.configuration).guildGuildIdChannelOrderPatch(requestParameters.guildId, options).then((request) => request(this.axios, this.basePath));
+        return GuildApiFp(this.configuration).guildGuildIdChannelOrderPatch(requestParameters.guildId, requestParameters.guildPatchGuildChannelOrderRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
