@@ -5,7 +5,8 @@
 		selectedChannelId,
 		channelsByGuild,
 		lastChannelByGuild,
-		channelReady
+		channelReady,
+		guildSettingsOpen
 	} from '$lib/stores/appState';
 	import type { DtoChannel, GuildChannelOrder } from '$lib/api';
 	import { subscribeWS, wsEvent } from '$lib/client/ws';
@@ -16,9 +17,9 @@
 
 	let creatingChannel = $state(false);
 	let creatingCategory = $state(false);
-        let newChannelName = $state('');
-        let newChannelPrivate = $state(false);
-        let newCategoryName = $state('');
+	let newChannelName = $state('');
+	let newChannelPrivate = $state(false);
+	let newCategoryName = $state('');
 	let channelError: string | null = $state(null);
 	let categoryError: string | null = $state(null);
 	let filter = $state('');
@@ -242,28 +243,28 @@
 		collapsed = { ...collapsed, [id]: !collapsed[id] };
 	}
 
-        async function createChannel() {
-                if (!newChannelName.trim() || !$selectedGuildId) return;
-                try {
-                        await auth.api.guild.guildGuildIdChannelPost({
-                                guildId: BigInt($selectedGuildId) as any,
-                                guildCreateGuildChannelRequest: {
-                                        name: newChannelName,
-                                        parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
-                                        type: 0,
-                                        private: newChannelPrivate
-                                }
-                        });
-                        creatingChannel = false;
-                        newChannelName = '';
-                        newChannelPrivate = false;
-                        creatingChannelParent = null;
-                        channelError = null;
-                        await refreshChannels();
-                } catch (e: any) {
-                        channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
-                }
-        }
+	async function createChannel() {
+		if (!newChannelName.trim() || !$selectedGuildId) return;
+		try {
+			await auth.api.guild.guildGuildIdChannelPost({
+				guildId: BigInt($selectedGuildId) as any,
+				guildCreateGuildChannelRequest: {
+					name: newChannelName,
+					parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
+					type: 0,
+					private: newChannelPrivate
+				}
+			});
+			creatingChannel = false;
+			newChannelName = '';
+			newChannelPrivate = false;
+			creatingChannelParent = null;
+			channelError = null;
+			await refreshChannels();
+		} catch (e: any) {
+			channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
+		}
+	}
 
 	function selectChannel(id: string) {
 		const gid = $selectedGuildId ? String($selectedGuildId) : '';
@@ -435,20 +436,6 @@
 			selectedGuildId.set(null);
 		} catch (e) {}
 	}
-
-	async function renameGuild() {
-		if (!$selectedGuildId) return;
-		const current = $guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name ?? '';
-		const name = prompt(m.rename_server_prompt(), current);
-		if (!name) return;
-		try {
-			await auth.api.guild.guildGuildIdPatch({
-				guildId: BigInt($selectedGuildId) as any,
-				guildUpdateGuildRequest: { name }
-			});
-			await auth.loadGuilds();
-		} catch (e) {}
-	}
 </script>
 
 <div class="flex h-full w-[var(--col2)] flex-col border-r border-[var(--stroke)]">
@@ -500,9 +487,9 @@
 				</button>
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={renameGuild}
-					title={m.rename_server()}
-					aria-label={m.rename_server()}
+					onclick={() => guildSettingsOpen.set(true)}
+					title={m.server_settings()}
+					aria-label={m.server_settings()}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -510,10 +497,11 @@
 						width="16"
 						height="16"
 						fill="currentColor"
-						><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" /><path
-							d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-						/></svg
 					>
+						<path
+							d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.007 7.007 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.5 2h-3a.5.5 0 0 0-.49.42l-.36 2.54a6.978 6.978 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L3.1 8.14a.5.5 0 0 0 .12.64l2.03 1.58c-.05.31-.07.63-.07.94 0 .31.02.63.07.94L3.22 13.82a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.44.34.7.22l2.39-.96c.5.39 1.05.72 1.63.94l.36 2.54c.04.26.25.42.49.42h3a.5.5 0 0 0 .49-.42l.36-2.54a7.007 7.007 0 0 0 1.63-.94l2.39.96c.26.11.56.02.7-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5S10.07 8.5 12 8.5s3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"
+						/>
+					</svg>
 				</button>
 				<button
 					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] text-red-400 hover:bg-[var(--panel)]"
@@ -540,14 +528,14 @@
 			bind:value={filter}
 		/>
 	</div>
-        <div
-                class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
-                role="region"
-                oncontextmenu={(e: MouseEvent) => {
-                        e.preventDefault();
-                        openPaneMenu(e);
-                }}
-        >
+	<div
+		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
+		role="region"
+		oncontextmenu={(e: MouseEvent) => {
+			e.preventDefault();
+			openPaneMenu(e);
+		}}
+	>
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
 			<div
@@ -580,24 +568,24 @@
 									></div>
 								{/if}
 								<div
-                                                                class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-                                                                        String((sec.ch as any).id)
-                                                                                ? 'bg-[var(--panel)]'
-                                                                                : ''}"
-                                                                role="button"
-                                                                tabindex="0"
-                                                                draggable="true"
-                                                                ondragstart={() => startDrag(sec.ch, null)}
-                                                                onclick={() => selectChannel(String((sec.ch as any).id))}
-                                                                onkeydown={(e) =>
-                                                                        (e.key === 'Enter' || e.key === ' ') &&
-                                                                        selectChannel(String((sec.ch as any).id))}
-                                                                oncontextmenu={(e: MouseEvent) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        openChannelMenu(e, sec.ch);
-                                                                }}
-                                                        >
+									class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+									String((sec.ch as any).id)
+										? 'bg-[var(--panel)]'
+										: ''}"
+									role="button"
+									tabindex="0"
+									draggable="true"
+									ondragstart={() => startDrag(sec.ch, null)}
+									onclick={() => selectChannel(String((sec.ch as any).id))}
+									onkeydown={(e) =>
+										(e.key === 'Enter' || e.key === ' ') &&
+										selectChannel(String((sec.ch as any).id))}
+									oncontextmenu={(e: MouseEvent) => {
+										e.preventDefault();
+										e.stopPropagation();
+										openChannelMenu(e, sec.ch);
+									}}
+								>
 									<div class="flex items-center gap-2 truncate">
 										<span class="opacity-70">#</span>
 										{sec.ch.name}
@@ -621,48 +609,48 @@
 										class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
 									></div>
 								{/if}
-                                                                <div
-                                                                        class="flex items-center px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
-                                                                                'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
-                                                                                ? 'rounded-md ring-2 ring-[var(--brand)]'
-                                                                                : ''}"
-                                                                        role="button"
-                                                                        tabindex="0"
-                                                                        draggable="true"
-                                                                        ondragstart={() => startDrag(sec.cat, null)}
-                                                                        ondragover={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                                                                const before = e.clientY < rect.top + rect.height / 2;
-                                                                                if (dragging?.type === 2 || before) {
-                                                                                        dragOverChannel(String((sec.cat as any)?.id), null);
-                                                                                } else {
-                                                                                        dragOverContainer(String((sec.cat as any)?.id));
-                                                                                }
-                                                                        }}
-                                                                        ondrop={(e) => {
-                                                                                e.stopPropagation();
-                                                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                                                                const before = e.clientY < rect.top + rect.height / 2;
-                                                                                dropOnCategoryHeader(String((sec.cat as any)?.id), before);
-                                                                        }}
-                                                                        oncontextmenu={(e: MouseEvent) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                                openCategoryMenu(e, sec.cat);
-                                                                        }}
-                                                                >
-                                                                        <button
-                                                                                class="flex items-center gap-2"
-                                                                                onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
-                                                                        >
-                                                                                <span class="inline-block"
-                                                                                        >{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
-                                                                                >
-                                                                                <div class="truncate">{sec.cat?.name ?? 'Category'}</div>
-                                                                        </button>
-                                                                </div>
+								<div
+									class="flex items-center px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
+										'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
+										? 'rounded-md ring-2 ring-[var(--brand)]'
+										: ''}"
+									role="button"
+									tabindex="0"
+									draggable="true"
+									ondragstart={() => startDrag(sec.cat, null)}
+									ondragover={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+										const before = e.clientY < rect.top + rect.height / 2;
+										if (dragging?.type === 2 || before) {
+											dragOverChannel(String((sec.cat as any)?.id), null);
+										} else {
+											dragOverContainer(String((sec.cat as any)?.id));
+										}
+									}}
+									ondrop={(e) => {
+										e.stopPropagation();
+										const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+										const before = e.clientY < rect.top + rect.height / 2;
+										dropOnCategoryHeader(String((sec.cat as any)?.id), before);
+									}}
+									oncontextmenu={(e: MouseEvent) => {
+										e.preventDefault();
+										e.stopPropagation();
+										openCategoryMenu(e, sec.cat);
+									}}
+								>
+									<button
+										class="flex items-center gap-2"
+										onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
+									>
+										<span class="inline-block"
+											>{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
+										>
+										<div class="truncate">{sec.cat?.name ?? 'Category'}</div>
+									</button>
+								</div>
 							</div>
 							{#if !collapsed[String((sec.cat as any)?.id)]}
 								{#each sec.items.filter((c) => (c.name || '')
@@ -687,24 +675,24 @@
 											></div>
 										{/if}
 										<div
-                                                                                class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-                                                                                        String((ch as any).id)
-                                                                                                ? 'bg-[var(--panel)]'
-                                                                                                : ''}"
-                                                                                        role="button"
-                                                                                        tabindex="0"
-                                                                                        draggable="true"
-                                                                                        ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
-                                                                                        onclick={() => selectChannel(String((ch as any).id))}
-                                                                                        onkeydown={(e) =>
-                                                                                                (e.key === 'Enter' || e.key === ' ') &&
-                                                                                                selectChannel(String((ch as any).id))}
-                                                                                        oncontextmenu={(e: MouseEvent) => {
-                                                                                                e.preventDefault();
-                                                                                                e.stopPropagation();
-                                                                                                openChannelMenu(e, ch);
-                                                                                        }}
-                                                                                >
+											class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+											String((ch as any).id)
+												? 'bg-[var(--panel)]'
+												: ''}"
+											role="button"
+											tabindex="0"
+											draggable="true"
+											ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+											onclick={() => selectChannel(String((ch as any).id))}
+											onkeydown={(e) =>
+												(e.key === 'Enter' || e.key === ' ') &&
+												selectChannel(String((ch as any).id))}
+											oncontextmenu={(e: MouseEvent) => {
+												e.preventDefault();
+												e.stopPropagation();
+												openChannelMenu(e, ch);
+											}}
+										>
 											<div class="flex items-center gap-2 truncate">
 												<span class="opacity-70">#</span>
 												{ch.name}
@@ -860,14 +848,14 @@
 					placeholder={m.channel_name()}
 					bind:value={newChannelName}
 				/>
-                                {#if creatingChannelParent}
-                                        <div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
-                                {/if}
-                                <label class="mb-2 flex items-center gap-2 text-sm">
-                                        <input type="checkbox" bind:checked={newChannelPrivate} />
-                                        {m.channel_private()}
-                                </label>
-                                <div class="flex justify-end gap-2">
+				{#if creatingChannelParent}
+					<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
+				{/if}
+				<label class="mb-2 flex items-center gap-2 text-sm">
+					<input type="checkbox" bind:checked={newChannelPrivate} />
+					{m.channel_private()}
+				</label>
+				<div class="flex justify-end gap-2">
 					<button
 						class="rounded-md border border-[var(--stroke)] px-3 py-1"
 						onclick={() => (creatingChannel = false)}>{m.cancel()}</button
