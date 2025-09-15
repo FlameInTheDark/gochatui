@@ -38,7 +38,9 @@
 	async function refreshChannels() {
 		const gid = $selectedGuildId ? String($selectedGuildId) : '';
 		if (!gid) return;
-		const res = await auth.api.guild.guildGuildIdChannelGet({ guildId: gid as any });
+		const res = await auth.api.guild.guildGuildIdChannelGet({
+			guildId: BigInt(gid) as any
+		});
 		const list = res.data ?? [];
 		channelsByGuild.update((m) => ({ ...m, [gid]: list }));
 		// If selected channel is not present in this guild or not a text channel, auto-fix.
@@ -206,10 +208,10 @@
 		if (!newChannelName.trim() || !$selectedGuildId) return;
 		try {
 			await auth.api.guild.guildGuildIdChannelPost({
-				guildId: $selectedGuildId as any,
+				guildId: BigInt($selectedGuildId) as any,
 				guildCreateGuildChannelRequest: {
 					name: newChannelName,
-					parent_id: creatingChannelParent ? (creatingChannelParent as any) : undefined,
+					parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
 					type: 0
 				}
 			});
@@ -287,7 +289,7 @@
 		if (!newCategoryName.trim() || !$selectedGuildId) return;
 		try {
 			await auth.api.guild.guildGuildIdCategoryPost({
-				guildId: $selectedGuildId as any,
+				guildId: BigInt($selectedGuildId) as any,
 				guildCreateGuildChannelCategoryRequest: {
 					name: newCategoryName,
 					type: 2
@@ -306,8 +308,8 @@
 		if (!$selectedGuildId) return;
 		try {
 			await auth.api.guild.guildGuildIdCategoryCategoryIdDelete({
-				guildId: $selectedGuildId as any,
-				categoryId: categoryId as any
+				guildId: BigInt($selectedGuildId) as any,
+				categoryId: BigInt(categoryId) as any
 			});
 			await refreshChannels();
 		} catch (e) {}
@@ -317,8 +319,8 @@
 		if (!$selectedGuildId) return;
 		try {
 			await auth.api.guild.guildGuildIdChannelChannelIdDelete({
-				guildId: $selectedGuildId as any,
-				channelId: channelId as any
+				guildId: BigInt($selectedGuildId) as any,
+				channelId: BigInt(channelId) as any
 			});
 			await refreshChannels();
 		} catch (e) {}
@@ -327,7 +329,9 @@
 	async function leaveGuild() {
 		if (!$selectedGuildId) return;
 		try {
-			await auth.api.user.userMeGuildsGuildIdDelete({ guildId: String($selectedGuildId) });
+			await auth.api.user.userMeGuildsGuildIdDelete({
+				guildId: BigInt($selectedGuildId) as any
+			});
 			await auth.loadGuilds();
 			selectedGuildId.set(null);
 		} catch (e) {}
@@ -340,7 +344,7 @@
 		if (!name) return;
 		try {
 			await auth.api.guild.guildGuildIdPatch({
-				guildId: $selectedGuildId as any,
+				guildId: BigInt($selectedGuildId) as any,
 				guildUpdateGuildRequest: { name }
 			});
 			await auth.loadGuilds();
@@ -457,61 +461,60 @@
 			>
 				{#each sections as sec (String(sec.type === 'category' ? (sec.cat as any)?.id : (sec.ch as any)?.id))}
 					{#if sec.type === 'channel'}
-                                                {#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
-                                                        <div
-                                                                role="listitem"
-                                                                ondragover={(e) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        dragOverChannel(String((sec.ch as any).id), null);
-                                                                }}
-                                                                ondrop={(e) => {
-                                                                        e.stopPropagation();
-                                                                        dropOnChannel(String((sec.ch as any).id), null);
-                                                                }}
-                                                        >
-                                                                {#if dragIndicator?.mode === 'before' &&
-                                                                dragIndicator.target === String((sec.ch as any).id) &&
-                                                                dragIndicator.parent === null}
-                                                                        <div class="my-1 h-0.5 rounded-full bg-[var(--brand)] pointer-events-none"></div>
-                                                                {/if}
-                                                                <div
-                                                                        class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-                                                                        String((sec.ch as any).id)
-                                                                                ? 'bg-[var(--panel)]'
-                                                                                : ''}"
-                                                                        role="button"
-                                                                        tabindex="0"
-                                                                        draggable="true"
-                                                                        ondragstart={() => startDrag(sec.ch, null)}
-                                                                        onclick={() => selectChannel(String((sec.ch as any).id))}
-                                                                        onkeydown={(e) =>
-                                                                                (e.key === 'Enter' || e.key === ' ') && selectChannel(String((sec.ch as any).id))}
-                                                                        oncontextmenu={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                                openChannelMenu(e, sec.ch);
-                                                                        }}
-                                                                >
-                                                                        <div class="flex items-center gap-2 truncate">
-                                                                                <span class="opacity-70">#</span>
-                                                                                {sec.ch.name}
-                                                                        </div>
-                                                                        <div
-                                                                                class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
-                                                                        >
-                                                                                <button
-                                                                                        class="text-xs text-red-400"
-                                                                                        title="Delete"
-                                                                                        onclick={(e) => {
-                                                                                                e.stopPropagation();
-                                                                                                deleteChannel(String((sec.ch as any).id));
-                                                                                        }}>✕</button
-                                                                                >
-                                                                        </div>
-                                                                </div>
-                                                        </div>
-                                                {/if}
+						{#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
+							<div
+								role="listitem"
+								ondragover={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									dragOverChannel(String((sec.ch as any).id), null);
+								}}
+								ondrop={(e) => {
+									e.stopPropagation();
+									dropOnChannel(String((sec.ch as any).id), null);
+								}}
+							>
+								{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.ch as any).id) && dragIndicator.parent === null}
+									<div class="pointer-events-none my-1 h-0.5 rounded-full bg-[var(--brand)]"></div>
+								{/if}
+								<div
+									class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+									String((sec.ch as any).id)
+										? 'bg-[var(--panel)]'
+										: ''}"
+									role="button"
+									tabindex="0"
+									draggable="true"
+									ondragstart={() => startDrag(sec.ch, null)}
+									onclick={() => selectChannel(String((sec.ch as any).id))}
+									onkeydown={(e) =>
+										(e.key === 'Enter' || e.key === ' ') &&
+										selectChannel(String((sec.ch as any).id))}
+									oncontextmenu={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										openChannelMenu(e, sec.ch);
+									}}
+								>
+									<div class="flex items-center gap-2 truncate">
+										<span class="opacity-70">#</span>
+										{sec.ch.name}
+									</div>
+									<div
+										class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
+									>
+										<button
+											class="text-xs text-red-400"
+											title="Delete"
+											onclick={(e) => {
+												e.stopPropagation();
+												deleteChannel(String((sec.ch as any).id));
+											}}>✕</button
+										>
+									</div>
+								</div>
+							</div>
+						{/if}
 					{:else}
 						<div
 							class="mt-2"
@@ -521,17 +524,15 @@
 							}}
 							ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
 							role="list"
-                                                 >
-                                                        {#if dragIndicator?.mode === 'before' &&
-                                                        dragIndicator.target === String((sec.cat as any)?.id) &&
-                                                        dragIndicator.parent === null}
-                                                                <div class="my-1 h-0.5 rounded-full bg-[var(--brand)] pointer-events-none"></div>
-                                                        {/if}
-                                                        <div
-                                                                  class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode === 'inside' &&
-                                                                  dragIndicator.parent === String((sec.cat as any)?.id)
-                                                                          ? 'rounded-md ring-2 ring-[var(--brand)]'
-                                                                          : ''}"
+						>
+							{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.cat as any)?.id) && dragIndicator.parent === null}
+								<div class="pointer-events-none my-1 h-0.5 rounded-full bg-[var(--brand)]"></div>
+							{/if}
+							<div
+								class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
+									'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
+									? 'rounded-md ring-2 ring-[var(--brand)]'
+									: ''}"
 								role="button"
 								tabindex="0"
 								draggable="true"
@@ -580,59 +581,60 @@
 								{#each sec.items.filter((c) => (c.name || '')
 										.toLowerCase()
 										.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
-                                                                          <div
-                                                                                  role="listitem"
-                                                                                  ondragover={(e) => {
-                                                                                          e.preventDefault();
-                                                                                          e.stopPropagation();
-                                                                                          dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
-                                                                                  }}
-                                                                                  ondrop={(e) => {
-                                                                                          e.stopPropagation();
-                                                                                          dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
-                                                                                  }}
-                                                                          >
-                                                                                  {#if dragIndicator?.mode === 'before' &&
-                                                                                  dragIndicator.target === String((ch as any).id) &&
-                                                                                  dragIndicator.parent === String((sec.cat as any)?.id)}
-                                                                                          <div class="my-1 h-0.5 rounded-full bg-[var(--brand)] pointer-events-none"></div>
-                                                                                  {/if}
-                                                                                  <div
-                                                                                          class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-                                                                                          String((ch as any).id)
-                                                                                                  ? 'bg-[var(--panel)]'
-                                                                                                  : ''}"
-                                                                                          role="button"
-                                                                                          tabindex="0"
-                                                                                          draggable="true"
-                                                                                          ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
-                                                                                          onclick={() => selectChannel(String((ch as any).id))}
-                                                                                          onkeydown={(e) =>
-                                                                                                  (e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
-                                                                                          oncontextmenu={(e) => {
-                                                                                                  e.preventDefault();
-                                                                                                  e.stopPropagation();
-                                                                                                  openChannelMenu(e, ch);
-                                                                                          }}
-                                                                                  >
-                                                                                          <div class="flex items-center gap-2 truncate">
-                                                                                                  <span class="opacity-70">#</span>
-                                                                                                  {ch.name}
-                                                                                          </div>
-                                                                                          <div
-                                                                                                  class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
-                                                                                          >
-                                                                                                  <button
-                                                                                                          class="text-xs text-red-400"
-                                                                                                          title="Delete"
-                                                                                                          onclick={(e) => {
-                                                                                                                  e.stopPropagation();
-                                                                                                                  deleteChannel(String((ch as any).id));
-                                                                                                          }}>✕</button
-                                                                                                  >
-                                                                                          </div>
-                                                                                  </div>
-                                                                          </div>
+									<div
+										role="listitem"
+										ondragover={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
+										}}
+										ondrop={(e) => {
+											e.stopPropagation();
+											dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
+										}}
+									>
+										{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((ch as any).id) && dragIndicator.parent === String((sec.cat as any)?.id)}
+											<div
+												class="pointer-events-none my-1 h-0.5 rounded-full bg-[var(--brand)]"
+											></div>
+										{/if}
+										<div
+											class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+											String((ch as any).id)
+												? 'bg-[var(--panel)]'
+												: ''}"
+											role="button"
+											tabindex="0"
+											draggable="true"
+											ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+											onclick={() => selectChannel(String((ch as any).id))}
+											onkeydown={(e) =>
+												(e.key === 'Enter' || e.key === ' ') &&
+												selectChannel(String((ch as any).id))}
+											oncontextmenu={(e) => {
+												e.preventDefault();
+												e.stopPropagation();
+												openChannelMenu(e, ch);
+											}}
+										>
+											<div class="flex items-center gap-2 truncate">
+												<span class="opacity-70">#</span>
+												{ch.name}
+											</div>
+											<div
+												class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
+											>
+												<button
+													class="text-xs text-red-400"
+													title="Delete"
+													onclick={(e) => {
+														e.stopPropagation();
+														deleteChannel(String((ch as any).id));
+													}}>✕</button
+												>
+											</div>
+										</div>
+									</div>
 								{/each}
 							{/if}
 							<div
