@@ -23,6 +23,7 @@
 	let filter = $state('');
 	let collapsed = $state<Record<string, boolean>>({});
 	let creatingChannelParent: string | null = $state(null);
+	let dragging: { id: string; parent: string | null } | null = null;
 
 	function currentGuildChannels(): DtoChannel[] {
 		const gid = $selectedGuildId ?? '';
@@ -58,6 +59,69 @@
 				selectedChannelId.set(null);
 			}
 		}
+	}
+
+	function startDrag(ch: DtoChannel, parent: string | null) {
+		dragging = { id: String(ch.id as unknown as number), parent };
+	}
+
+	function dropOnChannel(targetId: string, parent: string | null) {
+		if (!dragging) return;
+		moveChannel(dragging.id, dragging.parent, parent, targetId);
+		dragging = null;
+	}
+
+	function dropOnContainer(parent: string | null) {
+		if (!dragging) return;
+		moveChannel(dragging.id, dragging.parent, parent, null);
+		dragging = null;
+	}
+
+	async function moveChannel(
+		id: string,
+		from: string | null,
+		to: string | null,
+		beforeId: string | null
+	) {
+		const gid = $selectedGuildId ? String($selectedGuildId) : '';
+		if (!gid) return;
+		const list = [...($channelsByGuild[gid] ?? [])];
+		const idx = list.findIndex((c) => String((c as any).id) === id);
+		if (idx === -1) return;
+		const [moving] = list.splice(idx, 1);
+		(moving as any).parent_id = to ? Number(to) : null;
+
+		let insertIndex = list.length;
+		if (beforeId) {
+			const targetIdx = list.findIndex((c) => String((c as any).id) === beforeId);
+			if (targetIdx !== -1) insertIndex = targetIdx;
+		}
+		list.splice(insertIndex, 0, moving);
+		channelsByGuild.update((m) => ({ ...m, [gid]: list }));
+
+		if (from !== to) {
+			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+				guildId: Number(gid),
+				channelId: Number(id),
+				guildPatchGuildChannelRequest: { parent_id: to ? Number(to) : undefined }
+			});
+		}
+
+		async function sendOrder(parent: string | null) {
+			const ids = list
+				.filter((c) => {
+					const pid = (c as any).parent_id == null ? null : String((c as any).parent_id);
+					return pid === (parent ? String(parent) : null);
+				})
+				.map((c) => Number((c as any).id));
+			await auth.api.guild.guildGuildIdChannelOrderPatch(
+				{ guildId: Number(gid) },
+				{ data: { parent_id: parent ? Number(parent) : null, channel_ids: ids } as any }
+			);
+		}
+
+		await sendOrder(from);
+		if (to !== from) await sendOrder(to);
 	}
 
 	function computeSections(channels: DtoChannel[]) {
@@ -336,11 +400,14 @@
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
 			{#if sections.topLevel.length}
-				<div>
-					<div class="px-2 text-xs tracking-wide text-[var(--muted)] uppercase">Uncategorized</div>
+				<div
+					ondragover={(e) => e.preventDefault()}
+					ondrop={() => dropOnContainer(null)}
+					role="list"
+				>
 					{#each sections.topLevel.filter((c) => (c.name || '')
 							.toLowerCase()
-							.includes(filter.toLowerCase())) as ch}
+							.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
 						<div
 							class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
 							String((ch as any).id)
@@ -348,6 +415,10 @@
 								: ''}"
 							role="button"
 							tabindex="0"
+							draggable="true"
+							ondragstart={() => startDrag(ch, null)}
+							ondragover={(e) => e.preventDefault()}
+							ondrop={() => dropOnChannel(String((ch as any).id), null)}
 							onclick={() => selectChannel(String((ch as any).id))}
 							onkeydown={(e) =>
 								(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
@@ -378,7 +449,12 @@
 				</div>
 			{/if}
 			{#each sections.categories as sec}
-				<div class="mt-2">
+				<div
+					class="mt-2"
+					ondragover={(e) => e.preventDefault()}
+					ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
+					role="list"
+				>
 					<div
 						class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase"
 					>
@@ -410,7 +486,7 @@
 					{#if !collapsed[String((sec.cat as any)?.id)]}
 						{#each sec.items.filter((c) => (c.name || '')
 								.toLowerCase()
-								.includes(filter.toLowerCase())) as ch}
+								.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
 							<div
 								class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
 								String((ch as any).id)
@@ -418,6 +494,10 @@
 									: ''}"
 								role="button"
 								tabindex="0"
+								draggable="true"
+								ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+								ondragover={(e) => e.preventDefault()}
+								ondrop={() => dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id))}
 								onclick={() => selectChannel(String((ch as any).id))}
 								onkeydown={(e) =>
 									(e.key === 'Enter' || e.key === ' ') && selectChannel(String((ch as any).id))}
