@@ -147,7 +147,11 @@
 			(incoming as any).author = (incoming as any).author_id;
 		}
 		const stick = wasAtBottom;
-		if (!messages.find((m) => String((m as any).id) === String((incoming as any).id))) {
+		const idx = messages.findIndex((m) => String((m as any).id) === String((incoming as any).id));
+		if (idx >= 0) {
+			messages[idx] = { ...messages[idx], ...incoming };
+			messages = [...messages];
+		} else {
 			messages = [...messages, incoming];
 			if (stick) scrollToBottom(true);
 			else newCount += 1;

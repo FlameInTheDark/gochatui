@@ -46,6 +46,20 @@
 		}).format(d);
 	}
 
+	function fmtEditFull(m: DtoMessage) {
+		if (!m.updated_at) return '';
+		const d = new Date(m.updated_at);
+		if (Number.isNaN(d.getTime())) return '';
+		return new Intl.DateTimeFormat(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		}).format(d);
+	}
+
 	async function saveEdit() {
 		if (!$selectedChannelId || !message.id) return;
 		saving = true;
@@ -207,6 +221,14 @@
 				title={fmtMsgFull(message)}
 			>
 				{message.content}
+				{#if message.updated_at}
+					<span
+						class="ml-1 align-baseline text-xs text-[var(--muted)] italic"
+						title={fmtEditFull(message)}
+					>
+						edited
+					</span>
+				{/if}
 			</div>
 			{#if message.attachments?.length}
 				<div class={compact ? 'mt-1 flex flex-wrap gap-2' : 'mt-1.5 flex flex-wrap gap-2'}>
