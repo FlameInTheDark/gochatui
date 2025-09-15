@@ -12,6 +12,7 @@ import type {
 import { createApi } from '$lib/client/api';
 
 const TOKEN_KEY = 'gochat.token';
+const REFRESH_KEY = 'gochat.refresh';
 const USER_KEY = 'gochat.user';
 
 function createAuthStore() {
@@ -29,7 +30,41 @@ function createAuthStore() {
 		}
 	});
 
-	const api = createApi(() => get(token));
+	const refreshToken = writable<string | null>(
+		typeof localStorage !== 'undefined' ? localStorage.getItem(REFRESH_KEY) : null
+	);
+	refreshToken.subscribe((t) => {
+		try {
+			if (typeof localStorage !== 'undefined') {
+				if (t) localStorage.setItem(REFRESH_KEY, t);
+				else localStorage.removeItem(REFRESH_KEY);
+			}
+		} catch {
+			/* ignore */
+		}
+	});
+
+	const refreshApi = createApi(() => get(refreshToken));
+
+	async function refresh(): Promise<boolean> {
+		const rt = get(refreshToken);
+		if (!rt) return false;
+		try {
+			const res = await refreshApi.auth.authRefreshPost({
+				authRefreshTokenRequest: { user_id: get(user)?.id }
+			});
+			const t = res.data.token ?? '';
+			const r = res.data.refresh_token ?? '';
+			if (t) token.set(t);
+			if (r) refreshToken.set(r);
+			return true;
+		} catch {
+			logout();
+			return false;
+		}
+	}
+
+	const api = createApi(() => get(token), refresh);
 
 	const user = writable<DtoUser | null>(
 		typeof localStorage !== 'undefined'
@@ -57,12 +92,15 @@ function createAuthStore() {
 	async function login(data: AuthLoginRequest) {
 		const res = await api.auth.authLoginPost({ authLoginRequest: data });
 		const t = res.data.token ?? '';
+		const r = res.data.refresh_token ?? '';
 		token.set(t);
+		refreshToken.set(r);
 		return t;
 	}
 
 	function logout() {
 		token.set(null);
+		refreshToken.set(null);
 		user.set(null);
 		guilds.set([]);
 	}
