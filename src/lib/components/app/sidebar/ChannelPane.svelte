@@ -67,7 +67,7 @@
 	}
 
 	function startDrag(ch: DtoChannel, parent: string | null) {
-		dragging = { id: String(ch.id as unknown as number), parent, type: (ch as any)?.type ?? 0 };
+		dragging = { id: String((ch as any).id), parent, type: (ch as any)?.type ?? 0 };
 	}
 
 	function dragOverChannel(id: string, parent: string | null) {
@@ -115,7 +115,7 @@
 		const idx = list.findIndex((c) => String((c as any).id) === id);
 		if (idx === -1) return;
 		const [moving] = list.splice(idx, 1);
-		(moving as any).parent_id = to ? Number(to) : null;
+		(moving as any).parent_id = to ? String(to) : null;
 
 		let insertIndex = list.length;
 		if (beforeId) {
@@ -127,9 +127,9 @@
 
 		if (from !== to) {
 			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
-				guildId: Number(gid),
-				channelId: Number(id),
-				guildPatchGuildChannelRequest: { parent_id: to ? Number(to) : undefined }
+				guildId: gid as any,
+				channelId: id as any,
+				guildPatchGuildChannelRequest: { parent_id: to ? String(to) : undefined } as any
 			});
 		}
 
@@ -139,10 +139,10 @@
 					const pid = (c as any).parent_id == null ? null : String((c as any).parent_id);
 					return pid === (parent ? String(parent) : null);
 				})
-				.map((c, idx) => ({ id: Number((c as any).id), position: idx }));
+				.map((c, idx) => ({ id: String((c as any).id), position: idx }) as any);
 			await auth.api.guild.guildGuildIdChannelOrderPatch({
-				guildId: Number(gid),
-				guildPatchGuildChannelOrderRequest: { channels }
+				guildId: gid as any,
+				guildPatchGuildChannelOrderRequest: { channels } as any
 			});
 		}
 
