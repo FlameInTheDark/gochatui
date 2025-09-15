@@ -23,6 +23,14 @@
 	let filter = $state('');
 	let collapsed = $state<Record<string, boolean>>({});
 	let creatingChannelParent: string | null = $state(null);
+	let editingChannel: DtoChannel | null = $state(null);
+	let editingCategory: DtoChannel | null = $state(null);
+	let editChannelName = $state('');
+	let editChannelTopic = $state('');
+	let editChannelPrivate = $state(false);
+	let editChannelError: string | null = $state(null);
+	let editCategoryName = $state('');
+	let editCategoryError: string | null = $state(null);
 	let dragging: { id: string; parent: string | null; type: number } | null = null;
 	let dragIndicator = $state<{
 		target: string | null;
@@ -276,19 +284,30 @@
 	}
 
 	function openChannelMenu(e: MouseEvent, ch: any) {
-		const gid = $selectedGuildId ? String($selectedGuildId) : '';
 		const id = String(ch?.id ?? '');
 		const type = (ch as any)?.type;
-		const isText = type === 0;
 		const items = [
 			{ label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id },
-			{ label: m.open_channel(), action: () => selectChannel(id), disabled: !isText },
+			{ label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 },
+			{ label: m.edit_channel(), action: () => openEditChannel(ch) },
+			{ label: m.delete_channel(), action: () => deleteChannel(id), danger: true }
+		];
+		contextMenu.openFromEvent(e, items);
+	}
+
+	function openCategoryMenu(e: MouseEvent, cat: any) {
+		const id = String(cat?.id ?? '');
+		const items = [
 			{
-				label: m.delete_channel(),
-				action: () => deleteChannel(id),
-				danger: true,
-				disabled: !isText
-			}
+				label: m.new_channel(),
+				action: () => {
+					creatingChannel = true;
+					channelError = null;
+					creatingChannelParent = id;
+				}
+			},
+			{ label: m.edit_category(), action: () => openEditCategory(cat) },
+			{ label: m.delete_category(), action: () => deleteCategory(id), danger: true }
 		];
 		contextMenu.openFromEvent(e, items);
 	}
@@ -312,6 +331,54 @@
 			}
 		];
 		contextMenu.openFromEvent(e, items);
+	}
+
+	function openEditChannel(ch: DtoChannel) {
+		editingChannel = ch;
+		editChannelName = ch.name ?? '';
+		editChannelTopic = (ch as any).topic ?? '';
+		editChannelPrivate = !!(ch as any).private;
+		editChannelError = null;
+	}
+
+	async function saveEditChannel() {
+		if (!editingChannel || !$selectedGuildId) return;
+		try {
+			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+				guildId: BigInt($selectedGuildId) as any,
+				channelId: BigInt((editingChannel as any).id) as any,
+				guildPatchGuildChannelRequest: {
+					name: editChannelName,
+					topic: editChannelTopic,
+					private: editChannelPrivate
+				} as any
+			});
+			editingChannel = null;
+			await refreshChannels();
+		} catch (e: any) {
+			editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
+		}
+	}
+
+	function openEditCategory(cat: DtoChannel) {
+		editingCategory = cat;
+		editCategoryName = cat.name ?? '';
+		editCategoryError = null;
+	}
+
+	async function saveEditCategory() {
+		if (!editingCategory || !$selectedGuildId) return;
+		try {
+			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+				guildId: BigInt($selectedGuildId) as any,
+				channelId: BigInt((editingCategory as any).id) as any,
+				guildPatchGuildChannelRequest: { name: editCategoryName } as any
+			});
+			editingCategory = null;
+			await refreshChannels();
+		} catch (e: any) {
+			editCategoryError = e?.response?.data?.message ?? e?.message ?? 'Failed to update category';
+		}
 	}
 
 	async function createCategory() {
@@ -473,7 +540,7 @@
 	<div
 		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
 		role="region"
-		oncontextmenu={(e) => {
+		oncontextmenu={(e: MouseEvent) => {
 			e.preventDefault();
 			openPaneMenu(e);
 		}}
@@ -510,7 +577,7 @@
 									></div>
 								{/if}
 								<div
-									class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+									class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
 									String((sec.ch as any).id)
 										? 'bg-[var(--panel)]'
 										: ''}"
@@ -522,7 +589,7 @@
 									onkeydown={(e) =>
 										(e.key === 'Enter' || e.key === ' ') &&
 										selectChannel(String((sec.ch as any).id))}
-									oncontextmenu={(e) => {
+									oncontextmenu={(e: MouseEvent) => {
 										e.preventDefault();
 										e.stopPropagation();
 										openChannelMenu(e, sec.ch);
@@ -531,18 +598,6 @@
 									<div class="flex items-center gap-2 truncate">
 										<span class="opacity-70">#</span>
 										{sec.ch.name}
-									</div>
-									<div
-										class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
-									>
-										<button
-											class="text-xs text-red-400"
-											title="Delete"
-											onclick={(e) => {
-												e.stopPropagation();
-												deleteChannel(String((sec.ch as any).id));
-											}}>✕</button
-										>
 									</div>
 								</div>
 							</div>
@@ -564,7 +619,7 @@
 									></div>
 								{/if}
 								<div
-									class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
+									class="flex items-center px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
 										'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
 										? 'rounded-md ring-2 ring-[var(--brand)]'
 										: ''}"
@@ -590,6 +645,12 @@
 										dropOnCategoryHeader(String((sec.cat as any)?.id), before);
 									}}
 								>
+									oncontextmenu={(e: MouseEvent) => {
+										e.preventDefault();
+										e.stopPropagation();
+										openCategoryMenu(e, sec.cat);
+									}}
+									>
 									<button
 										class="flex items-center gap-2"
 										onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
@@ -599,22 +660,6 @@
 										>
 										<div class="truncate">{sec.cat?.name ?? 'Category'}</div>
 									</button>
-									<div class="flex items-center gap-2">
-										<button
-											class="text-xs"
-											title={m.new_channel()}
-											onclick={() => {
-												creatingChannel = true;
-												channelError = null;
-												creatingChannelParent = String((sec.cat as any)?.id);
-											}}>+</button
-										>
-										<button
-											class="text-xs text-red-400"
-											title="Delete category"
-											onclick={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button
-										>
-									</div>
 								</div>
 							</div>
 							{#if !collapsed[String((sec.cat as any)?.id)]}
@@ -640,7 +685,7 @@
 											></div>
 										{/if}
 										<div
-											class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+											class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
 											String((ch as any).id)
 												? 'bg-[var(--panel)]'
 												: ''}"
@@ -652,7 +697,7 @@
 											onkeydown={(e) =>
 												(e.key === 'Enter' || e.key === ' ') &&
 												selectChannel(String((ch as any).id))}
-											oncontextmenu={(e) => {
+											oncontextmenu={(e: MouseEvent) => {
 												e.preventDefault();
 												e.stopPropagation();
 												openChannelMenu(e, ch);
@@ -661,18 +706,6 @@
 											<div class="flex items-center gap-2 truncate">
 												<span class="opacity-70">#</span>
 												{ch.name}
-											</div>
-											<div
-												class="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100"
-											>
-												<button
-													class="text-xs text-red-400"
-													title="Delete"
-													onclick={(e) => {
-														e.stopPropagation();
-														deleteChannel(String((ch as any).id));
-													}}>✕</button
-												>
 											</div>
 										</div>
 									</div>
@@ -706,6 +739,97 @@
 	</div>
 
 	<UserPanel />
+
+	{#if editingChannel}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onpointerdown={() => (editingChannel = null)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') editingChannel = null;
+				if (e.key === 'Enter') saveEditChannel();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-sm font-medium">{m.edit_channel()}</div>
+				{#if editChannelError}
+					<div class="mb-2 text-sm text-red-500">{editChannelError}</div>
+				{/if}
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.channel_name()}
+					bind:value={editChannelName}
+				/>
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.channel_topic()}
+					bind:value={editChannelTopic}
+				/>
+				<label class="mb-2 flex items-center gap-2 text-sm">
+					<input type="checkbox" bind:checked={editChannelPrivate} />
+					{m.channel_private()}
+				</label>
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (editingChannel = null)}>{m.cancel()}</button
+					>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+						onclick={saveEditChannel}>{m.save()}</button
+					>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if editingCategory}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onpointerdown={() => (editingCategory = null)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') editingCategory = null;
+				if (e.key === 'Enter') saveEditCategory();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-sm font-medium">{m.edit_category()}</div>
+				{#if editCategoryError}
+					<div class="mb-2 text-sm text-red-500">{editCategoryError}</div>
+				{/if}
+				<input
+					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+					placeholder={m.category_name()}
+					bind:value={editCategoryName}
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (editingCategory = null)}>{m.cancel()}</button
+					>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+						onclick={saveEditCategory}>{m.save()}</button
+					>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if creatingChannel}
 		<div
