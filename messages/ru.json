@@ -108,5 +108,6 @@
 	"loading": "Загрузка...",
 	"jump_to_present": "Перейти к текущим",
 	"new_count": "{count} новых",
-	"failed_to_load_messages": "Не удалось загрузить сообщения"
+	"failed_to_load_messages": "Не удалось загрузить сообщения",
+	"connection_status_reconnecting": "Возникли проблемы с соединением. Переподключаемся к чату…"
 }

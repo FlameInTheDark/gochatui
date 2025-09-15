@@ -108,5 +108,6 @@
 	"loading": "Loading...",
 	"jump_to_present": "Jump to present",
 	"new_count": "{count} new",
-	"failed_to_load_messages": "Failed to load messages"
+	"failed_to_load_messages": "Failed to load messages",
+	"connection_status_reconnecting": "Experiencing connection issues. Reconnecting to chat…"
 }
