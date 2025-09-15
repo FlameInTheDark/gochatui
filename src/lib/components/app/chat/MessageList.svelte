@@ -140,21 +140,28 @@
 
 	$effect(() => {
 		const ev: any = $wsEvent;
-		if (!ev || ev.op !== 0 || !ev.d?.message) return;
-		const incoming = ev.d.message as DtoMessage & { author_id?: any };
-		if (!incoming.channel_id || String((incoming as any).channel_id) !== $selectedChannelId) return;
-		if (!incoming.author && (incoming as any).author_id) {
-			(incoming as any).author = (incoming as any).author_id;
-		}
-		const stick = wasAtBottom;
-		const idx = messages.findIndex((m) => String((m as any).id) === String((incoming as any).id));
-		if (idx >= 0) {
-			messages[idx] = { ...messages[idx], ...incoming };
-			messages = [...messages];
-		} else {
-			messages = [...messages, incoming];
-			if (stick) scrollToBottom(true);
-			else newCount += 1;
+		if (!ev || ev.op !== 0) return;
+		const d = ev.d || {};
+		if (d.message) {
+			const incoming = d.message as DtoMessage & { author_id?: any };
+			if (!incoming.channel_id || String((incoming as any).channel_id) !== $selectedChannelId)
+				return;
+			if (!incoming.author && (incoming as any).author_id) {
+				(incoming as any).author = (incoming as any).author_id;
+			}
+			const stick = wasAtBottom;
+			const idx = messages.findIndex((m) => String((m as any).id) === String((incoming as any).id));
+			if (idx >= 0) {
+				messages[idx] = { ...messages[idx], ...incoming };
+				messages = [...messages];
+			} else {
+				messages = [...messages, incoming];
+				if (stick) scrollToBottom(true);
+				else newCount += 1;
+			}
+		} else if (d.message_id) {
+			if (String(d.channel_id ?? '') !== $selectedChannelId) return;
+			messages = messages.filter((m) => String((m as any).id) !== String(d.message_id));
 		}
 	});
 </script>
