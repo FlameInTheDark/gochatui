@@ -1,19 +1,22 @@
 <script lang="ts">
-	import { wsConnectionLost } from '$lib/client/ws';
-	import { fade } from 'svelte/transition';
+        import { wsConnectionLost } from '$lib/client/ws';
+        import { fade } from 'svelte/transition';
 </script>
 
 {#if $wsConnectionLost}
-	<div
-		class="pointer-events-none fixed inset-x-0 top-0 z-[1000] flex justify-center"
-		transition:fade={{ duration: 150 }}
-	>
-		<div
-			class="pointer-events-auto h-1 w-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]"
-			role="status"
-			aria-live="polite"
-		>
-			<span class="sr-only">Connection lost. Attempting to reconnect…</span>
-		</div>
-	</div>
+        <div
+                class="pointer-events-none fixed inset-x-0 top-0 z-[1000] flex justify-center px-4"
+                transition:fade={{ duration: 150 }}
+        >
+                <div
+                        class="pointer-events-auto flex w-full max-w-3xl items-center justify-center gap-2 rounded-b-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-[0_4px_12px_rgba(220,38,38,0.45)]"
+                        role="status"
+                        aria-live="polite"
+                >
+                        <span aria-hidden="true">⚠️</span>
+                        <span class="text-center">
+                                Experiencing connection issues. Reconnecting to chat…
+                        </span>
+                </div>
+        </div>
 {/if}
