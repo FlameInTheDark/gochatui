@@ -10,6 +10,7 @@
 	import MessageItem from './MessageItem.svelte';
 	import { wsEvent } from '$lib/client/ws';
 	import { m } from '$lib/paraglide/messages.js';
+	import { fly } from 'svelte/transition';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -242,8 +243,11 @@
 </div>
 
 {#if !wasAtBottom && initialLoaded}
-	<div class="hint-enter pointer-events-none relative">
-		<div class="gradient-blur absolute inset-x-0 bottom-0 h-16">
+	<div class="pointer-events-none relative">
+		<div
+			class="gradient-blur absolute inset-x-0 bottom-0 h-16"
+			transition:fly={{ y: 16, duration: 200 }}
+		>
 			<div></div>
 			<div></div>
 			<div></div>
@@ -251,7 +255,10 @@
 			<div></div>
 			<div></div>
 		</div>
-		<div class="pointer-events-auto absolute right-4 bottom-20">
+		<div
+			class="pointer-events-auto absolute right-4 bottom-20"
+			transition:fly={{ y: 16, duration: 200 }}
+		>
 			<button
 				class="rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm shadow"
 				onclick={() => {
@@ -269,19 +276,6 @@
 {/if}
 
 <style>
-	.hint-enter {
-		animation: hint-slide-up 200ms ease-out;
-	}
-	@keyframes hint-slide-up {
-		from {
-			transform: translateY(16px);
-			opacity: 0;
-		}
-		to {
-			transform: translateY(0);
-			opacity: 1;
-		}
-	}
 	.gradient-blur {
 		z-index: 5;
 		pointer-events: none;
