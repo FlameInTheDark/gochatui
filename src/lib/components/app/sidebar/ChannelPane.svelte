@@ -80,50 +80,59 @@
 		dragIndicator = { target: null, parent, mode: 'inside' };
 	}
 
-	function dropOnChannel(targetId: string, parent: string | null) {
-		if (!dragging) return;
-		moveChannel(dragging.id, dragging.parent, parent, targetId);
-		dragging = null;
-		dragIndicator = null;
-	}
+        function dropOnChannel(targetId: string, parent: string | null) {
+                if (!dragging) return;
+                if (dragging.id === targetId) return;
+                if (dragging.type === 2 && parent !== null) return;
+                moveChannel(dragging.id, dragging.parent, parent, targetId);
+                dragging = null;
+                dragIndicator = null;
+        }
 
-	function dropOnContainer(parent: string | null) {
-		if (!dragging) return;
-		moveChannel(dragging.id, dragging.parent, parent, null);
-		dragging = null;
-		dragIndicator = null;
-	}
+        function dropOnContainer(parent: string | null) {
+                if (!dragging) return;
+                if (dragging.type === 2 && parent !== null) return;
+                if (dragging.id === parent) return;
+                moveChannel(dragging.id, dragging.parent, parent, null);
+                dragging = null;
+                dragIndicator = null;
+        }
 
-	function dropOnCategoryHeader(targetId: string) {
-		if (!dragging) return;
-		if (dragging.type === 2) {
-			moveChannel(dragging.id, dragging.parent, null, targetId);
-		} else {
-			moveChannel(dragging.id, dragging.parent, targetId, null);
-		}
-		dragging = null;
-		dragIndicator = null;
-	}
+        function dropOnCategoryHeader(targetId: string) {
+                if (!dragging) return;
+                if (dragging.id === targetId) return;
+                if (dragging.type === 2) {
+                        moveChannel(dragging.id, dragging.parent, null, targetId);
+                } else {
+                        moveChannel(dragging.id, dragging.parent, targetId, null);
+                }
+                dragging = null;
+                dragIndicator = null;
+        }
 
-	async function moveChannel(
-		id: string,
-		from: string | null,
-		to: string | null,
-		beforeId: string | null
-	) {
-		const gid = $selectedGuildId ? String($selectedGuildId) : '';
-		if (!gid) return;
-		const list = [...($channelsByGuild[gid] ?? [])];
-		const idx = list.findIndex((c) => String((c as any).id) === id);
-		if (idx === -1) return;
-		const [moving] = list.splice(idx, 1);
-		(moving as any).parent_id = to ? String(to) : null;
+        async function moveChannel(
+                id: string,
+                from: string | null,
+                to: string | null,
+                beforeId: string | null
+        ) {
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                if (!gid) return;
+                const list = [...($channelsByGuild[gid] ?? [])];
+                const idx = list.findIndex((c) => String((c as any).id) === id);
+                if (idx === -1) return;
+                const [moving] = list.splice(idx, 1);
+                if ((moving as any).type === 2 && to !== null) {
+                        return;
+                }
+                (moving as any).parent_id = to ? String(to) : null;
 
-		let insertIndex = list.length;
-		if (beforeId) {
-			const targetIdx = list.findIndex((c) => String((c as any).id) === beforeId);
-			if (targetIdx !== -1) insertIndex = targetIdx;
-		}
+                let insertIndex = list.length;
+                if (beforeId) {
+                        if (beforeId === id) return;
+                        const targetIdx = list.findIndex((c) => String((c as any).id) === beforeId);
+                        if (targetIdx !== -1) insertIndex = targetIdx;
+                }
 		list.splice(insertIndex, 0, moving);
 		channelsByGuild.update((m) => ({ ...m, [gid]: list }));
 
@@ -485,27 +494,28 @@
 				{#each sections as sec (String(sec.type === 'category' ? (sec.cat as any)?.id : (sec.ch as any)?.id))}
 					{#if sec.type === 'channel'}
 						{#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
-							<div
-								role="listitem"
-								ondragover={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									dragOverChannel(String((sec.ch as any).id), null);
-								}}
-								ondrop={(e) => {
-									e.stopPropagation();
-									dropOnChannel(String((sec.ch as any).id), null);
-								}}
-							>
-								{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.ch as any).id) && dragIndicator.parent === null}
-									<div class="pointer-events-none my-1 h-0.5 rounded-full bg-[var(--brand)]"></div>
-								{/if}
-								<div
-									class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-									String((sec.ch as any).id)
-										? 'bg-[var(--panel)]'
-										: ''}"
-									role="button"
+                                                        <div
+                                                                role="listitem"
+                                                                class="relative"
+                                                                ondragover={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        dragOverChannel(String((sec.ch as any).id), null);
+                                                                }}
+                                                                ondrop={(e) => {
+                                                                        e.stopPropagation();
+                                                                        dropOnChannel(String((sec.ch as any).id), null);
+                                                                }}
+                                                        >
+                                                                {#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.ch as any).id) && dragIndicator.parent === null}
+                                                                        <div class="pointer-events-none absolute left-0 right-0 top-0 -translate-y-1/2 h-0.5 rounded-full bg-[var(--brand)]"></div>
+                                                                {/if}
+                                                                <div
+                                                                        class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                        String((sec.ch as any).id)
+                                                                                ? 'bg-[var(--panel)]'
+                                                                                : ''}"
+                                                                        role="button"
 									tabindex="0"
 									draggable="true"
 									ondragstart={() => startDrag(sec.ch, null)}
@@ -539,53 +549,52 @@
 							</div>
 						{/if}
 					{:else}
-						<div
-							class="mt-2"
-							ondragover={(e) => {
-								e.preventDefault();
-								dragOverContainer(String((sec.cat as any)?.id));
-							}}
-							ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
-							role="list"
-						>
-							{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.cat as any)?.id) && dragIndicator.parent === null}
-								<div class="pointer-events-none my-1 h-0.5 rounded-full bg-[var(--brand)]"></div>
-							{/if}
-							<div
-								class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
-									'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
-									? 'rounded-md ring-2 ring-[var(--brand)]'
-									: ''}"
-								role="button"
-								tabindex="0"
-								draggable="true"
-								ondragstart={() => startDrag(sec.cat, null)}
-								ondragover={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									if (dragging && dragging.type === 2) {
-										dragOverChannel(String((sec.cat as any)?.id), null);
-									} else {
-										dragOverContainer(String((sec.cat as any)?.id));
-									}
-								}}
-								ondrop={(e) => {
-									e.stopPropagation();
-									dropOnCategoryHeader(String((sec.cat as any)?.id));
-								}}
-							>
-								<button
-									class="flex items-center gap-2"
-									onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
-								>
-									<span class="inline-block"
-										>{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
-									>
-									<div class="truncate">{sec.cat?.name ?? 'Category'}</div>
-								</button>
-								<div class="flex items-center gap-2">
-									<button
-										class="text-xs"
+                                                <div
+                                                        class="mt-2"
+                                                        ondragover={(e) => {
+                                                                e.preventDefault();
+                                                                dragOverContainer(String((sec.cat as any)?.id));
+                                                        }}
+                                                        ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
+                                                        role="list"
+                                                >
+                                                        <div class="relative">
+                                                                {#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.cat as any)?.id) && dragIndicator.parent === null}
+                                                                        <div class="pointer-events-none absolute left-0 right-0 top-0 -translate-y-1/2 h-0.5 rounded-full bg-[var(--brand)]"></div>
+                                                                {/if}
+                                                                <div
+                                                                        class="flex items-center justify-between px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
+                                                                                'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
+                                                                                ? 'rounded-md ring-2 ring-[var(--brand)]'
+                                                                                : ''}"
+                                                                        role="button"
+                                                                        tabindex="0"
+                                                                        draggable="true"
+                                                                        ondragstart={() => startDrag(sec.cat, null)}
+                                                                        ondragover={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                if (dragging && dragging.type === 2) {
+                                                                                        dragOverChannel(String((sec.cat as any)?.id), null);
+                                                                                } else {
+                                                                                        dragOverContainer(String((sec.cat as any)?.id));
+                                                                                }
+                                                                        }}
+                                                                        ondrop={(e) => {
+                                                                                e.stopPropagation();
+                                                                                dropOnCategoryHeader(String((sec.cat as any)?.id));
+                                                                        }}
+                                                                >
+                                                                        <button
+                                                                                class="flex items-center gap-2"
+                                                                                onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
+                                                                        >
+                                                                                <span class="inline-block">{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span>
+                                                                                <div class="truncate">{sec.cat?.name ?? 'Category'}</div>
+                                                                        </button>
+                                                                        <div class="flex items-center gap-2">
+                                                                                <button
+                                                                                        class="text-xs"
 										title={m.new_channel()}
 										onclick={() => {
 											creatingChannel = true;
@@ -593,40 +602,42 @@
 											creatingChannelParent = String((sec.cat as any)?.id);
 										}}>+</button
 									>
-									<button
-										class="text-xs text-red-400"
-										title="Delete category"
-										onclick={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button
-									>
-								</div>
-							</div>
-							{#if !collapsed[String((sec.cat as any)?.id)]}
+                                                                        <button
+                                                                                class="text-xs text-red-400"
+                                                                                title="Delete category"
+                                                                                onclick={() => deleteCategory(String((sec.cat as any)?.id))}>✕</button
+                                                                        >
+                                                                </div>
+                                                        </div>
+                                                        </div>
+                                                        {#if !collapsed[String((sec.cat as any)?.id)]}
 								{#each sec.items.filter((c) => (c.name || '')
 										.toLowerCase()
 										.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
-									<div
-										role="listitem"
-										ondragover={(e) => {
-											e.preventDefault();
-											e.stopPropagation();
-											dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
-										}}
-										ondrop={(e) => {
-											e.stopPropagation();
-											dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
-										}}
-									>
-										{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((ch as any).id) && dragIndicator.parent === String((sec.cat as any)?.id)}
-											<div
-												class="pointer-events-none my-1 h-0.5 rounded-full bg-[var(--brand)]"
-											></div>
-										{/if}
-										<div
-											class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-											String((ch as any).id)
-												? 'bg-[var(--panel)]'
-												: ''}"
-											role="button"
+                                                                        <div
+                                                                                role="listitem"
+                                                                                class="relative"
+                                                                                ondragover={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
+                                                                                }}
+                                                                                ondrop={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
+                                                                                }}
+                                                                        >
+                                                                                {#if dragIndicator?.mode === 'before' && dragIndicator.target === String((ch as any).id) && dragIndicator.parent === String((sec.cat as any)?.id)}
+                                                                                        <div
+                                                                                                class="pointer-events-none absolute left-0 right-0 top-0 -translate-y-1/2 h-0.5 rounded-full bg-[var(--brand)]"
+                                                                                        ></div>
+                                                                                {/if}
+                                                                                <div
+                                                                                        class="group flex cursor-pointer items-center justify-between rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                                        String((ch as any).id)
+                                                                                                ? 'bg-[var(--panel)]'
+                                                                                                : ''}"
+                                                                                        role="button"
 											tabindex="0"
 											draggable="true"
 											ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
