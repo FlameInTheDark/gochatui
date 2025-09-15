@@ -51,4 +51,4 @@
 - All entity IDs are 64-bit snowflakes.
 - Represent IDs as `bigint` in JavaScript/TypeScript to avoid precision loss.
 - Avoid casting IDs to `Number`; use `bigint` comparisons and pass IDs to APIs as `bigint` values (cast with `as any` if the generated types require `number`).
-- Bigints are serialized to JSON as strings via a global `BigInt.prototype.toJSON` helper (see `src/lib/client/api.ts`); send raw `bigint` values to APIs and they will be stringified automatically.
+- Bigints are serialized to JSON as int64 numbers via a request transformer in `src/lib/client/api.ts`; send raw `bigint` values to APIs and they will be emitted as numeric fields.
