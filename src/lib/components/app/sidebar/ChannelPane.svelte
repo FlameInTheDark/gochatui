@@ -167,6 +167,29 @@
 				return { ...map, [gid]: list };
 			});
 		}
+
+		if (ev?.op === 0 && ev?.t === 107 && ev?.d?.guild_id != null && ev?.d?.channel) {
+			const gid = String(ev.d.guild_id);
+			const updated = ev.d.channel;
+			channelsByGuild.update((map) => {
+				const list = [...(map[gid] ?? [])];
+				const id = String(updated.id);
+				const idx = list.findIndex((c) => String((c as any).id) === id);
+				if (idx !== -1) {
+					const target = list[idx] as any;
+					Object.assign(target, updated);
+					target.parent_id = updated.parent_id != null ? String(updated.parent_id) : null;
+					if (updated.position != null) target.position = updated.position;
+				} else {
+					list.push({
+						...updated,
+						parent_id: updated.parent_id != null ? String(updated.parent_id) : null
+					} as any);
+				}
+				list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+				return { ...map, [gid]: list };
+			});
+		}
 	});
 
 	function computeSections(channels: DtoChannel[]) {
