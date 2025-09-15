@@ -10,6 +10,7 @@
 	import MessageItem from './MessageItem.svelte';
 	import { wsEvent } from '$lib/client/ws';
 	import { m } from '$lib/paraglide/messages.js';
+	import { fly } from 'svelte/transition';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -242,7 +243,7 @@
 </div>
 
 {#if !wasAtBottom && initialLoaded}
-	<div class="pointer-events-none relative">
+	<div class="pointer-events-none relative" transition:fly={{ y: 16, duration: 200 }}>
 		<div class="gradient-blur absolute inset-x-0 bottom-0 h-16">
 			<div></div>
 			<div></div>
