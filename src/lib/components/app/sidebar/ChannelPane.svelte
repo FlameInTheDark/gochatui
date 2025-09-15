@@ -127,9 +127,9 @@
 
 		if (from !== to) {
 			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
-				guildId: gid as any,
-				channelId: id as any,
-				guildPatchGuildChannelRequest: { parent_id: to ? String(to) : undefined } as any
+				guildId: BigInt(gid) as any,
+				channelId: BigInt(id) as any,
+				guildPatchGuildChannelRequest: { parent_id: to ? (BigInt(to) as any) : undefined } as any
 			});
 		}
 
@@ -139,9 +139,9 @@
 					const pid = (c as any).parent_id == null ? null : String((c as any).parent_id);
 					return pid === (parent ? String(parent) : null);
 				})
-				.map((c, idx) => ({ id: String((c as any).id), position: idx }) as any);
+				.map((c, idx) => ({ id: BigInt((c as any).id), position: idx }) as any);
 			await auth.api.guild.guildGuildIdChannelOrderPatch({
-				guildId: gid as any,
+				guildId: BigInt(gid) as any,
 				guildPatchGuildChannelOrderRequest: { channels } as any
 			});
 		}

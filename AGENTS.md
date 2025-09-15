@@ -49,5 +49,5 @@
 ## ID Handling
 
 - All entity IDs are 64-bit snowflakes.
-- Treat IDs as strings in JavaScript/TypeScript to avoid `int64` precision loss.
-- Never cast IDs to `Number`; use string comparisons and pass IDs to APIs as strings (cast with `as any` if the generated types require `number`).
+- Represent IDs as `bigint` in JavaScript/TypeScript to avoid precision loss.
+- Avoid casting IDs to `Number`; use `bigint` comparisons and pass IDs to APIs as `bigint` values (cast with `as any` if the generated types require `number`).
