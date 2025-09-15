@@ -52,7 +52,7 @@ function createAuthStore() {
 		if (!rt) return false;
 		try {
 			const res = await refreshApi.auth.authRefreshGet({
-				headers: { Authentication: `Bearer ${rt}` }
+				headers: { Authorization: `Bearer ${rt}` }
 			});
 			const t = res.data.token ?? '';
 			const r = res.data.refresh_token ?? '';
