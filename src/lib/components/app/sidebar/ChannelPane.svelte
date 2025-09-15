@@ -98,10 +98,10 @@
                 dragIndicator = null;
         }
 
-        function dropOnCategoryHeader(targetId: string) {
+        function dropOnCategoryHeader(targetId: string, before: boolean) {
                 if (!dragging) return;
                 if (dragging.id === targetId) return;
-                if (dragging.type === 2) {
+                if (dragging.type === 2 || before) {
                         moveChannel(dragging.id, dragging.parent, null, targetId);
                 } else {
                         moveChannel(dragging.id, dragging.parent, targetId, null);
@@ -136,13 +136,13 @@
 		list.splice(insertIndex, 0, moving);
 		channelsByGuild.update((m) => ({ ...m, [gid]: list }));
 
-		if (from !== to) {
-			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
-				guildId: BigInt(gid) as any,
-				channelId: BigInt(id) as any,
-				guildPatchGuildChannelRequest: { parent_id: to ? (BigInt(to) as any) : undefined } as any
-			});
-		}
+                if (from !== to) {
+                        await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+                                guildId: BigInt(gid) as any,
+                                channelId: BigInt(id) as any,
+                                guildPatchGuildChannelRequest: { parent_id: BigInt(to ?? 0) as any } as any
+                        });
+                }
 
 		const channels: GuildChannelOrder[] = list.map(
 			(c, index) => ({ id: BigInt((c as any).id), position: index }) as any
@@ -574,7 +574,9 @@
                                                                         ondragover={(e) => {
                                                                                 e.preventDefault();
                                                                                 e.stopPropagation();
-                                                                                if (dragging && dragging.type === 2) {
+                                                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                                                const before = e.clientY < rect.top + rect.height / 2;
+                                                                                if (dragging?.type === 2 || before) {
                                                                                         dragOverChannel(String((sec.cat as any)?.id), null);
                                                                                 } else {
                                                                                         dragOverContainer(String((sec.cat as any)?.id));
@@ -582,9 +584,11 @@
                                                                         }}
                                                                         ondrop={(e) => {
                                                                                 e.stopPropagation();
-                                                                                dropOnCategoryHeader(String((sec.cat as any)?.id));
+                                                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                                                const before = e.clientY < rect.top + rect.height / 2;
+                                                                                dropOnCategoryHeader(String((sec.cat as any)?.id), before);
                                                                         }}
-                                                                >
+                                                               >
                                                                         <button
                                                                                 class="flex items-center gap-2"
                                                                                 onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
