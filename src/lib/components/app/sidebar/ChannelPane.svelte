@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { get } from 'svelte/store';
 	import { auth } from '$lib/stores/auth';
 	import {
 		selectedGuildId,
 		selectedChannelId,
 		channelsByGuild,
+		messagesByChannel,
 		lastChannelByGuild,
 		channelReady,
 		guildSettingsOpen
@@ -204,6 +206,39 @@
 					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
 					return { ...map, [gid]: list };
 				});
+			}
+
+			if (ev?.t === 109 && ev?.d?.channel_id != null) {
+				const gid = String(ev.d.guild_id);
+				const cid = String(ev.d.channel_id);
+				let list: DtoChannel[] = [];
+				channelsByGuild.update((map) => {
+					list = (map[gid] ?? []).filter((c) => String((c as any).id) !== cid);
+					return { ...map, [gid]: list };
+				});
+				messagesByChannel.update((map) => {
+					if (map[cid]) {
+						const { [cid]: _removed, ...rest } = map;
+						return rest;
+					}
+					return map;
+				});
+				const curGuild = String(get(selectedGuildId) ?? '');
+				const curChannel = String(get(selectedChannelId) ?? '');
+				if (curGuild === gid && curChannel === cid) {
+					const next = list.find((c: any) => (c as any).type === 0);
+					const nextId = next ? String((next as any).id) : null;
+					selectedChannelId.set(nextId);
+					if (nextId) {
+						subscribeWS([gid], nextId);
+						lastChannelByGuild.update((map) => ({ ...map, [gid]: nextId }));
+					} else {
+						lastChannelByGuild.update((map) => {
+							const { [gid]: _gone, ...rest } = map;
+							return rest;
+						});
+					}
+				}
 			}
 		}
 	});
