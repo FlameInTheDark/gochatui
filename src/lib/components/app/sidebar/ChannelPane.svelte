@@ -438,7 +438,9 @@
 	}
 </script>
 
-<div class="flex h-full w-[var(--col2)] flex-col border-r border-[var(--stroke)]">
+<div
+	class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-hidden border-r border-[var(--stroke)]"
+>
 	<div
 		class="box-border flex h-[var(--header-h)] flex-shrink-0 items-center justify-between overflow-hidden border-b border-[var(--stroke)] px-3"
 	>
