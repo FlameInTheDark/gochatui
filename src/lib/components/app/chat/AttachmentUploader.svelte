@@ -89,7 +89,7 @@
 >
 	<label
 		class={inline
-			? 'grid h-9 w-9 cursor-pointer place-items-center rounded-md hover:bg-[var(--panel)]'
+			? 'grid h-8 w-8 cursor-pointer place-items-center rounded-md hover:bg-[var(--panel)]'
 			: 'cursor-pointer rounded-md border border-[var(--stroke)] px-2 py-1'}
 		title={loading ? 'Uploading…' : 'Attach files'}
 	>
