@@ -537,14 +537,14 @@
 			bind:value={filter}
 		/>
 	</div>
-	<div
-		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
-		role="region"
-		oncontextmenu={(e: MouseEvent) => {
-			e.preventDefault();
-			openPaneMenu(e);
-		}}
-	>
+        <div
+                class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
+                role="region"
+                oncontextmenu={(e: MouseEvent) => {
+                        e.preventDefault();
+                        openPaneMenu(e);
+                }}
+        >
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
 			<div
@@ -577,24 +577,24 @@
 									></div>
 								{/if}
 								<div
-									class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-									String((sec.ch as any).id)
-										? 'bg-[var(--panel)]'
-										: ''}"
-									role="button"
-									tabindex="0"
-									draggable="true"
-									ondragstart={() => startDrag(sec.ch, null)}
-									onclick={() => selectChannel(String((sec.ch as any).id))}
-									onkeydown={(e) =>
-										(e.key === 'Enter' || e.key === ' ') &&
-										selectChannel(String((sec.ch as any).id))}
-									oncontextmenu={(e: MouseEvent) => {
-										e.preventDefault();
-										e.stopPropagation();
-										openChannelMenu(e, sec.ch);
-									}}
-								>
+                                                                class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                        String((sec.ch as any).id)
+                                                                                ? 'bg-[var(--panel)]'
+                                                                                : ''}"
+                                                                role="button"
+                                                                tabindex="0"
+                                                                draggable="true"
+                                                                ondragstart={() => startDrag(sec.ch, null)}
+                                                                onclick={() => selectChannel(String((sec.ch as any).id))}
+                                                                onkeydown={(e) =>
+                                                                        (e.key === 'Enter' || e.key === ' ') &&
+                                                                        selectChannel(String((sec.ch as any).id))}
+                                                                oncontextmenu={(e: MouseEvent) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        openChannelMenu(e, sec.ch);
+                                                                }}
+                                                        >
 									<div class="flex items-center gap-2 truncate">
 										<span class="opacity-70">#</span>
 										{sec.ch.name}
@@ -618,49 +618,48 @@
 										class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
 									></div>
 								{/if}
-								<div
-									class="flex items-center px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
-										'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
-										? 'rounded-md ring-2 ring-[var(--brand)]'
-										: ''}"
-									role="button"
-									tabindex="0"
-									draggable="true"
-									ondragstart={() => startDrag(sec.cat, null)}
-									ondragover={(e) => {
-										e.preventDefault();
-										e.stopPropagation();
-										const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-										const before = e.clientY < rect.top + rect.height / 2;
-										if (dragging?.type === 2 || before) {
-											dragOverChannel(String((sec.cat as any)?.id), null);
-										} else {
-											dragOverContainer(String((sec.cat as any)?.id));
-										}
-									}}
-									ondrop={(e) => {
-										e.stopPropagation();
-										const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-										const before = e.clientY < rect.top + rect.height / 2;
-										dropOnCategoryHeader(String((sec.cat as any)?.id), before);
-									}}
-								>
-									oncontextmenu={(e: MouseEvent) => {
-										e.preventDefault();
-										e.stopPropagation();
-										openCategoryMenu(e, sec.cat);
-									}}
-									>
-									<button
-										class="flex items-center gap-2"
-										onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
-									>
-										<span class="inline-block"
-											>{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
-										>
-										<div class="truncate">{sec.cat?.name ?? 'Category'}</div>
-									</button>
-								</div>
+                                                                <div
+                                                                        class="flex items-center px-2 text-xs tracking-wide text-[var(--muted)] uppercase {dragIndicator?.mode ===
+                                                                                'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
+                                                                                ? 'rounded-md ring-2 ring-[var(--brand)]'
+                                                                                : ''}"
+                                                                        role="button"
+                                                                        tabindex="0"
+                                                                        draggable="true"
+                                                                        ondragstart={() => startDrag(sec.cat, null)}
+                                                                        ondragover={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                                                const before = e.clientY < rect.top + rect.height / 2;
+                                                                                if (dragging?.type === 2 || before) {
+                                                                                        dragOverChannel(String((sec.cat as any)?.id), null);
+                                                                                } else {
+                                                                                        dragOverContainer(String((sec.cat as any)?.id));
+                                                                                }
+                                                                        }}
+                                                                        ondrop={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                                                const before = e.clientY < rect.top + rect.height / 2;
+                                                                                dropOnCategoryHeader(String((sec.cat as any)?.id), before);
+                                                                        }}
+                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                openCategoryMenu(e, sec.cat);
+                                                                        }}
+                                                                >
+                                                                        <button
+                                                                                class="flex items-center gap-2"
+                                                                                onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
+                                                                        >
+                                                                                <span class="inline-block"
+                                                                                        >{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
+                                                                                >
+                                                                                <div class="truncate">{sec.cat?.name ?? 'Category'}</div>
+                                                                        </button>
+                                                                </div>
 							</div>
 							{#if !collapsed[String((sec.cat as any)?.id)]}
 								{#each sec.items.filter((c) => (c.name || '')
@@ -685,24 +684,24 @@
 											></div>
 										{/if}
 										<div
-											class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-											String((ch as any).id)
-												? 'bg-[var(--panel)]'
-												: ''}"
-											role="button"
-											tabindex="0"
-											draggable="true"
-											ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
-											onclick={() => selectChannel(String((ch as any).id))}
-											onkeydown={(e) =>
-												(e.key === 'Enter' || e.key === ' ') &&
-												selectChannel(String((ch as any).id))}
-											oncontextmenu={(e: MouseEvent) => {
-												e.preventDefault();
-												e.stopPropagation();
-												openChannelMenu(e, ch);
-											}}
-										>
+                                                                                class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                                        String((ch as any).id)
+                                                                                                ? 'bg-[var(--panel)]'
+                                                                                                : ''}"
+                                                                                        role="button"
+                                                                                        tabindex="0"
+                                                                                        draggable="true"
+                                                                                        ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+                                                                                        onclick={() => selectChannel(String((ch as any).id))}
+                                                                                        onkeydown={(e) =>
+                                                                                                (e.key === 'Enter' || e.key === ' ') &&
+                                                                                                selectChannel(String((ch as any).id))}
+                                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                                e.preventDefault();
+                                                                                                e.stopPropagation();
+                                                                                                openChannelMenu(e, ch);
+                                                                                        }}
+                                                                                >
 											<div class="flex items-center gap-2 truncate">
 												<span class="opacity-70">#</span>
 												{ch.name}
