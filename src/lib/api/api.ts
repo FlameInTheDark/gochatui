@@ -585,6 +585,37 @@ export interface GuildCreateGuildRequest {
 /**
  * 
  * @export
+ * @interface GuildPatchGuildChannelRequest
+ */
+export interface GuildPatchGuildChannelRequest {
+    /**
+     * 
+     * @type {string}
+     * @memberof GuildPatchGuildChannelRequest
+     */
+    'name'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof GuildPatchGuildChannelRequest
+     */
+    'parent_id'?: number;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof GuildPatchGuildChannelRequest
+     */
+    'private'?: boolean;
+    /**
+     * 
+     * @type {string}
+     * @memberof GuildPatchGuildChannelRequest
+     */
+    'topic'?: string;
+}
+/**
+ * 
+ * @export
  * @interface GuildUpdateGuildRequest
  */
 export interface GuildUpdateGuildRequest {
@@ -1829,6 +1860,50 @@ export const GuildApiAxiosParamCreator = function (configuration?: Configuration
         },
         /**
          * 
+         * @summary Change channels data
+         * @param {number} guildId Guild ID
+         * @param {number} channelId Channel ID
+         * @param {GuildPatchGuildChannelRequest} guildPatchGuildChannelRequest Request body
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdChannelChannelIdPatch: async (guildId: number, channelId: number, guildPatchGuildChannelRequest: GuildPatchGuildChannelRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'guildId' is not null or undefined
+            assertParamExists('guildGuildIdChannelChannelIdPatch', 'guildId', guildId)
+            // verify required parameter 'channelId' is not null or undefined
+            assertParamExists('guildGuildIdChannelChannelIdPatch', 'channelId', channelId)
+            // verify required parameter 'guildPatchGuildChannelRequest' is not null or undefined
+            assertParamExists('guildGuildIdChannelChannelIdPatch', 'guildPatchGuildChannelRequest', guildPatchGuildChannelRequest)
+            const localVarPath = `/guild/{guild_id}/channel/{channel_id}`
+                .replace(`{${"guild_id"}}`, encodeURIComponent(String(guildId)))
+                .replace(`{${"channel_id"}}`, encodeURIComponent(String(channelId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PATCH', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(guildPatchGuildChannelRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary Get guild channels
          * @param {number} guildId Guild id
          * @param {*} [options] Override http request option.
@@ -2151,6 +2226,21 @@ export const GuildApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
+         * @summary Change channels data
+         * @param {number} guildId Guild ID
+         * @param {number} channelId Channel ID
+         * @param {GuildPatchGuildChannelRequest} guildPatchGuildChannelRequest Request body
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async guildGuildIdChannelChannelIdPatch(guildId: number, channelId: number, guildPatchGuildChannelRequest: GuildPatchGuildChannelRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DtoChannel>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.guildGuildIdChannelChannelIdPatch(guildId, channelId, guildPatchGuildChannelRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['GuildApi.guildGuildIdChannelChannelIdPatch']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary Get guild channels
          * @param {number} guildId Guild id
          * @param {*} [options] Override http request option.
@@ -2295,6 +2385,16 @@ export const GuildApiFactory = function (configuration?: Configuration, basePath
         },
         /**
          * 
+         * @summary Change channels data
+         * @param {GuildApiGuildGuildIdChannelChannelIdPatchRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdChannelChannelIdPatch(requestParameters: GuildApiGuildGuildIdChannelChannelIdPatchRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoChannel> {
+            return localVarFp.guildGuildIdChannelChannelIdPatch(requestParameters.guildId, requestParameters.channelId, requestParameters.guildPatchGuildChannelRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary Get guild channels
          * @param {GuildApiGuildGuildIdChannelGetRequest} requestParameters Request parameters.
          * @param {*} [options] Override http request option.
@@ -2411,6 +2511,16 @@ export interface GuildApiInterface {
      * @memberof GuildApiInterface
      */
     guildGuildIdChannelChannelIdGet(requestParameters: GuildApiGuildGuildIdChannelChannelIdGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoChannel>;
+
+    /**
+     * 
+     * @summary Change channels data
+     * @param {GuildApiGuildGuildIdChannelChannelIdPatchRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApiInterface
+     */
+    guildGuildIdChannelChannelIdPatch(requestParameters: GuildApiGuildGuildIdChannelChannelIdPatchRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoChannel>;
 
     /**
      * 
@@ -2566,6 +2676,34 @@ export interface GuildApiGuildGuildIdChannelChannelIdGetRequest {
      * @memberof GuildApiGuildGuildIdChannelChannelIdGet
      */
     readonly channelId: number
+}
+
+/**
+ * Request parameters for guildGuildIdChannelChannelIdPatch operation in GuildApi.
+ * @export
+ * @interface GuildApiGuildGuildIdChannelChannelIdPatchRequest
+ */
+export interface GuildApiGuildGuildIdChannelChannelIdPatchRequest {
+    /**
+     * Guild ID
+     * @type {number}
+     * @memberof GuildApiGuildGuildIdChannelChannelIdPatch
+     */
+    readonly guildId: number
+
+    /**
+     * Channel ID
+     * @type {number}
+     * @memberof GuildApiGuildGuildIdChannelChannelIdPatch
+     */
+    readonly channelId: number
+
+    /**
+     * Request body
+     * @type {GuildPatchGuildChannelRequest}
+     * @memberof GuildApiGuildGuildIdChannelChannelIdPatch
+     */
+    readonly guildPatchGuildChannelRequest: GuildPatchGuildChannelRequest
 }
 
 /**
@@ -2740,6 +2878,18 @@ export class GuildApi extends BaseAPI implements GuildApiInterface {
      */
     public guildGuildIdChannelChannelIdGet(requestParameters: GuildApiGuildGuildIdChannelChannelIdGetRequest, options?: RawAxiosRequestConfig) {
         return GuildApiFp(this.configuration).guildGuildIdChannelChannelIdGet(requestParameters.guildId, requestParameters.channelId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Change channels data
+     * @param {GuildApiGuildGuildIdChannelChannelIdPatchRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApi
+     */
+    public guildGuildIdChannelChannelIdPatch(requestParameters: GuildApiGuildGuildIdChannelChannelIdPatchRequest, options?: RawAxiosRequestConfig) {
+        return GuildApiFp(this.configuration).guildGuildIdChannelChannelIdPatch(requestParameters.guildId, requestParameters.channelId, requestParameters.guildPatchGuildChannelRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
