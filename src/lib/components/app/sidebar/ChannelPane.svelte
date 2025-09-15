@@ -625,9 +625,27 @@
 									</div>
 								{/each}
 							{/if}
+							<div
+								class="h-4"
+								role="listitem"
+								ondragover={(e) => {
+									e.preventDefault();
+									dragOverContainer(String((sec.cat as any)?.id));
+								}}
+								ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
+							></div>
 						</div>
 					{/if}
 				{/each}
+				<div
+					class="h-4"
+					role="listitem"
+					ondragover={(e) => {
+						e.preventDefault();
+						dragOverContainer(null);
+					}}
+					ondrop={() => dropOnContainer(null)}
+				></div>
 			</div>
 		{:else}
 			<div class="p-4 text-sm text-[var(--muted)]">Select a server to view channels.</div>
