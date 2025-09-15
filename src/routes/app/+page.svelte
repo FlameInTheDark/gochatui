@@ -17,7 +17,7 @@
 <AuthGate>
 	<div class="grid h-screen w-screen" style="grid-template-columns: var(--col1) var(--col2) 1fr;">
 		<ServerBar />
-		<div class="flex flex-col">
+		<div class="flex h-full min-h-0 flex-col overflow-hidden">
 			<div
 				class="box-border flex h-[var(--header-h)] flex-shrink-0 items-center justify-between overflow-hidden border-b border-[var(--stroke)] px-3"
 			>

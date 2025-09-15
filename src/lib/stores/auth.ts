@@ -44,14 +44,15 @@ function createAuthStore() {
 		}
 	});
 
-	const refreshApi = createApi(() => get(refreshToken));
+	// Separate API instance for token refresh without automatic auth header
+	const refreshApi = createApi(() => null);
 
 	async function refresh(): Promise<boolean> {
 		const rt = get(refreshToken);
 		if (!rt) return false;
 		try {
-			const res = await refreshApi.auth.authRefreshPost({
-				authRefreshTokenRequest: { user_id: get(user)?.id }
+			const res = await refreshApi.auth.authRefreshGet({
+				headers: { Authorization: `Bearer ${rt}` }
 			});
 			const t = res.data.token ?? '';
 			const r = res.data.refresh_token ?? '';

@@ -16,3 +16,6 @@ export const lastChannelByGuild = writable<Record<string, string>>({});
 
 // Gate to control when MessageList is allowed to fetch
 export const channelReady = writable(false);
+
+// Guild settings overlay state
+export const guildSettingsOpen = writable(false);
