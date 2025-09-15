@@ -8,7 +8,7 @@
 		channelReady
 	} from '$lib/stores/appState';
 	import type { DtoChannel, GuildChannelOrder } from '$lib/api';
-	import { subscribeWS } from '$lib/client/ws';
+	import { subscribeWS, wsEvent } from '$lib/client/ws';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
@@ -133,14 +133,39 @@
 			});
 		}
 
-                const channels: GuildChannelOrder[] = list.map(
-                        (c, index) => ({ id: BigInt((c as any).id), position: index }) as any
-                );
-                await auth.api.guild.guildGuildIdChannelOrderPatch({
-                        guildId: BigInt(gid) as any,
-                        guildPatchGuildChannelOrderRequest: { channels } as any
-                });
-        }
+		const channels: GuildChannelOrder[] = list.map(
+			(c, index) => ({ id: BigInt((c as any).id), position: index }) as any
+		);
+		await auth.api.guild.guildGuildIdChannelOrderPatch({
+			guildId: BigInt(gid) as any,
+			guildPatchGuildChannelOrderRequest: { channels } as any
+		});
+	}
+
+	$effect(() => {
+		const ev = $wsEvent as any;
+		if (
+			ev?.op === 0 &&
+			ev?.t === 108 &&
+			ev?.d?.guild_id != null &&
+			Array.isArray(ev?.d?.channels)
+		) {
+			const gid = String(ev.d.guild_id);
+			channelsByGuild.update((map) => {
+				const list = [...(map[gid] ?? [])];
+				const pos = new Map<string, number>();
+				for (const ch of ev.d.channels) {
+					pos.set(String(ch.id), ch.position ?? 0);
+				}
+				for (const ch of list) {
+					const p = pos.get(String((ch as any).id));
+					if (p != null) (ch as any).position = p;
+				}
+				list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+				return { ...map, [gid]: list };
+			});
+		}
+	});
 
 	function computeSections(channels: DtoChannel[]) {
 		const byParent: Record<string, DtoChannel[]> = {};
