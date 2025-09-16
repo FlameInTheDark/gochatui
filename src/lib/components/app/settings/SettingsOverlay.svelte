@@ -8,9 +8,20 @@
 		label: string;
 	};
 
+	type ThemeOption = {
+		value: Theme;
+		label: () => string;
+	};
+
 	const languages: LanguageOption[] = [
 		{ code: 'en', label: 'English' },
 		{ code: 'ru', label: 'Русский' }
+	];
+
+	const themeOptions: ThemeOption[] = [
+		{ value: 'system', label: () => m.system() },
+		{ value: 'light', label: () => m.light() },
+		{ value: 'dark', label: () => m.dark() }
 	];
 
 	let category = $state<'general' | 'appearance' | 'other'>('general');
@@ -110,23 +121,46 @@
 					</div>
 				{:else if category === 'appearance'}
 					<div>
-						<label for="theme-select" class="mb-2 block">{m.theme()}</label>
-						<div class="relative">
-							<select
-								id="theme-select"
-								class="w-full appearance-none rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-								value={$theme}
-								onchange={(e) => theme.set((e.target as HTMLSelectElement).value as Theme)}
-							>
-								<option value="system">{m.system()}</option>
-								<option value="light">{m.light()}</option>
-								<option value="dark">{m.dark()}</option>
-							</select>
-							<span
-								class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[var(--fg-muted)]"
-								>▾</span
-							>
-						</div>
+						<p id="theme-group-label" class="mb-2 block">{m.theme()}</p>
+						<div class="space-y-2" role="radiogroup" aria-labelledby="theme-group-label">
+							{#each themeOptions as option (option.value)}
+								<div>
+									<input
+										 type="radio"
+										 name="theme"
+										 id={`theme-${option.value}`}
+										 class="sr-only"
+										 value={option.value}
+										 checked={$theme === option.value}
+										 onchange={() => theme.set(option.value)}
+									/>
+									<label
+										 for={`theme-${option.value}`}
+										 class={`flex w-full cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition select-none focus-within:ring-2 focus-within:ring-[var(--brand)]/60 focus-within:ring-offset-2 focus-within:ring-offset-[var(--bg)] ${
+											$theme === option.value
+												? 'border-[var(--brand)] bg-[var(--panel-strong)] shadow-sm'
+												: 'border-[var(--stroke)] bg-[var(--panel)] hover:border-[var(--brand)]/60 hover:bg-[var(--panel-strong)]'
+										}`}
+									>
+										<span class="text-base font-medium">{option.label()}</span>
+										<span
+											 class={`ml-4 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors duration-150 ${
+												$theme === option.value
+													? 'border-[var(--brand)]'
+													: 'border-[var(--stroke-2)]'
+											}`}
+										 aria-hidden="true"
+									>
+											<span
+												 class={`h-2.5 w-2.5 rounded-full transition-colors duration-150 ${
+													$theme === option.value ? 'bg-[var(--brand)]' : 'bg-transparent'
+											}`}
+											></span>
+									</span>
+								</label>
+							</div>
+						{/each}
+					</div>
 					</div>
 				{:else}
 					<p>{m.other()}...</p>
