@@ -4,7 +4,7 @@
 	import { m } from '$lib/paraglide/messages.js';
 
 	const dispatch = createEventDispatcher<{ success: void }>();
-	let id = $state<number | null>(null);
+        let id = $state('');
 	let token = $state('');
 	let name = $state('');
 	let discriminator = $state('');
@@ -15,13 +15,28 @@
 	async function onSubmit() {
 		loading = true;
 		error = null;
-		try {
-			await auth.confirm({ id: id ?? undefined, token, name, discriminator, password });
-			dispatch('success');
-		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? m.auth_confirmation_failed();
-		} finally {
-			loading = false;
+                let parsedId: bigint | undefined;
+                try {
+                        parsedId = id.trim() ? BigInt(id.trim()) : undefined;
+                } catch {
+                        error = m.auth_confirmation_failed();
+                        loading = false;
+                        return;
+                }
+
+                try {
+                        await auth.confirm({
+                                id: parsedId,
+                                token,
+                                name,
+                                discriminator,
+                                password
+                        });
+                        dispatch('success');
+                } catch (e: any) {
+                        error = e?.response?.data?.message ?? e?.message ?? m.auth_confirmation_failed();
+                } finally {
+                        loading = false;
 		}
 	}
 </script>
@@ -41,10 +56,12 @@
 			<input
 				id="confirm-id"
 				class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-				type="number"
-				bind:value={id}
-				required
-			/>
+                                type="text"
+                                inputmode="numeric"
+                                pattern="\\d*"
+                                bind:value={id}
+                                required
+                        />
 		</div>
 		<div class="space-y-1">
 			<label for="confirm-token" class="text-sm text-[var(--muted)]">{m.auth_token()}</label>

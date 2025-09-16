@@ -36,11 +36,11 @@ export interface AuthConfirmationRequest {
      */
     'discriminator'?: string;
     /**
-     * 
-     * @type {number}
+     *
+     * @type {bigint}
      * @memberof AuthConfirmationRequest
      */
-    'id'?: number;
+    'id'?: bigint;
     /**
      * 
      * @type {string}
