@@ -1,24 +1,46 @@
 ﻿<script lang="ts">
-	import { auth } from '$lib/stores/auth';
-	import { m } from '$lib/paraglide/messages.js';
-	let id = $state<number | null>(null);
-	let token = $state('');
-	let password = $state('');
-	let loading = $state(false);
-	let message: string | null = $state(null);
-	let error: string | null = $state(null);
+        import { auth } from '$lib/stores/auth';
+        import { m } from '$lib/paraglide/messages.js';
 
-	async function onSubmit() {
-		loading = true;
-		error = null;
-		message = null;
-		try {
-			await auth.reset({ id: id ?? undefined, token, password });
-			message = m.auth_reset_success();
-		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? m.auth_reset_failed();
-		} finally {
-			loading = false;
+        type ResetDefaults = {
+                id?: string;
+                token?: string;
+        };
+
+        let { defaults } = $props<{ defaults?: ResetDefaults }>();
+
+        let id = $state(defaults?.id ?? '');
+        let token = $state(defaults?.token ?? '');
+        let password = $state('');
+        let loading = $state(false);
+        let message: string | null = $state(null);
+        let error: string | null = $state(null);
+
+        $effect(() => {
+                if (!defaults) return;
+                if (defaults.id !== undefined) id = defaults.id;
+                if (defaults.token !== undefined) token = defaults.token;
+        });
+
+        async function onSubmit() {
+                loading = true;
+                error = null;
+                message = null;
+                let parsedId: bigint | undefined;
+                try {
+                        parsedId = id.trim() ? BigInt(id.trim()) : undefined;
+                } catch {
+                        error = m.auth_reset_failed();
+                        loading = false;
+                        return;
+                }
+                try {
+                        await auth.reset({ id: parsedId, token, password });
+                        message = m.auth_reset_success();
+                } catch (e: any) {
+                        error = e?.response?.data?.message ?? e?.message ?? m.auth_reset_failed();
+                } finally {
+                        loading = false;
 		}
 	}
 </script>
@@ -36,13 +58,15 @@
 	<div class="grid grid-cols-2 gap-2">
 		<div class="space-y-1">
 			<label for="reset-id" class="text-sm text-[var(--muted)]">{m.auth_user_id()}</label>
-			<input
-				id="reset-id"
-				class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-				type="number"
-				bind:value={id}
-				required
-			/>
+                        <input
+                                id="reset-id"
+                                class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                type="text"
+                                inputmode="numeric"
+                                pattern="\\d*"
+                                bind:value={id}
+                                required
+                        />
 		</div>
 		<div class="space-y-1">
 			<label for="reset-token" class="text-sm text-[var(--muted)]">{m.auth_token()}</label>

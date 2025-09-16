@@ -1,16 +1,35 @@
 ﻿<script lang="ts">
-	import { auth } from '$lib/stores/auth';
-	import { createEventDispatcher } from 'svelte';
-	import { m } from '$lib/paraglide/messages.js';
+        import { auth } from '$lib/stores/auth';
+        import { createEventDispatcher } from 'svelte';
+        import { m } from '$lib/paraglide/messages.js';
 
-	const dispatch = createEventDispatcher<{ success: void }>();
-        let id = $state('');
-	let token = $state('');
-	let name = $state('');
-	let discriminator = $state('');
-	let password = $state('');
-	let loading = $state(false);
-	let error: string | null = $state(null);
+        type ConfirmDefaults = {
+                id?: string;
+                token?: string;
+                name?: string;
+                discriminator?: string;
+                password?: string;
+        };
+
+        const dispatch = createEventDispatcher<{ success: void }>();
+        let { defaults } = $props<{ defaults?: ConfirmDefaults }>();
+
+        let id = $state(defaults?.id ?? '');
+        let token = $state(defaults?.token ?? '');
+        let name = $state(defaults?.name ?? '');
+        let discriminator = $state(defaults?.discriminator ?? '');
+        let password = $state(defaults?.password ?? '');
+        let loading = $state(false);
+        let error: string | null = $state(null);
+
+        $effect(() => {
+                if (!defaults) return;
+                if (defaults.id !== undefined) id = defaults.id;
+                if (defaults.token !== undefined) token = defaults.token;
+                if (defaults.name !== undefined) name = defaults.name;
+                if (defaults.discriminator !== undefined) discriminator = defaults.discriminator;
+                if (defaults.password !== undefined) password = defaults.password;
+        });
 
 	async function onSubmit() {
 		loading = true;

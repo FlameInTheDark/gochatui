@@ -118,11 +118,11 @@ export interface AuthPasswordRecoveryRequest {
  */
 export interface AuthPasswordResetRequest {
     /**
-     * 
-     * @type {number}
+     *
+     * @type {bigint}
      * @memberof AuthPasswordResetRequest
      */
-    'id'?: number;
+    'id'?: bigint;
     /**
      * 
      * @type {string}
