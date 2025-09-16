@@ -15,6 +15,8 @@
 
 	const languages: LanguageOption[] = [
 		{ code: 'en', label: 'English' },
+		{ code: 'de', label: 'Deutsch' },
+		{ code: 'fr', label: 'Français' },
 		{ code: 'ru', label: 'Русский' }
 	];
 
@@ -126,17 +128,17 @@
 							{#each themeOptions as option (option.value)}
 								<div>
 									<input
-										 type="radio"
-										 name="theme"
-										 id={`theme-${option.value}`}
-										 class="sr-only"
-										 value={option.value}
-										 checked={$theme === option.value}
-										 onchange={() => theme.set(option.value)}
+										type="radio"
+										name="theme"
+										id={`theme-${option.value}`}
+										class="sr-only"
+										value={option.value}
+										checked={$theme === option.value}
+										onchange={() => theme.set(option.value)}
 									/>
 									<label
-										 for={`theme-${option.value}`}
-										 class={`flex w-full cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition select-none focus-within:ring-2 focus-within:ring-[var(--brand)]/60 focus-within:ring-offset-2 focus-within:ring-offset-[var(--bg)] ${
+										for={`theme-${option.value}`}
+										class={`flex w-full cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition select-none focus-within:ring-2 focus-within:ring-[var(--brand)]/60 focus-within:ring-offset-2 focus-within:ring-offset-[var(--bg)] ${
 											$theme === option.value
 												? 'border-[var(--brand)] bg-[var(--panel-strong)] shadow-sm'
 												: 'border-[var(--stroke)] bg-[var(--panel)] hover:border-[var(--brand)]/60 hover:bg-[var(--panel-strong)]'
@@ -144,23 +146,23 @@
 									>
 										<span class="text-base font-medium">{option.label()}</span>
 										<span
-											 class={`ml-4 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors duration-150 ${
+											class={`ml-4 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors duration-150 ${
 												$theme === option.value
 													? 'border-[var(--brand)]'
 													: 'border-[var(--stroke-2)]'
 											}`}
-										 aria-hidden="true"
-									>
+											aria-hidden="true"
+										>
 											<span
-												 class={`h-2.5 w-2.5 rounded-full transition-colors duration-150 ${
+												class={`h-2.5 w-2.5 rounded-full transition-colors duration-150 ${
 													$theme === option.value ? 'bg-[var(--brand)]' : 'bg-transparent'
-											}`}
+												}`}
 											></span>
-									</span>
-								</label>
-							</div>
-						{/each}
-					</div>
+										</span>
+									</label>
+								</div>
+							{/each}
+						</div>
 					</div>
 				{:else}
 					<p>{m.other()}...</p>
