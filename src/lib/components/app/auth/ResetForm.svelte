@@ -45,7 +45,7 @@
                         return;
                 }
                 try {
-                        await auth.reset({ user_id: parsedId, token: trimmedToken, password });
+                        await auth.reset({ id: parsedId, token: trimmedToken, password });
                         message = m.auth_reset_success();
                 } catch (e: any) {
                         error = e?.response?.data?.message ?? e?.message ?? m.auth_reset_failed();

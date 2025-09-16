@@ -40,7 +40,7 @@ export interface AuthConfirmationRequest {
      * @type {bigint}
      * @memberof AuthConfirmationRequest
      */
-    'user_id'?: bigint;
+    'id'?: bigint;
     /**
      * 
      * @type {string}
@@ -122,7 +122,7 @@ export interface AuthPasswordResetRequest {
      * @type {bigint}
      * @memberof AuthPasswordResetRequest
      */
-    'user_id'?: bigint;
+    'id'?: bigint;
     /**
      * 
      * @type {string}
