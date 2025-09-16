@@ -19,6 +19,7 @@
         let name = $state(defaults?.name ?? '');
         let discriminator = $state(defaults?.discriminator ?? '');
         let password = $state(defaults?.password ?? '');
+        let confirmPassword = $state(defaults?.password ?? '');
         let loading = $state(false);
         let error: string | null = $state(null);
         let hideCredentials = $state(Boolean(defaults?.id && defaults?.token));
@@ -29,13 +30,22 @@
                 if (defaults.token !== undefined) token = defaults.token;
                 if (defaults.name !== undefined) name = defaults.name;
                 if (defaults.discriminator !== undefined) discriminator = defaults.discriminator;
-                if (defaults.password !== undefined) password = defaults.password;
+                if (defaults.password !== undefined) {
+                        password = defaults.password;
+                        confirmPassword = defaults.password;
+                }
                 hideCredentials = Boolean(defaults.id && defaults.token);
         });
 
         async function onSubmit() {
                 loading = true;
                 error = null;
+                if (!password || !confirmPassword || password !== confirmPassword) {
+                        error = m.auth_password_mismatch();
+                        loading = false;
+                        return;
+                }
+
                 const trimmedId = id.trim();
                 const trimmedToken = token.trim();
                 if (!trimmedId || !trimmedToken) {
@@ -127,20 +137,35 @@
 			/>
 		</div>
 	</div>
-	<div class="space-y-1">
-		<label for="confirm-password" class="text-sm text-[var(--muted)]">{m.auth_password()}</label>
-		<input
-			id="confirm-password"
-			class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-			type="password"
-			bind:value={password}
-			required
-		/>
-	</div>
-	<button
-		class="w-full rounded-md bg-[var(--brand)] py-2 font-medium text-[var(--bg)] disabled:opacity-50"
-		disabled={loading}
-	>
-		{loading ? m.auth_confirming() : m.auth_confirm()}
-	</button>
+        <div class="space-y-1">
+                <label for="confirm-password" class="text-sm text-[var(--muted)]">{m.auth_password()}</label>
+                <input
+                        id="confirm-password"
+                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                        type="password"
+                        bind:value={password}
+                        required
+                />
+        </div>
+        <div class="space-y-1">
+                <label for="confirm-password-repeat" class="text-sm text-[var(--muted)]">{m.auth_confirm_password()}</label>
+                <input
+                        id="confirm-password-repeat"
+                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                        type="password"
+                        bind:value={confirmPassword}
+                        required
+                />
+                {#if password && confirmPassword && password !== confirmPassword}
+                        <div class="text-sm text-red-500">{m.auth_password_mismatch()}</div>
+                {/if}
+        </div>
+        <button
+                class="w-full rounded-md bg-[var(--brand)] py-2 font-medium text-[var(--bg)] disabled:opacity-50"
+                disabled={
+                        loading || !password || !confirmPassword || password !== confirmPassword
+                }
+        >
+                {loading ? m.auth_confirming() : m.auth_confirm()}
+        </button>
 </form>
