@@ -11,7 +11,7 @@
 	import { wsEvent } from '$lib/client/ws';
 	import { m } from '$lib/paraglide/messages.js';
 	import { fly } from 'svelte/transition';
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -92,25 +92,81 @@
 		}
 	});
 
+	const PAGE_SIZE = 50;
+
+	function extractId(value: any): string | null {
+		if (value == null) return null;
+		const raw = typeof value === 'object' ? ((value as any)?.id ?? value) : value;
+		if (raw == null) return null;
+		const str = String(raw);
+		const digits = str.replace(/[^0-9]/g, '');
+		return digits || str;
+	}
+
 	async function loadMore() {
 		if (!$selectedChannelId || loading || endReached) return;
 		loading = true;
+		const prevHeight = scroller?.scrollHeight ?? 0;
+		const prevTop = scroller?.scrollTop ?? 0;
+		let inserted = 0;
+		let mutatedExisting = false;
 		try {
 			const from = messages[0]?.id as any;
 			const res = await auth.api.message.messageChannelChannelIdGet({
 				channelId: $selectedChannelId as any,
 				from,
 				direction: from ? 'before' : undefined,
-				limit: 50
+				limit: PAGE_SIZE
 			});
 			const batch = res.data ?? [];
-			if (batch.length === 0) endReached = true;
-			messages = [...batch.reverse(), ...messages];
+			if (batch.length === 0) {
+				endReached = true;
+				error = null;
+				return;
+			}
+			const incoming = [...batch].reverse();
+			const existingIds = new Map<string, number>();
+			for (let i = 0; i < messages.length; i += 1) {
+				const key = extractId(messages[i]);
+				if (key) existingIds.set(key, i);
+			}
+			const seenNew = new Set<string>();
+			const unique: DtoMessage[] = [];
+			for (const item of incoming) {
+				const key = extractId(item);
+				if (key && existingIds.has(key)) {
+					const idx = existingIds.get(key)!;
+					messages[idx] = { ...messages[idx], ...item };
+					mutatedExisting = true;
+					continue;
+				}
+				if (key) {
+					if (seenNew.has(key)) continue;
+					seenNew.add(key);
+				}
+				unique.push(item);
+			}
+			if (unique.length > 0) {
+				messages = [...unique, ...messages];
+				inserted = unique.length;
+			} else if (mutatedExisting) {
+				messages = [...messages];
+			}
+			if (unique.length === 0 || batch.length < PAGE_SIZE) {
+				endReached = true;
+			}
 			error = null;
 		} catch (e: any) {
 			error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
 		} finally {
 			loading = false;
+			if (inserted > 0 && scroller) {
+				await tick();
+				const diff = scroller.scrollHeight - prevHeight;
+				if (prevTop > 0) {
+					scroller.scrollTop = prevTop + diff;
+				}
+			}
 		}
 	}
 
@@ -123,10 +179,11 @@
 		try {
 			const res = await auth.api.message.messageChannelChannelIdGet({
 				channelId: $selectedChannelId as any,
-				limit: 50
+				limit: PAGE_SIZE
 			});
 			const batch = res.data ?? [];
 			messages = [...batch].reverse();
+			endReached = batch.length < PAGE_SIZE;
 			error = null;
 			scrollToBottom(false);
 			wasAtBottom = true;
