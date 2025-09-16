@@ -21,6 +21,7 @@
         let password = $state(defaults?.password ?? '');
         let loading = $state(false);
         let error: string | null = $state(null);
+        let hideCredentials = $state(Boolean(defaults?.id && defaults?.token));
 
         $effect(() => {
                 if (!defaults) return;
@@ -29,14 +30,23 @@
                 if (defaults.name !== undefined) name = defaults.name;
                 if (defaults.discriminator !== undefined) discriminator = defaults.discriminator;
                 if (defaults.password !== undefined) password = defaults.password;
+                hideCredentials = Boolean(defaults.id && defaults.token);
         });
 
-	async function onSubmit() {
-		loading = true;
-		error = null;
-                let parsedId: bigint | undefined;
+        async function onSubmit() {
+                loading = true;
+                error = null;
+                const trimmedId = id.trim();
+                const trimmedToken = token.trim();
+                if (!trimmedId || !trimmedToken) {
+                        error = m.auth_confirmation_failed();
+                        loading = false;
+                        return;
+                }
+
+                let parsedId: bigint;
                 try {
-                        parsedId = id.trim() ? BigInt(id.trim()) : undefined;
+                        parsedId = BigInt(trimmedId);
                 } catch {
                         error = m.auth_confirmation_failed();
                         loading = false;
@@ -46,7 +56,7 @@
                 try {
                         await auth.confirm({
                                 id: parsedId,
-                                token,
+                                token: trimmedToken,
                                 name,
                                 discriminator,
                                 password
@@ -69,30 +79,32 @@
 >
 	<div class="text-lg font-semibold">{m.auth_confirm_account()}</div>
 	{#if error}<div class="text-sm text-red-500">{error}</div>{/if}
-	<div class="grid grid-cols-2 gap-2">
-		<div class="space-y-1">
-			<label for="confirm-id" class="text-sm text-[var(--muted)]">{m.auth_user_id()}</label>
-			<input
-				id="confirm-id"
-				class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-                                type="text"
-                                inputmode="numeric"
-                                pattern="\\d*"
-                                bind:value={id}
-                                required
-                        />
-		</div>
-		<div class="space-y-1">
-			<label for="confirm-token" class="text-sm text-[var(--muted)]">{m.auth_token()}</label>
-			<input
-				id="confirm-token"
-				class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-				type="text"
-				bind:value={token}
-				required
-			/>
-		</div>
-	</div>
+        {#if !hideCredentials}
+                <div class="grid grid-cols-2 gap-2">
+                        <div class="space-y-1">
+                                <label for="confirm-id" class="text-sm text-[var(--muted)]">{m.auth_user_id()}</label>
+                                <input
+                                        id="confirm-id"
+                                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                        type="text"
+                                        inputmode="numeric"
+                                        pattern="\\d*"
+                                        bind:value={id}
+                                        required
+                                />
+                        </div>
+                        <div class="space-y-1">
+                                <label for="confirm-token" class="text-sm text-[var(--muted)]">{m.auth_token()}</label>
+                                <input
+                                        id="confirm-token"
+                                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                        type="text"
+                                        bind:value={token}
+                                        required
+                                />
+                        </div>
+                </div>
+        {/if}
 	<div class="grid grid-cols-2 gap-2">
 		<div class="space-y-1">
 			<label for="confirm-name" class="text-sm text-[var(--muted)]">{m.auth_name()}</label>
