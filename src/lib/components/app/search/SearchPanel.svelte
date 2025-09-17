@@ -1,403 +1,700 @@
 <script lang="ts">
-	import type { DtoMessage } from '$lib/api';
-	import { auth } from '$lib/stores/auth';
-	import {
-		selectedGuildId,
-		searchOpen,
-		searchAnchor,
-		selectedChannelId
-	} from '$lib/stores/appState';
-	import { tick } from 'svelte';
-	import { m } from '$lib/paraglide/messages.js';
+        import type { DtoMessage } from '$lib/api';
+        import { auth } from '$lib/stores/auth';
+        import {
+                selectedGuildId,
+                searchOpen,
+                searchAnchor,
+                selectedChannelId,
+                channelsByGuild
+        } from '$lib/stores/appState';
+        import { tick } from 'svelte';
+        import { m } from '$lib/paraglide/messages.js';
 
-	let query = $state('');
-	let loading = $state(false);
-	let results: DtoMessage[] = $state([]);
-	let error: string | null = $state(null);
-	let page = $state(0);
-	let pages = $state(0);
-	let pageItems: (number | string)[] = $state([]);
-	let author = $state('');
-	let mentions = $state('');
-	let hasSelected = $state<string[]>([]);
+        type FilterType = 'from' | 'mentions' | 'has';
+        interface TextFilterToken {
+                raw: string;
+                display: string;
+        }
 
-	let panelEl: HTMLDivElement | null = $state(null);
-	let posX = $state(0);
-	let posY = $state(0);
-	function clamp(v: number, min: number, max: number) {
-		return Math.max(min, Math.min(max, v));
-	}
-	function parseSnowflake(value: string | null): bigint | undefined {
-		if (!value) return undefined;
-		try {
-			const digits = String(value)
-				.trim()
-				.replace(/[^0-9]/g, '');
-			if (!digits) return undefined;
-			return BigInt(digits);
-		} catch (err) {
-			console.error('Failed to parse snowflake', err);
-			return undefined;
-		}
-	}
-	function parseMentionsInput(value: string): bigint[] {
-		const parts = value
-			.split(/[\,\s]+/)
-			.map((part) => part.trim())
-			.filter(Boolean);
-		const ids: bigint[] = [];
-		for (const part of parts) {
-			const parsed = parseSnowflake(part);
-			if (parsed != null) ids.push(parsed);
-		}
-		return ids;
-	}
-	const hasOptions = [
-		{ value: 'link', label: m.search_has_link() },
-		{ value: 'embed', label: m.search_has_embed() },
-		{ value: 'file', label: m.search_has_file() },
-		{ value: 'image', label: m.search_has_image() }
-	];
-	function toggleHas(value: string) {
-		hasSelected = hasSelected.includes(value)
-			? hasSelected.filter((item) => item !== value)
-			: [...hasSelected, value];
-	}
-	const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
-	function snowflakeToDate(id: any): Date | null {
-		if (id == null) return null;
-		try {
-			const s = String(id).replace(/[^0-9]/g, '');
-			if (!s) return null;
-			const v = BigInt(s);
-			const ms = Number(v >> 22n);
-			return new Date(EPOCH_MS + ms);
-		} catch {
-			return null;
-		}
-	}
-	function formatMsgTime(msg: DtoMessage) {
-		const d =
-			snowflakeToDate((msg as any)?.id) || (msg.updated_at ? new Date(msg.updated_at) : null);
-		if (!d || Number.isNaN(d.getTime())) return '';
-		return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(d);
-	}
-	function formatMsgFull(msg: DtoMessage) {
-		const d =
-			snowflakeToDate((msg as any)?.id) || (msg.updated_at ? new Date(msg.updated_at) : null);
-		if (!d || Number.isNaN(d.getTime())) return '';
-		return new Intl.DateTimeFormat(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit'
-		}).format(d);
-	}
+        let inputValue = $state('');
+        let loading = $state(false);
+        let results: DtoMessage[] = $state([]);
+        let error: string | null = $state(null);
+        let page = $state(0);
+        let pages = $state(0);
+        let pageItems: (number | string)[] = $state([]);
 
-	async function updatePosition() {
-		if (typeof window === 'undefined') return;
-		await tick();
-		const pad = 8;
-		const vw = window.innerWidth;
-		const vh = window.innerHeight;
-		const rect = panelEl ? panelEl.getBoundingClientRect() : ({ width: 480, height: 320 } as any);
-		const anchor = $searchAnchor || { x: vw - pad, y: 56 };
-		posX = clamp(anchor.x, pad, vw - rect.width - pad);
-		posY = clamp(anchor.y, pad, vh - rect.height - pad);
-	}
+        let authorFilter: TextFilterToken | null = $state(null);
+        let mentionFilters: TextFilterToken[] = $state([]);
+        let hasSelected = $state<string[]>([]);
 
-	async function doSearch() {
-		if (!$selectedGuildId || !query.trim()) return;
-		loading = true;
-		error = null;
-		results = [];
-		try {
-			const guildId = parseSnowflake($selectedGuildId);
-			if (!guildId) {
-				throw new Error('Invalid guild id');
-			}
-			const request: any = { page };
-			const channelSnowflake = parseSnowflake($selectedChannelId);
-			if (channelSnowflake != null) request.channel_id = channelSnowflake;
-			const authorSnowflake = parseSnowflake(author);
-			if (authorSnowflake != null) request.author_id = authorSnowflake;
-			const mentionIds = parseMentionsInput(mentions);
-			if (mentionIds.length) request.mentions = mentionIds;
-			if (hasSelected.length) request.has = hasSelected;
-			if (query.trim()) request.content = query.trim();
-			const res = await auth.api.search.searchGuildIdMessagesPost({
-				guildId: guildId as any,
-				searchMessageSearchRequest: request
-			});
-			const data: any = res.data;
-			const collected: DtoMessage[] = [];
-			let totalPages = 0;
-			const appendResults = (chunk: any) => {
-				if (!chunk) return;
-				if (Array.isArray(chunk.messages)) {
-					collected.push(...chunk.messages);
-				}
-				const p = Number(chunk.pages ?? 0);
-				if (!Number.isNaN(p)) totalPages = Math.max(totalPages, p);
-			};
-			if (Array.isArray(data)) {
-				for (const entry of data) appendResults(entry);
-			} else {
-				appendResults(data);
-			}
-			results = collected;
-			pages = totalPages > 0 ? totalPages : collected.length > 0 ? page + 1 : 0;
-		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? 'Search failed';
-		} finally {
-			loading = false;
-		}
-	}
+        let pendingFilter: FilterType | null = $state(null);
+        let pendingValue = $state('');
 
-	function openMessage(m: DtoMessage) {
-		if (!m.channel_id) return;
-		selectedChannelId.set(String(m.channel_id));
-		searchOpen.set(false);
-	}
+        let panelEl: HTMLDivElement | null = $state(null);
+        let searchInputEl: HTMLInputElement | null = $state(null);
+        let promptInputEl: HTMLInputElement | null = $state(null);
 
-	$effect(() => {
-		if ($searchOpen) {
-			query = '';
-			results = [];
-			error = null;
-			page = 0;
-			pages = 0;
-			pageItems = [];
-			author = '';
-			mentions = '';
-			hasSelected = [];
-			updatePosition();
-		}
-	});
+        let posX = $state(0);
+        let posY = $state(0);
 
-	const MAX_PAGER_BUTTONS = 9; // total slots, including first/last and ellipses
-	function visiblePageItems(
-		total: number,
-		current: number,
-		maxButtons = MAX_PAGER_BUTTONS
-	): (number | string)[] {
-		total = Number(total) || 0;
-		current = Number(current) || 0;
-		if (total <= 0) return [];
-		if (total <= maxButtons) return Array.from({ length: total }, (_, i) => i);
-		const items: (number | string)[] = [];
-		const first = 0;
-		const last = total - 1;
-		const middleCount = maxButtons - 2; // minus first/last
-		let start = Math.max(1, current - Math.floor(middleCount / 2));
-		let end = start + middleCount - 1;
-		if (end > last - 1) {
-			end = last - 1;
-			start = end - middleCount + 1;
-		}
-		items.push(first);
-		if (start > 1) items.push('...');
-		for (let i = start; i <= end; i++) items.push(i);
-		if (end < last - 1) items.push('...');
-		items.push(last);
-		return items;
-	}
-	$effect(() => {
-		pageItems = visiblePageItems(pages, page);
-	});
+        function clamp(v: number, min: number, max: number) {
+                return Math.max(min, Math.min(max, v));
+        }
+
+        function parseSnowflake(value: string | null): bigint | undefined {
+                if (!value) return undefined;
+                try {
+                        const digits = String(value)
+                                .trim()
+                                .replace(/[^0-9]/g, '');
+                        if (!digits) return undefined;
+                        return BigInt(digits);
+                } catch (err) {
+                        console.error('Failed to parse snowflake', err);
+                        return undefined;
+                }
+        }
+
+        const hasOptions = [
+                { value: 'link', label: m.search_has_link() },
+                { value: 'embed', label: m.search_has_embed() },
+                { value: 'file', label: m.search_has_file() },
+                { value: 'image', label: m.search_has_image() }
+        ];
+
+        function hasLabel(value: string) {
+                return hasOptions.find((option) => option.value === value)?.label ?? value;
+        }
+
+        function toggleHas(value: string) {
+                hasSelected = hasSelected.includes(value)
+                        ? hasSelected.filter((item) => item !== value)
+                        : [...hasSelected, value];
+        }
+
+        function removeHas(value: string) {
+                hasSelected = hasSelected.filter((item) => item !== value);
+        }
+
+        const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
+
+        function snowflakeToDate(id: any): Date | null {
+                if (id == null) return null;
+                try {
+                        const s = String(id).replace(/[^0-9]/g, '');
+                        if (!s) return null;
+                        const v = BigInt(s);
+                        const ms = Number(v >> 22n);
+                        return new Date(EPOCH_MS + ms);
+                } catch {
+                        return null;
+                }
+        }
+
+        function formatMsgTime(msg: DtoMessage) {
+                const d =
+                        snowflakeToDate((msg as any)?.id) || (msg.updated_at ? new Date(msg.updated_at) : null);
+                if (!d || Number.isNaN(d.getTime())) return '';
+                return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(d);
+        }
+
+        function formatMsgFull(msg: DtoMessage) {
+                const d =
+                        snowflakeToDate((msg as any)?.id) || (msg.updated_at ? new Date(msg.updated_at) : null);
+                if (!d || Number.isNaN(d.getTime())) return '';
+                return new Intl.DateTimeFormat(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                }).format(d);
+        }
+
+        function authorInitials(message: DtoMessage) {
+                const name = message.author?.name ?? m.user_default_name();
+                return name.slice(0, 2).toUpperCase();
+        }
+
+        function resolveChannelName(channelId: any) {
+                if (!channelId || !$selectedGuildId) return '';
+                const gid = String($selectedGuildId ?? '');
+                const list = $channelsByGuild[gid] ?? [];
+                const target = String(channelId);
+                const found = list.find((channel: any) => String(channel?.id ?? '') === target);
+                return (found as any)?.name ?? '';
+        }
+
+        async function updatePosition() {
+                if (typeof window === 'undefined') return;
+                await tick();
+                const pad = 8;
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const rect = panelEl ? panelEl.getBoundingClientRect() : ({ width: 480, height: 320 } as any);
+                const anchor = $searchAnchor || { x: vw - pad, y: 56 };
+                posX = clamp(anchor.x, pad, vw - rect.width - pad);
+                posY = clamp(anchor.y, pad, vh - rect.height - pad);
+        }
+
+        function closeFilterPrompt() {
+                pendingFilter = null;
+                pendingValue = '';
+                promptInputEl = null;
+                tick().then(() => searchInputEl?.focus());
+        }
+
+        function startFilterPrompt(filter: FilterType) {
+                pendingFilter = filter;
+                pendingValue = '';
+                tick().then(() => {
+                        if (filter !== 'has') {
+                                promptInputEl?.focus();
+                                promptInputEl?.select();
+                        }
+                });
+        }
+
+        function detectFilterTrigger(value: string) {
+                if (pendingFilter) return;
+                const trimmedTrailing = value.replace(/\s+$/, '');
+                const match = trimmedTrailing.match(/(?:^|\s)(from|mentions|has):$/i);
+                if (!match) return;
+                const keyword = match[1].toLowerCase() as FilterType;
+                const lowered = trimmedTrailing.toLowerCase();
+                const trigger = `${keyword}:`;
+                const idx = lowered.lastIndexOf(trigger);
+                if (idx < 0) return;
+                const newValue = trimmedTrailing.slice(0, idx).replace(/\s+$/, ' ');
+                inputValue = newValue;
+                startFilterPrompt(keyword);
+        }
+
+        function onInputChange(event: Event) {
+                const value = (event.target as HTMLInputElement).value;
+                inputValue = value;
+                detectFilterTrigger(value);
+        }
+
+        function removeAuthor() {
+                authorFilter = null;
+        }
+
+        function removeMention(index: number) {
+                mentionFilters = mentionFilters.filter((_, i) => i !== index);
+        }
+
+        function addMentionToken(raw: string) {
+                const display = raw.trim();
+                if (!display) return;
+                if (!mentionFilters.some((token) => token.display === display)) {
+                        mentionFilters = [...mentionFilters, { raw, display }];
+                }
+        }
+
+        function applyPendingFilter() {
+                if (!pendingFilter) return;
+                if (pendingFilter === 'has') {
+                        closeFilterPrompt();
+                        return;
+                }
+                const value = pendingValue.trim();
+                if (!value) return;
+                if (pendingFilter === 'from') {
+                        authorFilter = { raw: value, display: value };
+                } else if (pendingFilter === 'mentions') {
+                        addMentionToken(value);
+                }
+                closeFilterPrompt();
+        }
+
+        function onPromptKeydown(event: KeyboardEvent) {
+                if (event.key === 'Enter') {
+                        event.preventDefault();
+                        applyPendingFilter();
+                } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        closeFilterPrompt();
+                }
+        }
+
+        function applyHasOption(value: string) {
+                toggleHas(value);
+                closeFilterPrompt();
+        }
+
+        function onSearchInputKeydown(event: KeyboardEvent) {
+                if (pendingFilter) {
+                        if (event.key === 'Escape') {
+                                event.preventDefault();
+                                closeFilterPrompt();
+                        } else if (event.key === 'Enter') {
+                                event.preventDefault();
+                        }
+                        return;
+                }
+                if (event.key === 'Enter') {
+                        event.preventDefault();
+                        page = 0;
+                        doSearch();
+                        return;
+                }
+                if (event.key === 'Backspace' && inputValue.length === 0) {
+                        if (mentionFilters.length > 0) {
+                                event.preventDefault();
+                                mentionFilters = mentionFilters.slice(0, -1);
+                                return;
+                        }
+                        if (hasSelected.length > 0) {
+                                event.preventDefault();
+                                hasSelected = hasSelected.slice(0, -1);
+                                return;
+                        }
+                        if (authorFilter) {
+                                event.preventDefault();
+                                authorFilter = null;
+                        }
+                }
+        }
+
+        async function doSearch() {
+                if (!$selectedGuildId) return;
+                const trimmedQuery = inputValue.trim();
+                const hasFilters =
+                        Boolean(authorFilter) || mentionFilters.length > 0 || hasSelected.length > 0;
+                if (!trimmedQuery && !hasFilters) return;
+                loading = true;
+                error = null;
+                results = [];
+                try {
+                        const guildId = parseSnowflake($selectedGuildId);
+                        if (!guildId) {
+                                throw new Error('Invalid guild id');
+                        }
+                        const request: any = { page };
+                        const channelSnowflake = parseSnowflake($selectedChannelId);
+                        if (channelSnowflake != null) request.channel_id = channelSnowflake;
+                        if (authorFilter) {
+                                const authorSnowflake = parseSnowflake(authorFilter.raw);
+                                if (authorSnowflake != null) request.author_id = authorSnowflake;
+                        }
+                        if (mentionFilters.length) {
+                                const mentionIds = mentionFilters
+                                        .map((token) => parseSnowflake(token.raw))
+                                        .filter((id): id is bigint => id != null);
+                                if (mentionIds.length) request.mentions = mentionIds;
+                        }
+                        if (hasSelected.length) request.has = hasSelected;
+                        if (trimmedQuery) request.content = trimmedQuery;
+                        const res = await auth.api.search.searchGuildIdMessagesPost({
+                                guildId: guildId as any,
+                                searchMessageSearchRequest: request
+                        });
+                        const data: any = res.data;
+                        const collected: DtoMessage[] = [];
+                        let totalPages = 0;
+                        const appendResults = (chunk: any) => {
+                                if (!chunk) return;
+                                if (Array.isArray(chunk.messages)) {
+                                        collected.push(...chunk.messages);
+                                }
+                                const p = Number(chunk.pages ?? 0);
+                                if (!Number.isNaN(p)) totalPages = Math.max(totalPages, p);
+                        };
+                        if (Array.isArray(data)) {
+                                for (const entry of data) appendResults(entry);
+                        } else {
+                                appendResults(data);
+                        }
+                        results = collected;
+                        pages = totalPages > 0 ? totalPages : collected.length > 0 ? page + 1 : 0;
+                } catch (e: any) {
+                        error = e?.response?.data?.message ?? e?.message ?? 'Search failed';
+                } finally {
+                        loading = false;
+                }
+        }
+
+        function openMessage(m: DtoMessage) {
+                if (!m.channel_id) return;
+                selectedChannelId.set(String(m.channel_id));
+                searchOpen.set(false);
+        }
+
+        $effect(() => {
+                if ($searchOpen) {
+                        inputValue = '';
+                        results = [];
+                        error = null;
+                        page = 0;
+                        pages = 0;
+                        pageItems = [];
+                        authorFilter = null;
+                        mentionFilters = [];
+                        hasSelected = [];
+                        pendingFilter = null;
+                        pendingValue = '';
+                        updatePosition();
+                        tick().then(() => searchInputEl?.focus());
+                }
+        });
+
+        const MAX_PAGER_BUTTONS = 9;
+        function visiblePageItems(
+                total: number,
+                current: number,
+                maxButtons = MAX_PAGER_BUTTONS
+        ): (number | string)[] {
+                total = Number(total) || 0;
+                current = Number(current) || 0;
+                if (total <= 0) return [];
+                if (total <= maxButtons) return Array.from({ length: total }, (_, i) => i);
+                const items: (number | string)[] = [];
+                const first = 0;
+                const last = total - 1;
+                const middleCount = maxButtons - 2;
+                let start = Math.max(1, current - Math.floor(middleCount / 2));
+                let end = start + middleCount - 1;
+                if (end > last - 1) {
+                        end = last - 1;
+                        start = end - middleCount + 1;
+                }
+                items.push(first);
+                if (start > 1) items.push('...');
+                for (let i = start; i <= end; i++) items.push(i);
+                if (end < last - 1) items.push('...');
+                items.push(last);
+                return items;
+        }
+
+        $effect(() => {
+                pageItems = visiblePageItems(pages, page);
+        });
 </script>
 
 {#if $searchOpen}
-	<div
-		class="fixed inset-0 z-[1000]"
-		role="button"
-		tabindex="0"
-		onpointerdown={() => searchOpen.set(false)}
-		onkeydown={(e) => e.key === 'Escape' && searchOpen.set(false)}
-	>
-		<div
-			bind:this={panelEl}
-			class="panel absolute w-[min(80vw,640px)] p-4"
-			role="dialog"
-			tabindex="-1"
-			style={`left:${posX}px; top:${posY}px`}
-			onpointerdown={(e) => e.stopPropagation()}
-		>
-			<div class="flex gap-2">
-				<input
-					class="flex-1 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					placeholder={m.search_placeholder()}
-					bind:value={query}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							page = 0;
-							doSearch();
-						}
-					}}
-				/>
-				<button
-					class="rounded-md bg-[var(--brand)] px-3 py-2 text-[var(--bg)]"
-					onclick={() => {
-						page = 0;
-						doSearch();
-					}}>{m.search()}</button
-				>
-			</div>
-			<div class="mt-3 space-y-3">
-				<div class="grid gap-3 sm:grid-cols-2">
-					<label class="flex flex-col gap-1 text-sm">
-						<span class="text-[var(--muted)]">{m.search_author_id()}</span>
-						<input
-							class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-							bind:value={author}
-							placeholder={m.search_author_id_placeholder()}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') {
-									page = 0;
-									doSearch();
-								}
-							}}
-						/>
-					</label>
-					<label class="flex flex-col gap-1 text-sm">
-						<span class="text-[var(--muted)]">{m.search_mentions()}</span>
-						<input
-							class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-							bind:value={mentions}
-							placeholder={m.search_mentions_placeholder()}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') {
-									page = 0;
-									doSearch();
-								}
-							}}
-						/>
-					</label>
-				</div>
-				<div class="flex flex-col gap-2 text-sm">
-					<span class="text-[var(--muted)]">{m.search_has()}</span>
-					<div class="flex flex-wrap gap-2">
-						{#each hasOptions as option}
-							<button
-								class={`rounded-full border px-3 py-1 text-xs transition hover:bg-[var(--panel)] ${
-									hasSelected.includes(option.value)
-										? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]'
-										: 'border-[var(--stroke)]'
-								}`}
-								type="button"
-								onclick={() => {
-									page = 0;
-									toggleHas(option.value);
-									doSearch();
-								}}
-							>
-								{option.label}
-							</button>
-						{/each}
-					</div>
-				</div>
-			</div>
-			{#if error}<div class="mt-2 text-sm text-red-500">{error}</div>{/if}
-
-			<div class="mt-3 max-h-[60vh] space-y-2 overflow-y-auto">
-				{#if loading}
-					<div class="text-sm text-[var(--muted)]">{m.searching()}</div>
-				{:else if results.length === 0}
-					<div class="text-sm text-[var(--muted)]">{m.no_results()}</div>
-				{:else}
-					{#each results as message (message.id)}
-						<div
-							class="cursor-pointer rounded p-2 hover:bg-[var(--panel)]"
-							role="button"
-							tabindex="0"
-							onclick={() => openMessage(message)}
-							onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && openMessage(message)}
-						>
-							<div class="flex items-baseline justify-between gap-2">
-								<div class="truncate text-sm font-semibold text-[var(--muted)]">
-									{message.author?.name ?? m.user_default_name()}
-								</div>
-								<div class="shrink-0 text-xs text-[var(--muted)]" title={formatMsgFull(message)}>
-									{formatMsgTime(message)}
-								</div>
-							</div>
-							<div class="mt-1 text-xs tracking-wide text-[var(--muted)] uppercase">
-								{message.channel_id
-									? m.search_result_in_channel({
-											channel: String(message.channel_id)
-										})
-									: ''}
-							</div>
-							<div class="mt-1 text-sm leading-snug whitespace-pre-line text-[var(--fg)]">
-								{message.content?.trim() || m.search_result_no_content()}
-							</div>
-							{#if message.attachments && message.attachments.length > 0}
-								<div class="mt-1 text-xs text-[var(--muted)]">
-									{m.search_result_attachments({
-										count: String(message.attachments.length)
-									})}
-								</div>
-							{/if}
-						</div>
-					{/each}
-				{/if}
-			</div>
-
-			{#if pages > 0}
-				<div class="mt-3 flex items-center justify-center gap-1">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-2 py-1 disabled:opacity-50"
-						aria-label={m.pager_prev()}
-						disabled={loading || page <= 0}
-						onclick={() => {
-							if (page > 0) {
-								page -= 1;
-								doSearch();
-							}
-						}}
-					>
-						&lsaquo;
-					</button>
-
-					{#each pageItems as p}
-						{#if typeof p === 'string'}
-							<span class="px-2 text-[var(--muted)] select-none">{p}</span>
-						{:else}
-							<button
-								class={`min-w-[2rem] rounded-md border border-[var(--stroke)] px-2 py-1 ${
-									p === page ? 'bg-[var(--panel)]' : ''
-								}`}
-								aria-current={p === page ? 'page' : undefined}
-								onclick={() => {
-									if (!loading && p !== page) {
-										page = p;
-										doSearch();
-									}
-								}}
-								disabled={loading}
-							>
-								{p + 1}
-							</button>
-						{/if}
-					{/each}
-
-					<button
-						class="rounded-md border border-[var(--stroke)] px-2 py-1 disabled:opacity-50"
-						aria-label={m.pager_next()}
-						disabled={loading || (pages ? page >= pages - 1 : false)}
-						onclick={() => {
-							if (!pages || page < pages - 1) {
-								page += 1;
-								doSearch();
-							}
-						}}
-					>
-						&rsaquo;
-					</button>
-				</div>
-			{/if}
-		</div>
-	</div>
+        <div
+                class="fixed inset-0 z-[1000]"
+                role="button"
+                tabindex="0"
+                onpointerdown={() => {
+                        if (pendingFilter) {
+                                closeFilterPrompt();
+                        } else {
+                                searchOpen.set(false);
+                        }
+                }}
+                onkeydown={(e) => {
+                        if (e.key === 'Escape') {
+                                if (pendingFilter) {
+                                        closeFilterPrompt();
+                                } else {
+                                        searchOpen.set(false);
+                                }
+                        }
+                }}
+        >
+                <div
+                        bind:this={panelEl}
+                        class="panel absolute w-[min(90vw,720px)] p-5"
+                        role="dialog"
+                        tabindex="-1"
+                        style={`left:${posX}px; top:${posY}px`}
+                        onpointerdown={(e) => e.stopPropagation()}
+                >
+                        <div class="flex flex-col gap-3">
+                                <div class="relative">
+                                        <div
+                                                class="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm shadow-sm transition focus-within:border-[var(--brand)] focus-within:ring-2 focus-within:ring-[var(--brand)]/20"
+                                        >
+                                                <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 24 24"
+                                                        class="h-5 w-5 text-[var(--muted)]"
+                                                >
+                                                        <path
+                                                                d="m21.53 20.47-4.7-4.7a8 8 0 1 0-1.06 1.06l4.7 4.7a.75.75 0 0 0 1.06-1.06ZM5.75 11a5.25 5.25 0 1 1 10.5 0 5.25 5.25 0 0 1-10.5 0Z"
+                                                                fill="currentColor"
+                                                        />
+                                                </svg>
+                                                {#if authorFilter}
+                                                        <span
+                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                        >
+                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                        {m.search_filter_from()}
+                                                                </span>
+                                                                <span>{authorFilter.display}</span>
+                                                                <button
+                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)]"
+                                                                        type="button"
+                                                                        aria-label={m.search_filter_remove()}
+                                                                        onclick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                removeAuthor();
+                                                                        }}
+                                                                >
+                                                                        ×
+                                                                </button>
+                                                        </span>
+                                                {/if}
+                                                {#each mentionFilters as mention, index}
+                                                        <span
+                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                        >
+                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                        {m.search_filter_mentions()}
+                                                                </span>
+                                                                <span>{mention.display}</span>
+                                                                <button
+                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)]"
+                                                                        type="button"
+                                                                        aria-label={m.search_filter_remove()}
+                                                                        onclick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                removeMention(index);
+                                                                        }}
+                                                                >
+                                                                        ×
+                                                                </button>
+                                                        </span>
+                                                {/each}
+                                                {#each hasSelected as option}
+                                                        <span
+                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                        >
+                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                        {m.search_filter_has()}
+                                                                </span>
+                                                                <span>{hasLabel(option)}</span>
+                                                                <button
+                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)]"
+                                                                        type="button"
+                                                                        aria-label={m.search_filter_remove()}
+                                                                        onclick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                removeHas(option);
+                                                                        }}
+                                                                >
+                                                                        ×
+                                                                </button>
+                                                        </span>
+                                                {/each}
+                                                <input
+                                                        bind:this={searchInputEl}
+                                                        class="min-w-[6rem] flex-1 border-none bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:outline-none"
+                                                        placeholder={m.search_placeholder()}
+                                                        bind:value={inputValue}
+                                                        oninput={onInputChange}
+                                                        onkeydown={onSearchInputKeydown}
+                                                />
+                                                <button
+                                                        class="ml-auto shrink-0 rounded-md bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand)]/90 disabled:opacity-50"
+                                                        type="button"
+                                                        onclick={() => {
+                                                                page = 0;
+                                                                doSearch();
+                                                        }}
+                                                        disabled={loading}
+                                                >
+                                                        {m.search()}
+                                                </button>
+                                        </div>
+                                        {#if pendingFilter === 'from' || pendingFilter === 'mentions'}
+                                                <div
+                                                        class="absolute left-0 right-0 top-full z-20 mt-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-4 shadow-xl"
+                                                >
+                                                        <div class="text-sm font-semibold text-[var(--fg)]">
+                                                                {pendingFilter === 'from'
+                                                                        ? m.search_filter_from_prompt()
+                                                                        : m.search_filter_mentions_prompt()}
+                                                        </div>
+                                                        <input
+                                                                bind:this={promptInputEl}
+                                                                class="mt-3 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--fg)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
+                                                                placeholder={pendingFilter === 'from'
+                                                                        ? m.search_filter_from_placeholder()
+                                                                        : m.search_filter_mentions_placeholder()}
+                                                                bind:value={pendingValue}
+                                                                onkeydown={onPromptKeydown}
+                                                        />
+                                                        <div class="mt-3 flex justify-end gap-2 text-sm">
+                                                                <button
+                                                                        class="rounded-md border border-[var(--stroke)] px-3 py-1.5 text-[var(--muted)] hover:bg-[var(--panel)]"
+                                                                        type="button"
+                                                                        onclick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                closeFilterPrompt();
+                                                                        }}
+                                                                >
+                                                                        {m.search_filter_cancel()}
+                                                                </button>
+                                                                <button
+                                                                        class="rounded-md bg-[var(--brand)] px-3 py-1.5 text-[var(--bg)] disabled:opacity-50"
+                                                                        type="button"
+                                                                        onclick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                applyPendingFilter();
+                                                                        }}
+                                                                        disabled={!pendingValue.trim()}
+                                                                >
+                                                                        {m.search_filter_add()}
+                                                                </button>
+                                                        </div>
+                                                </div>
+                                        {:else if pendingFilter === 'has'}
+                                                <div
+                                                        class="absolute left-0 right-0 top-full z-20 mt-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-4 shadow-xl"
+                                                >
+                                                        <div class="text-sm font-semibold text-[var(--fg)]">
+                                                                {m.search_filter_has_prompt()}
+                                                        </div>
+                                                        <div class="mt-3 flex flex-wrap gap-2">
+                                                                {#each hasOptions as option}
+                                                                        <button
+                                                                                class={`rounded-full border px-3 py-1 text-xs transition ${
+                                                                                        hasSelected.includes(option.value)
+                                                                                                ? 'border-[var(--brand)] bg-[var(--brand)]/20 text-[var(--brand)]'
+                                                                                                : 'border-[var(--stroke)] text-[var(--fg)] hover:bg-[var(--panel)]'
+                                                                                }`}
+                                                                                type="button"
+                                                                                onclick={(event) => {
+                                                                                        event.stopPropagation();
+                                                                                        applyHasOption(option.value);
+                                                                                }}
+                                                                        >
+                                                                                {option.label}
+                                                                        </button>
+                                                                {/each}
+                                                        </div>
+                                                        <div class="mt-3 flex justify-end text-sm">
+                                                                <button
+                                                                        class="rounded-md border border-[var(--stroke)] px-3 py-1.5 text-[var(--muted)] hover:bg-[var(--panel)]"
+                                                                        type="button"
+                                                                        onclick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                closeFilterPrompt();
+                                                                        }}
+                                                                >
+                                                                        {m.search_filter_done()}
+                                                                </button>
+                                                        </div>
+                                                </div>
+                                        {/if}
+                                </div>
+                                {#if error}
+                                        <div class="text-sm text-red-500">{error}</div>
+                                {/if}
+                                <div class="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                                        {#if loading}
+                                                <div class="text-sm text-[var(--muted)]">{m.searching()}</div>
+                                        {:else if results.length === 0}
+                                                <div class="text-sm text-[var(--muted)]">{m.no_results()}</div>
+                                        {:else}
+                                                {#each results as message (message.id)}
+                                                        <div
+                                                                class="group/result flex cursor-pointer gap-3 rounded-lg border border-transparent px-3 py-2 transition hover:border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                                                role="button"
+                                                                tabindex="0"
+                                                                onclick={() => openMessage(message)}
+                                                                onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && openMessage(message)}
+                                                        >
+                                                                <div
+                                                                        class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel)] text-sm font-semibold text-[var(--fg)]"
+                                                                >
+                                                                        {authorInitials(message)}
+                                                                </div>
+                                                                <div class="min-w-0 flex-1">
+                                                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                                                                <div class="truncate text-sm font-semibold text-[var(--fg)]">
+                                                                                        {message.author?.name ?? m.user_default_name()}
+                                                                                        {#if message.author?.discriminator}
+                                                                                                <span class="ml-1 text-xs text-[var(--muted)]">
+                                                                                                        #{message.author.discriminator}
+                                                                                                </span>
+                                                                                        {/if}
+                                                                                </div>
+                                                                                <div class="text-xs text-[var(--muted)]" title={formatMsgFull(message)}>
+                                                                                        {formatMsgTime(message)}
+                                                                                </div>
+                                                                                {#if resolveChannelName(message.channel_id)}
+                                                                                        <div class="text-xs text-[var(--muted)]">
+                                                                                                #{resolveChannelName(message.channel_id)}
+                                                                                        </div>
+                                                                                {/if}
+                                                                        </div>
+                                                                        <div class="mt-1 whitespace-pre-line text-sm leading-snug text-[var(--fg)]">
+                                                                                {message.content?.trim() || m.search_result_no_content()}
+                                                                        </div>
+                                                                        {#if message.attachments && message.attachments.length > 0}
+                                                                                <div class="mt-2 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
+                                                                                        <span>
+                                                                                                {m.search_result_attachments({
+                                                                                                        count: String(message.attachments.length)
+                                                                                                })}
+                                                                                        </span>
+                                                                                </div>
+                                                                        {/if}
+                                                                </div>
+                                                        </div>
+                                                {/each}
+                                        {/if}
+                                </div>
+                                {#if pages > 0}
+                                        <div class="flex items-center justify-center gap-1">
+                                                <button
+                                                        class="rounded-md border border-[var(--stroke)] px-2 py-1 text-sm disabled:opacity-50"
+                                                        aria-label={m.pager_prev()}
+                                                        disabled={loading || page <= 0}
+                                                        onclick={() => {
+                                                                if (page > 0) {
+                                                                        page -= 1;
+                                                                        doSearch();
+                                                                }
+                                                        }}
+                                                >
+                                                        &lsaquo;
+                                                </button>
+                                                {#each pageItems as p}
+                                                        {#if typeof p === 'string'}
+                                                                <span class="px-2 text-[var(--muted)] select-none">{p}</span>
+                                                        {:else}
+                                                                <button
+                                                                        class={`min-w-[2rem] rounded-md border border-[var(--stroke)] px-2 py-1 text-sm ${
+                                                                                p === page ? 'bg-[var(--panel)]' : ''
+                                                                        }`}
+                                                                        aria-current={p === page ? 'page' : undefined}
+                                                                        onclick={() => {
+                                                                                if (!loading && p !== page) {
+                                                                                        page = p;
+                                                                                        doSearch();
+                                                                                }
+                                                                        }}
+                                                                        disabled={loading}
+                                                                >
+                                                                        {p + 1}
+                                                                </button>
+                                                        {/if}
+                                                {/each}
+                                                <button
+                                                        class="rounded-md border border-[var(--stroke)] px-2 py-1 text-sm disabled:opacity-50"
+                                                        aria-label={m.pager_next()}
+                                                        disabled={loading || (pages ? page >= pages - 1 : false)}
+                                                        onclick={() => {
+                                                                if (!pages || page < pages - 1) {
+                                                                        page += 1;
+                                                                        doSearch();
+                                                                }
+                                                        }}
+                                                >
+                                                        &rsaquo;
+                                                </button>
+                                        </div>
+                                {/if}
+                        </div>
+                </div>
+        </div>
 {/if}
