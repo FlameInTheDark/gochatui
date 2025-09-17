@@ -35,6 +35,7 @@
         let panelEl: HTMLDivElement | null = $state(null);
         let searchInputEl: HTMLInputElement | null = $state(null);
         let promptInputEl: HTMLInputElement | null = $state(null);
+        let showKeywordHelp = $state(false);
 
         let posX = $state(0);
         let posY = $state(0);
@@ -58,10 +59,11 @@
         }
 
         const hasOptions = [
-                { value: 'link', label: m.search_has_link() },
-                { value: 'embed', label: m.search_has_embed() },
-                { value: 'file', label: m.search_has_file() },
-                { value: 'image', label: m.search_has_image() }
+                { value: 'url', label: m.search_has_url() },
+                { value: 'image', label: m.search_has_image() },
+                { value: 'video', label: m.search_has_video() },
+                { value: 'audio', label: m.search_has_audio() },
+                { value: 'file', label: m.search_has_file() }
         ];
 
         function hasLabel(value: string) {
@@ -69,6 +71,7 @@
         }
 
         function toggleHas(value: string) {
+                if (!hasOptions.some((option) => option.value === value)) return;
                 hasSelected = hasSelected.includes(value)
                         ? hasSelected.filter((item) => item !== value)
                         : [...hasSelected, value];
@@ -150,6 +153,7 @@
         function startFilterPrompt(filter: FilterType) {
                 pendingFilter = filter;
                 pendingValue = '';
+                showKeywordHelp = false;
                 tick().then(() => {
                         if (filter !== 'has') {
                                 promptInputEl?.focus();
@@ -176,6 +180,7 @@
         function onInputChange(event: Event) {
                 const value = (event.target as HTMLInputElement).value;
                 inputValue = value;
+                showKeywordHelp = false;
                 detectFilterTrigger(value);
         }
 
@@ -234,6 +239,11 @@
                         } else if (event.key === 'Enter') {
                                 event.preventDefault();
                         }
+                        return;
+                }
+                if (event.key === 'Escape' && showKeywordHelp) {
+                        event.preventDefault();
+                        showKeywordHelp = false;
                         return;
                 }
                 if (event.key === 'Enter') {
@@ -337,6 +347,7 @@
                         hasSelected = [];
                         pendingFilter = null;
                         pendingValue = '';
+                        showKeywordHelp = false;
                         updatePosition();
                         tick().then(() => searchInputEl?.focus());
                 }
@@ -383,6 +394,8 @@
                 onpointerdown={() => {
                         if (pendingFilter) {
                                 closeFilterPrompt();
+                        } else if (showKeywordHelp) {
+                                showKeywordHelp = false;
                         } else {
                                 searchOpen.set(false);
                         }
@@ -391,6 +404,8 @@
                         if (e.key === 'Escape') {
                                 if (pendingFilter) {
                                         closeFilterPrompt();
+                                } else if (showKeywordHelp) {
+                                        showKeywordHelp = false;
                                 } else {
                                         searchOpen.set(false);
                                 }
@@ -406,9 +421,20 @@
                         onpointerdown={(e) => e.stopPropagation()}
                 >
                         <div class="flex flex-col gap-3">
-                                <div class="relative">
+                                <div
+                                        class="relative"
+                                        onpointerdown={(event) => {
+                                                if (
+                                                        showKeywordHelp &&
+                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help') &&
+                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help-button')
+                                                ) {
+                                                        showKeywordHelp = false;
+                                                }
+                                        }}
+                                >
                                         <div
-                                                class="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm shadow-sm transition focus-within:border-[var(--brand)] focus-within:ring-2 focus-within:ring-[var(--brand)]/20"
+                                                class="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm shadow-sm transition focus-within:border-[var(--brand)] focus-within:shadow-[0_0_0_2px_var(--brand)]"
                                         >
                                                 <svg
                                                         xmlns="http://www.w3.org/2000/svg"
@@ -429,7 +455,7 @@
                                                                 </span>
                                                                 <span>{authorFilter.display}</span>
                                                                 <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)]"
+                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                         type="button"
                                                                         aria-label={m.search_filter_remove()}
                                                                         onclick={(event) => {
@@ -450,7 +476,7 @@
                                                                 </span>
                                                                 <span>{mention.display}</span>
                                                                 <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)]"
+                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                         type="button"
                                                                         aria-label={m.search_filter_remove()}
                                                                         onclick={(event) => {
@@ -471,7 +497,7 @@
                                                                 </span>
                                                                 <span>{hasLabel(option)}</span>
                                                                 <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)]"
+                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                         type="button"
                                                                         aria-label={m.search_filter_remove()}
                                                                         onclick={(event) => {
@@ -483,57 +509,35 @@
                                                                 </button>
                                                         </span>
                                                 {/each}
-                                                <input
-                                                        bind:this={searchInputEl}
-                                                        class="min-w-[6rem] flex-1 border-none bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:outline-none"
-                                                        placeholder={m.search_placeholder()}
-                                                        bind:value={inputValue}
-                                                        oninput={onInputChange}
-                                                        onkeydown={onSearchInputKeydown}
-                                                />
-                                                <button
-                                                        class="ml-auto shrink-0 rounded-md bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand)]/90 disabled:opacity-50"
-                                                        type="button"
-                                                        onclick={() => {
-                                                                page = 0;
-                                                                doSearch();
-                                                        }}
-                                                        disabled={loading}
-                                                >
-                                                        {m.search()}
-                                                </button>
-                                        </div>
-                                        {#if pendingFilter === 'from' || pendingFilter === 'mentions'}
-                                                <div
-                                                        class="absolute left-0 right-0 top-full z-20 mt-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-4 shadow-xl"
-                                                >
-                                                        <div class="text-sm font-semibold text-[var(--fg)]">
-                                                                {pendingFilter === 'from'
-                                                                        ? m.search_filter_from_prompt()
-                                                                        : m.search_filter_mentions_prompt()}
-                                                        </div>
-                                                        <input
-                                                                bind:this={promptInputEl}
-                                                                class="mt-3 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--fg)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
-                                                                placeholder={pendingFilter === 'from'
-                                                                        ? m.search_filter_from_placeholder()
-                                                                        : m.search_filter_mentions_placeholder()}
-                                                                bind:value={pendingValue}
-                                                                onkeydown={onPromptKeydown}
-                                                        />
-                                                        <div class="mt-3 flex justify-end gap-2 text-sm">
+                                                {#if pendingFilter === 'from' || pendingFilter === 'mentions'}
+                                                        <div class="flex items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]">
+                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                        {pendingFilter === 'from'
+                                                                                ? m.search_filter_from()
+                                                                                : m.search_filter_mentions()}
+                                                                </span>
+                                                                <input
+                                                                        bind:this={promptInputEl}
+                                                                        class="w-40 border-none bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:outline-none focus-visible:outline-none focus-visible:ring-0"
+                                                                        placeholder={pendingFilter === 'from'
+                                                                                ? m.search_filter_from_placeholder()
+                                                                                : m.search_filter_mentions_placeholder()}
+                                                                        bind:value={pendingValue}
+                                                                        onkeydown={onPromptKeydown}
+                                                                />
                                                                 <button
-                                                                        class="rounded-md border border-[var(--stroke)] px-3 py-1.5 text-[var(--muted)] hover:bg-[var(--panel)]"
+                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                         type="button"
+                                                                        aria-label={m.search_filter_cancel()}
                                                                         onclick={(event) => {
                                                                                 event.stopPropagation();
                                                                                 closeFilterPrompt();
                                                                         }}
                                                                 >
-                                                                        {m.search_filter_cancel()}
+                                                                        ×
                                                                 </button>
                                                                 <button
-                                                                        class="rounded-md bg-[var(--brand)] px-3 py-1.5 text-[var(--bg)] disabled:opacity-50"
+                                                                        class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand)]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 disabled:opacity-50"
                                                                         type="button"
                                                                         onclick={(event) => {
                                                                                 event.stopPropagation();
@@ -544,18 +548,12 @@
                                                                         {m.search_filter_add()}
                                                                 </button>
                                                         </div>
-                                                </div>
-                                        {:else if pendingFilter === 'has'}
-                                                <div
-                                                        class="absolute left-0 right-0 top-full z-20 mt-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-4 shadow-xl"
-                                                >
-                                                        <div class="text-sm font-semibold text-[var(--fg)]">
-                                                                {m.search_filter_has_prompt()}
-                                                        </div>
-                                                        <div class="mt-3 flex flex-wrap gap-2">
+                                                {:else if pendingFilter === 'has'}
+                                                        <div class="flex flex-wrap items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]">
+                                                                <span class="font-semibold text-[var(--muted)]">{m.search_filter_has()}</span>
                                                                 {#each hasOptions as option}
                                                                         <button
-                                                                                class={`rounded-full border px-3 py-1 text-xs transition ${
+                                                                                class={`rounded-full border px-3 py-1 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 ${
                                                                                         hasSelected.includes(option.value)
                                                                                                 ? 'border-[var(--brand)] bg-[var(--brand)]/20 text-[var(--brand)]'
                                                                                                 : 'border-[var(--stroke)] text-[var(--fg)] hover:bg-[var(--panel)]'
@@ -569,19 +567,87 @@
                                                                                 {option.label}
                                                                         </button>
                                                                 {/each}
-                                                        </div>
-                                                        <div class="mt-3 flex justify-end text-sm">
                                                                 <button
-                                                                        class="rounded-md border border-[var(--stroke)] px-3 py-1.5 text-[var(--muted)] hover:bg-[var(--panel)]"
+                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                         type="button"
+                                                                        aria-label={m.search_filter_done()}
                                                                         onclick={(event) => {
                                                                                 event.stopPropagation();
                                                                                 closeFilterPrompt();
                                                                         }}
                                                                 >
-                                                                        {m.search_filter_done()}
+                                                                        ×
                                                                 </button>
                                                         </div>
+                                                {/if}
+                                                <input
+                                                        bind:this={searchInputEl}
+                                                        class="min-w-[6rem] flex-1 border-none bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:outline-none focus-visible:outline-none focus-visible:ring-0"
+                                                        placeholder={m.search_placeholder()}
+                                                        bind:value={inputValue}
+                                                        oninput={onInputChange}
+                                                        onkeydown={onSearchInputKeydown}
+                                                />
+                                                <button
+                                                        id="search-filter-help-button"
+                                                        class="ml-2 shrink-0 rounded-md border border-[var(--stroke)] px-2 py-1.5 text-sm text-[var(--muted)] transition hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+                                                        type="button"
+                                                        aria-haspopup="dialog"
+                                                        aria-expanded={showKeywordHelp}
+                                                        aria-controls="search-filter-help"
+                                                        aria-label={m.search_filter_help_label()}
+                                                        onclick={(event) => {
+                                                                event.stopPropagation();
+                                                                if (pendingFilter) {
+                                                                        closeFilterPrompt();
+                                                                }
+                                                                showKeywordHelp = !showKeywordHelp;
+                                                        }}
+                                                >
+                                                        ?
+                                                </button>
+                                                <button
+                                                        class="ml-2 shrink-0 rounded-md bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand)]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 disabled:opacity-50"
+                                                        type="button"
+                                                        onclick={() => {
+                                                                showKeywordHelp = false;
+                                                                page = 0;
+                                                                doSearch();
+                                                        }}
+                                                        disabled={loading}
+                                                >
+                                                        {m.search()}
+                                                </button>
+                                        </div>
+                                        {#if showKeywordHelp}
+                                                <div
+                                                        id="search-filter-help"
+                                                        class="absolute right-0 top-full z-30 mt-2 w-64 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-4 text-xs text-[var(--fg)] shadow-xl"
+                                                >
+                                                        <div class="text-sm font-semibold text-[var(--fg)]">
+                                                                {m.search_filter_help_title()}
+                                                        </div>
+                                                        <p class="mt-1 text-xs text-[var(--muted)]">
+                                                                {m.search_filter_help_hint()}
+                                                        </p>
+                                                        <ul class="mt-3 space-y-2 text-left text-xs text-[var(--fg)]">
+                                                                <li class="flex gap-2">
+                                                                        <span class="font-mono text-[var(--muted)]">from:</span>
+                                                                        <span>{m.search_filter_help_from()}</span>
+                                                                </li>
+                                                                <li class="flex gap-2">
+                                                                        <span class="font-mono text-[var(--muted)]">mentions:</span>
+                                                                        <span>{m.search_filter_help_mentions()}</span>
+                                                                </li>
+                                                                <li class="flex gap-2">
+                                                                        <span class="font-mono text-[var(--muted)]">has:</span>
+                                                                        <span>
+                                                                                {m.search_filter_help_has({
+                                                                                        values: hasOptions.map((option) => option.value).join(', ')
+                                                                                })}
+                                                                        </span>
+                                                                </li>
+                                                        </ul>
                                                 </div>
                                         {/if}
                                 </div>
