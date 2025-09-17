@@ -11,6 +11,44 @@
 		| { type: 'text'; content: string }
 		| { type: 'code'; content: string; language?: string };
 
+	function normalizeCodeBlock(raw: string): string {
+		if (!raw) return '';
+
+		const normalized = raw.replace(/\r\n?/g, '\n');
+		const lines = normalized.split('\n');
+
+		while (lines.length && lines[0].trim() === '') {
+			lines.shift();
+		}
+
+		while (lines.length && lines[lines.length - 1].trim() === '') {
+			lines.pop();
+		}
+
+		let indent: number | undefined;
+		for (const line of lines) {
+			if (!line.trim()) continue;
+			const match = line.match(/^[ \t]+/);
+			if (!match) {
+				indent = 0;
+				break;
+			}
+			const depth = match[0].length;
+			indent = indent === undefined ? depth : Math.min(indent, depth);
+		}
+
+		if (!lines.length) {
+			return '';
+		}
+
+		if (!indent) {
+			return lines.join('\n');
+		}
+
+		const pattern = new RegExp(`^[ \t]{0,${indent}}`);
+		return lines.map((line) => line.replace(pattern, '')).join('\n');
+	}
+
 	function parseMessageContent(content: string | null | undefined): MessageSegment[] {
 		if (!content) return [];
 		const segments: MessageSegment[] = [];
@@ -27,7 +65,7 @@
 			}
 
 			const language = lang?.trim() || undefined;
-			const codeBody = body ?? '';
+			const codeBody = normalizeCodeBlock(body ?? '');
 			segments.push({ type: 'code', content: codeBody, language });
 			lastIndex = startIndex + fullMatch.length;
 		}
@@ -252,21 +290,21 @@
 				</div>
 			</div>
 		{:else}
-                        <div
-                                class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}
-                                title={fmtMsgFull(message)}
-                        >
-                                {#if segments.length === 0}
-                                        <span class="whitespace-pre-wrap">{message.content}</span>
-                                {:else}
-                                        {#each segments as segment, index (index)}
-                                                {#if segment.type === 'code'}
-                                                        <div class="my-2 whitespace-normal first:mt-0 last:mb-0">
-                                                                <CodeBlock code={segment.content} language={segment.language} />
-                                                        </div>
-                                                {:else}
-                                                        <span class="whitespace-pre-wrap">{segment.content}</span>
-                                                {/if}
+			<div
+				class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}
+				title={fmtMsgFull(message)}
+			>
+				{#if segments.length === 0}
+					<span class="whitespace-pre-wrap">{message.content}</span>
+				{:else}
+					{#each segments as segment, index (index)}
+						{#if segment.type === 'code'}
+							<div class="my-2 whitespace-normal first:mt-0 last:mb-0">
+								<CodeBlock code={segment.content} language={segment.language} />
+							</div>
+						{:else}
+							<span class="whitespace-pre-wrap">{segment.content}</span>
+						{/if}
 					{/each}
 				{/if}
 				{#if message.updated_at}
