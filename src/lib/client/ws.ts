@@ -18,6 +18,7 @@ let authed = false;
 let lastEventId = 0; // track last received/sent event id
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let shouldReconnect = true;
+let latestToken: string | null = get(auth.token);
 
 function nextT() {
   lastT += 1;
@@ -156,7 +157,7 @@ export function connectWS() {
     wsConnected.set(true);
     wsConnectionLost.set(false);
     // Send auth (hello) immediately: op=1 with token and t
-    const token = get(auth.token);
+    const token = latestToken ?? get(auth.token);
     if (token) {
       const t = nextT();
       const tok = JSON.stringify(token);
@@ -226,6 +227,10 @@ export function subscribeWS(guilds: (number | string)[] = [], channel?: number |
 
 // React to auth & selection changes (browser only)
 if (browser) {
+  auth.token.subscribe((value) => {
+    latestToken = value;
+  });
+
   auth.isAuthenticated.subscribe((ok) => {
     if (ok) connectWS();
     else disconnectWS();
