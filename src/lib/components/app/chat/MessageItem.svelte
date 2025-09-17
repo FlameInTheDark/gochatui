@@ -5,12 +5,50 @@
 	import { createEventDispatcher } from 'svelte';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
+	import CodeBlock from './CodeBlock.svelte';
+
+	type MessageSegment =
+		| { type: 'text'; content: string }
+		| { type: 'code'; content: string; language?: string };
+
+	function parseMessageContent(content: string | null | undefined): MessageSegment[] {
+		if (!content) return [];
+		const segments: MessageSegment[] = [];
+		const pattern = /```([^\r\n`]*)?(?:\r?\n)?([\s\S]*?)```/g;
+		let lastIndex = 0;
+		let match: RegExpExecArray | null;
+
+		while ((match = pattern.exec(content)) !== null) {
+			const [fullMatch, lang, body] = match;
+			const startIndex = match.index;
+
+			if (startIndex > lastIndex) {
+				segments.push({ type: 'text', content: content.slice(lastIndex, startIndex) });
+			}
+
+			const language = lang?.trim() || undefined;
+			const codeBody = body ?? '';
+			segments.push({ type: 'code', content: codeBody, language });
+			lastIndex = startIndex + fullMatch.length;
+		}
+
+		if (lastIndex < content.length) {
+			segments.push({ type: 'text', content: content.slice(lastIndex) });
+		}
+
+		if (segments.length === 0) {
+			return [{ type: 'text', content }];
+		}
+
+		return segments;
+	}
 
 	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
 	let isEditing = $state(false);
 	let draft = $state(message.content ?? '');
 	let saving = $state(false);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
+	const segments = $derived(parseMessageContent(message.content ?? ''));
 
 	const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
 
@@ -220,7 +258,19 @@
 					: 'mt-0.5 pr-16 whitespace-pre-wrap'}
 				title={fmtMsgFull(message)}
 			>
-				{message.content}
+				{#if segments.length === 0}
+					{message.content}
+				{:else}
+					{#each segments as segment, index (index)}
+						{#if segment.type === 'code'}
+							<div class="my-2 first:mt-0 last:mb-0">
+								<CodeBlock code={segment.content} language={segment.language} />
+							</div>
+						{:else}
+							<span class="whitespace-pre-wrap">{segment.content}</span>
+						{/if}
+					{/each}
+				{/if}
 				{#if message.updated_at}
 					<span
 						class="ml-1 align-baseline text-xs text-[var(--muted)] italic"
