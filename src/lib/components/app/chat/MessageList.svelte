@@ -29,12 +29,17 @@
 		return distance < 80;
 	}
 
-	function scrollToBottom(smooth = false) {
-		if (!scroller) return;
-		requestAnimationFrame(() => {
-			scroller!.scrollTo({ top: scroller!.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
-		});
-	}
+        function scrollToBottom(smooth = false) {
+                if (!scroller) return;
+                requestAnimationFrame(() => {
+                        scroller!.scrollTo({ top: scroller!.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+                });
+        }
+
+        function isNearTop() {
+                if (!scroller) return false;
+                return scroller.scrollTop <= 64;
+        }
 
 	function toDate(s?: string): Date | null {
 		if (!s) return null;
@@ -231,10 +236,13 @@
 <div
 	class="scroll-area relative flex-1 overflow-y-auto"
 	bind:this={scroller}
-	onscroll={() => {
-		wasAtBottom = isNearBottom();
-		if (wasAtBottom) newCount = 0;
-	}}
+        onscroll={() => {
+                wasAtBottom = isNearBottom();
+                if (wasAtBottom) newCount = 0;
+                if (!loading && !endReached && isNearTop()) {
+                        loadMore();
+                }
+        }}
 >
 	<div
 		class="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--stroke)] bg-[var(--bg)]/70 px-3 py-2 backdrop-blur"
