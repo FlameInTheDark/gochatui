@@ -36,6 +36,7 @@
         let searchInputEl: HTMLInputElement | null = $state(null);
         let promptInputEl: HTMLInputElement | null = $state(null);
         let showKeywordHelp = $state(false);
+        let pendingHasNormalized = $state<string | null>(null);
 
         let posX = $state(0);
         let posY = $state(0);
@@ -70,16 +71,30 @@
                 return hasOptions.find((option) => option.value === value)?.label ?? value;
         }
 
-        function toggleHas(value: string) {
-                if (!hasOptions.some((option) => option.value === value)) return;
-                hasSelected = hasSelected.includes(value)
-                        ? hasSelected.filter((item) => item !== value)
-                        : [...hasSelected, value];
+        function normalizeHasValue(value: string): string | null {
+                if (!value) return null;
+                const normalized = value.trim().toLowerCase();
+                if (!normalized) return null;
+                return hasOptions.some((option) => option.value === normalized) ? normalized : null;
+        }
+
+        function addHasValue(value: string): boolean {
+                const normalized = normalizeHasValue(value);
+                if (!normalized) return false;
+                if (hasSelected.includes(normalized)) return true;
+                hasSelected = [...hasSelected, normalized];
+                return true;
         }
 
         function removeHas(value: string) {
-                hasSelected = hasSelected.filter((item) => item !== value);
+                const normalized = normalizeHasValue(value) ?? value.trim().toLowerCase();
+                hasSelected = hasSelected.filter((item) => item !== normalized);
         }
+
+        $effect(() => {
+                pendingHasNormalized =
+                        pendingFilter === 'has' ? normalizeHasValue(pendingValue) : null;
+        });
 
         const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
 
@@ -100,7 +115,13 @@
                 const d =
                         snowflakeToDate((msg as any)?.id) || (msg.updated_at ? new Date(msg.updated_at) : null);
                 if (!d || Number.isNaN(d.getTime())) return '';
-                return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(d);
+                return new Intl.DateTimeFormat(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                }).format(d);
         }
 
         function formatMsgFull(msg: DtoMessage) {
@@ -155,10 +176,8 @@
                 pendingValue = '';
                 showKeywordHelp = false;
                 tick().then(() => {
-                        if (filter !== 'has') {
-                                promptInputEl?.focus();
-                                promptInputEl?.select();
-                        }
+                        promptInputEl?.focus();
+                        promptInputEl?.select();
                 });
         }
 
@@ -200,26 +219,34 @@
                 }
         }
 
-        function applyPendingFilter() {
-                if (!pendingFilter) return;
+        function applyPendingFilter(): boolean {
+                if (!pendingFilter) return false;
                 if (pendingFilter === 'has') {
-                        closeFilterPrompt();
-                        return;
+                        if (!pendingValue.trim()) return false;
+                        if (addHasValue(pendingValue)) {
+                                closeFilterPrompt();
+                                return true;
+                        }
+                        return false;
                 }
                 const value = pendingValue.trim();
-                if (!value) return;
+                if (!value) return false;
                 if (pendingFilter === 'from') {
                         authorFilter = { raw: value, display: value };
                 } else if (pendingFilter === 'mentions') {
                         addMentionToken(value);
                 }
                 closeFilterPrompt();
+                return true;
         }
 
         function onPromptKeydown(event: KeyboardEvent) {
-                if (event.key === 'Enter') {
+                if (event.key === 'Enter' || (pendingFilter === 'has' && event.key === ' ')) {
                         event.preventDefault();
-                        applyPendingFilter();
+                        const applied = applyPendingFilter();
+                        if (applied && event.key === ' ') {
+                                inputValue = `${inputValue} `;
+                        }
                 } else if (event.key === 'Escape') {
                         event.preventDefault();
                         closeFilterPrompt();
@@ -227,8 +254,9 @@
         }
 
         function applyHasOption(value: string) {
-                toggleHas(value);
-                closeFilterPrompt();
+                if (addHasValue(value)) {
+                        closeFilterPrompt();
+                }
         }
 
         function onSearchInputKeydown(event: KeyboardEvent) {
@@ -551,32 +579,52 @@
                                                 {:else if pendingFilter === 'has'}
                                                         <div class="flex flex-wrap items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]">
                                                                 <span class="font-semibold text-[var(--muted)]">{m.search_filter_has()}</span>
-                                                                {#each hasOptions as option}
-                                                                        <button
-                                                                                class={`rounded-full border px-3 py-1 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 ${
-                                                                                        hasSelected.includes(option.value)
-                                                                                                ? 'border-[var(--brand)] bg-[var(--brand)]/20 text-[var(--brand)]'
-                                                                                                : 'border-[var(--stroke)] text-[var(--fg)] hover:bg-[var(--panel)]'
-                                                                                }`}
-                                                                                type="button"
-                                                                                onclick={(event) => {
-                                                                                        event.stopPropagation();
-                                                                                        applyHasOption(option.value);
-                                                                                }}
-                                                                        >
-                                                                                {option.label}
-                                                                        </button>
-                                                                {/each}
+                                                                <input
+                                                                        bind:this={promptInputEl}
+                                                                        class="w-32 border-none bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:outline-none focus-visible:outline-none focus-visible:ring-0"
+                                                                        placeholder={m.search_filter_has_placeholder()}
+                                                                        bind:value={pendingValue}
+                                                                        onkeydown={onPromptKeydown}
+                                                                />
+                                                                <div class="flex flex-wrap gap-1">
+                                                                        {#each hasOptions as option}
+                                                                                <button
+                                                                                        class={`rounded-full border px-3 py-1 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 ${
+                                                                                                option.value === pendingHasNormalized || hasSelected.includes(option.value)
+                                                                                                        ? 'border-[var(--brand)] bg-[var(--brand)]/20 text-[var(--brand)]'
+                                                                                                        : 'border-[var(--stroke)] text-[var(--fg)] hover:bg-[var(--panel)]'
+                                                                                        }`}
+                                                                                        type="button"
+                                                                                        onclick={(event) => {
+                                                                                                event.stopPropagation();
+                                                                                                applyHasOption(option.value);
+                                                                                        }}
+                                                                                >
+                                                                                        {option.label}
+                                                                                </button>
+                                                                        {/each}
+                                                                </div>
                                                                 <button
                                                                         class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                         type="button"
-                                                                        aria-label={m.search_filter_done()}
+                                                                        aria-label={m.search_filter_cancel()}
                                                                         onclick={(event) => {
                                                                                 event.stopPropagation();
                                                                                 closeFilterPrompt();
                                                                         }}
                                                                 >
                                                                         ×
+                                                                </button>
+                                                                <button
+                                                                        class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand)]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 disabled:opacity-50"
+                                                                        type="button"
+                                                                        onclick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                applyPendingFilter();
+                                                                        }}
+                                                                        disabled={!pendingHasNormalized}
+                                                                >
+                                                                        {m.search_filter_add()}
                                                                 </button>
                                                         </div>
                                                 {/if}
