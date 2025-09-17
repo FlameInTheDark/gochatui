@@ -252,23 +252,21 @@
 				</div>
 			</div>
 		{:else}
-			<div
-				class={compact
-					? 'mt-0 pr-16 text-sm leading-tight whitespace-pre-wrap'
-					: 'mt-0.5 pr-16 whitespace-pre-wrap'}
-				title={fmtMsgFull(message)}
-			>
-				{#if segments.length === 0}
-					{message.content}
-				{:else}
-					{#each segments as segment, index (index)}
-						{#if segment.type === 'code'}
-							<div class="my-2 first:mt-0 last:mb-0">
-								<CodeBlock code={segment.content} language={segment.language} />
-							</div>
-						{:else}
-							<span class="whitespace-pre-wrap">{segment.content}</span>
-						{/if}
+                        <div
+                                class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}
+                                title={fmtMsgFull(message)}
+                        >
+                                {#if segments.length === 0}
+                                        <span class="whitespace-pre-wrap">{message.content}</span>
+                                {:else}
+                                        {#each segments as segment, index (index)}
+                                                {#if segment.type === 'code'}
+                                                        <div class="my-2 whitespace-normal first:mt-0 last:mb-0">
+                                                                <CodeBlock code={segment.content} language={segment.language} />
+                                                        </div>
+                                                {:else}
+                                                        <span class="whitespace-pre-wrap">{segment.content}</span>
+                                                {/if}
 					{/each}
 				{/if}
 				{#if message.updated_at}
