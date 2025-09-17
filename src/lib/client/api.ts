@@ -45,9 +45,15 @@ export function createApi(
 	refresh?: () => Promise<boolean>
 ): ApiGroup {
 	const basePath = computeApiBase();
-	const config = new Configuration({
-		basePath
-	});
+        const config = new Configuration({
+                basePath
+        });
+
+        // The generated OpenAPI client will JSON.stringify payloads before our axios
+        // transform runs, which breaks when the payload contains bigint values.
+        // Override the JSON MIME detection so the generator skips its own
+        // serialization step and lets our custom transformer handle it.
+        config.isJsonMime = () => false;
 
         // Create a dedicated axios instance with an auth interceptor
         const ax: AxiosInstance = axios.create();
