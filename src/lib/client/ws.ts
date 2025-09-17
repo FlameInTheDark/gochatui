@@ -7,6 +7,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 type AnyRecord = Record<string, any>;
 
 export const wsConnected = writable(false);
+export const wsConnectionLost = writable(false);
 export const wsEvent = writable<AnyRecord | null>(null);
 
 let socket: WebSocket | null = null;
@@ -15,6 +16,9 @@ let heartbeatMs = 15000;
 let lastT = 0;
 let authed = false;
 let lastEventId = 0; // track last received/sent event id
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let shouldReconnect = true;
+let latestToken: string | null = get(auth.token);
 
 function nextT() {
   lastT += 1;
@@ -122,17 +126,28 @@ function stopHeartbeat() {
 }
 
 export function disconnectWS() {
+  shouldReconnect = false;
   stopHeartbeat();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   if (socket) {
     try { socket.close(); } catch {}
   }
   socket = null;
   authed = false;
   wsConnected.set(false);
+  wsConnectionLost.set(false);
 }
 
 export function connectWS() {
   if (!browser) return;
+  shouldReconnect = true;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
   const url = wsUrl();
   socket = new WebSocket(url);
@@ -140,8 +155,9 @@ export function connectWS() {
 
   socket.onopen = () => {
     wsConnected.set(true);
+    wsConnectionLost.set(false);
     // Send auth (hello) immediately: op=1 with token and t
-    const token = get(auth.token);
+    const token = latestToken ?? get(auth.token);
     if (token) {
       const t = nextT();
       const tok = JSON.stringify(token);
@@ -179,6 +195,16 @@ export function connectWS() {
   socket.onclose = () => {
     wsConnected.set(false);
     stopHeartbeat();
+    authed = false;
+    socket = null;
+    if (!shouldReconnect) return;
+    wsConnectionLost.set(true);
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectWS();
+      }, 1000);
+    }
   };
 
   socket.onerror = () => {
@@ -201,6 +227,10 @@ export function subscribeWS(guilds: (number | string)[] = [], channel?: number |
 
 // React to auth & selection changes (browser only)
 if (browser) {
+  auth.token.subscribe((value) => {
+    latestToken = value;
+  });
+
   auth.isAuthenticated.subscribe((ok) => {
     if (ok) connectWS();
     else disconnectWS();

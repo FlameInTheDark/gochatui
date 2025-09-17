@@ -11,6 +11,7 @@
 	import { wsEvent } from '$lib/client/ws';
 	import { m } from '$lib/paraglide/messages.js';
 	import { fly } from 'svelte/transition';
+	import { tick, untrack } from 'svelte';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -28,12 +29,17 @@
 		return distance < 80;
 	}
 
-	function scrollToBottom(smooth = false) {
-		if (!scroller) return;
-		requestAnimationFrame(() => {
-			scroller!.scrollTo({ top: scroller!.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
-		});
-	}
+        function scrollToBottom(smooth = false) {
+                if (!scroller) return;
+                requestAnimationFrame(() => {
+                        scroller!.scrollTo({ top: scroller!.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+                });
+        }
+
+        function isNearTop() {
+                if (!scroller) return false;
+                return scroller.scrollTop <= 64;
+        }
 
 	function toDate(s?: string): Date | null {
 		if (!s) return null;
@@ -91,25 +97,81 @@
 		}
 	});
 
+	const PAGE_SIZE = 50;
+
+	function extractId(value: any): string | null {
+		if (value == null) return null;
+		const raw = typeof value === 'object' ? ((value as any)?.id ?? value) : value;
+		if (raw == null) return null;
+		const str = String(raw);
+		const digits = str.replace(/[^0-9]/g, '');
+		return digits || str;
+	}
+
 	async function loadMore() {
 		if (!$selectedChannelId || loading || endReached) return;
 		loading = true;
+		const prevHeight = scroller?.scrollHeight ?? 0;
+		const prevTop = scroller?.scrollTop ?? 0;
+		let inserted = 0;
+		let mutatedExisting = false;
 		try {
 			const from = messages[0]?.id as any;
 			const res = await auth.api.message.messageChannelChannelIdGet({
 				channelId: $selectedChannelId as any,
 				from,
 				direction: from ? 'before' : undefined,
-				limit: 50
+				limit: PAGE_SIZE
 			});
 			const batch = res.data ?? [];
-			if (batch.length === 0) endReached = true;
-			messages = [...batch.reverse(), ...messages];
+			if (batch.length === 0) {
+				endReached = true;
+				error = null;
+				return;
+			}
+			const incoming = [...batch].reverse();
+			const existingIds = new Map<string, number>();
+			for (let i = 0; i < messages.length; i += 1) {
+				const key = extractId(messages[i]);
+				if (key) existingIds.set(key, i);
+			}
+			const seenNew = new Set<string>();
+			const unique: DtoMessage[] = [];
+			for (const item of incoming) {
+				const key = extractId(item);
+				if (key && existingIds.has(key)) {
+					const idx = existingIds.get(key)!;
+					messages[idx] = { ...messages[idx], ...item };
+					mutatedExisting = true;
+					continue;
+				}
+				if (key) {
+					if (seenNew.has(key)) continue;
+					seenNew.add(key);
+				}
+				unique.push(item);
+			}
+			if (unique.length > 0) {
+				messages = [...unique, ...messages];
+				inserted = unique.length;
+			} else if (mutatedExisting) {
+				messages = [...messages];
+			}
+			if (unique.length === 0 || batch.length < PAGE_SIZE) {
+				endReached = true;
+			}
 			error = null;
 		} catch (e: any) {
 			error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
 		} finally {
 			loading = false;
+			if (inserted > 0 && scroller) {
+				await tick();
+				const diff = scroller.scrollHeight - prevHeight;
+				if (prevTop > 0) {
+					scroller.scrollTop = prevTop + diff;
+				}
+			}
 		}
 	}
 
@@ -122,10 +184,11 @@
 		try {
 			const res = await auth.api.message.messageChannelChannelIdGet({
 				channelId: $selectedChannelId as any,
-				limit: 50
+				limit: PAGE_SIZE
 			});
 			const batch = res.data ?? [];
 			messages = [...batch].reverse();
+			endReached = batch.length < PAGE_SIZE;
 			error = null;
 			scrollToBottom(false);
 			wasAtBottom = true;
@@ -140,28 +203,46 @@
 
 	$effect(() => {
 		const ev: any = $wsEvent;
-		if (!ev || ev.op !== 0 || !ev.d?.message) return;
-		const incoming = ev.d.message as DtoMessage & { author_id?: any };
-		if (!incoming.channel_id || String((incoming as any).channel_id) !== $selectedChannelId) return;
-		if (!incoming.author && (incoming as any).author_id) {
-			(incoming as any).author = (incoming as any).author_id;
-		}
-		const stick = wasAtBottom;
-		if (!messages.find((m) => String((m as any).id) === String((incoming as any).id))) {
-			messages = [...messages, incoming];
-			if (stick) scrollToBottom(true);
-			else newCount += 1;
-		}
+		if (!ev || ev.op !== 0) return;
+		untrack(() => {
+			const d = ev.d || {};
+			if (d.message) {
+				const incoming = d.message as DtoMessage & { author_id?: any };
+				if (!incoming.channel_id || String((incoming as any).channel_id) !== $selectedChannelId)
+					return;
+				if (!incoming.author && (incoming as any).author_id) {
+					(incoming as any).author = (incoming as any).author_id;
+				}
+				const stick = wasAtBottom;
+				const idx = messages.findIndex(
+					(m) => String((m as any).id) === String((incoming as any).id)
+				);
+				if (idx >= 0) {
+					messages[idx] = { ...messages[idx], ...incoming };
+					messages = [...messages];
+				} else {
+					messages = [...messages, incoming];
+					if (stick) scrollToBottom(true);
+					else newCount += 1;
+				}
+			} else if (d.message_id) {
+				if (String(d.channel_id ?? '') !== $selectedChannelId) return;
+				messages = messages.filter((m) => String((m as any).id) !== String(d.message_id));
+			}
+		});
 	});
 </script>
 
 <div
 	class="scroll-area relative flex-1 overflow-y-auto"
 	bind:this={scroller}
-	onscroll={() => {
-		wasAtBottom = isNearBottom();
-		if (wasAtBottom) newCount = 0;
-	}}
+        onscroll={() => {
+                wasAtBottom = isNearBottom();
+                if (wasAtBottom) newCount = 0;
+                if (!loading && !endReached && isNearTop()) {
+                        loadMore();
+                }
+        }}
 >
 	<div
 		class="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--stroke)] bg-[var(--bg)]/70 px-3 py-2 backdrop-blur"

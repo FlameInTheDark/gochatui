@@ -3,25 +3,24 @@
 	import { createEventDispatcher } from 'svelte';
 	import { m } from '$lib/paraglide/messages.js';
 
-	const dispatch = createEventDispatcher<{ sent: void }>();
-	let email = $state('');
-	let loading = $state(false);
-	let message: string | null = $state(null);
-	let error: string | null = $state(null);
+        const dispatch = createEventDispatcher<{ sent: { email: string } }>();
+        let email = $state('');
+        let loading = $state(false);
+        let error: string | null = $state(null);
 
-	async function onSubmit() {
-		loading = true;
-		error = null;
-		message = null;
-		try {
-			await auth.register({ email });
-			message = m.auth_confirmation_sent();
-			dispatch('sent');
-		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? m.auth_registration_failed();
-		} finally {
-			loading = false;
-		}
+        async function onSubmit() {
+                const normalizedEmail = email.trim();
+                email = normalizedEmail;
+                loading = true;
+                error = null;
+                try {
+                        await auth.register({ email: normalizedEmail });
+                        dispatch('sent', { email: normalizedEmail });
+                } catch (e: any) {
+                        error = e?.response?.data?.message ?? e?.message ?? m.auth_registration_failed();
+                } finally {
+                        loading = false;
+                }
 	}
 </script>
 
@@ -33,8 +32,7 @@
 	}}
 >
 	<div class="text-lg font-semibold">{m.auth_create_account()}</div>
-	{#if message}<div class="text-sm text-green-500">{message}</div>{/if}
-	{#if error}<div class="text-sm text-red-500">{error}</div>{/if}
+        {#if error}<div class="text-sm text-red-500">{error}</div>{/if}
 	<div class="space-y-1">
 		<label for="register-email" class="text-sm text-[var(--muted)]">{m.auth_email()}</label>
 		<input

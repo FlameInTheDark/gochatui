@@ -3,6 +3,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import SettingsOverlay from '$lib/components/app/settings/SettingsOverlay.svelte';
 	import GuildSettingsOverlay from '$lib/components/app/settings/GuildSettingsOverlay.svelte';
+	import ConnectionStatusBar from '$lib/components/app/ConnectionStatusBar.svelte';
 
 	let { children } = $props();
 </script>
@@ -15,3 +16,4 @@
 
 <SettingsOverlay />
 <GuildSettingsOverlay />
+<ConnectionStatusBar />

@@ -36,11 +36,11 @@ export interface AuthConfirmationRequest {
      */
     'discriminator'?: string;
     /**
-     * 
-     * @type {number}
+     *
+     * @type {bigint}
      * @memberof AuthConfirmationRequest
      */
-    'id'?: number;
+    'id'?: bigint;
     /**
      * 
      * @type {string}
@@ -118,11 +118,11 @@ export interface AuthPasswordRecoveryRequest {
  */
 export interface AuthPasswordResetRequest {
     /**
-     * 
-     * @type {number}
+     *
+     * @type {bigint}
      * @memberof AuthPasswordResetRequest
      */
-    'id'?: number;
+    'id'?: bigint;
     /**
      * 
      * @type {string}

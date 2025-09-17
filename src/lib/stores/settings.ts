@@ -2,7 +2,9 @@ import { writable } from 'svelte/store';
 import { setLocale } from '$lib/paraglide/runtime';
 
 export type Theme = 'light' | 'dark' | 'system';
-export type Locale = 'en' | 'ru';
+
+const supportedLocales = ['en', 'ru', 'de', 'fr'] as const;
+export type Locale = (typeof supportedLocales)[number];
 
 const initialTheme =
 	(typeof localStorage !== 'undefined' && (localStorage.getItem('theme') as Theme)) || 'system';
@@ -31,8 +33,12 @@ theme.subscribe((t) => {
 	}
 });
 
-const initialLocale =
-	(typeof localStorage !== 'undefined' && (localStorage.getItem('locale') as Locale)) || 'en';
+function isLocale(value: unknown): value is Locale {
+	return typeof value === 'string' && supportedLocales.includes(value as Locale);
+}
+
+const storedLocale = typeof localStorage !== 'undefined' ? localStorage.getItem('locale') : null;
+const initialLocale = (storedLocale && isLocale(storedLocale) && storedLocale) || 'en';
 
 setLocale(initialLocale);
 export const locale = writable<Locale>(initialLocale);
