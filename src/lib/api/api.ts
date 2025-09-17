@@ -36,11 +36,11 @@ export interface AuthConfirmationRequest {
      */
     'discriminator'?: string;
     /**
-     *
-     * @type {bigint}
+     * 
+     * @type {number}
      * @memberof AuthConfirmationRequest
      */
-    'id'?: bigint;
+    'id'?: number;
     /**
      * 
      * @type {string}
@@ -118,11 +118,11 @@ export interface AuthPasswordRecoveryRequest {
  */
 export interface AuthPasswordResetRequest {
     /**
-     *
-     * @type {bigint}
+     * 
+     * @type {number}
      * @memberof AuthPasswordResetRequest
      */
-    'id'?: bigint;
+    'id'?: number;
     /**
      * 
      * @type {string}
@@ -783,10 +783,10 @@ export interface SearchMessageSearchRequest {
 export interface SearchMessageSearchResponse {
     /**
      * 
-     * @type {Array<number>}
+     * @type {Array<DtoMessage>}
      * @memberof SearchMessageSearchResponse
      */
-    'ids'?: Array<number>;
+    'messages'?: Array<DtoMessage>;
     /**
      * 
      * @type {number}
