@@ -1,4 +1,5 @@
-﻿<script lang="ts">
+<script lang="ts">
+	import type { DtoMessage } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
 	import {
 		selectedGuildId,
@@ -6,17 +7,19 @@
 		searchAnchor,
 		selectedChannelId
 	} from '$lib/stores/appState';
-	type SearchResult = { id: string; channel_id?: string };
 	import { tick } from 'svelte';
 	import { m } from '$lib/paraglide/messages.js';
 
 	let query = $state('');
 	let loading = $state(false);
-	let results: SearchResult[] = $state([]);
+	let results: DtoMessage[] = $state([]);
 	let error: string | null = $state(null);
 	let page = $state(0);
 	let pages = $state(0);
 	let pageItems: (number | string)[] = $state([]);
+	let author = $state('');
+	let mentions = $state('');
+	let hasSelected = $state<string[]>([]);
 
 	let panelEl: HTMLDivElement | null = $state(null);
 	let posX = $state(0);
@@ -24,6 +27,75 @@
 	function clamp(v: number, min: number, max: number) {
 		return Math.max(min, Math.min(max, v));
 	}
+	function parseSnowflake(value: string | null): bigint | undefined {
+		if (!value) return undefined;
+		try {
+			const digits = String(value)
+				.trim()
+				.replace(/[^0-9]/g, '');
+			if (!digits) return undefined;
+			return BigInt(digits);
+		} catch (err) {
+			console.error('Failed to parse snowflake', err);
+			return undefined;
+		}
+	}
+	function parseMentionsInput(value: string): bigint[] {
+		const parts = value
+			.split(/[\,\s]+/)
+			.map((part) => part.trim())
+			.filter(Boolean);
+		const ids: bigint[] = [];
+		for (const part of parts) {
+			const parsed = parseSnowflake(part);
+			if (parsed != null) ids.push(parsed);
+		}
+		return ids;
+	}
+	const hasOptions = [
+		{ value: 'link', label: m.search_has_link() },
+		{ value: 'embed', label: m.search_has_embed() },
+		{ value: 'file', label: m.search_has_file() },
+		{ value: 'image', label: m.search_has_image() }
+	];
+	function toggleHas(value: string) {
+		hasSelected = hasSelected.includes(value)
+			? hasSelected.filter((item) => item !== value)
+			: [...hasSelected, value];
+	}
+	const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
+	function snowflakeToDate(id: any): Date | null {
+		if (id == null) return null;
+		try {
+			const s = String(id).replace(/[^0-9]/g, '');
+			if (!s) return null;
+			const v = BigInt(s);
+			const ms = Number(v >> 22n);
+			return new Date(EPOCH_MS + ms);
+		} catch {
+			return null;
+		}
+	}
+	function formatMsgTime(msg: DtoMessage) {
+		const d =
+			snowflakeToDate((msg as any)?.id) || (msg.updated_at ? new Date(msg.updated_at) : null);
+		if (!d || Number.isNaN(d.getTime())) return '';
+		return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(d);
+	}
+	function formatMsgFull(msg: DtoMessage) {
+		const d =
+			snowflakeToDate((msg as any)?.id) || (msg.updated_at ? new Date(msg.updated_at) : null);
+		if (!d || Number.isNaN(d.getTime())) return '';
+		return new Intl.DateTimeFormat(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		}).format(d);
+	}
+
 	async function updatePosition() {
 		if (typeof window === 'undefined') return;
 		await tick();
@@ -42,29 +114,41 @@
 		error = null;
 		results = [];
 		try {
-			const ch = $selectedChannelId ? String($selectedChannelId).replace(/[^0-9]/g, '') : '';
-			const body = `{"content":${JSON.stringify(query)},${ch ? `\"channel_id\":${ch},` : ''}\"page\":${page}}`;
+			const guildId = parseSnowflake($selectedGuildId);
+			if (!guildId) {
+				throw new Error('Invalid guild id');
+			}
+			const request: any = { page };
+			const channelSnowflake = parseSnowflake($selectedChannelId);
+			if (channelSnowflake != null) request.channel_id = channelSnowflake;
+			const authorSnowflake = parseSnowflake(author);
+			if (authorSnowflake != null) request.author_id = authorSnowflake;
+			const mentionIds = parseMentionsInput(mentions);
+			if (mentionIds.length) request.mentions = mentionIds;
+			if (hasSelected.length) request.has = hasSelected;
+			if (query.trim()) request.content = query.trim();
 			const res = await auth.api.search.searchGuildIdMessagesPost({
-				guildId: $selectedGuildId as any,
-				searchMessageSearchRequest: body as any
+				guildId: guildId as any,
+				searchMessageSearchRequest: request
 			});
 			const data: any = res.data;
-			let ids: (string | number)[] = [];
+			const collected: DtoMessage[] = [];
+			let totalPages = 0;
+			const appendResults = (chunk: any) => {
+				if (!chunk) return;
+				if (Array.isArray(chunk.messages)) {
+					collected.push(...chunk.messages);
+				}
+				const p = Number(chunk.pages ?? 0);
+				if (!Number.isNaN(p)) totalPages = Math.max(totalPages, p);
+			};
 			if (Array.isArray(data)) {
-				ids = ([] as (string | number)[]).concat(...data.map((p: any) => p?.ids ?? []));
-				const pmax = Math.max(
-					0,
-					...data.map((p: any) => Number(p?.pages ?? 0)).filter((n: number) => !Number.isNaN(n))
-				);
-				pages = pmax || pages;
-			} else if (data && Array.isArray(data.ids)) {
-				ids = data.ids;
-				pages = Number(data.pages ?? pages) || pages;
+				for (const entry of data) appendResults(entry);
+			} else {
+				appendResults(data);
 			}
-			results = (ids ?? []).map((id) => ({
-				id: String(id),
-				channel_id: $selectedChannelId ?? undefined
-			}));
+			results = collected;
+			pages = totalPages > 0 ? totalPages : collected.length > 0 ? page + 1 : 0;
 		} catch (e: any) {
 			error = e?.response?.data?.message ?? e?.message ?? 'Search failed';
 		} finally {
@@ -72,7 +156,7 @@
 		}
 	}
 
-	function openMessage(m: SearchResult) {
+	function openMessage(m: DtoMessage) {
 		if (!m.channel_id) return;
 		selectedChannelId.set(String(m.channel_id));
 		searchOpen.set(false);
@@ -86,6 +170,9 @@
 			page = 0;
 			pages = 0;
 			pageItems = [];
+			author = '';
+			mentions = '';
+			hasSelected = [];
 			updatePosition();
 		}
 	});
@@ -158,6 +245,60 @@
 					}}>{m.search()}</button
 				>
 			</div>
+			<div class="mt-3 space-y-3">
+				<div class="grid gap-3 sm:grid-cols-2">
+					<label class="flex flex-col gap-1 text-sm">
+						<span class="text-[var(--muted)]">{m.search_author_id()}</span>
+						<input
+							class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+							bind:value={author}
+							placeholder={m.search_author_id_placeholder()}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									page = 0;
+									doSearch();
+								}
+							}}
+						/>
+					</label>
+					<label class="flex flex-col gap-1 text-sm">
+						<span class="text-[var(--muted)]">{m.search_mentions()}</span>
+						<input
+							class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+							bind:value={mentions}
+							placeholder={m.search_mentions_placeholder()}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									page = 0;
+									doSearch();
+								}
+							}}
+						/>
+					</label>
+				</div>
+				<div class="flex flex-col gap-2 text-sm">
+					<span class="text-[var(--muted)]">{m.search_has()}</span>
+					<div class="flex flex-wrap gap-2">
+						{#each hasOptions as option}
+							<button
+								class={`rounded-full border px-3 py-1 text-xs transition hover:bg-[var(--panel)] ${
+									hasSelected.includes(option.value)
+										? 'border-[var(--brand)] bg-[var(--brand)]/10 text-[var(--brand)]'
+										: 'border-[var(--stroke)]'
+								}`}
+								type="button"
+								onclick={() => {
+									page = 0;
+									toggleHas(option.value);
+									doSearch();
+								}}
+							>
+								{option.label}
+							</button>
+						{/each}
+					</div>
+				</div>
+			</div>
 			{#if error}<div class="mt-2 text-sm text-red-500">{error}</div>{/if}
 
 			<div class="mt-3 max-h-[60vh] space-y-2 overflow-y-auto">
@@ -166,18 +307,39 @@
 				{:else if results.length === 0}
 					<div class="text-sm text-[var(--muted)]">{m.no_results()}</div>
 				{:else}
-					{#each results as m}
+					{#each results as message (message.id)}
 						<div
 							class="cursor-pointer rounded p-2 hover:bg-[var(--panel)]"
 							role="button"
 							tabindex="0"
-							onclick={() => openMessage(m)}
-							onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && openMessage(m)}
+							onclick={() => openMessage(message)}
+							onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && openMessage(message)}
 						>
-							<div class="text-xs text-[var(--muted)]">
-								{m.channel_id ? `in # ${m.channel_id}` : ''}
+							<div class="flex items-baseline justify-between gap-2">
+								<div class="truncate text-sm font-semibold text-[var(--muted)]">
+									{message.author?.name ?? m.user_default_name()}
+								</div>
+								<div class="shrink-0 text-xs text-[var(--muted)]" title={formatMsgFull(message)}>
+									{formatMsgTime(message)}
+								</div>
 							</div>
-							<div class="truncate">Message ID: {m.id}</div>
+							<div class="mt-1 text-xs tracking-wide text-[var(--muted)] uppercase">
+								{message.channel_id
+									? m.search_result_in_channel({
+											channel: String(message.channel_id)
+										})
+									: ''}
+							</div>
+							<div class="mt-1 text-sm leading-snug whitespace-pre-line text-[var(--fg)]">
+								{message.content?.trim() || m.search_result_no_content()}
+							</div>
+							{#if message.attachments && message.attachments.length > 0}
+								<div class="mt-1 text-xs text-[var(--muted)]">
+									{m.search_result_attachments({
+										count: String(message.attachments.length)
+									})}
+								</div>
+							{/if}
 						</div>
 					{/each}
 				{/if}
@@ -204,7 +366,9 @@
 							<span class="px-2 text-[var(--muted)] select-none">{p}</span>
 						{:else}
 							<button
-								class={`min-w-[2rem] rounded-md border border-[var(--stroke)] px-2 py-1 ${p === page ? 'bg-[var(--panel)]' : ''}`}
+								class={`min-w-[2rem] rounded-md border border-[var(--stroke)] px-2 py-1 ${
+									p === page ? 'bg-[var(--panel)]' : ''
+								}`}
 								aria-current={p === page ? 'page' : undefined}
 								onclick={() => {
 									if (!loading && p !== page) {
