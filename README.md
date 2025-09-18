@@ -70,9 +70,7 @@ The repository includes a multi-stage `Dockerfile` that builds the static site a
 Build the image:
 
 ```bash
-docker build \
-  --build-arg PUBLIC_BASE_PATH=/app \
-  -t gochatui .
+docker build -t gochatui .
 ```
 
 Run the container:
@@ -83,10 +81,10 @@ docker run -p 3000:80 gochatui
 
 The application will be available at http://localhost:3000.
 
-When deploying behind a reverse proxy that only forwards a sub-path (for example Traefik routing `/app` to the UI container), ensure that:
+When deploying behind a reverse proxy that only forwards a sub-path, ensure that:
 
 - `PUBLIC_BASE_PATH` is set to the forwarded prefix **at build time**.
-- The proxy forwards both `/app` and `/app/_app/*` to the UI container so static assets resolve correctly. The provided `nginx.conf` already serves `/app` with an SPA fallback to `/app/index.html` for deep links.
+- Your proxy forwards that prefix (and its static assets) to the UI container. The provided `nginx.conf` serves the app at `/` and issues redirects for legacy `/app` URLs so existing bookmarks continue to work.
 
 ## License
 

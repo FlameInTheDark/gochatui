@@ -65,7 +65,7 @@
 
                 try {
                         await auth.confirm({
-                                id: parsedId,
+                                id: parsedId as any,
                                 token: trimmedToken,
                                 name,
                                 discriminator,
