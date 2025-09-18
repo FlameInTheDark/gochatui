@@ -138,7 +138,7 @@ function createAuthStore() {
 			const status = (err as { response?: { status?: number } }).response?.status;
 			if (status === 401) {
 				logout();
-				if (browser) window.location.href = '/app';
+                                if (browser) window.location.href = '/';
 			}
 			return null;
 		}
