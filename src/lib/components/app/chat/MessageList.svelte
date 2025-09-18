@@ -77,6 +77,25 @@
 		return null;
 	}
 
+	function currentChannel(): any | null {
+		const gid = $selectedGuildId ?? '';
+		const list = $channelsByGuild[gid] ?? [];
+		return list.find((c: any) => String((c as any)?.id) === $selectedChannelId) ?? null;
+	}
+
+	function channelDisplayName() {
+		const ch = currentChannel() as any;
+		const name = typeof ch?.name === 'string' ? ch.name.trim() : '';
+		return name || 'channel';
+	}
+
+	function channelTopic() {
+		const ch = currentChannel() as any;
+		if (!ch) return '';
+		const topic = (ch?.topic ?? '').toString().trim();
+		return topic;
+	}
+
 	$effect(() => {
 		if ($selectedChannelId && $channelReady) {
 			const gid = $selectedGuildId ?? '';
@@ -261,6 +280,43 @@
 	{#if error}
 		<div class="border-b border-[var(--stroke)] bg-[var(--panel)] px-4 py-2 text-sm text-red-500">
 			{error}
+		</div>
+	{/if}
+	{#if endReached && initialLoaded}
+		{@const name = channelDisplayName()}
+		{@const topic = channelTopic()}
+		<div class="px-4 py-6">
+			<div
+				class="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
+			>
+				<div
+					class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--brand)]"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						class="h-6 w-6"
+						aria-hidden="true"
+					>
+						<path
+							d="M14.857 3.612c.076-.225.39-.225.466 0l.867 2.572a4.5 4.5 0 0 0 2.848 2.848l2.572.867c.225.076.225.39 0 .466l-2.572.867a4.5 4.5 0 0 0-2.848 2.848l-.867 2.572c-.076.225-.39.225-.466 0l-.867-2.572a4.5 4.5 0 0 0-2.848-2.848l-2.572-.867c-.225-.076-.225-.39 0-.466l2.572-.867a4.5 4.5 0 0 0 2.848-2.848l.867-2.572ZM6.429 1.429c.106-.319.553-.319.659 0l.483 1.45a2.55 2.55 0 0 0 1.615 1.615l1.45.483c.319.106.319.553 0 .659l-1.45.483A2.55 2.55 0 0 0 7.57 7.254l-.483 1.45c-.106.319-.553.319-.659 0l-.483-1.45A2.55 2.55 0 0 0 4.33 5.12l-1.45-.483c-.319-.106-.319-.553 0-.659l1.45-.483A2.55 2.55 0 0 0 6.097 2.879l.483-1.45ZM4.924 12.202c.06-.179.31-.179.37 0l.344 1.032a2.4 2.4 0 0 0 1.523 1.523l1.032.344c.179.06.179.31 0 .37l-1.032.344a2.4 2.4 0 0 0-1.523 1.523l-.344 1.032c-.06.179-.31.179-.37 0l-.344-1.032a2.4 2.4 0 0 0-1.523-1.523l-1.032-.344c-.179-.06-.179-.31 0-.37l1.032-.344a2.4 2.4 0 0 0 1.523-1.523l.344-1.032Z"
+						/>
+					</svg>
+				</div>
+				<div class="space-y-1">
+					<p class="text-sm font-semibold text-[var(--fg-strong)]">
+						It&apos;s the beginning of your conversation in
+						<span class="text-[var(--brand)]">#{name}</span>
+					</p>
+					{#if topic}
+						<p class="text-xs text-[var(--muted)]">{topic}</p>
+					{/if}
+				</div>
+				<p class="text-xs leading-relaxed text-[var(--muted)]">
+					Send a message to kick things off and keep the conversation going.
+				</p>
+			</div>
 		</div>
 	{/if}
 	{#each messages as m, i (m.id)}
