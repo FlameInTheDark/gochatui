@@ -5,12 +5,88 @@
 	import { createEventDispatcher } from 'svelte';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
+	import CodeBlock from './CodeBlock.svelte';
+
+	type MessageSegment =
+		| { type: 'text'; content: string }
+		| { type: 'code'; content: string; language?: string };
+
+	function normalizeCodeBlock(raw: string): string {
+		if (!raw) return '';
+
+		const normalized = raw.replace(/\r\n?/g, '\n');
+		const lines = normalized.split('\n');
+
+		while (lines.length && lines[0].trim() === '') {
+			lines.shift();
+		}
+
+		while (lines.length && lines[lines.length - 1].trim() === '') {
+			lines.pop();
+		}
+
+		let indent: number | undefined;
+		for (const line of lines) {
+			if (!line.trim()) continue;
+			const match = line.match(/^[ \t]+/);
+			if (!match) {
+				indent = 0;
+				break;
+			}
+			const depth = match[0].length;
+			indent = indent === undefined ? depth : Math.min(indent, depth);
+		}
+
+		if (!lines.length) {
+			return '';
+		}
+
+		if (!indent) {
+			return lines.join('\n');
+		}
+
+		const pattern = new RegExp(`^[ \t]{0,${indent}}`);
+		return lines.map((line) => line.replace(pattern, '')).join('\n');
+	}
+
+	function parseMessageContent(content: string | null | undefined): MessageSegment[] {
+		if (!content) return [];
+		const segments: MessageSegment[] = [];
+		const pattern = /```([^\r\n`]*)?(?:\r?\n)?([\s\S]*?)```/g;
+		let lastIndex = 0;
+		let match: RegExpExecArray | null;
+
+		while ((match = pattern.exec(content)) !== null) {
+			const [fullMatch, lang, body] = match;
+			const startIndex = match.index;
+
+			if (startIndex > lastIndex) {
+				segments.push({ type: 'text', content: content.slice(lastIndex, startIndex) });
+			}
+
+			const language = lang?.trim() || undefined;
+			const codeBody = normalizeCodeBlock(body ?? '');
+			segments.push({ type: 'code', content: codeBody, language });
+			lastIndex = startIndex + fullMatch.length;
+		}
+
+		if (lastIndex < content.length) {
+			segments.push({ type: 'text', content: content.slice(lastIndex) });
+		}
+
+		if (segments.length === 0) {
+			return [{ type: 'text', content }];
+		}
+
+		return segments;
+	}
 
 	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
 	let isEditing = $state(false);
 	let draft = $state(message.content ?? '');
 	let saving = $state(false);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
+	const segments = $derived(parseMessageContent(message.content ?? ''));
 
 	const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
 
@@ -215,12 +291,22 @@
 			</div>
 		{:else}
 			<div
-				class={compact
-					? 'mt-0 pr-16 text-sm leading-tight whitespace-pre-wrap'
-					: 'mt-0.5 pr-16 whitespace-pre-wrap'}
+				class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}
 				title={fmtMsgFull(message)}
 			>
-				{message.content}
+				{#if segments.length === 0}
+					<span class="whitespace-pre-wrap">{message.content}</span>
+				{:else}
+					{#each segments as segment, index (index)}
+						{#if segment.type === 'code'}
+							<div class="my-2 whitespace-normal first:mt-0 last:mb-0">
+								<CodeBlock code={segment.content} language={segment.language} />
+							</div>
+						{:else}
+							<span class="whitespace-pre-wrap">{segment.content}</span>
+						{/if}
+					{/each}
+				{/if}
 				{#if message.updated_at}
 					<span
 						class="ml-1 align-baseline text-xs text-[var(--muted)] italic"
