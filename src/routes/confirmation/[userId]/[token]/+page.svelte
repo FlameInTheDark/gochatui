@@ -20,5 +20,5 @@
 <AuthGate
         initialMode="confirm"
         confirmDefaults={confirmDefaults}
-        redirectTo="/app"
+        redirectTo="/"
 />
