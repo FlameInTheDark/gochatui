@@ -2,6 +2,12 @@
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 
+@theme {
+	--color-ink-900: #09090b;
+	--color-ink-800: #0b0b0f;
+	--shadow-chrome: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
 :root {
 	--radius-lg: 16px;
 	--radius-md: 12px;
@@ -56,11 +62,13 @@
 	color-scheme: light;
 }
 
-html,
+html {
+	height: 100%;
+	scroll-behavior: smooth;
+}
+
 body {
 	height: 100%;
-}
-body {
 	margin: 0;
 	font-family:
 		Inter,
@@ -72,9 +80,11 @@ body {
 		Arial,
 		'Apple Color Emoji',
 		'Segoe UI Emoji';
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 	color: var(--text);
 	background: var(--bg);
-	overflow: hidden;
+	overflow: auto;
 }
 
 .panel {
