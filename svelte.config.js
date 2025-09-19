@@ -24,12 +24,12 @@ const config = {
 			strict: false,
 			assets: assetOutDir
 		}),
-		paths: {
-			base: dev ? '' : basePath,
-			assets: '',
-			relative: basePath ? false : true
-		}
-	}
+                paths: {
+                        base: dev ? '' : basePath,
+                        assets: '',
+                        relative: false
+                }
+        }
 };
 
 export default config;
