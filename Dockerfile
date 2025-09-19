@@ -21,5 +21,8 @@ RUN npm run build
 FROM nginx:alpine AS production
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/build /usr/share/nginx/html
+RUN mkdir -p /usr/share/nginx/html/app \
+    && mv /usr/share/nginx/html/app.html /usr/share/nginx/html/app/index.html \
+    && cp -r /usr/share/nginx/html/_app /usr/share/nginx/html/app/_app
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
