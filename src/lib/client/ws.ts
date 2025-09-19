@@ -3,6 +3,7 @@ import { auth } from '$lib/stores/auth';
 import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
 import { browser } from '$app/environment';
 import { env as publicEnv } from '$env/dynamic/public';
+import { getRuntimeConfig } from '$lib/runtime/config';
 
 type AnyRecord = Record<string, any>;
 
@@ -31,7 +32,12 @@ function updateLastT(t?: number) {
 }
 
 function wsUrl(): string {
-  const configured = (publicEnv?.PUBLIC_WS_URL as string | undefined) || undefined;
+  const runtime = getRuntimeConfig();
+  const runtimeConfigured = runtime?.PUBLIC_WS_URL?.trim();
+  const configured =
+    runtimeConfigured && runtimeConfigured.length > 0
+      ? runtimeConfigured
+      : ((publicEnv?.PUBLIC_WS_URL as string | undefined) || undefined)?.trim();
   if (configured) {
     if (configured.startsWith('ws://') || configured.startsWith('wss://')) return configured;
     if (!browser) return `ws://${configured}`;

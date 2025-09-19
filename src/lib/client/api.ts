@@ -10,6 +10,7 @@ import {
 } from '$lib/api';
 import axios, { type AxiosInstance } from 'axios';
 import { env as publicEnv } from '$env/dynamic/public';
+import { getRuntimeConfig } from '$lib/runtime/config';
 
 // Stringify payloads so bigint values emit as int64 numbers instead of quoted strings
 function stringifyBigInt(data: unknown): string {
@@ -32,12 +33,17 @@ export type ApiGroup = {
 };
 
 function computeApiBase(): string {
-	const configured = (publicEnv?.PUBLIC_API_BASE_URL as string | undefined) || undefined;
-	if (configured && configured.trim().length > 0) {
-		return configured.replace(/\/+$/, '');
-	}
-	// Fallback: explicit localhost for both browser and SSR to avoid relying on a dev proxy
-	return 'http://localhost/api/v1';
+        const runtime = getRuntimeConfig();
+        const runtimeConfigured = runtime?.PUBLIC_API_BASE_URL?.trim();
+        if (runtimeConfigured && runtimeConfigured.length > 0) {
+                return runtimeConfigured.replace(/\/+$/, '');
+        }
+        const configured = ((publicEnv?.PUBLIC_API_BASE_URL as string | undefined) || undefined)?.trim();
+        if (configured && configured.length > 0) {
+                return configured.replace(/\/+$/, '');
+        }
+        // Fallback: explicit localhost for both browser and SSR to avoid relying on a dev proxy
+        return 'http://localhost/api/v1';
 }
 
 export function createApi(
