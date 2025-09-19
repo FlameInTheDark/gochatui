@@ -13,22 +13,41 @@ declare global {
 
 let cachedConfig: RuntimeConfig | null | undefined;
 
-export function getRuntimeConfig(): RuntimeConfig | null {
-	if (cachedConfig !== undefined) {
-		return cachedConfig;
+function readRuntimeConfig(): RuntimeConfig | null {
+	if (typeof globalThis === 'undefined') {
+		return null;
 	}
-	if (typeof globalThis !== 'undefined') {
-		const globalWithConfig = globalThis as typeof globalThis & {
-			__RUNTIME_CONFIG__?: RuntimeConfig;
-		};
-		const maybeConfig = globalWithConfig.__RUNTIME_CONFIG__;
-		if (maybeConfig && typeof maybeConfig === 'object') {
-			cachedConfig = maybeConfig as RuntimeConfig;
+
+	const globalWithConfig = globalThis as typeof globalThis & {
+		__RUNTIME_CONFIG__?: RuntimeConfig;
+	};
+
+	const maybeConfig = globalWithConfig.__RUNTIME_CONFIG__;
+	if (maybeConfig && typeof maybeConfig === 'object') {
+		return maybeConfig as RuntimeConfig;
+	}
+
+	return null;
+}
+
+export function getRuntimeConfig(): RuntimeConfig | null {
+	const shouldRefreshFromGlobal =
+		cachedConfig === undefined || (cachedConfig === null && typeof window !== 'undefined');
+
+	if (shouldRefreshFromGlobal) {
+		const maybeConfig = readRuntimeConfig();
+
+		if (maybeConfig) {
+			cachedConfig = maybeConfig;
 			return cachedConfig;
 		}
+
+		if (cachedConfig === undefined) {
+			cachedConfig = null;
+		}
 	}
-	cachedConfig = null;
-	return cachedConfig;
+
+	return cachedConfig ?? null;
 }
 
 export function getRuntimeConfigValue<K extends keyof RuntimeConfig>(
