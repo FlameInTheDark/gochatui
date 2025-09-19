@@ -20,16 +20,17 @@ const config = {
 	// for more information about preprocessors
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter({
-			strict: false,
-			assets: assetOutDir
-		}),
-		paths: {
-			base: dev ? '' : basePath,
-			assets: '',
-			relative: basePath ? false : true
-		}
-	}
+                adapter: adapter({
+                        fallback: 'app.html',
+                        strict: false,
+                        assets: assetOutDir
+                }),
+                paths: {
+                        base: dev ? '' : basePath,
+                        assets: '',
+                        relative: false
+                }
+        }
 };
 
 export default config;
