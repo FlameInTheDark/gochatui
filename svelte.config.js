@@ -20,10 +20,11 @@ const config = {
 	// for more information about preprocessors
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter({
-			strict: false,
-			assets: assetOutDir
-		}),
+                adapter: adapter({
+                        fallback: 'app.html',
+                        strict: false,
+                        assets: assetOutDir
+                }),
                 paths: {
                         base: dev ? '' : basePath,
                         assets: '',
