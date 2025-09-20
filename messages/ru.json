@@ -67,6 +67,8 @@
 	"rename_server": "Переименовать сервер",
 	"server_settings": "Настройки сервера",
 	"leave_server": "Выйти с сервера",
+	"leave_server_confirm_title": "Покинуть {server}?",
+	"leave_server_confirm_description": "Вы уверены, что хотите покинуть {server}? Вы потеряете доступ к этому серверу и его каналам.",
 	"copy_channel_id": "Скопировать ID канала",
 	"open_channel": "Открыть канал",
 	"delete_channel": "Удалить канал",

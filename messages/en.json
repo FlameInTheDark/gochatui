@@ -67,6 +67,8 @@
 	"rename_server": "Rename server",
 	"server_settings": "Server settings",
 	"leave_server": "Leave server",
+	"leave_server_confirm_title": "Leave {server}?",
+	"leave_server_confirm_description": "Are you sure you want to leave {server}? You will lose access to this server and its channels.",
 	"copy_channel_id": "Copy channel ID",
 	"open_channel": "Open channel",
 	"delete_channel": "Delete channel",
