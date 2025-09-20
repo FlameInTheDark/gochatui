@@ -1,7 +1,8 @@
 import type { PageLoad } from './$types';
 import type { DtoInvitePreview } from '$lib/api';
-import { computeApiBase } from '$lib/runtime/api';
 import { getRuntimeConfig } from '$lib/runtime/config';
+import { auth } from '$lib/stores/auth';
+import { isAxiosError } from 'axios';
 
 let runtimeConfigReady: Promise<void> | null = null;
 
@@ -40,52 +41,39 @@ function waitForRuntimeApiBase(): Promise<void> {
 export const prerender = false;
 export const ssr = false;
 
-export const load: PageLoad = async ({ params, fetch }) => {
-	const inviteCode = params.invite_code;
+export const load: PageLoad = async ({ params }) => {
+        const inviteCode = params.invite_code;
 
-	let invite: DtoInvitePreview | null = null;
-	let inviteState: 'ok' | 'not-found' | 'error' = 'error';
+        let invite: DtoInvitePreview | null = null;
+        let inviteState: 'ok' | 'not-found' | 'error' = 'error';
 
-	await waitForRuntimeApiBase();
-	const base = computeApiBase('/api/v1');
-	const endpoint = `${base}/guild/invites/receive/${encodeURIComponent(inviteCode)}`;
+        await waitForRuntimeApiBase();
+        try {
+                const response = await auth.api.guildInvites.guildInvitesReceiveInviteCodeGet({
+                        inviteCode
+                });
 
-	try {
-		const response = await fetch(endpoint, {
-			headers: {
-				Accept: 'application/json'
-			}
-		});
+                const inviteData = response.data ?? null;
 
-		const contentType = response.headers.get('content-type') ?? '';
-		const isJson = contentType.toLowerCase().includes('application/json');
+                if (inviteData) {
+                        invite = inviteData;
+                        inviteState = 'ok';
+                } else {
+                        console.error('Invite preview response did not include a payload');
+                        inviteState = 'error';
+                }
+        } catch (error) {
+                if (isAxiosError(error) && error.response?.status === 404) {
+                        inviteState = 'not-found';
+                } else {
+                        console.error('Failed to load invite preview', error);
+                        inviteState = 'error';
+                }
+        }
 
-		if (response.ok) {
-			if (!isJson) {
-				console.error('Invite preview response did not return JSON payload', contentType);
-				inviteState = 'error';
-			} else {
-				try {
-					invite = (await response.json()) as DtoInvitePreview;
-					inviteState = 'ok';
-				} catch (parseError) {
-					console.error('Failed to parse invite preview response', parseError);
-					inviteState = 'error';
-				}
-			}
-		} else if (response.status === 404 && isJson) {
-			inviteState = 'not-found';
-		} else {
-			inviteState = 'error';
-		}
-	} catch (error) {
-		console.error('Failed to load invite preview', error);
-		inviteState = 'error';
-	}
-
-	return {
-		inviteCode,
-		invite,
+        return {
+                inviteCode,
+                invite,
 		inviteState
 	};
 };
