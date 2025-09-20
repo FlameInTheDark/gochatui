@@ -3,11 +3,12 @@
 	import { auth } from '$lib/stores/auth';
 	import { selectedChannelId } from '$lib/stores/appState';
 	import { createEventDispatcher } from 'svelte';
-	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-	import { m } from '$lib/paraglide/messages.js';
-	import CodeBlock from './CodeBlock.svelte';
-        import InvitePreview from './InvitePreview.svelte';
-        import { extractInvite } from './extractInvite';
+      import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+      import { m } from '$lib/paraglide/messages.js';
+      import CodeBlock from './CodeBlock.svelte';
+      import InvitePreview from './InvitePreview.svelte';
+      import { extractInvite } from './extractInvite';
+      import { Pencil, Trash2 } from 'lucide-svelte';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
@@ -384,43 +385,25 @@
 			<div
 				class="absolute top-1 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
 			>
-				<button
-					class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
-					title="Edit"
-					aria-label="Edit"
-					onclick={() => {
-						isEditing = true;
-						draft = message.content ?? '';
-					}}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						width="14"
-						height="14"
-						fill="currentColor"
-						><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" /><path
-							d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-						/></svg
-					>
-				</button>
-				<button
-					class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
-					title="Delete"
-					aria-label="Delete"
-					onclick={deleteMsg}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						width="14"
-						height="14"
-						fill="currentColor"
-						><path d="M6 7h12v2H6z" /><path d="M8 9h8l-1 11H9L8 9z" /><path
-							d="M10 4h4v2h-4z"
-						/></svg
-					>
-				</button>
+                                <button
+                                        class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
+                                        title="Edit"
+                                        aria-label="Edit"
+                                        onclick={() => {
+                                                isEditing = true;
+                                                draft = message.content ?? '';
+                                        }}
+                                >
+                                        <Pencil class="h-3.5 w-3.5" stroke-width={2} />
+                                </button>
+                                <button
+                                        class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
+                                        title="Delete"
+                                        aria-label="Delete"
+                                        onclick={deleteMsg}
+                                >
+                                        <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
+                                </button>
 			</div>
 		{/if}
 		{#if !compact}

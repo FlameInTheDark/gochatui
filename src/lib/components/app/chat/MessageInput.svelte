@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { auth } from '$lib/stores/auth';
-	import { selectedChannelId, selectedGuildId, channelsByGuild } from '$lib/stores/appState';
-	import AttachmentUploader from './AttachmentUploader.svelte';
-	import { createEventDispatcher, onMount, tick } from 'svelte';
-	import { m } from '$lib/paraglide/messages.js';
+        import { auth } from '$lib/stores/auth';
+        import { selectedChannelId, selectedGuildId, channelsByGuild } from '$lib/stores/appState';
+        import AttachmentUploader from './AttachmentUploader.svelte';
+        import { createEventDispatcher, onMount, tick } from 'svelte';
+        import { m } from '$lib/paraglide/messages.js';
+        import { Send } from 'lucide-svelte';
 
 	let content = '';
 	let attachments: number[] = [];
@@ -89,20 +90,14 @@
 		{#if attachments.length}
 			<div class="text-xs text-[var(--muted)]">+{attachments.length}</div>
 		{/if}
-		<button
-			class="grid h-8 w-8 place-items-center rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50"
-			disabled={sending}
-			on:click={send}
-			title={m.send()}
-			aria-label={m.send()}
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 24 24"
-				width="18"
-				height="18"
-				fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z" /></svg
-			>
-		</button>
+                <button
+                        class="grid h-8 w-8 place-items-center rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50"
+                        disabled={sending}
+                        on:click={send}
+                        title={m.send()}
+                        aria-label={m.send()}
+                >
+                        <Send class="h-[18px] w-[18px]" stroke-width={2} />
+                </button>
 	</div>
 </div>
