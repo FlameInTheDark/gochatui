@@ -465,7 +465,6 @@
 		{:else}
 			<div
 				class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}
-				title={fmtMsgFull(message)}
 			>
 				{#if renderedSegments.length === 0}
 					<span class="break-words whitespace-pre-wrap">{message.content}</span>
