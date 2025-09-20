@@ -12,10 +12,13 @@
 		| { type: 'text'; content: string }
 		| { type: 'code'; content: string; language?: string };
 
+	type MessageEmbed =
+		| { kind: 'invite'; code: string; url: string }
+		| { kind: 'youtube'; videoId: string; url: string };
+
 	type TextToken =
 		| { type: 'text'; content: string }
-		| { type: 'link'; label: string; url: string }
-		| { type: 'invite'; label: string; code: string; url: string };
+		| { type: 'link'; label: string; url: string; embed?: MessageEmbed };
 
 	type RenderedSegment =
 		| { type: 'code'; content: string; language?: string }
@@ -122,6 +125,37 @@
 		return null;
 	}
 
+	function extractYouTube(url: string): { videoId: string } | null {
+		try {
+			const parsed = new URL(url);
+			const host = parsed.hostname.toLowerCase();
+			const pathSegments = parsed.pathname.split('/').filter(Boolean);
+
+			if (host === 'youtu.be') {
+				const videoId = pathSegments[0];
+				if (videoId) {
+					return { videoId };
+				}
+			}
+
+			if (host === 'www.youtube.com' || host === 'youtube.com' || host.endsWith('.youtube.com')) {
+				const videoId =
+					(parsed.pathname === '/watch' ? parsed.searchParams.get('v') : undefined) ??
+					(pathSegments[0]?.toLowerCase() === 'embed' ? pathSegments[1] : undefined) ??
+					(pathSegments[0]?.toLowerCase() === 'shorts' ? pathSegments[1] : undefined) ??
+					(pathSegments[0]?.toLowerCase() === 'live' ? pathSegments[1] : undefined);
+
+				if (videoId) {
+					return { videoId };
+				}
+			}
+		} catch {
+			return null;
+		}
+
+		return null;
+	}
+
 	function tokenizeText(content: string): TextToken[] {
 		const tokens: TextToken[] = [];
 		if (!content) return tokens;
@@ -149,9 +183,22 @@
 			const rawUrl = content.slice(startIndex, endIndex);
 			const normalized = normalizeUrl(rawUrl);
 			const invite = extractInvite(normalized);
+			const youtube = extractYouTube(normalized);
 
 			if (invite) {
-				tokens.push({ type: 'invite', label: rawUrl, code: invite.code, url: normalized });
+				tokens.push({
+					type: 'link',
+					label: rawUrl,
+					url: normalized,
+					embed: { kind: 'invite', code: invite.code, url: normalized }
+				});
+			} else if (youtube) {
+				tokens.push({
+					type: 'link',
+					label: rawUrl,
+					url: normalized,
+					embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized }
+				});
 			} else {
 				tokens.push({ type: 'link', label: rawUrl, url: normalized });
 			}
@@ -182,6 +229,15 @@
 				return segment;
 			}
 			return { type: 'text', tokens: tokenizeText(segment.content) };
+		})
+	);
+
+	const messageEmbeds = $derived(
+		renderedSegments.flatMap((segment): MessageEmbed[] => {
+			if (segment.type !== 'text') return [];
+			return segment.tokens.flatMap((token): MessageEmbed[] =>
+				token.type === 'link' && token.embed ? [token.embed] : []
+			);
 		})
 	);
 
@@ -403,7 +459,7 @@
 							{#each segment.tokens as token, tokenIndex (`${index}-${tokenIndex}`)}
 								{#if token.type === 'text'}
 									<span class="break-words whitespace-pre-wrap">{token.content}</span>
-								{:else if token.type === 'link'}
+								{:else}
 									<a
 										class="font-medium break-words text-[var(--brand)] underline underline-offset-2 transition hover:text-[var(--brand-2)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
 										href={token.url}
@@ -412,10 +468,6 @@
 									>
 										{token.label}
 									</a>
-								{:else}
-									<div class="my-2 max-w-sm">
-										<InvitePreview code={token.code} url={token.url} />
-									</div>
 								{/if}
 							{/each}
 						{/if}
@@ -430,6 +482,30 @@
 					</span>
 				{/if}
 			</div>
+			{#if messageEmbeds.length}
+				<div class="mt-2 flex flex-col gap-2">
+					{#each messageEmbeds as embed, embedIndex (embedIndex)}
+						{#if embed.kind === 'invite'}
+							<div class="max-w-sm">
+								<InvitePreview code={embed.code} url={embed.url} />
+							</div>
+						{:else if embed.kind === 'youtube'}
+							<div
+								class="w-full max-w-xl overflow-hidden rounded-lg border border-[var(--stroke)] bg-black"
+								style="aspect-ratio: 16 / 9;"
+							>
+								<iframe
+									class="h-full w-full"
+									src={`https://www.youtube.com/embed/${embed.videoId}`}
+									title="YouTube video player"
+									allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+									allowfullscreen
+								></iframe>
+							</div>
+						{/if}
+					{/each}
+				</div>
+			{/if}
 			{#if message.attachments?.length}
 				<div class={compact ? 'mt-1 flex flex-wrap gap-2' : 'mt-1.5 flex flex-wrap gap-2'}>
 					{#each message.attachments as a}
