@@ -2,9 +2,10 @@
 	import { guildSettingsOpen, selectedGuildId } from '$lib/stores/appState';
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages.js';
+	import GuildInvitesManager from './GuildInvitesManager.svelte';
 
 	const guilds = auth.guilds;
-	let category = $state<'profile' | 'roles' | 'moderation' | 'integrations'>('profile');
+	let category = $state<'profile' | 'roles' | 'moderation' | 'integrations' | 'invites'>('profile');
 	let name = $state('');
 	let saving = $state(false);
 	let error: string | null = $state(null);
@@ -85,6 +86,14 @@
 					{m.moderation()}
 				</button>
 				<button
+					class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'invites'
+						? 'bg-[var(--panel)] font-semibold'
+						: ''}"
+					onclick={() => (category = 'invites')}
+				>
+					{m.invites()}
+				</button>
+				<button
 					class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category ===
 					'integrations'
 						? 'bg-[var(--panel)] font-semibold'
@@ -120,6 +129,8 @@
 					<p>{m.roles()}...</p>
 				{:else if category === 'moderation'}
 					<p>{m.moderation()}...</p>
+				{:else if category === 'invites'}
+					<GuildInvitesManager />
 				{:else}
 					<p>{m.integrations()}...</p>
 				{/if}

@@ -2,6 +2,7 @@ import { Configuration } from '$lib/api';
 import {
 	AuthApi,
 	GuildApi,
+	GuildInvitesApi,
 	MessageApi,
 	SearchApi,
 	UserApi,
@@ -9,15 +10,13 @@ import {
 	SearchApiFactory
 } from '$lib/api';
 import axios, { type AxiosInstance } from 'axios';
-import { env as publicEnv } from '$env/dynamic/public';
-import { getRuntimeConfig } from '$lib/runtime/config';
+import { computeApiBase } from '$lib/runtime/api';
 
 // Stringify payloads so bigint values emit as int64 numbers instead of quoted strings
 function stringifyBigInt(data: unknown): string {
-        return JSON.stringify(
-                data,
-                (_, v) => (typeof v === 'bigint' ? v.toString() + '#bigint' : v)
-        ).replace(/"(-?\d+)#bigint"/g, '$1');
+	return JSON.stringify(data, (_, v) =>
+		typeof v === 'bigint' ? v.toString() + '#bigint' : v
+	).replace(/"(-?\d+)#bigint"/g, '$1');
 }
 
 // Centralized API client factory using the generated OpenAPI client.
@@ -26,55 +25,42 @@ function stringifyBigInt(data: unknown): string {
 export type ApiGroup = {
 	auth: AuthApi;
 	guild: GuildApi;
+	guildInvites: GuildInvitesApi;
 	message: MessageApi;
 	search: ReturnType<typeof SearchApiFactory>;
 	user: UserApi;
 	webhook: WebhookApi;
 };
 
-function computeApiBase(): string {
-        const runtime = getRuntimeConfig();
-        const runtimeConfigured = runtime?.PUBLIC_API_BASE_URL?.trim();
-        if (runtimeConfigured && runtimeConfigured.length > 0) {
-                return runtimeConfigured.replace(/\/+$/, '');
-        }
-        const configured = ((publicEnv?.PUBLIC_API_BASE_URL as string | undefined) || undefined)?.trim();
-        if (configured && configured.length > 0) {
-                return configured.replace(/\/+$/, '');
-        }
-        // Fallback: explicit localhost for both browser and SSR to avoid relying on a dev proxy
-        return 'http://localhost/api/v1';
-}
-
 export function createApi(
 	getToken: () => string | null,
 	refresh?: () => Promise<boolean>
 ): ApiGroup {
 	const basePath = computeApiBase();
-        const config = new Configuration({
-                basePath
-        });
+	const config = new Configuration({
+		basePath
+	});
 
-        // The generated OpenAPI client will JSON.stringify payloads before our axios
-        // transform runs, which breaks when the payload contains bigint values.
-        // Override the JSON MIME detection so the generator skips its own
-        // serialization step and lets our custom transformer handle it.
-        config.isJsonMime = () => false;
+	// The generated OpenAPI client will JSON.stringify payloads before our axios
+	// transform runs, which breaks when the payload contains bigint values.
+	// Override the JSON MIME detection so the generator skips its own
+	// serialization step and lets our custom transformer handle it.
+	config.isJsonMime = () => false;
 
-        // Create a dedicated axios instance with an auth interceptor
-        const ax: AxiosInstance = axios.create();
-        ax.defaults.transformRequest = [
-                (data, headers) => {
-                        if (data != null && typeof data === 'object') {
-                                (headers as any)['Content-Type'] = 'application/json';
-                                return stringifyBigInt(data);
-                        }
-                        return data;
-                }
-        ];
+	// Create a dedicated axios instance with an auth interceptor
+	const ax: AxiosInstance = axios.create();
+	ax.defaults.transformRequest = [
+		(data, headers) => {
+			if (data != null && typeof data === 'object') {
+				(headers as any)['Content-Type'] = 'application/json';
+				return stringifyBigInt(data);
+			}
+			return data;
+		}
+	];
 
-        // Preserve large int64 values as strings to avoid precision loss
-        function parseJSONPreserveLargeInts(data: string) {
+	// Preserve large int64 values as strings to avoid precision loss
+	function parseJSONPreserveLargeInts(data: string) {
 		let out = '';
 		let i = 0;
 		let inStr = false;
@@ -216,6 +202,7 @@ export function createApi(
 	return {
 		auth: new AuthApi(config, base, ax),
 		guild: new GuildApi(config, base, ax),
+		guildInvites: new GuildInvitesApi(config, base, ax),
 		message: new MessageApi(config, base, ax),
 		search,
 		user: new UserApi(config, base, ax),
