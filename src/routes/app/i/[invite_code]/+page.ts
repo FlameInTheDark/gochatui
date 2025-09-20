@@ -1,18 +1,49 @@
 import type { PageLoad } from './$types';
 import type { DtoInvitePreview } from '$lib/api';
 import { computeApiBase } from '$lib/runtime/api';
+import { getRuntimeConfig } from '$lib/runtime/config';
+
+let runtimeConfigReady: Promise<void> | null = null;
+
+function waitForRuntimeApiBase(): Promise<void> {
+        if (typeof window === 'undefined') {
+                return Promise.resolve();
+        }
+
+        if (getRuntimeConfig()?.PUBLIC_API_BASE_URL) {
+                return Promise.resolve();
+        }
+
+        if (!runtimeConfigReady) {
+                runtimeConfigReady = new Promise((resolve) => {
+                        const check = () => {
+                                if (getRuntimeConfig()?.PUBLIC_API_BASE_URL) {
+                                        resolve();
+                                        return;
+                                }
+
+                                window.requestAnimationFrame(check);
+                        };
+
+                        window.requestAnimationFrame(check);
+                });
+        }
+
+        return runtimeConfigReady;
+}
 
 export const prerender = false;
 export const ssr = false;
 
 export const load: PageLoad = async ({ params, fetch }) => {
-	const inviteCode = params.invite_code;
+        const inviteCode = params.invite_code;
 
-	let invite: DtoInvitePreview | null = null;
-	let inviteState: 'ok' | 'not-found' | 'error' = 'error';
+        let invite: DtoInvitePreview | null = null;
+        let inviteState: 'ok' | 'not-found' | 'error' = 'error';
 
-	const base = computeApiBase('/api/v1');
-	const endpoint = `${base}/guild/invites/receive/${encodeURIComponent(inviteCode)}`;
+        await waitForRuntimeApiBase();
+        const base = computeApiBase('/api/v1');
+        const endpoint = `${base}/guild/invites/receive/${encodeURIComponent(inviteCode)}`;
 
 	try {
 		const response = await fetch(endpoint, {
