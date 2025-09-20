@@ -1,17 +1,18 @@
 ﻿<script lang="ts">
 	import type { DtoMessage } from '$lib/api';
-	import { auth } from '$lib/stores/auth';
-	import {
-		selectedChannelId,
-		channelsByGuild,
-		selectedGuildId,
-		channelReady
-	} from '$lib/stores/appState';
-	import MessageItem from './MessageItem.svelte';
-	import { wsEvent } from '$lib/client/ws';
-	import { m } from '$lib/paraglide/messages.js';
-	import { fly } from 'svelte/transition';
-	import { tick, untrack } from 'svelte';
+        import { auth } from '$lib/stores/auth';
+        import {
+                selectedChannelId,
+                channelsByGuild,
+                selectedGuildId,
+                channelReady
+        } from '$lib/stores/appState';
+        import MessageItem from './MessageItem.svelte';
+        import { wsEvent } from '$lib/client/ws';
+        import { m } from '$lib/paraglide/messages.js';
+        import { fly } from 'svelte/transition';
+        import { tick, untrack } from 'svelte';
+        import { Sparkles } from 'lucide-svelte';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -292,18 +293,8 @@
 				<div
 					class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--brand)]"
 				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="currentColor"
-						class="h-6 w-6"
-						aria-hidden="true"
-					>
-						<path
-							d="M14.857 3.612c.076-.225.39-.225.466 0l.867 2.572a4.5 4.5 0 0 0 2.848 2.848l2.572.867c.225.076.225.39 0 .466l-2.572.867a4.5 4.5 0 0 0-2.848 2.848l-.867 2.572c-.076.225-.39.225-.466 0l-.867-2.572a4.5 4.5 0 0 0-2.848-2.848l-2.572-.867c-.225-.076-.225-.39 0-.466l2.572-.867a4.5 4.5 0 0 0 2.848-2.848l.867-2.572ZM6.429 1.429c.106-.319.553-.319.659 0l.483 1.45a2.55 2.55 0 0 0 1.615 1.615l1.45.483c.319.106.319.553 0 .659l-1.45.483A2.55 2.55 0 0 0 7.57 7.254l-.483 1.45c-.106.319-.553.319-.659 0l-.483-1.45A2.55 2.55 0 0 0 4.33 5.12l-1.45-.483c-.319-.106-.319-.553 0-.659l1.45-.483A2.55 2.55 0 0 0 6.097 2.879l.483-1.45ZM4.924 12.202c.06-.179.31-.179.37 0l.344 1.032a2.4 2.4 0 0 0 1.523 1.523l1.032.344c.179.06.179.31 0 .37l-1.032.344a2.4 2.4 0 0 0-1.523 1.523l-.344 1.032c-.06.179-.31.179-.37 0l-.344-1.032a2.4 2.4 0 0 0-1.523-1.523l-1.032-.344c-.179-.06-.179-.31 0-.37l1.032-.344a2.4 2.4 0 0 0 1.523-1.523l.344-1.032Z"
-						/>
-					</svg>
-				</div>
+                                        <Sparkles aria-hidden="true" class="h-6 w-6" stroke-width={2} />
+                                </div>
 				<div class="space-y-1">
 					<p class="text-sm font-semibold text-[var(--fg-strong)]">
 						It&apos;s the beginning of your conversation in

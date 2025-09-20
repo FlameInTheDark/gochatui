@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { auth } from '$lib/stores/auth';
-	import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
-	import { subscribeWS } from '$lib/client/ws';
-	import { m } from '$lib/paraglide/messages.js';
+        import { auth } from '$lib/stores/auth';
+        import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
+        import { subscribeWS } from '$lib/client/ws';
+        import { m } from '$lib/paraglide/messages.js';
+        import { MessageCirclePlus } from 'lucide-svelte';
 	let open = $state(false);
 	let singleId = $state('');
 	let groupIds = $state('');
@@ -69,17 +70,8 @@
 		title={m.new_dm()}
 		aria-label={m.new_dm()}
 	>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			viewBox="0 0 24 24"
-			width="16"
-			height="16"
-			fill="currentColor"
-			><path
-				d="M4 4h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6l-4 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
-			/></svg
-		>
-	</button>
+                <MessageCirclePlus class="h-4 w-4" stroke-width={2} />
+        </button>
 	{#if open}
 		<div
 			class="fixed inset-0 z-40 grid place-items-center bg-black/40"

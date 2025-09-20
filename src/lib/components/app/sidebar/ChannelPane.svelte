@@ -12,9 +12,10 @@
 	} from '$lib/stores/appState';
 	import type { DtoChannel, GuildChannelOrder } from '$lib/api';
 	import { subscribeWS, wsEvent } from '$lib/client/ws';
-	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-	import { m } from '$lib/paraglide/messages.js';
-	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
+        import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import { m } from '$lib/paraglide/messages.js';
+        import UserPanel from '$lib/components/app/user/UserPanel.svelte';
+        import { FolderPlus, LogOut, Plus, Settings } from 'lucide-svelte';
 	const guilds = auth.guilds;
 
 	let creatingChannel = $state(false);
@@ -484,77 +485,45 @@
 		</div>
 		{#if $selectedGuildId}
 			<div class="flex items-center gap-2">
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => {
-						creatingChannel = true;
-						channelError = null;
-						creatingChannelParent = null;
-					}}
-					title={m.new_channel()}
-					aria-label={m.new_channel()}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						width="16"
-						height="16"
-						fill="currentColor"><path d="M11 5h2v14h-2z" /><path d="M5 11h14v2H5z" /></svg
-					>
-				</button>
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => {
-						creatingCategory = true;
-						categoryError = null;
-					}}
-					title={m.new_category()}
-					aria-label={m.new_category()}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						width="16"
-						height="16"
-						fill="currentColor"
-						><path d="M4 6h8l2 2h6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /><path
-							d="M8 11h8v2H8z"
-						/></svg
-					>
-				</button>
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => guildSettingsOpen.set(true)}
-					title={m.server_settings()}
-					aria-label={m.server_settings()}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						width="16"
-						height="16"
-						fill="currentColor"
-					>
-						<path
-							d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.007 7.007 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.5 2h-3a.5.5 0 0 0-.49.42l-.36 2.54a6.978 6.978 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L3.1 8.14a.5.5 0 0 0 .12.64l2.03 1.58c-.05.31-.07.63-.07.94 0 .31.02.63.07.94L3.22 13.82a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.44.34.7.22l2.39-.96c.5.39 1.05.72 1.63.94l.36 2.54c.04.26.25.42.49.42h3a.5.5 0 0 0 .49-.42l.36-2.54a7.007 7.007 0 0 0 1.63-.94l2.39.96c.26.11.56.02.7-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5S10.07 8.5 12 8.5s3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"
-						/>
-					</svg>
-				</button>
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] text-red-400 hover:bg-[var(--panel)]"
-					onclick={leaveGuild}
-					title={m.leave_server()}
-					aria-label={m.leave_server()}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						width="16"
-						height="16"
-						fill="currentColor"
-						><path d="M10 17l5-5-5-5v10z" /><path d="M4 4h8v2H6v12h6v2H4z" /></svg
-					>
-				</button>
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                        onclick={() => {
+                                                creatingChannel = true;
+                                                channelError = null;
+                                                creatingChannelParent = null;
+                                        }}
+                                        title={m.new_channel()}
+                                        aria-label={m.new_channel()}
+                                >
+                                        <Plus class="h-4 w-4" stroke-width={2} />
+                                </button>
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                        onclick={() => {
+                                                creatingCategory = true;
+                                                categoryError = null;
+                                        }}
+                                        title={m.new_category()}
+                                        aria-label={m.new_category()}
+                                >
+                                        <FolderPlus class="h-4 w-4" stroke-width={2} />
+                                </button>
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                        onclick={() => guildSettingsOpen.set(true)}
+                                        title={m.server_settings()}
+                                        aria-label={m.server_settings()}
+                                >
+                                        <Settings class="h-4 w-4" stroke-width={2} />
+                                </button>
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] text-red-400 hover:bg-[var(--panel)]"
+                                        onclick={leaveGuild}
+                                        title={m.leave_server()}
+                                        aria-label={m.leave_server()}
+                                >
+                                        <LogOut class="h-4 w-4" stroke-width={2} />
+                                </button>
 			</div>
 		{/if}
 	</div>
