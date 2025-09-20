@@ -15,7 +15,7 @@
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
         import { m } from '$lib/paraglide/messages.js';
         import UserPanel from '$lib/components/app/user/UserPanel.svelte';
-        import { FolderPlus, LogOut, Plus, Settings } from 'lucide-svelte';
+        import { FolderPlus, Plus, Settings } from 'lucide-svelte';
 	const guilds = auth.guilds;
 
 	let creatingChannel = $state(false);
@@ -462,16 +462,6 @@
 		} catch (e) {}
 	}
 
-	async function leaveGuild() {
-		if (!$selectedGuildId) return;
-		try {
-			await auth.api.user.userMeGuildsGuildIdDelete({
-				guildId: BigInt($selectedGuildId) as any
-			});
-			await auth.loadGuilds();
-			selectedGuildId.set(null);
-		} catch (e) {}
-	}
 </script>
 
 <div
@@ -516,17 +506,9 @@
                                 >
                                         <Settings class="h-4 w-4" stroke-width={2} />
                                 </button>
-                                <button
-                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] text-red-400 hover:bg-[var(--panel)]"
-                                        onclick={leaveGuild}
-                                        title={m.leave_server()}
-                                        aria-label={m.leave_server()}
-                                >
-                                        <LogOut class="h-4 w-4" stroke-width={2} />
-                                </button>
-			</div>
-		{/if}
-	</div>
+                        </div>
+                {/if}
+        </div>
 	<div class="border-b border-[var(--stroke)] p-2">
 		<input
 			class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm"
