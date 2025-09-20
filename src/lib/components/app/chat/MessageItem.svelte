@@ -6,7 +6,8 @@
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
 	import CodeBlock from './CodeBlock.svelte';
-	import InvitePreview from './InvitePreview.svelte';
+        import InvitePreview from './InvitePreview.svelte';
+        import { extractInvite } from './extractInvite';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
@@ -106,27 +107,7 @@
 		return `https://${raw}`;
 	}
 
-	function extractInvite(url: string): { code: string } | null {
-		try {
-			const parsed = new URL(url);
-			const segments = parsed.pathname.split('/').filter(Boolean);
-			if (
-				segments.length >= 3 &&
-				segments[0]?.toLowerCase() === 'app' &&
-				segments[1]?.toLowerCase() === 'i'
-			) {
-				const code = segments[2];
-				if (code) {
-					return { code };
-				}
-			}
-		} catch {
-			return null;
-		}
-		return null;
-	}
-
-	function extractYouTube(url: string): { videoId: string } | null {
+        function extractYouTube(url: string): { videoId: string } | null {
 		try {
 			const parsed = new URL(url);
 			const host = parsed.hostname.toLowerCase();
