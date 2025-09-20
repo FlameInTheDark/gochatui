@@ -2,6 +2,7 @@ import { Configuration } from '$lib/api';
 import {
 	AuthApi,
 	GuildApi,
+	GuildInvitesApi,
 	MessageApi,
 	SearchApi,
 	UserApi,
@@ -14,9 +15,9 @@ import { getRuntimeConfig } from '$lib/runtime/config';
 
 // Stringify payloads so bigint values emit as int64 numbers instead of quoted strings
 function stringifyBigInt(data: unknown): string {
-        return JSON.stringify(
-                data,
-                (_, v) => (typeof v === 'bigint' ? v.toString() + '#bigint' : v)
+	return JSON.stringify(
+		data,
+		(_, v) => (typeof v === 'bigint' ? v.toString() + '#bigint' : v)
         ).replace(/"(-?\d+)#bigint"/g, '$1');
 }
 
@@ -24,11 +25,12 @@ function stringifyBigInt(data: unknown): string {
 // Injects the bearer token dynamically via configuration.accessToken.
 
 export type ApiGroup = {
-	auth: AuthApi;
-	guild: GuildApi;
-	message: MessageApi;
-	search: ReturnType<typeof SearchApiFactory>;
-	user: UserApi;
+        auth: AuthApi;
+        guild: GuildApi;
+	guildInvites: GuildInvitesApi;
+        message: MessageApi;
+        search: ReturnType<typeof SearchApiFactory>;
+        user: UserApi;
 	webhook: WebhookApi;
 };
 
@@ -36,14 +38,14 @@ function computeApiBase(): string {
         const runtime = getRuntimeConfig();
         const runtimeConfigured = runtime?.PUBLIC_API_BASE_URL?.trim();
         if (runtimeConfigured && runtimeConfigured.length > 0) {
-                return runtimeConfigured.replace(/\/+$/, '');
+		return runtimeConfigured.replace(/\/+$/, '');
         }
         const configured = ((publicEnv?.PUBLIC_API_BASE_URL as string | undefined) || undefined)?.trim();
         if (configured && configured.length > 0) {
-                return configured.replace(/\/+$/, '');
+		return configured.replace(/\/+$/, '');
         }
         // Fallback: explicit localhost for both browser and SSR to avoid relying on a dev proxy
-        return 'http://localhost/api/v1';
+	return 'http://localhost/api/v1';
 }
 
 export function createApi(
@@ -52,7 +54,7 @@ export function createApi(
 ): ApiGroup {
 	const basePath = computeApiBase();
         const config = new Configuration({
-                basePath
+		basePath
         });
 
         // The generated OpenAPI client will JSON.stringify payloads before our axios
@@ -64,13 +66,13 @@ export function createApi(
         // Create a dedicated axios instance with an auth interceptor
         const ax: AxiosInstance = axios.create();
         ax.defaults.transformRequest = [
-                (data, headers) => {
-                        if (data != null && typeof data === 'object') {
-                                (headers as any)['Content-Type'] = 'application/json';
-                                return stringifyBigInt(data);
-                        }
-                        return data;
-                }
+		(data, headers) => {
+		        if (data != null && typeof data === 'object') {
+		                (headers as any)['Content-Type'] = 'application/json';
+		                return stringifyBigInt(data);
+		        }
+		        return data;
+		}
         ];
 
         // Preserve large int64 values as strings to avoid precision loss
@@ -216,6 +218,7 @@ export function createApi(
 	return {
 		auth: new AuthApi(config, base, ax),
 		guild: new GuildApi(config, base, ax),
+		guildInvites: new GuildInvitesApi(config, base, ax),
 		message: new MessageApi(config, base, ax),
 		search,
 		user: new UserApi(config, base, ax),
