@@ -7,58 +7,70 @@
         import type { PageData } from './$types';
         import { m } from '$lib/paraglide/messages.js';
 
-        let { data }: { data: PageData } = $props();
+        export let data: PageData;
 
-        const inviteCode = $derived(data.inviteCode);
         const isAuthenticated = auth.isAuthenticated;
 
-        let invite = $state<DtoInvitePreview | null>(null);
-        let loadError: string | null = $state(null);
-        let loadingInvite = $state(false);
-        let currentInviteCode: string | null = $state(null);
-        let inFlightInviteCode: string | null = $state(null);
+        let inviteCode = data.inviteCode;
+        let invite: DtoInvitePreview | null = null;
+        let loadError: string | null = null;
+        let loadingInvite = false;
+        let currentInviteCode: string | null = null;
+        let inFlightInviteCode: string | null = null;
 
-        let joining = $state(false);
-        let joinError: string | null = $state(null);
-        let joinSuccess = $state(false);
+        let joining = false;
+        let joinError: string | null = null;
+        let joinSuccess = false;
 
         const FIFTY_YEARS_MS = 1000 * 60 * 60 * 24 * 365 * 50;
 
         function parseIsoDate(iso?: string | null) {
                 if (!iso) return null;
-		const date = new Date(iso);
-		return Number.isNaN(date.getTime()) ? null : date;
-	}
+                const date = new Date(iso);
+                return Number.isNaN(date.getTime()) ? null : date;
+        }
 
-        const expiresLabel = $derived(() => {
+        let expiresLabel: string | null = null;
+        let createdLabel: string | null = null;
+        let membersLabel: string | null = null;
+
+        $: inviteCode = data.inviteCode;
+
+        $: {
                 const currentInvite = invite;
-                if (!currentInvite) return null;
-                const created = parseIsoDate(currentInvite.created_at);
-                const expires = parseIsoDate(currentInvite.expires_at);
-                if (!expires) return null;
-                if (created && expires.getTime() - created.getTime() >= FIFTY_YEARS_MS) {
-                        return m.invite_never_expires();
+                if (!currentInvite) {
+                        expiresLabel = null;
+                } else {
+                        const created = parseIsoDate(currentInvite.created_at);
+                        const expires = parseIsoDate(currentInvite.expires_at);
+                        if (!expires) {
+                                expiresLabel = null;
+                        } else if (created && expires.getTime() - created.getTime() >= FIFTY_YEARS_MS) {
+                                expiresLabel = m.invite_never_expires();
+                        } else {
+                                expiresLabel = new Intl.DateTimeFormat(undefined, {
+                                        dateStyle: 'medium',
+                                        timeStyle: 'short'
+                                }).format(expires);
+                        }
                 }
-                return new Intl.DateTimeFormat(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short'
-                }).format(expires);
-        });
+        }
 
-        const createdLabel = $derived(() => {
-                const created = parseIsoDate(invite?.created_at);
-                if (!created) return null;
-                return new Intl.DateTimeFormat(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short'
-                }).format(created);
-        });
+        $: {
+                const created = parseIsoDate(invite?.created_at ?? null);
+                createdLabel = created
+                        ? new Intl.DateTimeFormat(undefined, {
+                                        dateStyle: 'medium',
+                                        timeStyle: 'short'
+                                }).format(created)
+                        : null;
+        }
 
-        const membersLabel = $derived(() => {
+        $: {
                 const count = invite?.members_count ?? 0;
                 const formatted = new Intl.NumberFormat(undefined).format(count);
-                return m.invite_member_count({ count: formatted });
-        });
+                membersLabel = m.invite_member_count({ count: formatted });
+        }
 
         async function fetchInvite(code: string) {
                 inFlightInviteCode = code;
@@ -85,29 +97,26 @@
                 }
         }
 
-        $effect(() => {
+        $: {
                 if (!$isAuthenticated) {
                         invite = null;
                         loadError = null;
                         loadingInvite = false;
                         currentInviteCode = null;
                         inFlightInviteCode = null;
-                        return;
+                } else {
+                        const code = inviteCode;
+                        if (!code) {
+                                invite = null;
+                                loadError = m.invite_not_found_message();
+                                loadingInvite = false;
+                                currentInviteCode = null;
+                                inFlightInviteCode = null;
+                        } else if (code !== currentInviteCode && code !== inFlightInviteCode) {
+                                void fetchInvite(code);
+                        }
                 }
-                const code = inviteCode;
-                if (!code) {
-                        invite = null;
-                        loadError = m.invite_not_found_message();
-                        loadingInvite = false;
-                        currentInviteCode = null;
-                        inFlightInviteCode = null;
-                        return;
-                }
-                if (code === currentInviteCode || code === inFlightInviteCode) {
-                        return;
-                }
-                void fetchInvite(code);
-        });
+        }
 
         async function joinInvite() {
                 const currentInvite = invite;
