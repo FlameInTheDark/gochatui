@@ -9,6 +9,7 @@
         import { goto } from '$app/navigation';
         import { onMount } from 'svelte';
         import { m } from '$lib/paraglide/messages.js';
+        import { Check } from 'lucide-svelte';
 
         type AuthMode = 'login' | 'register' | 'register-success' | 'confirm' | 'recovery' | 'reset';
 
@@ -120,19 +121,8 @@
                                 </div>
                         {:else if mode === 'register-success'}
                                 <div class="space-y-6 text-center">
-                                        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[var(--brand)] text-[var(--brand)]">
-                                                <svg
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        stroke-width="2"
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        class="h-8 w-8"
-                                                >
-                                                        <path d="M5 13l4 4L19 7" />
-                                                </svg>
+                                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[var(--brand)] text-[var(--brand)]">
+                                                <Check class="h-8 w-8" stroke-width={2} />
                                         </div>
                                         <div class="space-y-2">
                                                 <div class="text-xl font-semibold text-[var(--fg-strong)]">

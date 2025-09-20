@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { auth } from '$lib/stores/auth';
-	import { selectedChannelId } from '$lib/stores/appState';
-	import { createEventDispatcher } from 'svelte';
+        import { auth } from '$lib/stores/auth';
+        import { selectedChannelId } from '$lib/stores/appState';
+        import { createEventDispatcher } from 'svelte';
+        import { LoaderCircle, Paperclip } from 'lucide-svelte';
 
 	let { attachments, inline = false } = $props<{
 		attachments: (number | string)[];
@@ -95,30 +96,11 @@
 	>
 		<input type="file" class="hidden" multiple onchange={pickFiles} />
 		{#if inline}
-			{#if loading}
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					width="18"
-					height="18"
-					fill="currentColor"
-					class="animate-spin"><path d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8V2z" /></svg
-				>
-			{:else}
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 24 24"
-					width="18"
-					height="18"
-					fill="currentColor"
-					><path
-						d="M16.5,6.5 L8.5,14.5 C7.67157288,15.3284271 7.67157288,16.6715729 8.5,17.5 C9.32842712,18.3284271 10.6715729,18.3284271 11.5,17.5 L19.5,9.5 C21.1568542,7.84314575 21.1568542,5.15685425 19.5,3.5 C17.8431458,1.84314575 15.1568542,1.84314575 13.5,3.5 L5.5,11.5 C3.01471863,13.9852814 3.01471863,18.0147186 5.5,20.5 C7.98528137,22.9852814 12.0147186,22.9852814 14.5,20.5 L20,15"
-						stroke="currentColor"
-						stroke-width="2"
-						fill="none"
-					/></svg
-				>
-			{/if}
+                        {#if loading}
+                                <LoaderCircle class="h-[18px] w-[18px] animate-spin" stroke-width={2} />
+                        {:else}
+                                <Paperclip class="h-[18px] w-[18px]" stroke-width={2} />
+                        {/if}
 		{:else}
 			{loading ? 'Uploading…' : 'Attach'}
 		{/if}

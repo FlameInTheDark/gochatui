@@ -5,6 +5,7 @@
   import MessageList from './MessageList.svelte';
   import MessageInput from './MessageInput.svelte';
   import { channelReady } from '$lib/stores/appState';
+  import { Search } from 'lucide-svelte';
   let listRef: any = null;
 
   function currentChannel() {
@@ -41,7 +42,7 @@
                 searchAnchor.set({ x: r.right, y: r.bottom });
                 searchOpen.set(true);
               }}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm-8 6a8 8 0 1 1 14.32 4.906l3.387 3.387-1.414 1.414-3.387-3.387A8 8 0 0 1 2 10z"/></svg>
+        <Search class="h-4 w-4" stroke-width={2} />
       </button>
     </div>
   </div>

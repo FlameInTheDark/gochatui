@@ -10,6 +10,7 @@
         } from '$lib/stores/appState';
         import { tick } from 'svelte';
         import { m } from '$lib/paraglide/messages.js';
+        import { Search } from 'lucide-svelte';
 
         type FilterType = 'from' | 'mentions' | 'has';
         interface TextFilterToken {
@@ -464,16 +465,7 @@
                                         <div
                                                 class="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm shadow-sm transition focus-within:border-[var(--brand)] focus-within:shadow-[0_0_0_2px_var(--brand)]"
                                         >
-                                                <svg
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        viewBox="0 0 24 24"
-                                                        class="h-5 w-5 text-[var(--muted)]"
-                                                >
-                                                        <path
-                                                                d="m21.53 20.47-4.7-4.7a8 8 0 1 0-1.06 1.06l4.7 4.7a.75.75 0 0 0 1.06-1.06ZM5.75 11a5.25 5.25 0 1 1 10.5 0 5.25 5.25 0 0 1-10.5 0Z"
-                                                                fill="currentColor"
-                                                        />
-                                                </svg>
+                                                <Search class="h-5 w-5 text-[var(--muted)]" stroke-width={2} />
                                                 {#if authorFilter}
                                                         <span
                                                                 class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
