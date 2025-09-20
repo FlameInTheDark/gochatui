@@ -1,21 +1,12 @@
-import { browser } from '$app/environment';
 import type { PageLoad } from './$types';
 import type { DtoInvitePreview } from '$lib/api';
 import { computeApiBase } from '$lib/runtime/api';
 
 export const prerender = false;
+export const ssr = false;
 
 export const load: PageLoad = async ({ params, fetch }) => {
 	const inviteCode = params.invite_code;
-	const defaultResult = {
-		inviteCode,
-		invite: null as DtoInvitePreview | null,
-		inviteState: 'error' as 'ok' | 'not-found' | 'error'
-	};
-
-	if (!browser) {
-		return defaultResult;
-	}
 
 	let invite: DtoInvitePreview | null = null;
 	let inviteState: 'ok' | 'not-found' | 'error' = 'error';
