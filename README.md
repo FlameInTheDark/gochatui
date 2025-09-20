@@ -83,7 +83,7 @@ The application will be available at http://localhost:3000.
 
 ### Runtime configuration
 
-At container start an entrypoint script writes `/usr/share/nginx/html/runtime-env.js` with the values of `PUBLIC_API_BASE_URL`, `PUBLIC_WS_URL` and `PUBLIC_BASE_PATH`. The page includes this script before the Svelte bundle loads, so browser code can discover deployment-specific endpoints without rebuilding the image.
+At container start an entrypoint script writes `/usr/share/nginx/html<base>/runtime-env.js` (where `<base>` is `PUBLIC_BASE_PATH` normalized the same way as SvelteKit's `paths.base`) with the values of `PUBLIC_API_BASE_URL`, `PUBLIC_WS_URL` and `PUBLIC_BASE_PATH`. The page includes this script before the Svelte bundle loads via `%sveltekit.base%/runtime-env.js`, so browser code can discover deployment-specific endpoints without rebuilding the image. A copy is also written to `/usr/share/nginx/html/runtime-env.js` for legacy consumers that still expect the root path.
 
 - Leave a variable unset (or empty) to fall back to the build-time value baked into the static bundle.
 - Override the defaults by passing environment variables to `docker run` (or your orchestrator):
@@ -96,7 +96,7 @@ At container start an entrypoint script writes `/usr/share/nginx/html/runtime-en
     gochatui
   ```
 
-The generated script is served as a static asset (`/runtime-env.js`), so the configuration is cached by browsers and CDNs just like other files. Restart the container after changing environment variables to refresh the runtime configuration.
+The generated script is served as a static asset (`<base>/runtime-env.js`), so the configuration is cached by browsers and CDNs just like other files. Restart the container after changing environment variables to refresh the runtime configuration.
 
 When deploying behind a reverse proxy that only forwards a sub-path, ensure that:
 
