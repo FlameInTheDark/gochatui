@@ -1,18 +1,11 @@
 <script lang="ts">
 	import { auth } from '$lib/stores/auth';
-	import {
-		selectedGuildId,
-		channelsByGuild,
-		selectedChannelId,
-		lastChannelByGuild,
-		channelReady,
-		guildSettingsOpen
-	} from '$lib/stores/appState';
-	import { subscribeWS } from '$lib/client/ws';
+	import { selectedGuildId, guildSettingsOpen } from '$lib/stores/appState';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	const guilds = auth.guilds;
 	import { m } from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
+	import { selectGuild } from '$lib/utils/guildSelection';
 	onMount(() => {
 		const unsub = guilds.subscribe((arr) => {
 			if (!$selectedGuildId && (arr?.length ?? 0) > 0) {
@@ -37,79 +30,6 @@
 	let creating = $state(false);
 	let newGuildName = $state('');
 	let error: string | null = $state(null);
-
-	// Helpers to persist last visited channel per guild safely
-	function readLastChannels(): Record<string, string> {
-		try {
-			const raw = localStorage.getItem('lastChannels');
-			const obj = raw ? JSON.parse(raw) : {};
-			const out: Record<string, string> = {};
-			for (const k in obj) out[String(k)] = String(obj[k]);
-			return out;
-		} catch {
-			return {};
-		}
-	}
-	function writeLastChannel(gid: string, channelId: string) {
-		try {
-			const saved = readLastChannels();
-			saved[String(gid)] = String(channelId);
-			localStorage.setItem('lastChannels', JSON.stringify(saved));
-		} catch {}
-	}
-
-	let switchToken = 0;
-
-	async function selectGuild(id: string | undefined | null) {
-		if (!id) return;
-		const gid = String(id);
-		const myToken = ++switchToken;
-		// Clear previous selection before switching guild to avoid cross-guild requests
-		channelReady.set(false);
-		selectedChannelId.set(null);
-		selectedGuildId.set(gid);
-		try {
-			localStorage.setItem('lastGuild', gid);
-		} catch {}
-		try {
-			const res = await auth.api.guild.guildGuildIdChannelGet({ guildId: gid as any });
-			const list = res.data ?? [];
-			// If user switched guilds during fetch, ignore this result
-			if ($selectedGuildId !== gid || myToken !== switchToken) return;
-			channelsByGuild.update((m) => ({ ...m, [gid]: list }));
-			// Filter text channels only (type === 0)
-			const textChannels = list.filter((c: any) => c?.type === 0);
-
-			// Prefer last visited channel for this guild, if still present and is text
-			let targetId: string | null = null;
-			let remembered = readLastChannels()?.[gid] || '';
-			if (!remembered) {
-				const map = $lastChannelByGuild;
-				remembered = map[gid];
-			}
-			const rememberedOk =
-				remembered && textChannels.some((c: any) => String(c?.id) === remembered);
-			if (rememberedOk) {
-				targetId = remembered;
-			} else if (textChannels.length > 0) {
-				// Auto-select first text channel
-				targetId = String((textChannels[0] as any).id);
-			} else {
-				// No text channels; do not select any
-				targetId = null;
-			}
-			if (targetId && $selectedGuildId === gid && myToken === switchToken) {
-				selectedChannelId.set(targetId);
-				subscribeWS([gid], targetId);
-				// Remember this as last visited for next time (only for this gid)
-				lastChannelByGuild.update((map) => ({ ...map, [gid]: targetId! }));
-				channelReady.set(true);
-				writeLastChannel(gid, targetId);
-			}
-		} catch (e) {
-			// ignore
-		}
-	}
 
 	async function createGuild() {
 		if (!newGuildName.trim()) return;
