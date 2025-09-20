@@ -201,6 +201,7 @@
         "invite_preview_member_unknown": "Member count unavailable",
         "invite_preview_member_one": "{count} member",
         "invite_preview_member_other": "{count} members",
+        "invite_preview_created": "Created {date}",
         "invite_preview_accept": "Accept invite",
         "invite_preview_accepting": "Accepting...",
         "invite_preview_joined": "Joined",
