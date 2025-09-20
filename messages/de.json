@@ -35,6 +35,8 @@
 	"rename_server": "Server umbenennen",
 	"server_settings": "Servereinstellungen",
 	"leave_server": "Server verlassen",
+	"leave_server_confirm_title": "„{server}“ verlassen?",
+	"leave_server_confirm_description": "Bist du sicher, dass du {server} verlassen möchtest? Du verlierst den Zugriff auf diesen Server und seine Kanäle.",
 	"copy_channel_id": "Kanal-ID kopieren",
 	"open_channel": "Kanal öffnen",
 	"delete_channel": "Kanal löschen",

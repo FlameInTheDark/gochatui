@@ -31,6 +31,7 @@
 	let creating = $state(false);
 	let newGuildName = $state('');
 	let error: string | null = $state(null);
+	let leavingGuild = $state<{ id: string; name: string } | null>(null);
 
 	async function createGuild() {
 		if (!newGuildName.trim()) return;
@@ -50,6 +51,16 @@
 			await auth.api.user.userMeGuildsGuildIdDelete({ guildId: gid as any });
 			await auth.loadGuilds();
 		} catch {}
+	}
+
+	async function confirmLeaveGuild() {
+		if (!leavingGuild) return;
+		const { id } = leavingGuild;
+		leavingGuild = null;
+		await leaveGuildDirect(id);
+		if ($selectedGuildId === id) {
+			selectedGuildId.set(null);
+		}
 	}
 
 	function openGuildSettings(gid: string) {
@@ -85,7 +96,13 @@
 						contextMenu.openFromEvent(e, [
 							{ label: m.copy_server_id(), action: () => copyToClipboard(gid) },
 							{ label: m.server_settings(), action: () => openGuildSettings(gid) },
-							{ label: m.leave_server(), action: () => leaveGuildDirect(gid), danger: true }
+							{
+								label: m.leave_server(),
+								action: () => {
+									leavingGuild = { id: gid, name };
+								},
+								danger: true
+							}
 						]);
 					}}
 				>
@@ -139,6 +156,44 @@
 						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
 						onclick={createGuild}>{m.create()}</button
 					>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if leavingGuild}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onpointerdown={() => (leavingGuild = null)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') leavingGuild = null;
+				if (e.key === 'Enter') confirmLeaveGuild();
+			}}
+		>
+			<div class="absolute inset-0 bg-black/40"></div>
+			<div
+				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-4"
+				role="document"
+				tabindex="-1"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<div class="mb-2 text-base font-semibold">{m.leave_server_confirm_title({ server: leavingGuild.name })}</div>
+				<p class="mb-4 text-sm text-[var(--muted)]">{m.leave_server_confirm_description({ server: leavingGuild.name })}</p>
+				<div class="flex justify-end gap-2">
+					<button
+						class="rounded-md border border-[var(--stroke)] px-3 py-1"
+						onclick={() => (leavingGuild = null)}
+					>
+						{m.cancel()}
+					</button>
+					<button
+						class="rounded-md bg-[var(--danger)] px-3 py-1 text-[var(--bg)]"
+						onclick={confirmLeaveGuild}
+					>
+						{m.leave_server()}
+					</button>
 				</div>
 			</div>
 		</div>
