@@ -52,37 +52,37 @@ describe('invite-utils', () => {
 		expect(getInviteUnavailableMessage('error')).toContain('try again later');
 	});
 
-        it('joins the guild through the provided dependencies', async () => {
-                const deps: JoinGuildDeps = {
-                        acceptInvite: vi.fn().mockResolvedValue({ data: { id: 77 } }),
-                        loadGuilds: vi.fn().mockResolvedValue(undefined),
-                        goto: vi.fn().mockResolvedValue(undefined),
-                        onSuccess: vi.fn().mockResolvedValue(undefined)
-                };
+  it('joins the guild through the provided dependencies', async () => {
+          const deps: JoinGuildDeps = {
+                  acceptInvite: vi.fn().mockResolvedValue({ data: { id: 77 } }),
+                  loadGuilds: vi.fn().mockResolvedValue(undefined),
+                  goto: vi.fn().mockResolvedValue(undefined),
+                  onSuccess: vi.fn().mockResolvedValue(undefined)
+          };
 
-                const result = await joinGuild('creative', '/app', deps);
+          const result = await joinGuild('creative', '/app', deps);
 
-                expect(result).toEqual({ success: true });
-                expect(deps.acceptInvite).toHaveBeenCalledWith({ inviteCode: 'creative' });
-                expect(deps.loadGuilds).toHaveBeenCalled();
-                expect(deps.onSuccess).toHaveBeenCalledWith({ guildId: '77', guild: { id: 77 } });
-                expect(deps.goto).toHaveBeenCalledWith('/app');
-        });
+          expect(result).toEqual({ success: true });
+          expect(deps.acceptInvite).toHaveBeenCalledWith({ inviteCode: 'creative' });
+          expect(deps.loadGuilds).toHaveBeenCalled();
+          expect(deps.onSuccess).toHaveBeenCalledWith({ guildId: '77', guild: { id: 77 } });
+          expect(deps.goto).toHaveBeenCalledWith('/app');
+  });
 
-        it('returns the API error message when joining fails', async () => {
-                const deps: JoinGuildDeps = {
-			acceptInvite: vi.fn().mockRejectedValue({
-				response: { data: { message: 'Invite expired' } }
-			}),
-                        loadGuilds: vi.fn(),
-                        goto: vi.fn(),
-                        onSuccess: vi.fn()
-                };
+  it('returns the API error message when joining fails', async () => {
+          const deps: JoinGuildDeps = {
+acceptInvite: vi.fn().mockRejectedValue({
+  response: { data: { message: 'Invite expired' } }
+}),
+                  loadGuilds: vi.fn(),
+                  goto: vi.fn(),
+                  onSuccess: vi.fn()
+          };
 
-                const result = await joinGuild('expired', '/app', deps);
+          const result = await joinGuild('expired', '/app', deps);
 
-                expect(result).toEqual({ success: false, message: 'Invite expired' });
-                expect(deps.goto).not.toHaveBeenCalled();
-                expect(deps.onSuccess).not.toHaveBeenCalled();
-        });
+          expect(result).toEqual({ success: false, message: 'Invite expired' });
+          expect(deps.goto).not.toHaveBeenCalled();
+          expect(deps.onSuccess).not.toHaveBeenCalled();
+  });
 });
