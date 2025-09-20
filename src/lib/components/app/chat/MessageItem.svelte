@@ -16,9 +16,10 @@
 		| { kind: 'invite'; code: string; url: string }
 		| { kind: 'youtube'; videoId: string; url: string };
 
-	type TextToken =
-		| { type: 'text'; content: string }
-		| { type: 'link'; label: string; url: string; embed?: MessageEmbed };
+        type TextToken =
+                | { type: 'text'; content: string }
+                | { type: 'link'; label: string; url: string; embed?: MessageEmbed }
+                | { type: 'code'; content: string };
 
 	type RenderedSegment =
 		| { type: 'code'; content: string; language?: string }
@@ -156,66 +157,104 @@
 		return null;
 	}
 
-	function tokenizeText(content: string): TextToken[] {
-		const tokens: TextToken[] = [];
-		if (!content) return tokens;
+        function tokenizePlainText(content: string, tokens: TextToken[]) {
+                if (!content) return;
 
-		urlPattern.lastIndex = 0;
-		let lastIndex = 0;
-		let match: RegExpExecArray | null;
+                urlPattern.lastIndex = 0;
+                let lastIndex = 0;
+                let match: RegExpExecArray | null;
 
-		while ((match = urlPattern.exec(content)) !== null) {
-			const startIndex = match.index;
-			let endIndex = startIndex + match[0].length;
+                while ((match = urlPattern.exec(content)) !== null) {
+                        const startIndex = match.index;
+                        let endIndex = startIndex + match[0].length;
 
-			while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(content[endIndex - 1])) {
-				endIndex--;
-			}
+                        while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(content[endIndex - 1])) {
+                                endIndex--;
+                        }
 
-			if (endIndex <= startIndex) {
-				continue;
-			}
+                        if (endIndex <= startIndex) {
+                                continue;
+                        }
 
-			if (startIndex > lastIndex) {
-				tokens.push({ type: 'text', content: content.slice(lastIndex, startIndex) });
-			}
+                        if (startIndex > lastIndex) {
+                                tokens.push({ type: 'text', content: content.slice(lastIndex, startIndex) });
+                        }
 
-			const rawUrl = content.slice(startIndex, endIndex);
-			const normalized = normalizeUrl(rawUrl);
-			const invite = extractInvite(normalized);
-			const youtube = extractYouTube(normalized);
+                        const rawUrl = content.slice(startIndex, endIndex);
+                        const normalized = normalizeUrl(rawUrl);
+                        const invite = extractInvite(normalized);
+                        const youtube = extractYouTube(normalized);
 
-			if (invite) {
-				tokens.push({
-					type: 'link',
-					label: rawUrl,
-					url: normalized,
-					embed: { kind: 'invite', code: invite.code, url: normalized }
-				});
-			} else if (youtube) {
-				tokens.push({
-					type: 'link',
-					label: rawUrl,
-					url: normalized,
-					embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized }
-				});
-			} else {
-				tokens.push({ type: 'link', label: rawUrl, url: normalized });
-			}
+                        if (invite) {
+                                tokens.push({
+                                        type: 'link',
+                                        label: rawUrl,
+                                        url: normalized,
+                                        embed: { kind: 'invite', code: invite.code, url: normalized }
+                                });
+                        } else if (youtube) {
+                                tokens.push({
+                                        type: 'link',
+                                        label: rawUrl,
+                                        url: normalized,
+                                        embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized }
+                                });
+                        } else {
+                                tokens.push({ type: 'link', label: rawUrl, url: normalized });
+                        }
 
-			lastIndex = endIndex;
+                        lastIndex = endIndex;
 
-			if (urlPattern.lastIndex > endIndex) {
-				urlPattern.lastIndex = endIndex;
-			}
-		}
+                        if (urlPattern.lastIndex > endIndex) {
+                                urlPattern.lastIndex = endIndex;
+                        }
+                }
 
-		if (lastIndex < content.length) {
-			tokens.push({ type: 'text', content: content.slice(lastIndex) });
-		}
+                if (lastIndex < content.length) {
+                        tokens.push({ type: 'text', content: content.slice(lastIndex) });
+                }
+        }
 
-		return tokens;
-	}
+        function tokenizeText(content: string): TextToken[] {
+                const tokens: TextToken[] = [];
+                if (!content) return tokens;
+
+                let cursor = 0;
+                let processed = false;
+
+                while (cursor < content.length) {
+                        const startIndex = content.indexOf('`', cursor);
+
+                        if (startIndex === -1) {
+                                tokenizePlainText(content.slice(cursor), tokens);
+                                processed = true;
+                                break;
+                        }
+
+                        const endIndex = content.indexOf('`', startIndex + 1);
+
+                        if (endIndex === -1) {
+                                tokenizePlainText(content.slice(cursor), tokens);
+                                processed = true;
+                                break;
+                        }
+
+                        if (startIndex > cursor) {
+                                tokenizePlainText(content.slice(cursor, startIndex), tokens);
+                                processed = true;
+                        }
+
+                        tokens.push({ type: 'code', content: content.slice(startIndex + 1, endIndex) });
+                        processed = true;
+                        cursor = endIndex + 1;
+                }
+
+                if (!processed) {
+                        tokenizePlainText(content, tokens);
+                }
+
+                return tokens;
+        }
 
 	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
 	let isEditing = $state(false);
@@ -456,23 +495,29 @@
 								<CodeBlock code={segment.content} language={segment.language} />
 							</div>
 						{:else}
-							{#each segment.tokens as token, tokenIndex (`${index}-${tokenIndex}`)}
-								{#if token.type === 'text'}
-									<span class="break-words whitespace-pre-wrap">{token.content}</span>
-								{:else}
-									<a
-										class="font-medium break-words text-[var(--brand)] underline underline-offset-2 transition hover:text-[var(--brand-2)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
-										href={token.url}
-										rel="noopener noreferrer"
-										target="_blank"
-									>
-										{token.label}
-									</a>
-								{/if}
-							{/each}
-						{/if}
-					{/each}
-				{/if}
+                                                        {#each segment.tokens as token, tokenIndex (`${index}-${tokenIndex}`)}
+                                                                {#if token.type === 'text'}
+                                                                        <span class="break-words whitespace-pre-wrap">{token.content}</span>
+                                                                {:else if token.type === 'link'}
+                                                                        <a
+                                                                                class="font-medium break-words text-[var(--brand)] underline underline-offset-2 transition hover:text-[var(--brand-2)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
+                                                                                href={token.url}
+                                                                                rel="noopener noreferrer"
+                                                                                target="_blank"
+                                                                        >
+                                                                                {token.label}
+                                                                        </a>
+                                                                {:else if token.type === 'code'}
+                                                                        <code
+                                                                                class="font-mono whitespace-pre-wrap rounded border border-[var(--stroke)] bg-[var(--panel-strong)] px-1 py-0.5"
+                                                                        >
+                                                                                {token.content}
+                                                                        </code>
+                                                                {/if}
+                                                        {/each}
+                                               {/if}
+                                       {/each}
+                               {/if}
 				{#if message.updated_at}
 					<span
 						class="ml-1 align-baseline text-xs text-[var(--muted)] italic"
