@@ -6,10 +6,20 @@
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
 	import CodeBlock from './CodeBlock.svelte';
+	import InvitePreview from './InvitePreview.svelte';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
 		| { type: 'code'; content: string; language?: string };
+
+	type TextToken =
+		| { type: 'text'; content: string }
+		| { type: 'link'; label: string; url: string }
+		| { type: 'invite'; label: string; code: string; url: string };
+
+	type RenderedSegment =
+		| { type: 'code'; content: string; language?: string }
+		| { type: 'text'; tokens: TextToken[] };
 
 	function normalizeCodeBlock(raw: string): string {
 		if (!raw) return '';
@@ -81,12 +91,99 @@
 		return segments;
 	}
 
+	const urlPattern =
+		/((?:https?:\/\/|ftp:\/\/)[^\s<>()]+|www\.[^\s<>()]+|[\w.-]+\.[a-zA-Z]{2,}(?:\/[^\s<>()]+)*)/gi;
+
+	function normalizeUrl(raw: string): string {
+		if (!raw) return raw;
+		if (/^[a-zA-Z][\w+.-]*:\/\//.test(raw)) {
+			return raw;
+		}
+		return `https://${raw}`;
+	}
+
+	function extractInvite(url: string): { code: string } | null {
+		try {
+			const parsed = new URL(url);
+			const segments = parsed.pathname.split('/').filter(Boolean);
+			if (
+				segments.length >= 3 &&
+				segments[0]?.toLowerCase() === 'app' &&
+				segments[1]?.toLowerCase() === 'i'
+			) {
+				const code = segments[2];
+				if (code) {
+					return { code };
+				}
+			}
+		} catch {
+			return null;
+		}
+		return null;
+	}
+
+	function tokenizeText(content: string): TextToken[] {
+		const tokens: TextToken[] = [];
+		if (!content) return tokens;
+
+		urlPattern.lastIndex = 0;
+		let lastIndex = 0;
+		let match: RegExpExecArray | null;
+
+		while ((match = urlPattern.exec(content)) !== null) {
+			const startIndex = match.index;
+			let endIndex = startIndex + match[0].length;
+
+			while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(content[endIndex - 1])) {
+				endIndex--;
+			}
+
+			if (endIndex <= startIndex) {
+				continue;
+			}
+
+			if (startIndex > lastIndex) {
+				tokens.push({ type: 'text', content: content.slice(lastIndex, startIndex) });
+			}
+
+			const rawUrl = content.slice(startIndex, endIndex);
+			const normalized = normalizeUrl(rawUrl);
+			const invite = extractInvite(normalized);
+
+			if (invite) {
+				tokens.push({ type: 'invite', label: rawUrl, code: invite.code, url: normalized });
+			} else {
+				tokens.push({ type: 'link', label: rawUrl, url: normalized });
+			}
+
+			lastIndex = endIndex;
+
+			if (urlPattern.lastIndex > endIndex) {
+				urlPattern.lastIndex = endIndex;
+			}
+		}
+
+		if (lastIndex < content.length) {
+			tokens.push({ type: 'text', content: content.slice(lastIndex) });
+		}
+
+		return tokens;
+	}
+
 	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
 	let isEditing = $state(false);
 	let draft = $state(message.content ?? '');
 	let saving = $state(false);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
 	const segments = $derived(parseMessageContent(message.content ?? ''));
+	const renderedSegments = $derived(
+		segments.map((segment): RenderedSegment => {
+			if (segment.type === 'code') {
+				return segment;
+			}
+			return { type: 'text', tokens: tokenizeText(segment.content) };
+		})
+	);
 
 	const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
 
@@ -294,16 +391,33 @@
 				class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}
 				title={fmtMsgFull(message)}
 			>
-				{#if segments.length === 0}
-					<span class="whitespace-pre-wrap">{message.content}</span>
+				{#if renderedSegments.length === 0}
+					<span class="break-words whitespace-pre-wrap">{message.content}</span>
 				{:else}
-					{#each segments as segment, index (index)}
+					{#each renderedSegments as segment, index (index)}
 						{#if segment.type === 'code'}
 							<div class="my-2 whitespace-normal first:mt-0 last:mb-0">
 								<CodeBlock code={segment.content} language={segment.language} />
 							</div>
 						{:else}
-							<span class="whitespace-pre-wrap">{segment.content}</span>
+							{#each segment.tokens as token, tokenIndex (`${index}-${tokenIndex}`)}
+								{#if token.type === 'text'}
+									<span class="break-words whitespace-pre-wrap">{token.content}</span>
+								{:else if token.type === 'link'}
+									<a
+										class="font-medium break-words text-[var(--brand)] underline underline-offset-2 transition hover:text-[var(--brand-2)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
+										href={token.url}
+										rel="noopener noreferrer"
+										target="_blank"
+									>
+										{token.label}
+									</a>
+								{:else}
+									<div class="my-2 max-w-sm">
+										<InvitePreview code={token.code} url={token.url} />
+									</div>
+								{/if}
+							{/each}
 						{/if}
 					{/each}
 				{/if}
