@@ -162,5 +162,18 @@
         "invite_not_found_title": "Einladung nicht verfügbar",
 	"invite_not_found_message": "Diese Einladung ist ungültig oder abgelaufen.",
 	"invite_member_count": "{count} Mitglieder",
+        "invite_preview_default_name": "GoChat-Community",
+        "invite_preview_loading": "Einladung wird geladen...",
+        "invite_preview_error_loading": "Wir konnten diese Einladung nicht laden.",
+        "invite_preview_open_link": "Einladungslink öffnen",
+        "invite_preview_member_unknown": "Mitgliederzahl nicht verfügbar",
+        "invite_preview_member_one": "{count} Mitglied",
+        "invite_preview_member_other": "{count} Mitglieder",
+        "invite_preview_created": "Erstellt am {date}",
+        "invite_preview_accept": "Einladung annehmen",
+        "invite_preview_accepting": "Annehmen...",
+        "invite_preview_joined": "Beigetreten",
+        "invite_preview_error_accept": "Wir konnten diesem Server nicht beitreten.",
+        "invite_preview_invalid": "Diese Einladung ist möglicherweise ungültig oder abgelaufen.",
 	"connection_status_reconnecting": "Verbindungsprobleme. Stelle Chat-Verbindung wieder her…"
 }

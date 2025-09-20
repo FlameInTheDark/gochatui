@@ -162,5 +162,18 @@
         "invite_not_found_title": "Invitation indisponible",
 	"invite_not_found_message": "Cette invitation est invalide ou a expiré.",
 	"invite_member_count": "{count} membres",
+        "invite_preview_default_name": "Communauté GoChat",
+        "invite_preview_loading": "Chargement de l'invitation...",
+        "invite_preview_error_loading": "Impossible de charger cette invitation.",
+        "invite_preview_open_link": "Ouvrir le lien d'invitation",
+        "invite_preview_member_unknown": "Nombre de membres indisponible",
+        "invite_preview_member_one": "{count} membre",
+        "invite_preview_member_other": "{count} membres",
+        "invite_preview_created": "Créé le {date}",
+        "invite_preview_accept": "Accepter l'invitation",
+        "invite_preview_accepting": "Accepter...",
+        "invite_preview_joined": "Rejoint",
+        "invite_preview_error_accept": "Impossible de rejoindre ce serveur.",
+        "invite_preview_invalid": "Cette invitation est peut-être invalide ou expirée.",
 	"connection_status_reconnecting": "Problèmes de connexion. Reconnexion au chat…"
 }
