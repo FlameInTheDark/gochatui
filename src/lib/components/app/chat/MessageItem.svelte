@@ -667,7 +667,10 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
 		dispatch('deleted');
 	}
 
-        async function openMenu(e: MouseEvent) {
+        async function openMenu(e: MouseEvent, fromMessageBody = false) {
+                if (!compact && fromMessageBody) {
+                        return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -834,9 +837,9 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
 </script>
 
 <div
-	role="listitem"
-	class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
-	oncontextmenu={openMenu}
+        role="listitem"
+        class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
+        oncontextmenu={(e) => openMenu(e, true)}
 >
 	{#if compact}
 		<div
@@ -879,17 +882,11 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
 		{/if}
 		{#if !compact}
 			<div class="flex items-baseline gap-2 pr-20">
-				<div
-					role="contentinfo"
-					class="truncate font-semibold text-[var(--muted)]"
-					oncontextmenu={(e) => {
-						e.preventDefault();
-						const uid = String(((message as any)?.author as any)?.id ?? '');
-						contextMenu.openFromEvent(e, [
-							{ label: 'Copy user ID', action: () => copyToClipboard(uid), disabled: !uid }
-						]);
-					}}
-				>
+                                <div
+                                        role="contentinfo"
+                                        class="truncate font-semibold text-[var(--muted)]"
+                                        oncontextmenu={openMenu}
+                                >
 					{message.author?.name ?? 'User'}
 				</div>
 				<div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>
