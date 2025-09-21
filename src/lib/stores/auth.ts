@@ -1,19 +1,36 @@
 import { browser } from '$app/environment';
 import { writable, derived, get } from 'svelte/store';
 import type {
-	AuthLoginRequest,
-	AuthRegisterRequest,
-	AuthConfirmationRequest,
-	AuthPasswordRecoveryRequest,
-	AuthPasswordResetRequest,
-	DtoUser,
-	DtoGuild
+        AuthLoginRequest,
+        AuthRegisterRequest,
+        AuthConfirmationRequest,
+        AuthPasswordRecoveryRequest,
+        AuthPasswordResetRequest,
+        DtoUser,
+        DtoGuild
 } from '$lib/api';
 import { createApi } from '$lib/client/api';
+import { normalizePermissionValue } from '$lib/utils/permissions';
 
 const TOKEN_KEY = 'gochat.token';
 const REFRESH_KEY = 'gochat.refresh';
 const USER_KEY = 'gochat.user';
+
+function toSnowflakeString(value: unknown): string | null {
+        if (value == null) return null;
+        try {
+                if (typeof value === 'string') return value;
+                if (typeof value === 'bigint') return value.toString();
+                if (typeof value === 'number') return BigInt(value).toString();
+                return String(value);
+        } catch {
+                try {
+                        return String(value);
+                } catch {
+                        return null;
+                }
+        }
+}
 
 function createAuthStore() {
 	const token = writable<string | null>(
@@ -144,12 +161,36 @@ function createAuthStore() {
 		}
 	}
 
-	async function loadGuilds() {
-		if (!get(token)) return [];
-		const res = await api.user.userMeGuildsGet();
-		guilds.set(res.data ?? []);
-		return res.data ?? [];
-	}
+        async function loadGuilds() {
+                if (!get(token)) return [];
+                const res = await api.user.userMeGuildsGet();
+                const incoming = res.data ?? [];
+                const previous = get(guilds);
+                const previousMap = new Map<string, any>();
+                for (const guild of previous) {
+                        const id = toSnowflakeString((guild as any)?.id);
+                        if (id) {
+                                previousMap.set(id, guild as any);
+                        }
+                }
+                const list = incoming.map((guild) => {
+                        const id = toSnowflakeString((guild as any)?.id);
+                        const base = normalizePermissionValue((guild as any)?.permissions);
+                        const prev = id ? previousMap.get(id) : undefined;
+                        const prevEffectiveRaw = prev?.__effectivePermissions;
+                        const effective =
+                                prevEffectiveRaw != null
+                                        ? normalizePermissionValue(prevEffectiveRaw)
+                                        : base;
+                        return {
+                                ...guild,
+                                __basePermissions: base,
+                                __effectivePermissions: effective
+                        } as any;
+                });
+                guilds.set(list);
+                return list;
+        }
 
 	const isAuthenticated = derived(token, (t) => Boolean(t));
 
