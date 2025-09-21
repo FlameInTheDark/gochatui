@@ -19,8 +19,8 @@
 	import { subscribeWS, wsEvent } from '$lib/client/ws';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
-	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
-	import { FolderPlus, Plus, Settings } from 'lucide-svelte';
+        import UserPanel from '$lib/components/app/user/UserPanel.svelte';
+        import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
 	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
 	import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
 	import {
@@ -1145,39 +1145,45 @@
 																	<div
 																		class="flex overflow-hidden rounded border border-[var(--stroke)] text-xs font-semibold"
 																	>
-																		<button
-																			class={`px-2 py-1 transition ${
-																				state === 'deny'
-																					? 'bg-red-500 text-white'
-																					: 'bg-transparent hover:bg-red-500/10'
-																			}`}
-																			onclick={() =>
-																				setChannelPermission(roleId, perm.value, 'deny')}
-																		>
-																			{m.permission_deny()}
-																		</button>
-																		<button
-																			class={`px-2 py-1 transition ${
-																				state === 'inherit'
-																					? 'bg-[var(--panel)]'
-																					: 'bg-transparent hover:bg-[var(--panel)]/60'
-																			}`}
-																			onclick={() =>
-																				setChannelPermission(roleId, perm.value, 'inherit')}
-																		>
-																			{m.permission_default()}
-																		</button>
-																		<button
-																			class={`px-2 py-1 transition ${
-																				state === 'allow'
-																					? 'bg-green-500 text-white'
-																					: 'bg-transparent hover:bg-green-500/10'
-																			}`}
-																			onclick={() =>
-																				setChannelPermission(roleId, perm.value, 'allow')}
-																		>
-																			{m.permission_allow()}
-																		</button>
+                                                                                                                               <button
+                                                                                                                               class={`px-2 py-1 transition ${
+                                                                                                                               state === 'deny'
+                                                                                                                               ? 'bg-red-500 text-white'
+                                                                                                                               : 'bg-transparent hover:bg-red-500/10'
+                                                                                                                               }`}
+                                                                                                                               onclick={() =>
+                                                                                                                               setChannelPermission(roleId, perm.value, 'deny')}
+                                                                                                                               aria-label={m.permission_deny()}
+                                                                                                                               title={m.permission_deny()}
+                                                                                                                               >
+                                                                                                                               <X class="h-4 w-4" stroke-width={2} />
+                                                                                                                               </button>
+                                                                                                                               <button
+                                                                                                                               class={`px-2 py-1 transition ${
+                                                                                                                               state === 'inherit'
+                                                                                                                               ? 'bg-[var(--panel)]'
+                                                                                                                               : 'bg-transparent hover:bg-[var(--panel)]/60'
+                                                                                                                               }`}
+                                                                                                                               onclick={() =>
+                                                                                                                               setChannelPermission(roleId, perm.value, 'inherit')}
+                                                                                                                               aria-label={m.permission_default()}
+                                                                                                                               title={m.permission_default()}
+                                                                                                                               >
+                                                                                                                               <Slash class="h-4 w-4" stroke-width={2} />
+                                                                                                                               </button>
+                                                                                                                               <button
+                                                                                                                               class={`px-2 py-1 transition ${
+                                                                                                                               state === 'allow'
+                                                                                                                               ? 'bg-green-500 text-white'
+                                                                                                                               : 'bg-transparent hover:bg-green-500/10'
+                                                                                                                               }`}
+                                                                                                                               onclick={() =>
+                                                                                                                               setChannelPermission(roleId, perm.value, 'allow')}
+                                                                                                                               aria-label={m.permission_allow()}
+                                                                                                                               title={m.permission_allow()}
+                                                                                                                               >
+                                                                                                                               <Check class="h-4 w-4" stroke-width={2} />
+                                                                                                                               </button>
 																	</div>
 																</div>
 															</div>
