@@ -16,7 +16,27 @@
         import { m } from '$lib/paraglide/messages.js';
         import UserPanel from '$lib/components/app/user/UserPanel.svelte';
         import { FolderPlus, Plus, Settings } from 'lucide-svelte';
-	const guilds = auth.guilds;
+        import {
+                PERMISSION_MANAGE_CHANNELS,
+                PERMISSION_MANAGE_GUILD,
+                PERMISSION_MANAGE_ROLES,
+                hasAnyGuildPermission
+        } from '$lib/utils/permissions';
+        const guilds = auth.guilds;
+        const me = auth.user;
+
+        const canAccessSelectedGuildSettings = $derived.by(() => {
+                const gid = $selectedGuildId;
+                if (!gid) return false;
+                const guild = $guilds.find((g) => String((g as any)?.id) === gid) ?? null;
+                return hasAnyGuildPermission(
+                        guild,
+                        $me?.id,
+                        PERMISSION_MANAGE_GUILD,
+                        PERMISSION_MANAGE_ROLES,
+                        PERMISSION_MANAGE_CHANNELS
+                );
+        });
 
 	let creatingChannel = $state(false);
 	let creatingCategory = $state(false);
@@ -473,8 +493,8 @@
 		<div class="truncate font-semibold">
 			{$guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name ?? m.select_server()}
 		</div>
-		{#if $selectedGuildId}
-			<div class="flex items-center gap-2">
+                {#if $selectedGuildId}
+                        <div class="flex items-center gap-2">
                                 <button
                                         class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
                                         onclick={() => {
@@ -498,14 +518,19 @@
                                 >
                                         <FolderPlus class="h-4 w-4" stroke-width={2} />
                                 </button>
-                                <button
-                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                                        onclick={() => guildSettingsOpen.set(true)}
-                                        title={m.server_settings()}
-                                        aria-label={m.server_settings()}
-                                >
-                                        <Settings class="h-4 w-4" stroke-width={2} />
-                                </button>
+                                {#if canAccessSelectedGuildSettings}
+                                        <button
+                                                class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                                onclick={() => {
+                                                        if (!canAccessSelectedGuildSettings) return;
+                                                        guildSettingsOpen.set(true);
+                                                }}
+                                                title={m.server_settings()}
+                                                aria-label={m.server_settings()}
+                                        >
+                                                <Settings class="h-4 w-4" stroke-width={2} />
+                                        </button>
+                                {/if}
                         </div>
                 {/if}
         </div>
