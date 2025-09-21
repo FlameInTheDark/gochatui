@@ -2,7 +2,7 @@
 	import type { DtoMessage } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
 	import { selectedChannelId } from '$lib/stores/appState';
-	import { createEventDispatcher } from 'svelte';
+        import { createEventDispatcher, tick } from 'svelte';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
         import { m } from '$lib/paraglide/messages.js';
         import CodeBlock from './CodeBlock.svelte';
@@ -386,11 +386,28 @@
         }
 
 	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
-	let isEditing = $state(false);
-	let draft = $state(message.content ?? '');
-	let saving = $state(false);
-	const dispatch = createEventDispatcher<{ deleted: void }>();
-	const segments = $derived(parseMessageContent(message.content ?? ''));
+        let isEditing = $state(false);
+        let draft = $state(message.content ?? '');
+        let saving = $state(false);
+        let editTextarea = $state<HTMLTextAreaElement | null>(null);
+        const dispatch = createEventDispatcher<{ deleted: void }>();
+        const segments = $derived(parseMessageContent(message.content ?? ''));
+
+        function autoSizeEditTextarea() {
+                if (!editTextarea) return;
+                editTextarea.style.height = 'auto';
+                const nextHeight = editTextarea.scrollHeight;
+                editTextarea.style.height = `${nextHeight}px`;
+                const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : Number.POSITIVE_INFINITY;
+                editTextarea.style.overflowY = nextHeight > viewportHeight ? 'auto' : 'hidden';
+        }
+
+        async function startEditing() {
+                draft = message.content ?? '';
+                isEditing = true;
+                await tick();
+                autoSizeEditTextarea();
+        }
         function parseBlocks(content: string): Block[] {
                 const lines = content.split(/\r?\n/);
                 const blocks: Block[] = [];
@@ -587,10 +604,9 @@
 			{ label: m.ctx_copy_user_id(), action: () => copyToClipboard(uid), disabled: !uid },
 			{
 				label: m.ctx_edit_message(),
-				action: () => {
-					isEditing = true;
-					draft = message.content ?? '';
-				},
+                                action: () => {
+                                        void startEditing();
+                                },
 				disabled: !message?.id
 			},
 			{
@@ -633,8 +649,7 @@
                                         title="Edit"
                                         aria-label="Edit"
                                         onclick={() => {
-                                                isEditing = true;
-                                                draft = message.content ?? '';
+                                                void startEditing();
                                         }}
                                 >
                                         <Pencil class="h-3.5 w-3.5" stroke-width={2} />
@@ -671,11 +686,13 @@
 		{/if}
 		{#if isEditing}
 			<div class="mt-1">
-				<textarea
-					class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					bind:value={draft}
-					rows={3}
-				></textarea>
+                                <textarea
+                                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                        bind:this={editTextarea}
+                                        bind:value={draft}
+                                        style:overflow-y={'hidden'}
+                                        oninput={autoSizeEditTextarea}
+                                ></textarea>
 				<div class="mt-1 flex gap-2 text-sm">
 					<button
 						class="rounded-md bg-[var(--brand)] px-2 py-1 text-[var(--bg)]"
