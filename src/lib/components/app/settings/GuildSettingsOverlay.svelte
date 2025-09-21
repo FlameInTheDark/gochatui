@@ -32,7 +32,14 @@
                 if (hasGuildPermission(guild, $me?.id, PERMISSION_MANAGE_GUILD)) {
                         allowed.push('profile');
                 }
-                if (hasGuildPermission(guild, $me?.id, PERMISSION_MANAGE_ROLES)) {
+                if (
+                        hasAnyGuildPermission(
+                                guild,
+                                $me?.id,
+                                PERMISSION_MANAGE_ROLES,
+                                PERMISSION_MANAGE_GUILD
+                        )
+                ) {
                         allowed.push('roles');
                 }
                 if (
