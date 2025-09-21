@@ -3,12 +3,14 @@
 	import { auth } from '$lib/stores/auth';
 	import { selectedChannelId } from '$lib/stores/appState';
 	import { createEventDispatcher } from 'svelte';
-      import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-      import { m } from '$lib/paraglide/messages.js';
-      import CodeBlock from './CodeBlock.svelte';
-      import InvitePreview from './InvitePreview.svelte';
-      import { extractInvite } from './extractInvite';
-      import { Pencil, Trash2 } from 'lucide-svelte';
+        import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import { m } from '$lib/paraglide/messages.js';
+        import CodeBlock from './CodeBlock.svelte';
+        import InlineTokens from './InlineTokens.svelte';
+        import InvitePreview from './InvitePreview.svelte';
+        import YoutubeEmbed from './YoutubeEmbed.svelte';
+        import { extractInvite } from './extractInvite';
+        import { Pencil, Trash2 } from 'lucide-svelte';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
@@ -18,14 +20,28 @@
 		| { kind: 'invite'; code: string; url: string }
 		| { kind: 'youtube'; videoId: string; url: string };
 
-        type TextToken =
-                | { type: 'text'; content: string }
-                | { type: 'link'; label: string; url: string; embed?: MessageEmbed }
+        type FormatStyles = {
+                bold?: boolean;
+                italic?: boolean;
+                underline?: boolean;
+                strike?: boolean;
+        };
+
+        export type InlineToken =
+                | { type: 'text'; content: string; styles?: FormatStyles }
+                | { type: 'link'; label: string; url: string; styles?: FormatStyles; embed?: MessageEmbed }
                 | { type: 'code'; content: string };
 
-	type RenderedSegment =
-		| { type: 'code'; content: string; language?: string }
-		| { type: 'text'; tokens: TextToken[] };
+        type Block =
+                | { type: 'paragraph'; tokens: InlineToken[] }
+                | { type: 'heading'; level: 1 | 2 | 3; tokens: InlineToken[] }
+                | { type: 'quote'; lines: InlineToken[][] }
+                | { type: 'list'; items: InlineToken[][] }
+                | { type: 'break' };
+
+        type RenderedSegment =
+                | { type: 'code'; content: string; language?: string }
+                | { type: 'blocks'; blocks: Block[] };
 
 	function normalizeCodeBlock(raw: string): string {
 		if (!raw) return '';
@@ -139,100 +155,229 @@
 		return null;
 	}
 
-        function tokenizePlainText(content: string, tokens: TextToken[]) {
-                if (!content) return;
+        function cloneStyles(styles: FormatStyles = {}): FormatStyles {
+                return {
+                        bold: styles.bold ? true : undefined,
+                        italic: styles.italic ? true : undefined,
+                        underline: styles.underline ? true : undefined,
+                        strike: styles.strike ? true : undefined
+                };
+        }
 
-                urlPattern.lastIndex = 0;
-                let lastIndex = 0;
-                let match: RegExpExecArray | null;
+        function stylesEqual(a: FormatStyles = {}, b: FormatStyles = {}): boolean {
+                return (
+                        !!a.bold === !!b.bold &&
+                        !!a.italic === !!b.italic &&
+                        !!a.underline === !!b.underline &&
+                        !!a.strike === !!b.strike
+                );
+        }
 
-                while ((match = urlPattern.exec(content)) !== null) {
-                        const startIndex = match.index;
-                        let endIndex = startIndex + match[0].length;
+        type FormattedChunk = { text: string; styles: FormatStyles };
 
-                        while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(content[endIndex - 1])) {
-                                endIndex--;
-                        }
-
-                        if (endIndex <= startIndex) {
-                                continue;
-                        }
-
-                        if (startIndex > lastIndex) {
-                                tokens.push({ type: 'text', content: content.slice(lastIndex, startIndex) });
-                        }
-
-                        const rawUrl = content.slice(startIndex, endIndex);
-                        const normalized = normalizeUrl(rawUrl);
-                        const invite = extractInvite(normalized);
-                        const youtube = extractYouTube(normalized);
-
-                        if (invite) {
-                                tokens.push({
-                                        type: 'link',
-                                        label: rawUrl,
-                                        url: normalized,
-                                        embed: { kind: 'invite', code: invite.code, url: normalized }
-                                });
-                        } else if (youtube) {
-                                tokens.push({
-                                        type: 'link',
-                                        label: rawUrl,
-                                        url: normalized,
-                                        embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized }
-                                });
+        function mergeChunks(chunks: FormattedChunk[]): FormattedChunk[] {
+                const merged: FormattedChunk[] = [];
+                for (const chunk of chunks) {
+                        if (!chunk.text) continue;
+                        const last = merged[merged.length - 1];
+                        if (last && stylesEqual(last.styles, chunk.styles)) {
+                                last.text += chunk.text;
                         } else {
-                                tokens.push({ type: 'link', label: rawUrl, url: normalized });
-                        }
-
-                        lastIndex = endIndex;
-
-                        if (urlPattern.lastIndex > endIndex) {
-                                urlPattern.lastIndex = endIndex;
+                                merged.push({ text: chunk.text, styles: cloneStyles(chunk.styles) });
                         }
                 }
+                return merged;
+        }
 
-                if (lastIndex < content.length) {
-                        tokens.push({ type: 'text', content: content.slice(lastIndex) });
+        function parseFormattingChunks(content: string, state: FormatStyles = {}): FormattedChunk[] {
+                const result: FormattedChunk[] = [];
+                let buffer = '';
+                let i = 0;
+
+                const pushBuffer = () => {
+                        if (!buffer) return;
+                        result.push({ text: buffer, styles: cloneStyles(state) });
+                        buffer = '';
+                };
+
+        outer: while (i < content.length) {
+                        const char = content[i];
+
+                        if (char === '_') {
+                                const closing = content.indexOf('_', i + 1);
+                                if (closing > i + 1) {
+                                        pushBuffer();
+                                        const inner = parseFormattingChunks(content.slice(i + 1, closing), {
+                                                ...state,
+                                                underline: true
+                                        });
+                                        result.push(...inner);
+                                        i = closing + 1;
+                                        continue;
+                                }
+                        } else if (char === '~' && content[i + 1] === '~') {
+                                const closing = content.indexOf('~~', i + 2);
+                                if (closing > i + 2) {
+                                        pushBuffer();
+                                        const inner = parseFormattingChunks(content.slice(i + 2, closing), {
+                                                ...state,
+                                                strike: true
+                                        });
+                                        result.push(...inner);
+                                        i = closing + 2;
+                                        continue;
+                                }
+                        } else if (char === '*') {
+                                let runLength = 1;
+                                while (i + runLength < content.length && content[i + runLength] === '*') {
+                                        runLength++;
+                                }
+
+                                const attempts = runLength >= 3 ? [3, 2, 1] : runLength === 2 ? [2, 1] : [1];
+
+                                for (const len of attempts) {
+                                        const closing = content.indexOf('*'.repeat(len), i + len);
+                                        if (closing > i + len) {
+                                                pushBuffer();
+                                                const nextState: FormatStyles = { ...state };
+                                                if (len === 3) {
+                                                        nextState.bold = true;
+                                                        nextState.italic = true;
+                                                } else if (len === 2) {
+                                                        nextState.bold = true;
+                                                } else {
+                                                        nextState.italic = true;
+                                                }
+                                                const inner = parseFormattingChunks(content.slice(i + len, closing), nextState);
+                                                result.push(...inner);
+                                                i = closing + len;
+                                                continue outer;
+                                        }
+                                }
+                        }
+
+                        buffer += char;
+                        i++;
+                }
+
+                pushBuffer();
+                return mergeChunks(result);
+        }
+
+        function parsePlainText(content: string, tokens: InlineToken[]) {
+                if (!content) return;
+
+                const chunks = parseFormattingChunks(content);
+
+                for (const chunk of chunks) {
+                        if (!chunk.text) continue;
+
+                        urlPattern.lastIndex = 0;
+                        let lastIndex = 0;
+                        let match: RegExpExecArray | null;
+
+                        while ((match = urlPattern.exec(chunk.text)) !== null) {
+                                const startIndex = match.index;
+                                let endIndex = startIndex + match[0].length;
+
+                                while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(chunk.text[endIndex - 1])) {
+                                        endIndex--;
+                                }
+
+                                if (endIndex <= startIndex) {
+                                        continue;
+                                }
+
+                                if (startIndex > lastIndex) {
+                                        tokens.push({
+                                                type: 'text',
+                                                content: chunk.text.slice(lastIndex, startIndex),
+                                                styles: chunk.styles
+                                        });
+                                }
+
+                                const rawUrl = chunk.text.slice(startIndex, endIndex);
+                                const normalized = normalizeUrl(rawUrl);
+                                const invite = extractInvite(normalized);
+                                const youtube = extractYouTube(normalized);
+
+                                if (invite) {
+                                        tokens.push({
+                                                type: 'link',
+                                                label: rawUrl,
+                                                url: normalized,
+                                                embed: { kind: 'invite', code: invite.code, url: normalized },
+                                                styles: chunk.styles
+                                        });
+                                } else if (youtube) {
+                                        tokens.push({
+                                                type: 'link',
+                                                label: rawUrl,
+                                                url: normalized,
+                                                embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized },
+                                                styles: chunk.styles
+                                        });
+                                } else {
+                                        tokens.push({
+                                                type: 'link',
+                                                label: rawUrl,
+                                                url: normalized,
+                                                styles: chunk.styles
+                                        });
+                                }
+
+                                lastIndex = endIndex;
+
+                                if (urlPattern.lastIndex > endIndex) {
+                                        urlPattern.lastIndex = endIndex;
+                                }
+                        }
+
+                        if (lastIndex < chunk.text.length) {
+                                tokens.push({
+                                        type: 'text',
+                                        content: chunk.text.slice(lastIndex),
+                                        styles: chunk.styles
+                                });
+                        }
                 }
         }
 
-        function tokenizeText(content: string): TextToken[] {
-                const tokens: TextToken[] = [];
+        function parseInline(content: string): InlineToken[] {
+                const tokens: InlineToken[] = [];
                 if (!content) return tokens;
 
                 let cursor = 0;
-                let processed = false;
+                let encounteredCode = false;
 
                 while (cursor < content.length) {
                         const startIndex = content.indexOf('`', cursor);
 
                         if (startIndex === -1) {
-                                tokenizePlainText(content.slice(cursor), tokens);
-                                processed = true;
+                                parsePlainText(content.slice(cursor), tokens);
                                 break;
                         }
 
                         const endIndex = content.indexOf('`', startIndex + 1);
 
                         if (endIndex === -1) {
-                                tokenizePlainText(content.slice(cursor), tokens);
-                                processed = true;
+                                parsePlainText(content.slice(cursor), tokens);
                                 break;
                         }
 
                         if (startIndex > cursor) {
-                                tokenizePlainText(content.slice(cursor, startIndex), tokens);
-                                processed = true;
+                                parsePlainText(content.slice(cursor, startIndex), tokens);
                         }
 
                         tokens.push({ type: 'code', content: content.slice(startIndex + 1, endIndex) });
-                        processed = true;
+                        encounteredCode = true;
                         cursor = endIndex + 1;
                 }
 
-                if (!processed) {
-                        tokenizePlainText(content, tokens);
+                if (!encounteredCode && tokens.length === 0) {
+                        parsePlainText(content, tokens);
+                } else if (cursor < content.length) {
+                        parsePlainText(content.slice(cursor), tokens);
                 }
 
                 return tokens;
@@ -244,23 +389,119 @@
 	let saving = $state(false);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
 	const segments = $derived(parseMessageContent(message.content ?? ''));
-	const renderedSegments = $derived(
-		segments.map((segment): RenderedSegment => {
-			if (segment.type === 'code') {
-				return segment;
-			}
-			return { type: 'text', tokens: tokenizeText(segment.content) };
-		})
-	);
+        function parseBlocks(content: string): Block[] {
+                const lines = content.split(/\r?\n/);
+                const blocks: Block[] = [];
+                let listBuffer: InlineToken[][] | null = null;
+                let quoteBuffer: InlineToken[][] | null = null;
 
-	const messageEmbeds = $derived(
-		renderedSegments.flatMap((segment): MessageEmbed[] => {
-			if (segment.type !== 'text') return [];
-			return segment.tokens.flatMap((token): MessageEmbed[] =>
-				token.type === 'link' && token.embed ? [token.embed] : []
-			);
-		})
-	);
+                const flushList = () => {
+                        if (listBuffer && listBuffer.length) {
+                                blocks.push({ type: 'list', items: listBuffer });
+                        }
+                        listBuffer = null;
+                };
+
+                const flushQuote = () => {
+                        if (quoteBuffer && quoteBuffer.length) {
+                                blocks.push({ type: 'quote', lines: quoteBuffer });
+                        }
+                        quoteBuffer = null;
+                };
+
+                for (const line of lines) {
+                        if (line.startsWith('### ')) {
+                                flushList();
+                                flushQuote();
+                                blocks.push({ type: 'heading', level: 3, tokens: parseInline(line.slice(4)) });
+                                continue;
+                        }
+
+                        if (line.startsWith('## ')) {
+                                flushList();
+                                flushQuote();
+                                blocks.push({ type: 'heading', level: 2, tokens: parseInline(line.slice(3)) });
+                                continue;
+                        }
+
+                        if (line.startsWith('# ')) {
+                                flushList();
+                                flushQuote();
+                                blocks.push({ type: 'heading', level: 1, tokens: parseInline(line.slice(2)) });
+                                continue;
+                        }
+
+                        if (line.startsWith('- ')) {
+                                flushQuote();
+                                if (!listBuffer) listBuffer = [];
+                                listBuffer.push(parseInline(line.slice(2)));
+                                continue;
+                        }
+
+                        if (line.startsWith('>')) {
+                                flushList();
+                                if (!quoteBuffer) quoteBuffer = [];
+                                const remainder = line.slice(1);
+                                const trimmed = remainder.startsWith(' ') ? remainder.slice(1) : remainder;
+                                quoteBuffer.push(parseInline(trimmed));
+                                continue;
+                        }
+
+                        if (line.trim() === '') {
+                                flushList();
+                                flushQuote();
+                                blocks.push({ type: 'break' });
+                                continue;
+                        }
+
+                        flushList();
+                        flushQuote();
+                        blocks.push({ type: 'paragraph', tokens: parseInline(line) });
+                }
+
+                flushList();
+                flushQuote();
+
+                return blocks;
+        }
+
+        function collectEmbedsFromTokens(tokens: InlineToken[]): MessageEmbed[] {
+                return tokens.flatMap((token): MessageEmbed[] =>
+                        token.type === 'link' && token.embed ? [token.embed] : []
+                );
+        }
+
+        function collectEmbedsFromBlock(block: Block): MessageEmbed[] {
+                if (block.type === 'paragraph' || block.type === 'heading') {
+                        return collectEmbedsFromTokens(block.tokens);
+                }
+
+                if (block.type === 'quote') {
+                        return block.lines.flatMap((line) => collectEmbedsFromTokens(line));
+                }
+
+                if (block.type === 'list') {
+                        return block.items.flatMap((item) => collectEmbedsFromTokens(item));
+                }
+
+                return [];
+        }
+
+        const renderedSegments = $derived(
+                segments.map((segment): RenderedSegment => {
+                        if (segment.type === 'code') {
+                                return segment;
+                        }
+                        return { type: 'blocks', blocks: parseBlocks(segment.content) };
+                })
+        );
+
+        const messageEmbeds = $derived(
+                renderedSegments.flatMap((segment): MessageEmbed[] => {
+                        if (segment.type !== 'blocks') return [];
+                        return segment.blocks.flatMap((block) => collectEmbedsFromBlock(block));
+                })
+        );
 
 	const EPOCH_MS = Date.UTC(2008, 10, 10, 23, 0, 0, 0);
 
@@ -445,86 +686,106 @@
 					>
 				</div>
 			</div>
-		{:else}
-			<div
-				class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}
-			>
-				{#if renderedSegments.length === 0}
-					<span class="break-words whitespace-pre-wrap">{message.content}</span>
-				{:else}
-					{#each renderedSegments as segment, index (index)}
-						{#if segment.type === 'code'}
-							<div class="my-2 whitespace-normal first:mt-0 last:mb-0">
-								<CodeBlock code={segment.content} language={segment.language} />
-							</div>
-						{:else}
-                                                        {#each segment.tokens as token, tokenIndex (`${index}-${tokenIndex}`)}
-                                                                {#if token.type === 'text'}
-                                                                        <span class="break-words whitespace-pre-wrap">{token.content}</span>
-                                                                {:else if token.type === 'link'}
-                                                                        <a
-                                                                                class="font-medium break-words text-[var(--brand)] underline underline-offset-2 transition hover:text-[var(--brand-2)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
-                                                                                href={token.url}
-                                                                                rel="noopener noreferrer"
-                                                                                target="_blank"
-                                                                        >
-                                                                                {token.label}
-                                                                        </a>
-                                                                {:else if token.type === 'code'}
-                                                                        <code
-                                                                                class="font-mono whitespace-pre-wrap rounded border border-[var(--stroke)] bg-[var(--panel-strong)] px-1 py-0.5"
-                                                                        >
-                                                                                {token.content}
-                                                                        </code>
+                {:else}
+                        <div
+                                class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}
+                        >
+                                {#if renderedSegments.length === 0}
+                                        <span class="break-words whitespace-pre-wrap">{message.content}</span>
+                                {:else}
+                                        {#each renderedSegments as segment, index (index)}
+                                                {#if segment.type === 'code'}
+                                                        <div class="my-2 whitespace-normal first:mt-0 last:mb-0">
+                                                                <CodeBlock code={segment.content} language={segment.language} />
+                                                        </div>
+                                                {:else}
+                                                        {#each segment.blocks as block, blockIndex (`${index}-${blockIndex}`)}
+                                                                {#if block.type === 'heading'}
+                                                                        {#if block.level === 1}
+                                                                                <h1 class="m-0 text-lg font-semibold leading-tight">
+                                                                                        <InlineTokens tokens={block.tokens} />
+                                                                                </h1>
+                                                                        {:else if block.level === 2}
+                                                                                <h2 class="m-0 text-base font-semibold leading-tight">
+                                                                                        <InlineTokens tokens={block.tokens} />
+                                                                                </h2>
+                                                                        {:else}
+                                                                                <h3 class="m-0 text-sm font-semibold leading-tight">
+                                                                                        <InlineTokens tokens={block.tokens} />
+                                                                                </h3>
+                                                                        {/if}
+                                                                {:else if block.type === 'paragraph'}
+                                                                        <p class="m-0 break-words whitespace-pre-wrap">
+                                                                                {#if block.tokens.length === 0}
+                                                                                        <br />
+                                                                                {:else}
+                                                                                        <InlineTokens tokens={block.tokens} />
+                                                                                {/if}
+                                                                        </p>
+                                                                {:else if block.type === 'quote'}
+                                                                        <blockquote class="m-0 border-l-2 border-[var(--stroke)] pl-3 text-[var(--muted)]">
+                                                                                {#each block.lines as line, lineIndex (`${index}-${blockIndex}-q-${lineIndex}`)}
+                                                                                        <p class="m-0 break-words whitespace-pre-wrap">
+                                                                                                {#if line.length === 0}
+                                                                                                        <br />
+                                                                                                {:else}
+                                                                                                        <InlineTokens tokens={line} />
+                                                                                                {/if}
+                                                                                        </p>
+                                                                                {/each}
+                                                                        </blockquote>
+                                                                {:else if block.type === 'list'}
+                                                                        <ul class="ml-4 list-disc space-y-1">
+                                                                                {#each block.items as item, itemIndex (`${index}-${blockIndex}-li-${itemIndex}`)}
+                                                                                        <li class="break-words whitespace-pre-wrap">
+                                                                                                {#if item.length === 0}
+                                                                                                        <br />
+                                                                                                {:else}
+                                                                                                        <InlineTokens tokens={item} />
+                                                                                                {/if}
+                                                                                        </li>
+                                                                                {/each}
+                                                                        </ul>
+                                                                {:else if block.type === 'break'}
+                                                                        <br />
                                                                 {/if}
                                                         {/each}
-                                               {/if}
-                                       {/each}
-                               {/if}
-				{#if message.updated_at}
-					<span
-						class="ml-1 align-baseline text-xs text-[var(--muted)] italic"
-						title={fmtEditFull(message)}
-					>
-						edited
-					</span>
-				{/if}
-			</div>
-			{#if messageEmbeds.length}
-				<div class="mt-2 flex flex-col gap-2">
-					{#each messageEmbeds as embed, embedIndex (embedIndex)}
-						{#if embed.kind === 'invite'}
-							<div class="max-w-sm">
-								<InvitePreview code={embed.code} url={embed.url} />
-							</div>
-						{:else if embed.kind === 'youtube'}
-							<div
-								class="w-full max-w-xl overflow-hidden rounded-lg border border-[var(--stroke)] bg-black"
-								style="aspect-ratio: 16 / 9;"
-							>
-								<iframe
-									class="h-full w-full"
-									src={`https://www.youtube.com/embed/${embed.videoId}`}
-									title="YouTube video player"
-									allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-									allowfullscreen
-								></iframe>
-							</div>
-						{/if}
-					{/each}
-				</div>
-			{/if}
-			{#if message.attachments?.length}
-				<div class={compact ? 'mt-1 flex flex-wrap gap-2' : 'mt-1.5 flex flex-wrap gap-2'}>
-					{#each message.attachments as a}
-						<div
-							class="rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-0.5 text-xs"
-						>
-							{a.filename}
-						</div>
-					{/each}
-				</div>
-			{/if}
+                                                {/if}
+                                        {/each}
+                                {/if}
+                                {#if message.updated_at}
+                                        <span
+                                                class="ml-1 align-baseline text-xs text-[var(--muted)] italic"
+                                                title={fmtEditFull(message)}
+                                        >
+                                                edited
+                                        </span>
+                                {/if}
+                                {#if messageEmbeds.length}
+                                        <div class="mt-2 flex flex-col gap-2">
+                                                {#each messageEmbeds as embed, embedIndex (embedIndex)}
+                                                        {#if embed.kind === 'invite'}
+                                                                <div class="max-w-sm">
+                                                                        <InvitePreview code={embed.code} url={embed.url} />
+                                                                </div>
+                                                        {:else if embed.kind === 'youtube'}
+                                                                <YoutubeEmbed videoId={embed.videoId} url={embed.url} />
+                                                        {/if}
+                                                {/each}
+                                        </div>
+                                {/if}
+                                {#if message.attachments?.length}
+                                        <div class={compact ? 'mt-1 flex flex-wrap gap-2' : 'mt-1.5 flex flex-wrap gap-2'}>
+                                                {#each message.attachments as a}
+                                                        <div
+                                                                class="rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-0.5 text-xs"
+                                                        >
+                                                                {a.filename}
+                                                        </div>
+                                                {/each}
+                                        </div>
+                                {/if}
+                        </div>
 		{/if}
 	</div>
 </div>
