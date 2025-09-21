@@ -1,10 +1,13 @@
 import { writable } from 'svelte/store';
 
+export type ContextMenuAction = () => void | Promise<void>;
+
 export type ContextMenuItem = {
 	label: string;
-	action: () => void | Promise<void>;
+	action?: ContextMenuAction;
 	danger?: boolean;
 	disabled?: boolean;
+	children?: ContextMenuItem[];
 };
 
 export type ContextMenuState = {
@@ -12,23 +15,34 @@ export type ContextMenuState = {
 	x: number;
 	y: number;
 	items: ContextMenuItem[];
+	openSubmenuIndex: number | null;
 };
 
-const state = writable<ContextMenuState>({ open: false, x: 0, y: 0, items: [] });
+function createInitialState(): ContextMenuState {
+	return { open: false, x: 0, y: 0, items: [], openSubmenuIndex: null };
+}
+
+const state = writable<ContextMenuState>(createInitialState());
 
 export const contextMenu = {
 	subscribe: state.subscribe,
 	openAt(clientX: number, clientY: number, items: ContextMenuItem[]) {
 		// Store raw cursor position; component will clamp based on actual menu size
-		state.set({ open: true, x: clientX, y: clientY, items });
+		state.set({ open: true, x: clientX, y: clientY, items, openSubmenuIndex: null });
 	},
 	openFromEvent(e: MouseEvent, items: ContextMenuItem[]) {
 		e.preventDefault();
 		e.stopPropagation();
 		contextMenu.openAt(e.clientX, e.clientY, items);
 	},
+	openSubmenu(index: number | null) {
+		state.update((current) => ({ ...current, openSubmenuIndex: index }));
+	},
+	closeSubmenu() {
+		state.update((current) => ({ ...current, openSubmenuIndex: null }));
+	},
 	close() {
-		state.set({ open: false, x: 0, y: 0, items: [] });
+		state.set(createInitialState());
 	}
 };
 

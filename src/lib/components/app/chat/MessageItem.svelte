@@ -1,9 +1,10 @@
 <script lang="ts">
-	import type { DtoMessage } from '$lib/api';
-	import { auth } from '$lib/stores/auth';
-	import { selectedChannelId } from '$lib/stores/appState';
+        import type { DtoChannel, DtoMessage } from '$lib/api';
+        import { auth } from '$lib/stores/auth';
+        import { channelsByGuild, selectedChannelId, selectedGuildId } from '$lib/stores/appState';
         import { createEventDispatcher, tick } from 'svelte';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import type { ContextMenuItem } from '$lib/stores/contextMenu';
         import { m } from '$lib/paraglide/messages.js';
         import CodeBlock from './CodeBlock.svelte';
         import InlineTokens from './InlineTokens.svelte';
@@ -385,13 +386,46 @@
                 return tokens;
         }
 
-	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
+        const me = auth.user;
+        let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
         let isEditing = $state(false);
         let draft = $state(message.content ?? '');
         let saving = $state(false);
         let editTextarea = $state<HTMLTextAreaElement | null>(null);
         const dispatch = createEventDispatcher<{ deleted: void }>();
         const segments = $derived(parseMessageContent(message.content ?? ''));
+
+        const PERMISSION_MANAGE_MESSAGES = 1 << 17;
+
+        let canDeleteMessage = $state(false);
+        let canEditMessage = $state(false);
+
+        function resolveChannelPermissions(): number {
+                const gid = $selectedGuildId ?? '';
+                const cid = $selectedChannelId;
+                if (!cid) return 0;
+                const list = ($channelsByGuild[gid] ?? []) as DtoChannel[];
+                const channel = list.find((c) => String((c as any)?.id) === cid);
+                const perms = (channel as any)?.permissions;
+                if (typeof perms === 'bigint') return Number(perms);
+                if (typeof perms === 'string') {
+                        const parsed = Number(perms);
+                        return Number.isFinite(parsed) ? parsed : 0;
+                }
+                if (typeof perms === 'number') return perms;
+                return 0;
+        }
+
+        $effect(() => {
+                const currentId = $me?.id != null ? String($me.id) : null;
+                const authorRaw = (message as any)?.author?.id;
+                const authorStr = authorRaw == null ? null : String(authorRaw);
+                const perms = resolveChannelPermissions();
+                const own = currentId != null && authorStr != null && currentId === authorStr;
+                const manage = Boolean(perms & PERMISSION_MANAGE_MESSAGES);
+                canEditMessage = own;
+                canDeleteMessage = own || manage;
+        });
 
         function autoSizeEditTextarea() {
                 if (!editTextarea) return;
@@ -586,44 +620,63 @@
 		}
 	}
 
-	async function deleteMsg() {
-		if (!$selectedChannelId || !message.id) return;
-		await auth.api.message.messageChannelChannelIdMessageIdDelete({
-			channelId: $selectedChannelId as any,
-			messageId: message.id as any
-		});
-		dispatch('deleted');
-	}
+        async function deleteMsg() {
+                if (!canDeleteMessage || !$selectedChannelId || !message.id) return;
+                await auth.api.message.messageChannelChannelIdMessageIdDelete({
+                        channelId: $selectedChannelId as any,
+                        messageId: message.id as any
+                });
+                dispatch('deleted');
+        }
 
-	function openMenu(e: MouseEvent) {
-		e.preventDefault();
-		const mid = String((message as any)?.id ?? '');
-		const uid = String(((message as any)?.author as any)?.id ?? '');
-		const items = [
-			{ label: m.ctx_copy_message_id(), action: () => copyToClipboard(mid), disabled: !mid },
-			{ label: m.ctx_copy_user_id(), action: () => copyToClipboard(uid), disabled: !uid },
-			{
-				label: m.ctx_edit_message(),
+        function openMenu(e: MouseEvent) {
+                e.preventDefault();
+                e.stopPropagation();
+                const mid = String((message as any)?.id ?? '');
+                const items: ContextMenuItem[] = [];
+                if (canDeleteMessage) {
+                        items.push({
+                                label: m.ctx_delete_message(),
+                                action: () => deleteMsg(),
+                                danger: true,
+                                disabled: !message?.id
+                        });
+                }
+                items.push({
+                        label: m.ctx_copy_message_id(),
+                        action: () => copyToClipboard(mid),
+                        disabled: !mid
+                });
+                if (canEditMessage) {
+                        items.push({
+                                label: m.ctx_edit_message(),
                                 action: () => {
                                         void startEditing();
                                 },
-				disabled: !message?.id
-			},
-			{
-				label: m.ctx_delete_message(),
-				action: () => deleteMsg(),
-				danger: true,
-				disabled: !message?.id
-			}
-		];
-		contextMenu.openFromEvent(e, items);
-	}
+                                disabled: !message?.id
+                        });
+                }
+                if (items.length === 0) return;
+                contextMenu.openFromEvent(e, items);
+        }
+
+        function handleRootPointerUp(event: PointerEvent) {
+                if (event.button !== 0) return;
+                if (event.defaultPrevented || isEditing) return;
+                if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
+                const target = event.target as HTMLElement | null;
+                if (target && target.closest('button, a, textarea, input, [contenteditable], [role="button"]')) {
+                        return;
+                }
+                openMenu(event as unknown as MouseEvent);
+        }
 </script>
 
 <div
-	role="listitem"
-	class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
-	oncontextmenu={openMenu}
+        role="listitem"
+        class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
+        onpointerup={handleRootPointerUp}
+        oncontextmenu={openMenu}
 >
 	{#if compact}
 		<div
@@ -640,30 +693,34 @@
 		</div>
 	{/if}
 	<div class="relative min-w-0 flex-1">
-		{#if !isEditing}
-			<div
-				class="absolute top-1 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
-			>
-                                <button
-                                        class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
-                                        title="Edit"
-                                        aria-label="Edit"
-                                        onclick={() => {
-                                                void startEditing();
-                                        }}
-                                >
-                                        <Pencil class="h-3.5 w-3.5" stroke-width={2} />
-                                </button>
-                                <button
-                                        class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
-                                        title="Delete"
-                                        aria-label="Delete"
-                                        onclick={deleteMsg}
-                                >
-                                        <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
-                                </button>
-			</div>
-		{/if}
+                {#if !isEditing && (canEditMessage || canDeleteMessage)}
+                        <div
+                                class="absolute top-1 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
+                        >
+                                {#if canEditMessage}
+                                        <button
+                                                class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
+                                                title="Edit"
+                                                aria-label="Edit"
+                                                onclick={() => {
+                                                        void startEditing();
+                                                }}
+                                        >
+                                                <Pencil class="h-3.5 w-3.5" stroke-width={2} />
+                                        </button>
+                                {/if}
+                                {#if canDeleteMessage}
+                                        <button
+                                                class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
+                                                title="Delete"
+                                                aria-label="Delete"
+                                                onclick={deleteMsg}
+                                        >
+                                                <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
+                                        </button>
+                                {/if}
+                        </div>
+                {/if}
 		{#if !compact}
 			<div class="flex items-baseline gap-2 pr-20">
 				<div
