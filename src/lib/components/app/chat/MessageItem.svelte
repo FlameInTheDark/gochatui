@@ -1,10 +1,12 @@
 <script lang="ts">
-	import type { DtoMessage } from '$lib/api';
-	import { auth } from '$lib/stores/auth';
-	import { selectedChannelId } from '$lib/stores/appState';
-        import { createEventDispatcher, tick } from 'svelte';
-        import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-        import { m } from '$lib/paraglide/messages.js';
+import type { DtoMessage, DtoRole } from '$lib/api';
+import type { ContextMenuItem } from '$lib/stores/contextMenu';
+import { auth } from '$lib/stores/auth';
+import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
+import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+import { m } from '$lib/paraglide/messages.js';
+import { createEventDispatcher, tick } from 'svelte';
+import { get } from 'svelte/store';
         import CodeBlock from './CodeBlock.svelte';
         import InlineTokens from './InlineTokens.svelte';
         import InvitePreview from './InvitePreview.svelte';
@@ -39,9 +41,79 @@
                 | { type: 'list'; items: InlineToken[][] }
                 | { type: 'break' };
 
-        type RenderedSegment =
-                | { type: 'code'; content: string; language?: string }
-                | { type: 'blocks'; blocks: Block[] };
+type RenderedSegment =
+        | { type: 'code'; content: string; language?: string }
+        | { type: 'blocks'; blocks: Block[] };
+
+const guildRolesResolved = new Map<string, DtoRole[]>();
+const guildRolesInFlight = new Map<string, Promise<DtoRole[]>>();
+
+function getRoleId(role?: DtoRole | null): string | null {
+        const raw = role?.id as string | number | bigint | undefined;
+        if (raw == null) return null;
+        try {
+                if (typeof raw === 'bigint') {
+                        return raw.toString();
+                }
+                return BigInt(raw).toString();
+        } catch {
+                return String(raw);
+        }
+}
+
+function toSnowflake(value: unknown): string | null {
+        if (value == null) return null;
+        if (typeof value === 'string') return value;
+        if (typeof value === 'bigint') return value.toString();
+        if (typeof value === 'number') {
+                try {
+                        return BigInt(value).toString();
+                } catch {
+                        return String(value);
+                }
+        }
+        return null;
+}
+
+async function loadGuildRolesCached(guildId: string): Promise<DtoRole[]> {
+        const cached = guildRolesResolved.get(guildId);
+        if (cached) return cached;
+
+        let pending = guildRolesInFlight.get(guildId);
+        if (!pending) {
+                pending = auth.api.guildRoles
+                        .guildGuildIdRolesGet({ guildId: BigInt(guildId) as any })
+                        .then((res) => {
+                                const list = ((res as any)?.data ?? res ?? []) as DtoRole[];
+                                guildRolesResolved.set(guildId, list);
+                                guildRolesInFlight.delete(guildId);
+                                return list;
+                        })
+                        .catch((err) => {
+                                guildRolesInFlight.delete(guildId);
+                                throw err;
+                        });
+                guildRolesInFlight.set(guildId, pending);
+        }
+
+        return pending;
+}
+
+async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<string>> {
+        const res = await auth.api.guildRoles.guildGuildIdMemberUserIdRolesGet({
+                guildId: BigInt(guildId) as any,
+                userId: BigInt(userId) as any
+        });
+        const list = ((res as any)?.data ?? res ?? []) as DtoRole[];
+        const ids = new Set<string>();
+        for (const role of list) {
+                const id = getRoleId(role);
+                if (id) {
+                        ids.add(id);
+                }
+        }
+        return ids;
+}
 
 	function normalizeCodeBlock(raw: string): string {
 		if (!raw) return '';
@@ -595,35 +667,179 @@
 		dispatch('deleted');
 	}
 
-	function openMenu(e: MouseEvent) {
-		e.preventDefault();
-		const mid = String((message as any)?.id ?? '');
-		const uid = String(((message as any)?.author as any)?.id ?? '');
-		const items = [
-			{ label: m.ctx_copy_message_id(), action: () => copyToClipboard(mid), disabled: !mid },
-			{ label: m.ctx_copy_user_id(), action: () => copyToClipboard(uid), disabled: !uid },
-			{
-				label: m.ctx_edit_message(),
+        async function openMenu(e: MouseEvent, fromMessageBody = false) {
+                if (!compact && fromMessageBody) {
+                        return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+
+                const coords = { x: e.clientX, y: e.clientY };
+                const messageId = toSnowflake((message as any)?.id);
+                const userId = toSnowflake(((message as any)?.author as any)?.id);
+                const guildId = $selectedGuildId;
+
+                const createBaseItems = (): ContextMenuItem[] => [
+                        {
+                                label: m.ctx_copy_message_id(),
+                                action: messageId ? () => copyToClipboard(messageId) : undefined,
+                                disabled: !messageId
+                        },
+                        {
+                                label: m.ctx_copy_user_id(),
+                                action: userId ? () => copyToClipboard(userId) : undefined,
+                                disabled: !userId
+                        },
+                        {
+                                label: m.ctx_edit_message(),
                                 action: () => {
                                         void startEditing();
                                 },
-				disabled: !message?.id
-			},
-			{
-				label: m.ctx_delete_message(),
-				action: () => deleteMsg(),
-				danger: true,
-				disabled: !message?.id
-			}
-		];
-		contextMenu.openFromEvent(e, items);
-	}
+                                disabled: !message?.id
+                        },
+                        {
+                                label: m.ctx_delete_message(),
+                                action: () => deleteMsg(),
+                                danger: true,
+                                disabled: !message?.id
+                        }
+                ];
+
+                if (!guildId || !userId) {
+                        contextMenu.openAt(coords.x, coords.y, createBaseItems());
+                        return;
+                }
+
+                const safeGuildId = guildId as string;
+                const safeUserId = userId as string;
+                let roles: DtoRole[] = [];
+                const assignment = new Map<string, boolean>();
+                const pending = new Set<string>();
+                let menuError: string | null = null;
+                const roleMenuIndex = 2;
+
+                function buildRoleChildren(): ContextMenuItem[] {
+                        const items: ContextMenuItem[] = [];
+
+                        if (menuError) {
+                                items.push({ label: menuError, disabled: true, danger: true });
+                        }
+
+                        if (!roles.length) {
+                                if (!menuError) {
+                                        items.push({ label: m.ctx_roles_empty(), disabled: true });
+                                }
+                                return items;
+                        }
+
+                        for (const role of roles) {
+                                const id = getRoleId(role);
+                                if (!id) continue;
+                                const name = role?.name?.trim() || m.role_default_role_name();
+                                if (pending.has(id)) {
+                                        items.push({
+                                                label: m.ctx_roles_item_updating({ role: name }),
+                                                disabled: true
+                                        });
+                                        continue;
+                                }
+                                const isAssigned = assignment.get(id) ?? false;
+                                items.push({
+                                        label: isAssigned
+                                                ? m.ctx_roles_item_assigned({ role: name })
+                                                : m.ctx_roles_item_unassigned({ role: name }),
+                                        action: () => {
+                                                void toggleRole(id, isAssigned);
+                                        }
+                                });
+                        }
+
+                        if (!items.length) {
+                                items.push({ label: m.ctx_roles_empty(), disabled: true });
+                        }
+
+                        return items;
+                }
+
+                function reopen(openRolesSubmenu = false, overrideChildren?: ContextMenuItem[]) {
+                        const base = createBaseItems();
+                        const children = overrideChildren ?? buildRoleChildren();
+                        base.splice(roleMenuIndex, 0, {
+                                label: m.ctx_roles_menu(),
+                                children,
+                                disabled: false
+                        });
+                        contextMenu.openAt(coords.x, coords.y, base);
+                        if (openRolesSubmenu && children.length) {
+                                Promise.resolve()
+                                        .then(tick)
+                                        .then(() => contextMenu.openSubmenu(roleMenuIndex));
+                        }
+                }
+
+                async function toggleRole(roleId: string, wasAssigned: boolean) {
+                        const targetAssigned = !wasAssigned;
+                        assignment.set(roleId, targetAssigned);
+                        pending.add(roleId);
+                        menuError = null;
+                        reopen(true);
+                        try {
+                                const payload = {
+                                        guildId: BigInt(safeGuildId) as any,
+                                        userId: BigInt(safeUserId) as any,
+                                        roleId: BigInt(roleId) as any
+                                };
+                                if (targetAssigned) {
+                                        await auth.api.guildRoles.guildGuildIdMemberUserIdRolesRoleIdPut(payload);
+                                } else {
+                                        await auth.api.guildRoles.guildGuildIdMemberUserIdRolesRoleIdDelete(payload);
+                                }
+                                pending.delete(roleId);
+                                reopen(true);
+                        } catch (err: any) {
+                                pending.delete(roleId);
+                                assignment.set(roleId, wasAssigned);
+                                menuError =
+                                        err?.response?.data?.message ??
+                                        err?.message ??
+                                        m.ctx_roles_error_updating();
+                                reopen(true);
+                        }
+                }
+
+                const placeholderChildren: ContextMenuItem[] = [
+                        { label: m.ctx_roles_loading(), disabled: true }
+                ];
+                reopen(false, placeholderChildren);
+
+                try {
+                        roles = await loadGuildRolesCached(safeGuildId);
+                        const memberRoles = await loadMemberRoleIds(safeGuildId, safeUserId);
+                        for (const role of roles) {
+                                const id = getRoleId(role);
+                                if (!id) continue;
+                                assignment.set(id, memberRoles.has(id));
+                        }
+                } catch (err: any) {
+                        menuError =
+                                err?.response?.data?.message ??
+                                err?.message ??
+                                m.ctx_roles_error_loading();
+                }
+
+                const state = get(contextMenu);
+                if (!state?.open || state.x !== coords.x || state.y !== coords.y) {
+                        return;
+                }
+
+                reopen(false);
+        }
 </script>
 
 <div
-	role="listitem"
-	class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
-	oncontextmenu={openMenu}
+        role="listitem"
+        class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
+        oncontextmenu={(e) => openMenu(e, true)}
 >
 	{#if compact}
 		<div
@@ -666,17 +882,11 @@
 		{/if}
 		{#if !compact}
 			<div class="flex items-baseline gap-2 pr-20">
-				<div
-					role="contentinfo"
-					class="truncate font-semibold text-[var(--muted)]"
-					oncontextmenu={(e) => {
-						e.preventDefault();
-						const uid = String(((message as any)?.author as any)?.id ?? '');
-						contextMenu.openFromEvent(e, [
-							{ label: 'Copy user ID', action: () => copyToClipboard(uid), disabled: !uid }
-						]);
-					}}
-				>
+                                <div
+                                        role="contentinfo"
+                                        class="truncate font-semibold text-[var(--muted)]"
+                                        oncontextmenu={openMenu}
+                                >
 					{message.author?.name ?? 'User'}
 				</div>
 				<div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>
