@@ -355,6 +355,7 @@
 
                         if (startIndex === -1) {
                                 parsePlainText(content.slice(cursor), tokens);
+                                cursor = content.length;
                                 break;
                         }
 
@@ -362,6 +363,7 @@
 
                         if (endIndex === -1) {
                                 parsePlainText(content.slice(cursor), tokens);
+                                cursor = content.length;
                                 break;
                         }
 
