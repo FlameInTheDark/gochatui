@@ -2,7 +2,8 @@
 	import { guildSettingsOpen, selectedGuildId } from '$lib/stores/appState';
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages.js';
-	import GuildInvitesManager from './GuildInvitesManager.svelte';
+        import GuildInvitesManager from './GuildInvitesManager.svelte';
+        import GuildRolesManager from './GuildRolesManager.svelte';
 
 	const guilds = auth.guilds;
 	let category = $state<'profile' | 'roles' | 'moderation' | 'integrations' | 'invites'>('profile');
@@ -125,8 +126,8 @@
 							<p class="mt-2 text-sm text-red-500">{error}</p>
 						{/if}
 					</div>
-				{:else if category === 'roles'}
-					<p>{m.roles()}...</p>
+                                {:else if category === 'roles'}
+                                        <GuildRolesManager />
 				{:else if category === 'moderation'}
 					<p>{m.moderation()}...</p>
 				{:else if category === 'invites'}
