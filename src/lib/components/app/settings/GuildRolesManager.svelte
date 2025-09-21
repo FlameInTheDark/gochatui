@@ -190,6 +190,20 @@
                 }
         ];
 
+        const DEFAULT_ROLE_PERMISSIONS =
+                (1 << 0) |
+                (1 << 5) |
+                (1 << 6) |
+                (1 << 11) |
+                (1 << 12) |
+                (1 << 13) |
+                (1 << 14) |
+                (1 << 15) |
+                (1 << 19) |
+                (1 << 20) |
+                (1 << 21) |
+                (1 << 22);
+
         const DEFAULT_ROLE_COLOR = '#5865F2';
 
         let roles = $state<DtoRole[]>([]);
@@ -284,7 +298,7 @@
                 return {
                         name: '',
                         color: DEFAULT_ROLE_COLOR,
-                        permissions: 0
+                        permissions: DEFAULT_ROLE_PERMISSIONS
                 };
         }
 
