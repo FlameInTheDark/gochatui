@@ -1,5 +1,5 @@
 <script lang="ts">
-        import type { DtoChannel, DtoMessage } from '$lib/api';
+        import type { DtoChannel, DtoMessage, DtoRole } from '$lib/api';
         import { auth } from '$lib/stores/auth';
         import { channelsByGuild, selectedChannelId, selectedGuildId } from '$lib/stores/appState';
         import { createEventDispatcher, tick } from 'svelte';
@@ -12,6 +12,11 @@
         import YoutubeEmbed from './YoutubeEmbed.svelte';
         import { extractInvite } from './extractInvite';
         import { Pencil, Trash2 } from 'lucide-svelte';
+        import {
+                PERMISSION_MANAGE_GUILD,
+                PERMISSION_MANAGE_ROLES,
+                hasAnyGuildPermission
+        } from '$lib/utils/permissions';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
@@ -457,6 +462,7 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
         }
 
         const me = auth.user;
+        const guilds = auth.guilds;
         let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
         let isEditing = $state(false);
         let draft = $state(message.content ?? '');
@@ -699,7 +705,7 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
                 dispatch('deleted');
         }
 
-        function openMenu(e: MouseEvent) {
+        function openMessageMenu(e: MouseEvent) {
                 e.preventDefault();
                 e.stopPropagation();
                 const mid = String((message as any)?.id ?? '');
@@ -730,15 +736,192 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
                 contextMenu.openFromEvent(e, items);
         }
 
+        function openUserMenu(e: MouseEvent) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const userId = toSnowflake((message as any)?.author?.id);
+                const guildId = $selectedGuildId;
+                const clientX = e.clientX;
+                const clientY = e.clientY;
+
+                const items: ContextMenuItem[] = [
+                        {
+                                label: m.ctx_copy_user_id(),
+                                action: userId ? () => copyToClipboard(userId) : undefined,
+                                disabled: !userId
+                        }
+                ];
+
+                const guild = guildId ? $guilds.find((g) => String((g as any)?.id ?? '') === guildId) : null;
+                const canManageRoles =
+                        Boolean(
+                                guildId &&
+                                        userId &&
+                                        guild &&
+                                        hasAnyGuildPermission(
+                                                guild as any,
+                                                $me?.id,
+                                                PERMISSION_MANAGE_ROLES,
+                                                PERMISSION_MANAGE_GUILD
+                                        )
+                        );
+
+                let rolesItem: ContextMenuItem | null = null;
+                let rolesIndex = -1;
+                if (canManageRoles) {
+                        rolesItem = {
+                                label: m.ctx_roles_menu(),
+                                children: [{ label: m.ctx_roles_loading(), disabled: true }]
+                        };
+                        items.push(rolesItem);
+                        rolesIndex = items.length - 1;
+                }
+
+                let allowRefresh = true;
+                let unsubscribe: (() => void) | null = null;
+                let isRolesSubmenuOpen = false;
+
+                const refreshMenu = (forceOpenSubmenu = false) => {
+                        if (!allowRefresh) return;
+                        const shouldOpen = (forceOpenSubmenu || isRolesSubmenuOpen) && rolesIndex >= 0;
+                        contextMenu.openAt(clientX, clientY, items);
+                        if (shouldOpen) {
+                                setTimeout(() => {
+                                        if (!allowRefresh) return;
+                                        contextMenu.openSubmenu(rolesIndex);
+                                }, 0);
+                        }
+                };
+
+                refreshMenu(false);
+
+                unsubscribe = contextMenu.subscribe((state) => {
+                        if (state.items === items) {
+                                isRolesSubmenuOpen = state.openSubmenuIndex === rolesIndex;
+                        }
+                        if (state.items !== items || !state.open) {
+                                allowRefresh = false;
+                                if (unsubscribe) {
+                                        unsubscribe();
+                                        unsubscribe = null;
+                                }
+                        }
+                });
+
+                if (!rolesItem || !guildId || !userId) {
+                        return;
+                }
+
+                const guildSnowflake = (() => {
+                        try {
+                                return BigInt(guildId) as any;
+                        } catch {
+                                return null;
+                        }
+                })();
+                const userSnowflake = (() => {
+                        try {
+                                return BigInt(userId) as any;
+                        } catch {
+                                return null;
+                        }
+                })();
+
+                if (guildSnowflake == null || userSnowflake == null) {
+                        rolesItem.children = [{ label: m.ctx_roles_error_loading(), disabled: true }];
+                        refreshMenu();
+                        return;
+                }
+
+                void (async () => {
+                        try {
+                                const [roles, memberRoleIds] = await Promise.all([
+                                        loadGuildRolesCached(guildId),
+                                        loadMemberRoleIds(guildId, userId)
+                                ]);
+                                if (!allowRefresh) return;
+
+                                const roleItems: ContextMenuItem[] = [];
+                                for (const role of roles) {
+                                        const rid = getRoleId(role);
+                                        if (!rid) continue;
+                                        const roleName = String(role.name ?? 'Role');
+                                        const labelForState = (assigned: boolean) =>
+                                                assigned
+                                                        ? m.ctx_roles_item_assigned({ role: roleName })
+                                                        : m.ctx_roles_item_unassigned({ role: roleName });
+                                        const item: ContextMenuItem = {
+                                                label: labelForState(memberRoleIds.has(rid))
+                                        };
+                                        item.action = async () => {
+                                                if (!allowRefresh) return;
+                                                const assigned = memberRoleIds.has(rid);
+                                                let roleSnowflake: any;
+                                                try {
+                                                        roleSnowflake = BigInt(rid) as any;
+                                                } catch {
+                                                        return;
+                                                }
+                                                item.disabled = true;
+                                                item.label = m.ctx_roles_item_updating({ role: roleName });
+                                                refreshMenu(true);
+                                                try {
+                                                        if (assigned) {
+                                                                await auth.api.guildRoles.guildGuildIdMemberUserIdRolesRoleIdDelete({
+                                                                        guildId: guildSnowflake,
+                                                                        userId: userSnowflake,
+                                                                        roleId: roleSnowflake
+                                                                });
+                                                                memberRoleIds.delete(rid);
+                                                        } else {
+                                                                await auth.api.guildRoles.guildGuildIdMemberUserIdRolesRoleIdPut({
+                                                                        guildId: guildSnowflake,
+                                                                        userId: userSnowflake,
+                                                                        roleId: roleSnowflake
+                                                                });
+                                                                memberRoleIds.add(rid);
+                                                        }
+                                                        item.label = labelForState(memberRoleIds.has(rid));
+                                                        item.disabled = false;
+                                                        refreshMenu(true);
+                                                } catch {
+                                                        item.label = m.ctx_roles_error_updating();
+                                                        refreshMenu(true);
+                                                        setTimeout(() => {
+                                                                if (!allowRefresh) return;
+                                                                item.label = labelForState(memberRoleIds.has(rid));
+                                                                item.disabled = false;
+                                                                refreshMenu(true);
+                                                        }, 1200);
+                                                }
+                                        };
+                                        roleItems.push(item);
+                                }
+
+                                if (!roleItems.length) {
+                                        rolesItem.children = [{ label: m.ctx_roles_empty(), disabled: true }];
+                                } else {
+                                        rolesItem.children = roleItems;
+                                }
+                                refreshMenu();
+                        } catch {
+                                if (!allowRefresh) return;
+                                rolesItem.children = [{ label: m.ctx_roles_error_loading(), disabled: true }];
+                                refreshMenu();
+                        }
+                })();
+        }
+
         function handleRootPointerUp(event: PointerEvent) {
                 if (event.button !== 0) return;
                 if (event.defaultPrevented || isEditing) return;
                 if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
                 const target = event.target as HTMLElement | null;
-                if (target && target.closest('button, a, textarea, input, [contenteditable], [role="button"]')) {
+                if (target && target.closest('button, a, textarea, input, [contenteditable], [role="button"], [data-user-menu="true"]')) {
                         return;
                 }
-                openMenu(event as unknown as MouseEvent);
+                openMessageMenu(event as unknown as MouseEvent);
         }
 </script>
 
@@ -746,7 +929,7 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
         role="listitem"
         class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
         onpointerup={handleRootPointerUp}
-        oncontextmenu={openMenu}
+        oncontextmenu={openMessageMenu}
 >
 	{#if compact}
 		<div
@@ -756,12 +939,16 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
 			{fmtMsgTime(message)}
 		</div>
 	{:else}
-		<div
-			class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
-		>
-			{(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
-		</div>
-	{/if}
+                <button
+                        type="button"
+                        class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
+                        data-user-menu="true"
+                        aria-label={message.author?.name ?? 'User'}
+                        oncontextmenu={openUserMenu}
+                >
+                        {(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
+                </button>
+        {/if}
 	<div class="relative min-w-0 flex-1">
                 {#if !isEditing && (canEditMessage || canDeleteMessage)}
                         <div
@@ -796,10 +983,11 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
                                 <div
                                         role="contentinfo"
                                         class="truncate font-semibold text-[var(--muted)]"
-                                        oncontextmenu={openMenu}
+                                        data-user-menu="true"
+                                        oncontextmenu={openUserMenu}
                                 >
-					{message.author?.name ?? 'User'}
-				</div>
+                                        {message.author?.name ?? 'User'}
+                                </div>
 				<div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>
 					{fmtMsgTime(message)}
 				</div>
