@@ -40,9 +40,79 @@
                 | { type: 'list'; items: InlineToken[][] }
                 | { type: 'break' };
 
-        type RenderedSegment =
-                | { type: 'code'; content: string; language?: string }
-                | { type: 'blocks'; blocks: Block[] };
+type RenderedSegment =
+        | { type: 'code'; content: string; language?: string }
+        | { type: 'blocks'; blocks: Block[] };
+
+const guildRolesResolved = new Map<string, DtoRole[]>();
+const guildRolesInFlight = new Map<string, Promise<DtoRole[]>>();
+
+function getRoleId(role?: DtoRole | null): string | null {
+        const raw = role?.id as string | number | bigint | undefined;
+        if (raw == null) return null;
+        try {
+                if (typeof raw === 'bigint') {
+                        return raw.toString();
+                }
+                return BigInt(raw).toString();
+        } catch {
+                return String(raw);
+        }
+}
+
+function toSnowflake(value: unknown): string | null {
+        if (value == null) return null;
+        if (typeof value === 'string') return value;
+        if (typeof value === 'bigint') return value.toString();
+        if (typeof value === 'number') {
+                try {
+                        return BigInt(value).toString();
+                } catch {
+                        return String(value);
+                }
+        }
+        return null;
+}
+
+async function loadGuildRolesCached(guildId: string): Promise<DtoRole[]> {
+        const cached = guildRolesResolved.get(guildId);
+        if (cached) return cached;
+
+        let pending = guildRolesInFlight.get(guildId);
+        if (!pending) {
+                pending = auth.api.guildRoles
+                        .guildGuildIdRolesGet({ guildId: BigInt(guildId) as any })
+                        .then((res) => {
+                                const list = ((res as any)?.data ?? res ?? []) as DtoRole[];
+                                guildRolesResolved.set(guildId, list);
+                                guildRolesInFlight.delete(guildId);
+                                return list;
+                        })
+                        .catch((err) => {
+                                guildRolesInFlight.delete(guildId);
+                                throw err;
+                        });
+                guildRolesInFlight.set(guildId, pending);
+        }
+
+        return pending;
+}
+
+async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<string>> {
+        const res = await auth.api.guildRoles.guildGuildIdMemberUserIdRolesGet({
+                guildId: BigInt(guildId) as any,
+                userId: BigInt(userId) as any
+        });
+        const list = ((res as any)?.data ?? res ?? []) as DtoRole[];
+        const ids = new Set<string>();
+        for (const role of list) {
+                const id = getRoleId(role);
+                if (id) {
+                        ids.add(id);
+                }
+        }
+        return ids;
+}
 
 	function normalizeCodeBlock(raw: string): string {
 		if (!raw) return '';
@@ -723,17 +793,11 @@
                 {/if}
 		{#if !compact}
 			<div class="flex items-baseline gap-2 pr-20">
-				<div
-					role="contentinfo"
-					class="truncate font-semibold text-[var(--muted)]"
-					oncontextmenu={(e) => {
-						e.preventDefault();
-						const uid = String(((message as any)?.author as any)?.id ?? '');
-						contextMenu.openFromEvent(e, [
-							{ label: 'Copy user ID', action: () => copyToClipboard(uid), disabled: !uid }
-						]);
-					}}
-				>
+                                <div
+                                        role="contentinfo"
+                                        class="truncate font-semibold text-[var(--muted)]"
+                                        oncontextmenu={openMenu}
+                                >
 					{message.author?.name ?? 'User'}
 				</div>
 				<div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>
