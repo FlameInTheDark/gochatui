@@ -3,12 +3,13 @@
 	import { auth } from '$lib/stores/auth';
 	import { selectedChannelId } from '$lib/stores/appState';
 	import { createEventDispatcher } from 'svelte';
-      import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-      import { m } from '$lib/paraglide/messages.js';
-      import CodeBlock from './CodeBlock.svelte';
-      import InvitePreview from './InvitePreview.svelte';
-      import { extractInvite } from './extractInvite';
-      import { Pencil, Trash2 } from 'lucide-svelte';
+        import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import { m } from '$lib/paraglide/messages.js';
+        import CodeBlock from './CodeBlock.svelte';
+        import InvitePreview from './InvitePreview.svelte';
+        import YoutubeEmbed from './YoutubeEmbed.svelte';
+        import { extractInvite } from './extractInvite';
+        import { Pencil, Trash2 } from 'lucide-svelte';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
@@ -497,19 +498,8 @@
 							<div class="max-w-sm">
 								<InvitePreview code={embed.code} url={embed.url} />
 							</div>
-						{:else if embed.kind === 'youtube'}
-							<div
-								class="w-full max-w-xl overflow-hidden rounded-lg border border-[var(--stroke)] bg-black"
-								style="aspect-ratio: 16 / 9;"
-							>
-								<iframe
-									class="h-full w-full"
-									src={`https://www.youtube.com/embed/${embed.videoId}`}
-									title="YouTube video player"
-									allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-									allowfullscreen
-								></iframe>
-							</div>
+                                                {:else if embed.kind === 'youtube'}
+                                                        <YoutubeEmbed videoId={embed.videoId} url={embed.url} />
 						{/if}
 					{/each}
 				</div>
