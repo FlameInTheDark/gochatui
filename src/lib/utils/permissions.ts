@@ -9,7 +9,7 @@ export const PERMISSION_BAN_MEMBERS = 1 << 9;
 export const PERMISSION_TIMEOUT_MEMBERS = 1 << 10;
 export const PERMISSION_ADMINISTRATOR = 1 << 26;
 
-function normalizePermissionValue(value: unknown): number {
+export function normalizePermissionValue(value: unknown): number {
         if (typeof value === 'number') {
                 return Number.isFinite(value) ? value : 0;
         }
@@ -32,7 +32,14 @@ function toSnowflakeString(value: unknown): string | null {
         }
 }
 
-export function getGuildPermissionValue(guild: Pick<DtoGuild, 'permissions'> | null | undefined): number {
+export function getGuildPermissionValue(
+        guild: (Pick<DtoGuild, 'permissions'> & { __effectivePermissions?: unknown }) | null | undefined
+): number {
+        if (!guild) return 0;
+        const effective = (guild as any)?.__effectivePermissions;
+        if (effective != null) {
+                return normalizePermissionValue(effective);
+        }
         return normalizePermissionValue(guild?.permissions);
 }
 

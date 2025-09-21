@@ -8,6 +8,7 @@ import {
 	selectedGuildId
 } from '$lib/stores/appState';
 import { subscribeWS } from '$lib/client/ws';
+import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
 
 function readLastChannels(): Record<string, string> {
 	if (typeof localStorage === 'undefined') return {};
@@ -64,7 +65,9 @@ export async function selectGuild(guildId: string | number | bigint | null | und
 
 		if (get(selectedGuildId) !== gid || myToken !== switchToken) return;
 
-		channelsByGuild.update((map) => ({ ...map, [gid]: list }));
+                channelsByGuild.update((map) => ({ ...map, [gid]: list }));
+
+                void refreshGuildEffectivePermissions(gid);
 
 		const textChannels = list.filter((channel: any) => channel?.type === 0);
 

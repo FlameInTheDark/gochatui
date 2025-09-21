@@ -17,6 +17,8 @@
                 PERMISSION_MANAGE_ROLES,
                 hasAnyGuildPermission
         } from '$lib/utils/permissions';
+        import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
@@ -49,9 +51,6 @@ type RenderedSegment =
         | { type: 'code'; content: string; language?: string }
         | { type: 'blocks'; blocks: Block[] };
 
-const guildRolesResolved = new Map<string, DtoRole[]>();
-const guildRolesInFlight = new Map<string, Promise<DtoRole[]>>();
-
 function getRoleId(role?: DtoRole | null): string | null {
         const raw = role?.id as string | number | bigint | undefined;
         if (raw == null) return null;
@@ -77,30 +76,6 @@ function toSnowflake(value: unknown): string | null {
                 }
         }
         return null;
-}
-
-async function loadGuildRolesCached(guildId: string): Promise<DtoRole[]> {
-        const cached = guildRolesResolved.get(guildId);
-        if (cached) return cached;
-
-        let pending = guildRolesInFlight.get(guildId);
-        if (!pending) {
-                pending = auth.api.guildRoles
-                        .guildGuildIdRolesGet({ guildId: BigInt(guildId) as any })
-                        .then((res) => {
-                                const list = ((res as any)?.data ?? res ?? []) as DtoRole[];
-                                guildRolesResolved.set(guildId, list);
-                                guildRolesInFlight.delete(guildId);
-                                return list;
-                        })
-                        .catch((err) => {
-                                guildRolesInFlight.delete(guildId);
-                                throw err;
-                        });
-                guildRolesInFlight.set(guildId, pending);
-        }
-
-        return pending;
 }
 
 async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<string>> {
@@ -881,6 +856,10 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
                                                                         roleId: roleSnowflake
                                                                 });
                                                                 memberRoleIds.add(rid);
+                                                        }
+                                                        const currentUserId = toSnowflake($me?.id);
+                                                        if (currentUserId && currentUserId === userId) {
+                                                                void refreshGuildEffectivePermissions(guildId);
                                                         }
                                                         item.label = labelForState(memberRoleIds.has(rid));
                                                         item.disabled = false;

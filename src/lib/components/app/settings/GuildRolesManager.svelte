@@ -3,6 +3,8 @@
         import { auth } from '$lib/stores/auth';
         import { m } from '$lib/paraglide/messages.js';
         import type { DtoRole } from '$lib/api';
+        import { invalidateGuildRolesCache } from '$lib/utils/guildRoles';
+        import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
 
         type RoleDraft = {
                 name: string;
@@ -412,48 +414,56 @@
                         color: colorIntFromHex(draft.color),
                         permissions: draft.permissions
                 };
-                try {
-                        if (editingRoleId === 'new') {
-                                const res = await auth.api.guildRoles.guildGuildIdRolesPost({
-                                        guildId: BigInt($selectedGuildId) as any,
-                                        guildCreateGuildRoleRequest: payload
-                                });
-                                const createdId = res.data?.id != null ? String(res.data.id) : null;
-                                const list = await loadRoles();
-                                if (createdId) {
-                                        const created = list.find((role) => getRoleId(role) === createdId);
-                                        if (created) {
-                                                const base = createDraftFromRole(created);
-                                                editingRoleId = createdId;
-                                                draft = { ...base };
-                                                initialDraft = { ...base };
-                                        } else {
-                                                cancelEditing();
-                                        }
-                                } else {
-                                        cancelEditing();
-                                }
-                        } else if (editingRoleId) {
-                                await auth.api.guildRoles.guildGuildIdRolesRoleIdPatch({
-                                        guildId: BigInt($selectedGuildId) as any,
-                                        roleId: BigInt(editingRoleId) as any,
-                                        guildPatchGuildRoleRequest: payload
-                                });
-                                const list = await loadRoles();
-                                const updated = list.find((role) => getRoleId(role) === editingRoleId);
-                                if (updated) {
-                                        const base = createDraftFromRole(updated);
+        try {
+                if (editingRoleId === 'new') {
+                        const res = await auth.api.guildRoles.guildGuildIdRolesPost({
+                                guildId: BigInt($selectedGuildId) as any,
+                                guildCreateGuildRoleRequest: payload
+                        });
+                        if ($selectedGuildId) {
+                                invalidateGuildRolesCache($selectedGuildId);
+                                void refreshGuildEffectivePermissions($selectedGuildId);
+                        }
+                        const createdId = res.data?.id != null ? String(res.data.id) : null;
+                        const list = await loadRoles();
+                        if (createdId) {
+                                const created = list.find((role) => getRoleId(role) === createdId);
+                                if (created) {
+                                        const base = createDraftFromRole(created);
+                                        editingRoleId = createdId;
                                         draft = { ...base };
                                         initialDraft = { ...base };
                                 } else {
                                         cancelEditing();
                                 }
+                        } else {
+                                cancelEditing();
                         }
-                } catch (err: any) {
-                        formError = err?.response?.data?.message ?? err?.message ?? m.role_error_saving();
-                } finally {
-                        saving = false;
+                } else if (editingRoleId) {
+                        await auth.api.guildRoles.guildGuildIdRolesRoleIdPatch({
+                                guildId: BigInt($selectedGuildId) as any,
+                                roleId: BigInt(editingRoleId) as any,
+                                guildPatchGuildRoleRequest: payload
+                        });
+                        if ($selectedGuildId) {
+                                invalidateGuildRolesCache($selectedGuildId);
+                                void refreshGuildEffectivePermissions($selectedGuildId);
+                        }
+                        const list = await loadRoles();
+                        const updated = list.find((role) => getRoleId(role) === editingRoleId);
+                        if (updated) {
+                                const base = createDraftFromRole(updated);
+                                draft = { ...base };
+                                initialDraft = { ...base };
+                        } else {
+                                cancelEditing();
+                        }
                 }
+        } catch (err: any) {
+                formError = err?.response?.data?.message ?? err?.message ?? m.role_error_saving();
+        } finally {
+                saving = false;
+        }
         }
 
         async function deleteRole(role: DtoRole) {
@@ -470,6 +480,10 @@
                                 guildId: BigInt($selectedGuildId) as any,
                                 roleId: BigInt(id) as any
                         });
+                        if ($selectedGuildId) {
+                                invalidateGuildRolesCache($selectedGuildId);
+                                void refreshGuildEffectivePermissions($selectedGuildId);
+                        }
                         if (editingRoleId === id) {
                                 cancelEditing();
                         }
