@@ -830,7 +830,6 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
                                                 label: labelForState(memberRoleIds.has(rid))
                                         };
                                         item.action = async () => {
-                                                if (!allowRefresh) return;
                                                 const assigned = memberRoleIds.has(rid);
                                                 let roleSnowflake: any;
                                                 try {
