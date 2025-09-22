@@ -61,16 +61,20 @@
 	let editChannelName = $state('');
 	let editChannelTopic = $state('');
 	let editChannelPrivate = $state(false);
-	let editChannelError: string | null = $state(null);
-	let editChannelTab = $state<'overview' | 'permissions'>('overview');
-	let editChannelRoles = $state<DtoRole[]>([]);
-	let editChannelRoleToAdd = $state('');
-	let editChannelOverrides = $state<Record<string, { accept: number; deny: number }>>({});
-	let editChannelOverridesInitial = $state<Record<string, { accept: number; deny: number }>>({});
-	let editChannelSelectedOverride = $state<string | null>(null);
-	let editChannelOrderedOverrideRoleIds = $state<string[]>([]);
-	let editChannelPermissionsLoading = $state(false);
-	let editChannelPermissionsError: string | null = $state(null);
+        let editChannelError: string | null = $state(null);
+        let editChannelTab = $state<'overview' | 'permissions'>('overview');
+        let editChannelRoles = $state<DtoRole[]>([]);
+        let editChannelRoleToAdd = $state('');
+        let editChannelOverrides = $state<Record<string, { accept: number; deny: number }>>({});
+        let editChannelOverridesInitial = $state<Record<string, { accept: number; deny: number }>>({});
+        let editChannelSelectedOverride = $state<string | null>(null);
+        let editChannelOrderedOverrideRoleIds = $state<string[]>([]);
+        let editChannelPermissionsLoading = $state(false);
+        let editChannelPermissionsError: string | null = $state(null);
+        let editChannelInitialName = $state('');
+        let editChannelInitialTopic = $state('');
+        let editChannelInitialPrivate = $state(false);
+        let editChannelSaving = $state(false);
 	let editCategoryName = $state('');
 	let editCategoryError: string | null = $state(null);
 	let dragging: { id: string; parent: string | null; type: number } | null = null;
@@ -488,25 +492,32 @@
 		contextMenu.openFromEvent(e, items);
 	}
 
-	function openEditChannel(ch: DtoChannel) {
-		editingChannel = ch;
-		editChannelName = ch.name ?? '';
-		editChannelTopic = (ch as any).topic ?? '';
-		editChannelPrivate = !!(ch as any).private;
-		editChannelError = null;
-		editChannelTab = 'overview';
-		editChannelRoleToAdd = '';
-		editChannelPermissionsError = null;
-		editChannelOverrides = {};
-		editChannelOverridesInitial = {};
-		editChannelSelectedOverride = null;
-		editChannelOrderedOverrideRoleIds = [];
-		editChannelRoles = [];
-		const channelId = String((ch as any)?.id ?? '');
-		if (channelId) {
-			loadChannelPermissions(channelId);
-		}
-	}
+        function openEditChannel(ch: DtoChannel) {
+                editingChannel = ch;
+                const name = ch.name ?? '';
+                const topic = (ch as any).topic ?? '';
+                const isPrivate = !!(ch as any).private;
+                editChannelName = name;
+                editChannelTopic = topic;
+                editChannelPrivate = isPrivate;
+                editChannelInitialName = name;
+                editChannelInitialTopic = topic;
+                editChannelInitialPrivate = isPrivate;
+                editChannelError = null;
+                editChannelTab = 'overview';
+                editChannelRoleToAdd = '';
+                editChannelPermissionsError = null;
+                editChannelOverrides = {};
+                editChannelOverridesInitial = {};
+                editChannelSelectedOverride = null;
+                editChannelOrderedOverrideRoleIds = [];
+                editChannelRoles = [];
+                editChannelSaving = false;
+                const channelId = String((ch as any)?.id ?? '');
+                if (channelId) {
+                        loadChannelPermissions(channelId);
+                }
+        }
 
 	function channelPermissionState(roleId: string, value: number): 'deny' | 'inherit' | 'allow' {
 		const override = editChannelOverrides[roleId];
@@ -587,11 +598,11 @@
 		});
 	}
 
-	function orderedOverrideRoleIds(): string[] {
-		const ids = Object.keys(editChannelOverrides);
-		if (!ids.length) {
-			if (editChannelOrderedOverrideRoleIds.length) {
-				editChannelOrderedOverrideRoleIds = [];
+        function orderedOverrideRoleIds(): string[] {
+                const ids = Object.keys(editChannelOverrides);
+                if (!ids.length) {
+                        if (editChannelOrderedOverrideRoleIds.length) {
+                                editChannelOrderedOverrideRoleIds = [];
 			}
 			return ids;
 		}
@@ -610,41 +621,87 @@
 		}
 		for (const id of remaining) {
 			next.push(id);
-		}
-		if (
-			next.length !== editChannelOrderedOverrideRoleIds.length ||
-			next.some((id, index) => editChannelOrderedOverrideRoleIds[index] !== id)
-		) {
-			editChannelOrderedOverrideRoleIds = next;
-		}
-		return next;
-	}
+                }
+                if (
+                        next.length !== editChannelOrderedOverrideRoleIds.length ||
+                        next.some((id, index) => editChannelOrderedOverrideRoleIds[index] !== id)
+                ) {
+                        editChannelOrderedOverrideRoleIds = next;
+                }
+                return next;
+        }
 
-	async function saveChannelPermissionOverrides(gid: string, channelId: string) {
-		const updates: Promise<any>[] = [];
-		const roleIds = new Set([
-			...Object.keys(editChannelOverridesInitial),
-			...Object.keys(editChannelOverrides)
-		]);
-		for (const roleId of roleIds) {
-			if (!roleId) continue;
-			const next = editChannelOverrides[roleId];
-			const initial = editChannelOverridesInitial[roleId];
-			const nextAccept = next?.accept ?? 0;
-			const nextDeny = next?.deny ?? 0;
-			const initialAccept = initial?.accept ?? 0;
-			const initialDeny = initial?.deny ?? 0;
-			if (nextAccept === initialAccept && nextDeny === initialDeny) continue;
-			const baseParams = {
-				guildId: toApiSnowflake(gid),
-				channelId: toApiSnowflake(channelId),
-				roleId: toApiSnowflake(roleId)
-			} as const;
-			if (nextAccept === 0 && nextDeny === 0) {
-				updates.push(
-					auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
-						...baseParams
-					})
+        function hasEditChannelChanges(): boolean {
+                if (!editingChannel) return false;
+                if (editChannelName !== editChannelInitialName) return true;
+                if (editChannelTopic !== editChannelInitialTopic) return true;
+                if (editChannelPrivate !== editChannelInitialPrivate) return true;
+                const currentIds = Object.keys(editChannelOverrides);
+                const initialIds = Object.keys(editChannelOverridesInitial);
+                if (currentIds.length !== initialIds.length) return true;
+                for (const roleId of new Set([...currentIds, ...initialIds])) {
+                        const current = editChannelOverrides[roleId];
+                        const initial = editChannelOverridesInitial[roleId];
+                        if (!current && initial) return true;
+                        if (current && !initial) return true;
+                        if (!current || !initial) continue;
+                        if (current.accept !== initial.accept || current.deny !== initial.deny) {
+                                return true;
+                        }
+                }
+                return false;
+        }
+
+        const editChannelHasChanges = $derived.by(() => hasEditChannelChanges());
+
+        async function saveChannelPermissionOverrides(gid: string, channelId: string) {
+                const updates: Promise<any>[] = [];
+                const roleIds = new Set([
+                        ...Object.keys(editChannelOverridesInitial),
+                        ...Object.keys(editChannelOverrides)
+                ]);
+                for (const roleId of roleIds) {
+                        if (!roleId) continue;
+                        const next = editChannelOverrides[roleId];
+                        const initial = editChannelOverridesInitial[roleId];
+                        const hasNext = next != null;
+                        const hasInitial = initial != null;
+                        const nextAccept = next?.accept ?? 0;
+                        const nextDeny = next?.deny ?? 0;
+                        const initialAccept = initial?.accept ?? 0;
+                        const initialDeny = initial?.deny ?? 0;
+                        const baseParams = {
+                                guildId: toApiSnowflake(gid),
+                                channelId: toApiSnowflake(channelId),
+                                roleId: toApiSnowflake(roleId)
+                        } as const;
+                        if (!hasNext && hasInitial) {
+                                updates.push(
+                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
+                                                ...baseParams
+                                        })
+                                );
+                                continue;
+                        }
+                        if (hasNext && !hasInitial) {
+                                updates.push(
+                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdPut({
+                                                ...baseParams,
+                                                guildChannelRolePermissionRequest: {
+                                                        accept: nextAccept,
+                                                        deny: nextDeny
+                                                } as any
+                                        })
+                                );
+                                continue;
+                        }
+                        if (!hasNext && !hasInitial) continue;
+                        if (nextAccept === initialAccept && nextDeny === initialDeny) continue;
+                        if (nextAccept === 0 && nextDeny === 0) {
+                                updates.push(
+                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
+                                                ...baseParams
+                                        })
 				);
 			} else {
 				updates.push(
@@ -663,42 +720,58 @@
 		}
 	}
 
-	function closeEditChannel() {
-		editChannelPermissionsLoadToken += 1;
-		editingChannel = null;
-		editChannelError = null;
-		editChannelTab = 'overview';
-		editChannelRoles = [];
-		editChannelRoleToAdd = '';
-		editChannelOverrides = {};
-		editChannelOverridesInitial = {};
-		editChannelPermissionsLoading = false;
-		editChannelPermissionsError = null;
-		editChannelSelectedOverride = null;
-		editChannelOrderedOverrideRoleIds = [];
-	}
+        function closeEditChannel() {
+                editChannelPermissionsLoadToken += 1;
+                editingChannel = null;
+                editChannelError = null;
+                editChannelTab = 'overview';
+                editChannelRoles = [];
+                editChannelRoleToAdd = '';
+                editChannelOverrides = {};
+                editChannelOverridesInitial = {};
+                editChannelPermissionsLoading = false;
+                editChannelPermissionsError = null;
+                editChannelSelectedOverride = null;
+                editChannelOrderedOverrideRoleIds = [];
+                editChannelInitialName = '';
+                editChannelInitialTopic = '';
+                editChannelInitialPrivate = false;
+                editChannelSaving = false;
+        }
 
-	async function saveEditChannel() {
-		if (!editingChannel || !$selectedGuildId) return;
-		const channelId = String((editingChannel as any)?.id ?? '');
-		if (!channelId) return;
-		try {
-			await auth.api.guild.guildGuildIdChannelChannelIdPatch({
-				guildId: BigInt($selectedGuildId) as any,
-				channelId: BigInt((editingChannel as any).id) as any,
-				guildPatchGuildChannelRequest: {
-					name: editChannelName,
-					topic: editChannelTopic,
-					private: editChannelPrivate
-				} as any
-			});
-			await saveChannelPermissionOverrides($selectedGuildId, channelId);
-			closeEditChannel();
-			await refreshChannels();
-		} catch (e: any) {
-			editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
-		}
-	}
+        async function saveEditChannel() {
+                if (!editingChannel || !$selectedGuildId || editChannelSaving) return;
+                if (!hasEditChannelChanges()) return;
+                const channelId = String((editingChannel as any)?.id ?? '');
+                if (!channelId) return;
+                editChannelSaving = true;
+                try {
+                        const shouldPatchChannel =
+                                editChannelName !== editChannelInitialName ||
+                                editChannelTopic !== editChannelInitialTopic ||
+                                editChannelPrivate !== editChannelInitialPrivate;
+                        if (shouldPatchChannel) {
+                                await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+                                        guildId: BigInt($selectedGuildId) as any,
+                                        channelId: BigInt((editingChannel as any).id) as any,
+                                        guildPatchGuildChannelRequest: {
+                                                name: editChannelName,
+                                                topic: editChannelTopic,
+                                                private: editChannelPrivate
+                                        } as any
+                                });
+                        }
+                        await saveChannelPermissionOverrides($selectedGuildId, channelId);
+                        closeEditChannel();
+                        await refreshChannels();
+                } catch (e: any) {
+                        editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
+                } finally {
+                        if (editingChannel) {
+                                editChannelSaving = false;
+                        }
+                }
+        }
 
 	function openEditCategory(cat: DtoChannel) {
 		editingCategory = cat;
@@ -1295,8 +1368,9 @@
                                                         {m.cancel()}
                                                 </button>
                                                 <button
-                                                        class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                        class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:cursor-not-allowed disabled:opacity-50"
                                                         onclick={saveEditChannel}
+                                                        disabled={!editChannelHasChanges || editChannelSaving}
                                                 >
                                                         {m.save()}
                                                 </button>
