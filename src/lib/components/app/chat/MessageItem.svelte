@@ -15,6 +15,7 @@
         import { PERMISSION_MANAGE_ROLES, hasGuildPermission } from '$lib/utils/permissions';
         import { loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
+        import { colorIntToHex } from '$lib/utils/color';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
@@ -89,6 +90,44 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
         }
         return ids;
 }
+
+        function extractAuthorRoleIds(msg: DtoMessage | null | undefined): string[] {
+                if (!msg) return [];
+                const anyMsg = msg as any;
+                const candidates = [
+                        anyMsg?.member?.roles,
+                        anyMsg?.member_roles,
+                        anyMsg?.member?.role_ids,
+                        anyMsg?.member?.roleIds,
+                        anyMsg?.memberRoles
+                ];
+
+                for (const candidate of candidates) {
+                        if (!candidate) continue;
+
+                        const list = Array.isArray(candidate)
+                                ? candidate
+                                : typeof candidate[Symbol.iterator] === 'function'
+                                        ? Array.from(candidate as Iterable<unknown>)
+                                        : [];
+
+                        if (!list.length) continue;
+
+                        const normalized: string[] = [];
+                        for (const value of list) {
+                                const id = toSnowflake(value);
+                                if (id) {
+                                        normalized.push(id);
+                                }
+                        }
+
+                        if (normalized.length) {
+                                return normalized;
+                        }
+                }
+
+                return [];
+        }
 
 	function normalizeCodeBlock(raw: string): string {
 		if (!raw) return '';
@@ -446,6 +485,8 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
 
         let canDeleteMessage = $state(false);
         let canEditMessage = $state(false);
+        let primaryRoleColor = $state<string | null>(null);
+        let roleColorRequest = 0;
 
         function resolveChannelPermissions(): number {
                 const gid = $selectedGuildId ?? '';
@@ -472,6 +513,45 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
                 const manage = Boolean(perms & PERMISSION_MANAGE_MESSAGES);
                 canEditMessage = own;
                 canDeleteMessage = own || manage;
+        });
+
+        $effect(() => {
+                const guildId = $selectedGuildId;
+                const roleIds = extractAuthorRoleIds(message);
+                const requestId = ++roleColorRequest;
+                primaryRoleColor = null;
+
+                const primaryRoleId = roleIds.find((id) => id != null && id !== '');
+                if (!guildId || !primaryRoleId) {
+                        return;
+                }
+
+                const activeGuildId = guildId;
+                const targetRoleId = primaryRoleId;
+
+                void (async () => {
+                        try {
+                                const definitions = await loadGuildRolesCached(activeGuildId);
+                                if (requestId !== roleColorRequest) {
+                                        return;
+                                }
+                                const matchedRole = definitions.find((role) => getRoleId(role) === targetRoleId);
+                                if (!matchedRole) {
+                                        primaryRoleColor = null;
+                                        return;
+                                }
+                                const colorValue = (matchedRole as any)?.color;
+                                if (colorValue == null) {
+                                        primaryRoleColor = null;
+                                        return;
+                                }
+                                primaryRoleColor = colorIntToHex(colorValue as number | string | bigint | null);
+                        } catch {
+                                if (requestId === roleColorRequest) {
+                                        primaryRoleColor = null;
+                                }
+                        }
+                })();
         });
 
         function autoSizeEditTextarea() {
@@ -952,6 +1032,7 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
                                 <div
                                         role="contentinfo"
                                         class="truncate font-semibold text-[var(--muted)]"
+                                        style:color={primaryRoleColor ?? null}
                                         data-user-menu="true"
                                         oncontextmenu={openUserMenu}
                                 >

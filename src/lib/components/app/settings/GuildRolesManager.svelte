@@ -10,6 +10,7 @@
                 type PermissionCategory,
                 type PermissionDefinition
         } from '$lib/utils/permissionDefinitions';
+        import { colorIntToHex } from '$lib/utils/color';
 
         type RoleDraft = {
                 name: string;
@@ -85,19 +86,6 @@
                 return DEFAULT_ROLE_COLOR;
         }
 
-        function toHex(color?: number | string | null): string {
-                const numeric =
-                        typeof color === 'string'
-                                ? Number(color)
-                                : typeof color === 'number'
-                                        ? color
-                                        : 0;
-                if (!Number.isFinite(numeric) || numeric < 0) {
-                        return '#000000';
-                }
-                return `#${Math.round(numeric).toString(16).padStart(6, '0').toUpperCase()}`;
-        }
-
         function colorIntFromHex(hex: string): number {
                 const cleaned = hex.startsWith('#') ? hex.slice(1) : hex;
                 const parsed = parseInt(cleaned, 16);
@@ -110,13 +98,13 @@
         }
 
         function roleColor(role: DtoRole): string {
-                return normalizeHex(toHex(role?.color));
+                return normalizeHex(colorIntToHex(role?.color));
         }
 
         function createDraftFromRole(role?: DtoRole | null): RoleDraft {
                 return {
                         name: role?.name ?? '',
-                        color: normalizeHex(toHex(role?.color)),
+                        color: normalizeHex(colorIntToHex(role?.color)),
                         permissions: role?.permissions != null ? Number(role.permissions) : 0
                 };
         }
