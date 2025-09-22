@@ -12,11 +12,7 @@
         import YoutubeEmbed from './YoutubeEmbed.svelte';
         import { extractInvite } from './extractInvite';
         import { Pencil, Trash2 } from 'lucide-svelte';
-        import {
-                PERMISSION_MANAGE_GUILD,
-                PERMISSION_MANAGE_ROLES,
-                hasAnyGuildPermission
-        } from '$lib/utils/permissions';
+        import { PERMISSION_MANAGE_ROLES, hasGuildPermission } from '$lib/utils/permissions';
         import { loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
 
@@ -734,12 +730,7 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
                                 guildId &&
                                         userId &&
                                         guild &&
-                                        hasAnyGuildPermission(
-                                                guild as any,
-                                                $me?.id,
-                                                PERMISSION_MANAGE_ROLES,
-                                                PERMISSION_MANAGE_GUILD
-                                        )
+                                        hasGuildPermission(guild as any, $me?.id, PERMISSION_MANAGE_ROLES)
                         );
 
                 let rolesItem: ContextMenuItem | null = null;
