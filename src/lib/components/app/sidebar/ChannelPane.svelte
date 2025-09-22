@@ -19,8 +19,8 @@
 	import { subscribeWS, wsEvent } from '$lib/client/ws';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
-        import UserPanel from '$lib/components/app/user/UserPanel.svelte';
-        import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
+	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
+	import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
 	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
 	import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
 	import {
@@ -67,6 +67,8 @@
 	let editChannelRoleToAdd = $state('');
 	let editChannelOverrides = $state<Record<string, { accept: number; deny: number }>>({});
 	let editChannelOverridesInitial = $state<Record<string, { accept: number; deny: number }>>({});
+	let editChannelSelectedOverride = $state<string | null>(null);
+	let editChannelOrderedOverrideRoleIds = $state<string[]>([]);
 	let editChannelPermissionsLoading = $state(false);
 	let editChannelPermissionsError: string | null = $state(null);
 	let editCategoryName = $state('');
@@ -134,6 +136,8 @@
 			editChannelRoleToAdd = '';
 			editChannelPermissionsError = null;
 			editChannelPermissionsLoading = false;
+			editChannelSelectedOverride = null;
+			editChannelOrderedOverrideRoleIds = [];
 			return;
 		}
 		const token = ++editChannelPermissionsLoadToken;
@@ -164,12 +168,15 @@
 				};
 			}
 			editChannelOverrides = map;
+			editChannelOrderedOverrideRoleIds = [];
 			const initial: Record<string, { accept: number; deny: number }> = {};
 			for (const [roleId, value] of Object.entries(map)) {
 				initial[roleId] = { ...value };
 			}
 			editChannelOverridesInitial = initial;
 			editChannelRoleToAdd = '';
+			const ordered = orderedOverrideRoleIds();
+			editChannelSelectedOverride = ordered[0] ?? null;
 		} catch (e: any) {
 			if (token !== editChannelPermissionsLoadToken) {
 				return;
@@ -180,6 +187,8 @@
 			editChannelOverrides = {};
 			editChannelOverridesInitial = {};
 			editChannelRoleToAdd = '';
+			editChannelSelectedOverride = null;
+			editChannelOrderedOverrideRoleIds = [];
 		} finally {
 			if (token === editChannelPermissionsLoadToken) {
 				editChannelPermissionsLoading = false;
@@ -490,6 +499,8 @@
 		editChannelPermissionsError = null;
 		editChannelOverrides = {};
 		editChannelOverridesInitial = {};
+		editChannelSelectedOverride = null;
+		editChannelOrderedOverrideRoleIds = [];
 		editChannelRoles = [];
 		const channelId = String((ch as any)?.id ?? '');
 		if (channelId) {
@@ -505,25 +516,25 @@
 		return 'inherit';
 	}
 
-        function setChannelPermission(
-                roleId: string,
-                value: number,
-                state: 'deny' | 'inherit' | 'allow'
-        ) {
-                const current = editChannelOverrides[roleId] ?? { accept: 0, deny: 0 };
-                const next = { ...current };
-                if (state === 'deny') {
-                        next.deny |= value;
-                        next.accept &= ~value;
-                } else if (state === 'allow') {
-                        next.accept |= value;
-                        next.deny &= ~value;
-                } else {
-                        next.accept &= ~value;
-                        next.deny &= ~value;
-                }
-                editChannelOverrides = { ...editChannelOverrides, [roleId]: next };
-        }
+	function setChannelPermission(
+		roleId: string,
+		value: number,
+		state: 'deny' | 'inherit' | 'allow'
+	) {
+		const current = editChannelOverrides[roleId] ?? { accept: 0, deny: 0 };
+		const next = { ...current };
+		if (state === 'deny') {
+			next.deny |= value;
+			next.accept &= ~value;
+		} else if (state === 'allow') {
+			next.accept |= value;
+			next.deny &= ~value;
+		} else {
+			next.accept &= ~value;
+			next.deny &= ~value;
+		}
+		editChannelOverrides = { ...editChannelOverrides, [roleId]: next };
+	}
 
 	function addRoleOverride() {
 		const roleId = editChannelRoleToAdd;
@@ -532,12 +543,23 @@
 			...editChannelOverrides,
 			[roleId]: { accept: 0, deny: 0 }
 		};
+		const ordered = orderedOverrideRoleIds();
+		editChannelSelectedOverride = roleId;
+		editChannelOrderedOverrideRoleIds = ordered;
 		editChannelRoleToAdd = '';
 	}
 
 	function removeRoleOverride(roleId: string) {
 		const { [roleId]: _removed, ...rest } = editChannelOverrides;
 		editChannelOverrides = rest;
+		const ordered = orderedOverrideRoleIds();
+		if (
+			editChannelSelectedOverride === roleId ||
+			(editChannelSelectedOverride && !ordered.includes(editChannelSelectedOverride))
+		) {
+			editChannelSelectedOverride = ordered[0] ?? null;
+		}
+		editChannelOrderedOverrideRoleIds = ordered;
 	}
 
 	function getRoleId(role: DtoRole | null | undefined): string | null {
@@ -567,20 +589,35 @@
 
 	function orderedOverrideRoleIds(): string[] {
 		const ids = Object.keys(editChannelOverrides);
-		if (!ids.length) return ids;
-		const ordered: string[] = [];
+		if (!ids.length) {
+			if (editChannelOrderedOverrideRoleIds.length) {
+				editChannelOrderedOverrideRoleIds = [];
+			}
+			return ids;
+		}
+		const remaining = new Set(ids);
+		const next: string[] = [];
+		for (const existing of editChannelOrderedOverrideRoleIds) {
+			if (remaining.delete(existing)) {
+				next.push(existing);
+			}
+		}
 		for (const role of editChannelRoles) {
 			const id = getRoleId(role);
-			if (id && ids.includes(id)) {
-				ordered.push(id);
+			if (id && remaining.delete(id)) {
+				next.push(id);
 			}
 		}
-		for (const id of ids) {
-			if (!ordered.includes(id)) {
-				ordered.push(id);
-			}
+		for (const id of remaining) {
+			next.push(id);
 		}
-		return ordered;
+		if (
+			next.length !== editChannelOrderedOverrideRoleIds.length ||
+			next.some((id, index) => editChannelOrderedOverrideRoleIds[index] !== id)
+		) {
+			editChannelOrderedOverrideRoleIds = next;
+		}
+		return next;
 	}
 
 	async function saveChannelPermissionOverrides(gid: string, channelId: string) {
@@ -637,6 +674,8 @@
 		editChannelOverridesInitial = {};
 		editChannelPermissionsLoading = false;
 		editChannelPermissionsError = null;
+		editChannelSelectedOverride = null;
+		editChannelOrderedOverrideRoleIds = [];
 	}
 
 	async function saveEditChannel() {
@@ -847,6 +886,22 @@
 									</div>
 								</div>
 							</div>
+							<div
+								class="flex justify-end gap-2 border-t border-[var(--stroke)] bg-[var(--panel)] p-4"
+							>
+								<button
+									class="rounded-md border border-[var(--stroke)] px-3 py-1"
+									onclick={closeEditChannel}
+								>
+									{m.cancel()}
+								</button>
+								<button
+									class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+									onclick={saveEditChannel}
+								>
+									{m.save()}
+								</button>
+							</div>
 						{/if}
 					{:else}
 						<div
@@ -1025,8 +1080,8 @@
 						{m.channel_tab_permissions()}
 					</button>
 				</aside>
-                                <section class="flex flex-1 flex-col">
-                                        <div class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
+				<section class="flex flex-1 flex-col">
+					<div class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
 						<h2 class="text-lg font-semibold">{m.edit_channel()}</h2>
 						{#if editChannelError}
 							<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
@@ -1100,111 +1155,153 @@
 									{#if editChannelPermissionsLoading}
 										<p class="text-sm text-[var(--muted)]">{m.loading()}</p>
 									{/if}
-									{#if overrideRoleIds.length === 0 && !editChannelPermissionsLoading}
-										<p class="text-sm text-[var(--muted)]">{m.channel_permissions_empty()}</p>
-									{/if}
-									{#each overrideRoleIds as roleId}
-										{@const role = editChannelRoles.find((r) => getRoleId(r) === roleId)}
-										<div class="space-y-3 rounded border border-[var(--stroke)] bg-[var(--bg)] p-4">
-											<div
-												class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
-											>
-												<div class="text-sm font-semibold">
-													{roleDisplayName(role, roleId)}
-												</div>
-												<button
-													class="text-xs text-red-500 hover:underline"
-													onclick={() => removeRoleOverride(roleId)}
+									{#if overrideRoleIds.length > 0}
+										<div class="space-y-3">
+											<div class="space-y-2">
+												<div
+													class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
 												>
-													{m.channel_permissions_remove_role()}
-												</button>
+													{m.channel_permissions_role_overrides_label()}
+												</div>
+												<div class="flex gap-2 overflow-x-auto pb-1">
+													{#each overrideRoleIds as roleId}
+														{@const role = editChannelRoles.find((r) => getRoleId(r) === roleId)}
+														<button
+															type="button"
+															class={`rounded-full border border-[var(--stroke)] px-3 py-1 text-sm whitespace-nowrap transition ${
+																editChannelSelectedOverride === roleId
+																	? 'bg-[var(--brand)] text-[var(--bg)]'
+																	: 'bg-[var(--bg)] hover:bg-[var(--panel-strong)]'
+															}`}
+															onclick={() => (editChannelSelectedOverride = roleId)}
+															aria-pressed={editChannelSelectedOverride === roleId}
+														>
+															{roleDisplayName(role, roleId)}
+														</button>
+													{/each}
+												</div>
 											</div>
-											{#each CHANNEL_PERMISSION_CATEGORIES as category}
-												<div>
+											{#if editChannelSelectedOverride && overrideRoleIds.includes(editChannelSelectedOverride)}
+												{@const selectedOverrideId = editChannelSelectedOverride as string}
+												{@const selectedRole = editChannelRoles.find(
+													(r) => getRoleId(r) === selectedOverrideId
+												)}
+												<div
+													class="space-y-3 rounded border border-[var(--stroke)] bg-[var(--bg)] p-4"
+												>
 													<div
-														class="mb-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
+														class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
 													>
-														{category.label()}
+														<div class="text-sm font-semibold">
+															{roleDisplayName(selectedRole, selectedOverrideId)}
+														</div>
+														<button
+															type="button"
+															class="text-xs text-red-500 hover:underline"
+															onclick={() => removeRoleOverride(selectedOverrideId)}
+														>
+															{m.channel_permissions_remove_role()}
+														</button>
 													</div>
-													<div class="space-y-3">
-														{#each category.permissions as perm}
-															{@const state = channelPermissionState(roleId, perm.value)}
-															<div class="rounded border border-[var(--stroke)] bg-[var(--bg)] p-3">
-																<div class="flex items-start justify-between gap-4">
-																	<div>
-																		<div class="text-sm font-medium">{perm.label()}</div>
-																		<div class="text-xs text-[var(--muted)]">
-																			{perm.description()}
+													{#each CHANNEL_PERMISSION_CATEGORIES as category}
+														<div>
+															<div
+																class="mb-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
+															>
+																{category.label()}
+															</div>
+															<div class="space-y-3">
+																{#each category.permissions as perm}
+																	{@const state = channelPermissionState(
+																		selectedOverrideId,
+																		perm.value
+																	)}
+																	<div
+																		class="rounded border border-[var(--stroke)] bg-[var(--bg)] p-3"
+																	>
+																		<div class="flex items-start justify-between gap-4">
+																			<div>
+																				<div class="text-sm font-medium">{perm.label()}</div>
+																				<div class="text-xs text-[var(--muted)]">
+																					{perm.description()}
+																				</div>
+																			</div>
+																			<div
+																				class="flex overflow-hidden rounded border border-[var(--stroke)] text-xs font-semibold"
+																			>
+																				<button
+																					class={`px-2 py-1 transition ${
+																						state === 'deny'
+																							? 'bg-red-500 text-white'
+																							: 'bg-transparent hover:bg-red-500/10'
+																					}`}
+																					onclick={() =>
+																						setChannelPermission(
+																							selectedOverrideId,
+																							perm.value,
+																							'deny'
+																						)}
+																					aria-label={m.permission_deny()}
+																					title={m.permission_deny()}
+																				>
+																					<X class="h-4 w-4" stroke-width={2} />
+																				</button>
+																				<button
+																					class={`px-2 py-1 transition ${
+																						state === 'inherit'
+																							? 'bg-[var(--panel)]'
+																							: 'bg-transparent hover:bg-[var(--panel)]/60'
+																					}`}
+																					onclick={() =>
+																						setChannelPermission(
+																							selectedOverrideId,
+																							perm.value,
+																							'inherit'
+																						)}
+																					aria-label={m.permission_default()}
+																					title={m.permission_default()}
+																				>
+																					<Slash class="h-4 w-4" stroke-width={2} />
+																				</button>
+																				<button
+																					class={`px-2 py-1 transition ${
+																						state === 'allow'
+																							? 'bg-green-500 text-white'
+																							: 'bg-transparent hover:bg-green-500/10'
+																					}`}
+																					onclick={() =>
+																						setChannelPermission(
+																							selectedOverrideId,
+																							perm.value,
+																							'allow'
+																						)}
+																					aria-label={m.permission_allow()}
+																					title={m.permission_allow()}
+																				>
+																					<Check class="h-4 w-4" stroke-width={2} />
+																				</button>
+																			</div>
 																		</div>
 																	</div>
-																	<div
-																		class="flex overflow-hidden rounded border border-[var(--stroke)] text-xs font-semibold"
-																	>
-                                                                                                                               <button
-                                                                                                                               class={`px-2 py-1 transition ${
-                                                                                                                               state === 'deny'
-                                                                                                                               ? 'bg-red-500 text-white'
-                                                                                                                               : 'bg-transparent hover:bg-red-500/10'
-                                                                                                                               }`}
-                                                                                                                               onclick={() =>
-                                                                                                                               setChannelPermission(roleId, perm.value, 'deny')}
-                                                                                                                               aria-label={m.permission_deny()}
-                                                                                                                               title={m.permission_deny()}
-                                                                                                                               >
-                                                                                                                               <X class="h-4 w-4" stroke-width={2} />
-                                                                                                                               </button>
-                                                                                                                               <button
-                                                                                                                               class={`px-2 py-1 transition ${
-                                                                                                                               state === 'inherit'
-                                                                                                                               ? 'bg-[var(--panel)]'
-                                                                                                                               : 'bg-transparent hover:bg-[var(--panel)]/60'
-                                                                                                                               }`}
-                                                                                                                               onclick={() =>
-                                                                                                                               setChannelPermission(roleId, perm.value, 'inherit')}
-                                                                                                                               aria-label={m.permission_default()}
-                                                                                                                               title={m.permission_default()}
-                                                                                                                               >
-                                                                                                                               <Slash class="h-4 w-4" stroke-width={2} />
-                                                                                                                               </button>
-                                                                                                                               <button
-                                                                                                                               class={`px-2 py-1 transition ${
-                                                                                                                               state === 'allow'
-                                                                                                                               ? 'bg-green-500 text-white'
-                                                                                                                               : 'bg-transparent hover:bg-green-500/10'
-                                                                                                                               }`}
-                                                                                                                               onclick={() =>
-                                                                                                                               setChannelPermission(roleId, perm.value, 'allow')}
-                                                                                                                               aria-label={m.permission_allow()}
-                                                                                                                               title={m.permission_allow()}
-                                                                                                                               >
-                                                                                                                               <Check class="h-4 w-4" stroke-width={2} />
-                                                                                                                               </button>
-																	</div>
-																</div>
+																{/each}
 															</div>
-														{/each}
-													</div>
+														</div>
+													{/each}
 												</div>
-											{/each}
+											{:else}
+												<p class="text-sm text-[var(--muted)]">
+													{m.channel_permissions_select_override_prompt()}
+												</p>
+											{/if}
 										</div>
-									{/each}
+									{:else if !editChannelPermissionsLoading}
+										<p class="text-sm text-[var(--muted)]">
+											{m.channel_permissions_empty()}
+										</p>
+									{/if}
 								</div>
 							</div>
 						{/if}
-					</div>
-					<div class="flex justify-end gap-2 border-t border-[var(--stroke)] bg-[var(--panel)] p-4">
-						<button
-							class="rounded-md border border-[var(--stroke)] px-3 py-1"
-							onclick={closeEditChannel}
-						>
-							{m.cancel()}
-						</button>
-						<button
-							class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-							onclick={saveEditChannel}
-						>
-							{m.save()}
-						</button>
 					</div>
 				</section>
 			</div>
