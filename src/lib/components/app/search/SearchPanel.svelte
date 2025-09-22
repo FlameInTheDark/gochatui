@@ -694,7 +694,7 @@
                                 {#if error}
                                         <div class="text-sm text-red-500">{error}</div>
                                 {/if}
-                                <div class="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                                <div class="scroll-area max-h-[60vh] space-y-2 overflow-y-auto pr-1">
                                         {#if loading}
                                                 <div class="text-sm text-[var(--muted)]">{m.searching()}</div>
                                         {:else if results.length === 0}

@@ -77,7 +77,7 @@
 					{m.other()}
 				</button>
 			</aside>
-			<section class="flex-1 space-y-4 overflow-y-auto p-4">
+                        <section class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
 				{#if category === 'general'}
 					<div>
 						<p id="language-group-label" class="mb-2 block">{m.language()}</p>
