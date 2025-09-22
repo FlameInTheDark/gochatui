@@ -92,7 +92,7 @@
 <div
 	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-hidden border-r border-[var(--stroke)] p-2"
 >
-	<div class="flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
+        <div class="scroll-area flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
 		{#each $guilds as g}
 			<div class="group relative">
 				<div

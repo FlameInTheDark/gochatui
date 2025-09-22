@@ -1025,8 +1025,8 @@
 						{m.channel_tab_permissions()}
 					</button>
 				</aside>
-				<section class="flex flex-1 flex-col">
-					<div class="flex-1 space-y-4 overflow-y-auto p-4">
+                                <section class="flex flex-1 flex-col">
+                                        <div class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
 						<h2 class="text-lg font-semibold">{m.edit_channel()}</h2>
 						{#if editChannelError}
 							<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">

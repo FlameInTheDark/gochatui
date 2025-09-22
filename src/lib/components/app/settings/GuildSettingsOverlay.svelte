@@ -185,7 +185,7 @@
                                         </button>
                                 {/if}
                         </aside>
-                        <section class="flex-1 space-y-4 overflow-y-auto p-4">
+                        <section class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
                                 {#if category === 'profile' && accessibleCategories.includes('profile')}
                                         <div>
                                                 <label for="guild-name" class="mb-2 block">{m.server_name()}</label>
