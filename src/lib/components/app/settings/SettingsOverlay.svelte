@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { settingsOpen, theme, locale } from '$lib/stores/settings';
-	import { m } from '$lib/paraglide/messages.js';
-	import type { Theme, Locale } from '$lib/stores/settings';
+        import { settingsOpen, theme, locale } from '$lib/stores/settings';
+        import { m } from '$lib/paraglide/messages.js';
+        import ProfileEdit from '$lib/components/app/user/ProfileEdit.svelte';
+        import type { Theme, Locale } from '$lib/stores/settings';
 
 	type LanguageOption = {
 		code: Locale;
@@ -26,7 +27,7 @@
 		{ value: 'dark', label: () => m.dark() }
 	];
 
-	let category = $state<'general' | 'appearance' | 'other'>('general');
+        let category = $state<'profile' | 'general' | 'appearance' | 'other'>('profile');
 
 	function close() {
 		settingsOpen.set(false);
@@ -51,10 +52,18 @@
 				&times;
 			</button>
 			<aside class="w-48 space-y-2 border-r border-[var(--stroke)] p-4">
-				<button
-					class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'general'
-						? 'bg-[var(--panel)] font-semibold'
-						: ''}"
+                                <button
+                                        class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'profile'
+                                                ? 'bg-[var(--panel)] font-semibold'
+                                                : ''}"
+                                        onclick={() => (category = 'profile')}
+                                >
+                                        {m.profile()}
+                                </button>
+                                <button
+                                        class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'general'
+                                                ? 'bg-[var(--panel)] font-semibold'
+                                                : ''}"
 					onclick={() => (category = 'general')}
 				>
 					{m.general()}
@@ -78,9 +87,13 @@
 				</button>
 			</aside>
                         <section class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
-				{#if category === 'general'}
-					<div>
-						<p id="language-group-label" class="mb-2 block">{m.language()}</p>
+                                {#if category === 'profile'}
+                                        <div class="space-y-4">
+                                                <ProfileEdit />
+                                        </div>
+                                {:else if category === 'general'}
+                                        <div>
+                                                <p id="language-group-label" class="mb-2 block">{m.language()}</p>
 						<div class="space-y-2" role="radiogroup" aria-labelledby="language-group-label">
 							{#each languages as lang (lang.code)}
 								<div>
