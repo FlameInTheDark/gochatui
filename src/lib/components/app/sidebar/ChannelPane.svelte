@@ -886,26 +886,10 @@
 									</div>
 								</div>
 							</div>
-							<div
-								class="flex justify-end gap-2 border-t border-[var(--stroke)] bg-[var(--panel)] p-4"
-							>
-								<button
-									class="rounded-md border border-[var(--stroke)] px-3 py-1"
-									onclick={closeEditChannel}
-								>
-									{m.cancel()}
-								</button>
-								<button
-									class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-									onclick={saveEditChannel}
-								>
-									{m.save()}
-								</button>
-							</div>
-						{/if}
-					{:else}
-						<div
-							class="mt-2"
+                                                {/if}
+                                        {:else}
+                                                <div
+                                                        class="mt-2"
 							ondragover={(e) => {
 								e.preventDefault();
 								dragOverContainer(String((sec.cat as any)?.id));
@@ -1080,12 +1064,12 @@
 						{m.channel_tab_permissions()}
 					</button>
 				</aside>
-				<section class="flex flex-1 flex-col">
-					<div class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
-						<h2 class="text-lg font-semibold">{m.edit_channel()}</h2>
-						{#if editChannelError}
-							<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
-								{editChannelError}
+                                <section class="flex flex-1 flex-col">
+                                        <div class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
+                                                <h2 class="text-lg font-semibold">{m.edit_channel()}</h2>
+                                                {#if editChannelError}
+                                                        <div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
+                                                                {editChannelError}
 							</div>
 						{/if}
 						{#if editChannelTab === 'overview'}
@@ -1300,13 +1284,27 @@
 										</p>
 									{/if}
 								</div>
-							</div>
-						{/if}
-					</div>
-				</section>
-			</div>
-		</div>
-	{/if}
+                                                        </div>
+                                                {/if}
+                                        </div>
+                                        <div class="flex justify-end gap-2 border-t border-[var(--stroke)] bg-[var(--panel)] p-4">
+                                                <button
+                                                        class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                        onclick={closeEditChannel}
+                                                >
+                                                        {m.cancel()}
+                                                </button>
+                                                <button
+                                                        class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                        onclick={saveEditChannel}
+                                                >
+                                                        {m.save()}
+                                                </button>
+                                        </div>
+                                </section>
+                        </div>
+                </div>
+        {/if}
 
 	{#if editingCategory}
 		<div
