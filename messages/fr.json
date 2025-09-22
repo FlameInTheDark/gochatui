@@ -52,6 +52,8 @@
         "channel_permissions_private_desc": "Seuls les membres disposant de rôles autorisés peuvent voir ce canal.",
         "channel_permissions_select_role": "Sélectionner un rôle",
         "channel_permissions_add_role": "Ajouter un rôle",
+        "channel_permissions_role_overrides_label": "Remplacements de rôle",
+        "channel_permissions_select_override_prompt": "Sélectionnez un rôle pour modifier ses autorisations de canal.",
         "channel_permissions_empty": "Aucun rôle ne possède encore d'autorisations personnalisées. Ajoutez un rôle pour les configurer.",
         "channel_permissions_remove_role": "Supprimer la dérogation",
         "channel_permissions_load_error": "Impossible de charger les autorisations du canal",
