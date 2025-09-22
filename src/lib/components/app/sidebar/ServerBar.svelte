@@ -2,11 +2,29 @@
         import { auth } from '$lib/stores/auth';
         import { selectedGuildId, guildSettingsOpen } from '$lib/stores/appState';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import type { ContextMenuItem } from '$lib/stores/contextMenu';
         const guilds = auth.guilds;
         import { m } from '$lib/paraglide/messages.js';
         import { onMount } from 'svelte';
         import { selectGuild } from '$lib/utils/guildSelection';
         import { Plus } from 'lucide-svelte';
+        import {
+                PERMISSION_MANAGE_CHANNELS,
+                PERMISSION_MANAGE_GUILD,
+                PERMISSION_MANAGE_ROLES,
+                hasAnyGuildPermission
+        } from '$lib/utils/permissions';
+        const me = auth.user;
+
+        function canAccessGuildSettings(guild: any): boolean {
+                return hasAnyGuildPermission(
+                        guild,
+                        $me?.id,
+                        PERMISSION_MANAGE_GUILD,
+                        PERMISSION_MANAGE_ROLES,
+                        PERMISSION_MANAGE_CHANNELS
+                );
+        }
 	onMount(() => {
 		const unsub = guilds.subscribe((arr) => {
 			if (!$selectedGuildId && (arr?.length ?? 0) > 0) {
@@ -63,16 +81,18 @@
 		}
 	}
 
-	function openGuildSettings(gid: string) {
-		selectGuild(gid);
-		guildSettingsOpen.set(true);
-	}
+        function openGuildSettings(gid: string) {
+                const targetGuild = $guilds.find((g) => String((g as any)?.id) === gid);
+                if (!canAccessGuildSettings(targetGuild)) return;
+                selectGuild(gid);
+                guildSettingsOpen.set(true);
+        }
 </script>
 
 <div
 	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-hidden border-r border-[var(--stroke)] p-2"
 >
-	<div class="flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
+        <div class="scroll-area flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
 		{#each $guilds as g}
 			<div class="group relative">
 				<div
@@ -93,19 +113,27 @@
 						e.preventDefault();
 						const gid = String((g as any).id);
 						const name = String((g as any).name ?? 'Server');
-						contextMenu.openFromEvent(e, [
-							{ label: m.copy_server_id(), action: () => copyToClipboard(gid) },
-							{ label: m.server_settings(), action: () => openGuildSettings(gid) },
-							{
-								label: m.leave_server(),
-								action: () => {
-									leavingGuild = { id: gid, name };
-								},
-								danger: true
-							}
-						]);
-					}}
-				>
+                                                const menuItems: ContextMenuItem[] = [
+                                                        { label: m.copy_server_id(), action: () => copyToClipboard(gid) }
+                                                ];
+                                                if (canAccessGuildSettings(g)) {
+                                                        menuItems.push({
+                                                                label: m.server_settings(),
+                                                                action: async () => {
+                                                                        openGuildSettings(gid);
+                                                                }
+                                                        });
+                                                }
+                                                menuItems.push({
+                                                        label: m.leave_server(),
+                                                        action: async () => {
+                                                                leavingGuild = { id: gid, name };
+                                                        },
+                                                        danger: true
+                                                });
+                                                contextMenu.openFromEvent(e, menuItems);
+                                        }}
+                                >
 					<span class="font-bold">{(g.name ?? '?').slice(0, 2).toUpperCase()}</span>
 				</button>
 			</div>

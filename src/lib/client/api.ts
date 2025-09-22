@@ -1,13 +1,14 @@
 import { Configuration } from '$lib/api';
 import {
-	AuthApi,
-	GuildApi,
-	GuildInvitesApi,
-	MessageApi,
-	SearchApi,
-	UserApi,
-	WebhookApi,
-	SearchApiFactory
+        AuthApi,
+        GuildApi,
+        GuildInvitesApi,
+        GuildRolesApi,
+        MessageApi,
+        SearchApi,
+        UserApi,
+        WebhookApi,
+        SearchApiFactory
 } from '$lib/api';
 import axios, { type AxiosInstance } from 'axios';
 import { computeApiBase } from '$lib/runtime/api';
@@ -23,13 +24,14 @@ function stringifyBigInt(data: unknown): string {
 // Injects the bearer token dynamically via configuration.accessToken.
 
 export type ApiGroup = {
-	auth: AuthApi;
-	guild: GuildApi;
-	guildInvites: GuildInvitesApi;
-	message: MessageApi;
-	search: ReturnType<typeof SearchApiFactory>;
-	user: UserApi;
-	webhook: WebhookApi;
+        auth: AuthApi;
+        guild: GuildApi;
+        guildInvites: GuildInvitesApi;
+        guildRoles: GuildRolesApi;
+        message: MessageApi;
+        search: ReturnType<typeof SearchApiFactory>;
+        user: UserApi;
+        webhook: WebhookApi;
 };
 
 export function createApi(
@@ -199,13 +201,14 @@ export function createApi(
 
 	const search = SearchApiFactory(config, base, ax);
 
-	return {
-		auth: new AuthApi(config, base, ax),
-		guild: new GuildApi(config, base, ax),
-		guildInvites: new GuildInvitesApi(config, base, ax),
-		message: new MessageApi(config, base, ax),
-		search,
-		user: new UserApi(config, base, ax),
-		webhook: new WebhookApi(config, base, ax)
-	};
+        return {
+                auth: new AuthApi(config, base, ax),
+                guild: new GuildApi(config, base, ax),
+                guildInvites: new GuildInvitesApi(config, base, ax),
+                guildRoles: new GuildRolesApi(config, base, ax),
+                message: new MessageApi(config, base, ax),
+                search,
+                user: new UserApi(config, base, ax),
+                webhook: new WebhookApi(config, base, ax)
+        };
 }
