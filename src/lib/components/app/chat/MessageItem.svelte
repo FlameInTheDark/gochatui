@@ -517,35 +517,53 @@ async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<s
 
         $effect(() => {
                 const guildId = $selectedGuildId;
-                const roleIds = extractAuthorRoleIds(message);
+                const initialRoleIds = extractAuthorRoleIds(message);
+                const authorId = toSnowflake((message as any)?.author?.id);
                 const requestId = ++roleColorRequest;
                 primaryRoleColor = null;
 
-                const primaryRoleId = roleIds.find((id) => id != null && id !== '');
-                if (!guildId || !primaryRoleId) {
+                if (!guildId) {
                         return;
                 }
 
                 const activeGuildId = guildId;
-                const targetRoleId = primaryRoleId;
 
                 void (async () => {
                         try {
+                                let roleIds = initialRoleIds;
+                                if ((!roleIds || roleIds.length === 0) && activeGuildId && authorId) {
+                                        const fetched = await loadMemberRoleIds(activeGuildId, authorId);
+                                        if (requestId !== roleColorRequest) {
+                                                return;
+                                        }
+                                        roleIds = Array.from(fetched);
+                                }
+
+                                const orderedRoleIds = (roleIds ?? []).filter((id) => id != null && id !== '');
+                                if (!orderedRoleIds.length) {
+                                        return;
+                                }
+
                                 const definitions = await loadGuildRolesCached(activeGuildId);
                                 if (requestId !== roleColorRequest) {
                                         return;
                                 }
-                                const matchedRole = definitions.find((role) => getRoleId(role) === targetRoleId);
-                                if (!matchedRole) {
-                                        primaryRoleColor = null;
+
+                                let resolvedColor: string | null = null;
+                                for (const roleId of orderedRoleIds) {
+                                        const matchedRole = definitions.find((role) => getRoleId(role) === roleId);
+                                        if (!matchedRole) continue;
+                                        const colorValue = (matchedRole as any)?.color;
+                                        if (colorValue == null) continue;
+                                        resolvedColor = colorIntToHex(colorValue as number | string | bigint | null);
+                                        break;
+                                }
+
+                                if (requestId !== roleColorRequest) {
                                         return;
                                 }
-                                const colorValue = (matchedRole as any)?.color;
-                                if (colorValue == null) {
-                                        primaryRoleColor = null;
-                                        return;
-                                }
-                                primaryRoleColor = colorIntToHex(colorValue as number | string | bigint | null);
+
+                                primaryRoleColor = resolvedColor;
                         } catch {
                                 if (requestId === roleColorRequest) {
                                         primaryRoleColor = null;
