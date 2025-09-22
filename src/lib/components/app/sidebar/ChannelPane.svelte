@@ -505,30 +505,25 @@
 		return 'inherit';
 	}
 
-	function setChannelPermission(
-		roleId: string,
-		value: number,
-		state: 'deny' | 'inherit' | 'allow'
-	) {
-		const current = editChannelOverrides[roleId] ?? { accept: 0, deny: 0 };
-		const next = { ...current };
-		if (state === 'deny') {
-			next.deny |= value;
-			next.accept &= ~value;
-		} else if (state === 'allow') {
-			next.accept |= value;
-			next.deny &= ~value;
-		} else {
-			next.accept &= ~value;
-			next.deny &= ~value;
-		}
-		if (next.accept === 0 && next.deny === 0 && !(roleId in editChannelOverridesInitial)) {
-			const { [roleId]: _removed, ...rest } = editChannelOverrides;
-			editChannelOverrides = rest;
-			return;
-		}
-		editChannelOverrides = { ...editChannelOverrides, [roleId]: next };
-	}
+        function setChannelPermission(
+                roleId: string,
+                value: number,
+                state: 'deny' | 'inherit' | 'allow'
+        ) {
+                const current = editChannelOverrides[roleId] ?? { accept: 0, deny: 0 };
+                const next = { ...current };
+                if (state === 'deny') {
+                        next.deny |= value;
+                        next.accept &= ~value;
+                } else if (state === 'allow') {
+                        next.accept |= value;
+                        next.deny &= ~value;
+                } else {
+                        next.accept &= ~value;
+                        next.deny &= ~value;
+                }
+                editChannelOverrides = { ...editChannelOverrides, [roleId]: next };
+        }
 
 	function addRoleOverride() {
 		const roleId = editChannelRoleToAdd;
