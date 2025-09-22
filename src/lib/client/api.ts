@@ -3,6 +3,7 @@ import {
 	AuthApi,
 	GuildApi,
 	GuildInvitesApi,
+	GuildRolesApi,
 	MessageApi,
 	SearchApi,
 	UserApi,
@@ -26,6 +27,7 @@ export type ApiGroup = {
 	auth: AuthApi;
 	guild: GuildApi;
 	guildInvites: GuildInvitesApi;
+	guildRoles: GuildRolesApi;
 	message: MessageApi;
 	search: ReturnType<typeof SearchApiFactory>;
 	user: UserApi;
@@ -203,6 +205,7 @@ export function createApi(
 		auth: new AuthApi(config, base, ax),
 		guild: new GuildApi(config, base, ax),
 		guildInvites: new GuildInvitesApi(config, base, ax),
+		guildRoles: new GuildRolesApi(config, base, ax),
 		message: new MessageApi(config, base, ax),
 		search,
 		user: new UserApi(config, base, ax),
