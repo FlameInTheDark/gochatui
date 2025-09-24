@@ -36,32 +36,36 @@
 		role="presentation"
 		onpointerdown={handleBackdropPointerDown}
 	>
-		<div
-			class={`relative flex h-[80vh] w-full overflow-hidden rounded-lg bg-[var(--bg)] shadow-xl ${maxWidthClass}`}
-			role="dialog"
-			aria-modal="true"
-			onpointerdown={(event) => event.stopPropagation()}
-		>
-			<button
-				aria-label={m.close()}
-				class="absolute top-3 right-3 rounded p-1 text-xl leading-none hover:bg-[var(--panel)]"
-				onclick={close}
-			>
-				&times;
-			</button>
-			<aside class={`w-48 space-y-2 border-r border-[var(--stroke)] p-4 ${sidebarClass}`}>
-				<slot name="sidebar" {close} />
-			</aside>
-			<section class="flex flex-1 flex-col">
-				<div class={`scroll-area flex-1 space-y-4 overflow-y-auto p-4 ${contentClass}`}>
-					<slot {close} />
-				</div>
-				{#if $$slots.footer}
-					<footer class="border-t border-[var(--stroke)] bg-[var(--panel)] p-4">
-						<slot name="footer" {close} />
-					</footer>
-				{/if}
-			</section>
-		</div>
-	</div>
+                <div
+                        class={`relative flex h-[80vh] w-full flex-col overflow-hidden rounded-lg bg-[var(--bg)] shadow-xl ${maxWidthClass}`}
+                        role="dialog"
+                        aria-modal="true"
+                        onpointerdown={(event) => event.stopPropagation()}
+                >
+                        <header class="relative z-20 flex items-center justify-end border-b border-[var(--stroke)] bg-[var(--panel)] px-4 py-3">
+                                <button
+                                        aria-label={m.close()}
+                                        class="relative z-20 rounded p-1 text-xl leading-none hover:bg-[var(--panel-strong)]"
+                                        onclick={close}
+                                >
+                                        &times;
+                                </button>
+                        </header>
+                        <div class="flex flex-1 overflow-hidden">
+                                <aside class={`w-48 flex-shrink-0 space-y-2 border-r border-[var(--stroke)] p-4 ${sidebarClass}`}>
+                                        <slot name="sidebar" {close} />
+                                </aside>
+                                <section class="flex flex-1 flex-col overflow-hidden">
+                                        <div class={`scroll-area flex-1 space-y-4 overflow-y-auto p-4 ${contentClass}`}>
+                                                <slot {close} />
+                                        </div>
+                                        {#if $$slots.footer}
+                                                <footer class="border-t border-[var(--stroke)] bg-[var(--panel)] p-4">
+                                                        <slot name="footer" {close} />
+                                                </footer>
+                                        {/if}
+                                </section>
+                        </div>
+                </div>
+        </div>
 {/if}
