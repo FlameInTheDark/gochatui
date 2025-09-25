@@ -10,6 +10,7 @@
 	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
 	import { normalizePermissionValue, PERMISSION_ADMINISTRATOR } from '$lib/utils/permissions';
 	import { m } from '$lib/paraglide/messages.js';
+	import { openUserContextMenu } from '$lib/utils/userContextMenu';
 
 	const guilds = auth.guilds;
 
@@ -341,7 +342,20 @@
 		{:else}
 			<div class="space-y-1 py-2">
 				{#each decoratedMembers as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
-					<div class="flex items-center gap-3 px-3 py-2 text-sm">
+					<div
+						role="button"
+						tabindex="0"
+						class="flex items-center gap-3 px-3 py-2 text-sm"
+						oncontextmenu={(event) =>
+							openUserContextMenu(
+								event,
+								{ member: entry.member },
+								{
+									guildId: $selectedGuildId,
+									channelId: $selectedChannelId
+								}
+							)}
+					>
 						<div
 							class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
 						>
