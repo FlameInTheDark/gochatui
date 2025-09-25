@@ -1,7 +1,12 @@
 <script lang="ts">
-	import type { DtoChannel, DtoMessage, DtoRole } from '$lib/api';
+	import type { DtoChannel, DtoMember, DtoMessage, DtoRole } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
-	import { channelsByGuild, selectedChannelId, selectedGuildId } from '$lib/stores/appState';
+	import {
+		channelsByGuild,
+		membersByGuild,
+		selectedChannelId,
+		selectedGuildId
+	} from '$lib/stores/appState';
 	import { createEventDispatcher, tick } from 'svelte';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import type { ContextMenuItem } from '$lib/stores/contextMenu';
@@ -88,6 +93,32 @@
 			}
 		}
 		return ids;
+	}
+
+	function memberUserId(member: DtoMember | null | undefined): string | null {
+		if (!member) return null;
+		return (
+			toSnowflake((member as any)?.user?.id) ??
+			toSnowflake((member as any)?.user_id) ??
+			toSnowflake((member as any)?.id)
+		);
+	}
+
+	function collectMemberRoleIds(
+		member: DtoMember | null | undefined,
+		guildId: string | null
+	): string[] {
+		const ids = new Set<string>();
+		if (member && Array.isArray((member as any)?.roles)) {
+			for (const raw of (member as any)?.roles ?? []) {
+				const id = toSnowflake(raw);
+				if (id) ids.add(id);
+			}
+		}
+		if (guildId) {
+			ids.add(guildId);
+		}
+		return Array.from(ids);
 	}
 
 	function extractAuthorRoleIds(msg: DtoMessage | null | undefined): string[] {
@@ -517,6 +548,16 @@
 		const guildId = $selectedGuildId;
 		const initialRoleIds = extractAuthorRoleIds(message);
 		const authorId = toSnowflake((message as any)?.author?.id);
+		const guildMemberList = guildId ? ($membersByGuild[guildId] ?? undefined) : undefined;
+		const memberIndex = new Map<string, DtoMember>();
+		if (Array.isArray(guildMemberList)) {
+			for (const entry of guildMemberList) {
+				const id = memberUserId(entry);
+				if (id) {
+					memberIndex.set(id, entry);
+				}
+			}
+		}
 		const requestId = ++roleColorRequest;
 		primaryRoleColor = null;
 
@@ -528,8 +569,17 @@
 
 		void (async () => {
 			try {
-				let roleIds = initialRoleIds;
-				if ((!roleIds || roleIds.length === 0) && activeGuildId && authorId) {
+				let roleIds: string[] = (initialRoleIds ?? []).filter((id) => id != null && id !== '');
+				if (roleIds.length === 0 && authorId) {
+					const cachedMember = memberIndex.get(authorId);
+					if (cachedMember) {
+						const cached = collectMemberRoleIds(cachedMember, activeGuildId);
+						if (cached.length > 0) {
+							roleIds = cached;
+						}
+					}
+				}
+				if (roleIds.length === 0 && activeGuildId && authorId) {
 					const fetched = await loadMemberRoleIds(activeGuildId, authorId);
 					if (requestId !== roleColorRequest) {
 						return;
@@ -537,7 +587,21 @@
 					roleIds = Array.from(fetched);
 				}
 
-				const orderedRoleIds = (roleIds ?? []).filter((id) => id != null && id !== '');
+				const orderedRoleIds: string[] = [];
+				const seen = new Set<string>();
+				const appendUnique = (raw: string | null | undefined) => {
+					if (raw == null) return;
+					const normalized = String(raw);
+					if (!normalized || seen.has(normalized)) {
+						return;
+					}
+					seen.add(normalized);
+					orderedRoleIds.push(normalized);
+				};
+				for (const id of roleIds ?? []) {
+					appendUnique(id);
+				}
+				appendUnique(activeGuildId);
 				if (!orderedRoleIds.length) {
 					return;
 				}

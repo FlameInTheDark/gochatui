@@ -4,7 +4,8 @@
 		channelsByGuild,
 		selectedGuildId,
 		searchOpen,
-		searchAnchor
+		searchAnchor,
+		membersByGuild
 	} from '$lib/stores/appState';
 	import { tick } from 'svelte';
 	import { m } from '$lib/paraglide/messages.js';
@@ -13,6 +14,7 @@
 	import { channelReady } from '$lib/stores/appState';
 	import { Search } from 'lucide-svelte';
 	import MemberPane from './MemberPane.svelte';
+	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 	let listRef: any = null;
 
 	function currentChannel() {
@@ -29,6 +31,16 @@
 		const t = (ch?.topic ?? '').toString().trim();
 		return t;
 	}
+
+	$effect(() => {
+		const gid = $selectedGuildId ?? '';
+		if (!gid) return;
+		const map = $membersByGuild;
+		if (map && Object.prototype.hasOwnProperty.call(map, gid)) {
+			return;
+		}
+		ensureGuildMembersLoaded(gid).catch(() => {});
+	});
 </script>
 
 <div class="flex h-full min-h-0">
