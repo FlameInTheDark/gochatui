@@ -34,6 +34,7 @@
                 invalidateChannelRoleIds
         } from '$lib/utils/guildRoles';
         import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
+        import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
         import {
                 PERMISSION_MANAGE_CHANNELS,
                 PERMISSION_MANAGE_GUILD,
@@ -164,22 +165,10 @@
 
         function inlineChannelRoleIds(channel: DtoChannel): string[] {
                 const inlineRoles = (channel as any)?.roles;
-                const seen = new Set<string>();
-                const collected: string[] = [];
                 if (!Array.isArray(inlineRoles)) {
-                        return collected;
+                        return [];
                 }
-                for (const entry of inlineRoles) {
-                        const rid =
-                                entry && typeof entry === 'object'
-                                        ? toSnowflakeString((entry as any)?.id ?? (entry as any)?.role_id ?? entry)
-                                        : toSnowflakeString(entry);
-                        if (rid && !seen.has(rid)) {
-                                seen.add(rid);
-                                collected.push(rid);
-                        }
-                }
-                return collected;
+                return filterViewableRoleIds(inlineRoles as any);
         }
 
         function rememberInlineChannelRoles(
