@@ -7,8 +7,7 @@ import {
         loadGuildRolesCached,
         invalidateGuildRolesCache,
         getGuildIdForRole,
-        rememberRoleGuild,
-        refreshChannelRoleIds
+        rememberRoleGuild
 } from '$lib/utils/guildRoles';
 import { refreshChannelRoleIds } from '$lib/utils/channelRoles';
 import { normalizePermissionValue } from '$lib/utils/permissions';
