@@ -297,6 +297,12 @@ export interface DtoChannel {
      */
     'private'?: boolean;
     /**
+     * Roles IDs
+     * @type {Array<number>}
+     * @memberof DtoChannel
+     */
+    'roles'?: Array<number>;
+    /**
      * Channel topic.
      * @type {string}
      * @memberof DtoChannel
