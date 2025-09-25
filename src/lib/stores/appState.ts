@@ -7,6 +7,7 @@ export const selectedChannelId = writable<string | null>(null);
 export const channelsByGuild = writable<Record<string, DtoChannel[]>>({});
 export const messagesByChannel = writable<Record<string, DtoMessage[]>>({});
 export const membersByGuild = writable<Record<string, DtoMember[] | undefined>>({});
+export const channelRolesByGuild = writable<Record<string, Record<string, string[]>>>({});
 
 export const channelOverridesRefreshToken = writable(0);
 
