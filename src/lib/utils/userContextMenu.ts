@@ -1,11 +1,13 @@
 import type { DtoMember, DtoRole } from '$lib/api';
 import { auth } from '$lib/stores/auth';
+import { membersByGuild } from '$lib/stores/appState';
 import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 import type { ContextMenuItem } from '$lib/stores/contextMenu';
 import { m } from '$lib/paraglide/messages.js';
 import { PERMISSION_MANAGE_ROLES, hasGuildPermission } from '$lib/utils/permissions';
 import { loadGuildRolesCached } from '$lib/utils/guildRoles';
 import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
+import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 import { get } from 'svelte/store';
 
 function toSnowflake(value: unknown): string | null {
@@ -109,7 +111,36 @@ export function openUserContextMenu(
 
 	let rolesItem: ContextMenuItem | null = null;
 	let rolesIndex = -1;
-	if (canManageRoles) {
+	let resolvedMember: DtoMember | null = null;
+	let shouldShowRolesSubmenu = canManageRoles && Boolean(guildId && userId);
+	const resolveMemberFromList = (list: DtoMember[] | undefined | null): DtoMember | null => {
+		if (!list) return null;
+		for (const member of list) {
+			const memberId = toSnowflake((member as any)?.user?.id);
+			if (memberId && memberId === userId) {
+				return member;
+			}
+		}
+		return null;
+	};
+
+	if (shouldShowRolesSubmenu && guildId && userId) {
+		const directMember = target.member;
+		if (toSnowflake((directMember as any)?.user?.id) === userId) {
+			resolvedMember = directMember ?? null;
+		}
+		if (!resolvedMember) {
+			const map = get(membersByGuild);
+			const cachedMembers = map[guildId];
+			resolvedMember = resolveMemberFromList(cachedMembers);
+			if (cachedMembers !== undefined && !resolvedMember) {
+				// Members are cached but this user is not present; omit the submenu entirely.
+				shouldShowRolesSubmenu = false;
+			}
+		}
+	}
+
+	if (shouldShowRolesSubmenu && guildId && userId) {
 		rolesItem = {
 			label: m.ctx_roles_menu(),
 			children: [{ label: m.ctx_roles_loading(), disabled: true }]
@@ -179,8 +210,24 @@ export function openUserContextMenu(
 
 	void (async () => {
 		try {
+			const rolesPromise = loadGuildRolesCached(guildId);
+			if (!resolvedMember) {
+				const ensuredMembers = await ensureGuildMembersLoaded(guildId).catch(() => []);
+				if (!allowRefresh) return;
+				resolvedMember = resolveMemberFromList(ensuredMembers);
+				if (!resolvedMember) {
+					const latestMap = get(membersByGuild);
+					resolvedMember = resolveMemberFromList(latestMap[guildId]);
+				}
+				if (!resolvedMember) {
+					rolesItem.children = [{ label: m.ctx_roles_error_loading(), disabled: true }];
+					refreshMenu();
+					return;
+				}
+			}
+
 			const [roles, memberRoleIds] = await Promise.all([
-				loadGuildRolesCached(guildId),
+				rolesPromise,
 				loadMemberRoleIds(guildId, userId)
 			]);
 			if (!allowRefresh) return;
