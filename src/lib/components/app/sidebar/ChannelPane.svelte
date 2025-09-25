@@ -1,48 +1,49 @@
 <script lang="ts">
 	import { get } from 'svelte/store';
 	import { auth } from '$lib/stores/auth';
-        import {
-                selectedGuildId,
-                selectedChannelId,
-                channelsByGuild,
-                messagesByChannel,
-                lastChannelByGuild,
-                channelReady,
-                guildSettingsOpen,
-                membersByGuild,
-                channelRolesByGuild
-        } from '$lib/stores/appState';
-        import type {
-                DtoChannel,
-                DtoMember,
-                DtoRole,
-                GuildChannelOrder,
-                GuildChannelRolePermission
-        } from '$lib/api';
+	import {
+		selectedGuildId,
+		selectedChannelId,
+		channelsByGuild,
+		messagesByChannel,
+		lastChannelByGuild,
+		channelReady,
+		guildSettingsOpen,
+		membersByGuild,
+		channelRolesByGuild
+	} from '$lib/stores/appState';
+	import type {
+		DtoChannel,
+		DtoMember,
+		DtoRole,
+		GuildChannelOrder,
+		GuildChannelRolePermission
+	} from '$lib/api';
 	import { subscribeWS, wsEvent } from '$lib/client/ws';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
-        import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
-        import {
-                loadGuildRolesCached,
-                loadChannelRoleIds,
-                primeGuildChannelRoles,
-                pruneChannelRoleCache,
-                refreshChannelRoleIds,
-                invalidateChannelRoleIds
-        } from '$lib/utils/guildRoles';
-        import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
-        import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
-        import {
-                PERMISSION_MANAGE_CHANNELS,
-                PERMISSION_MANAGE_GUILD,
-                PERMISSION_MANAGE_ROLES,
-                PERMISSION_ADMINISTRATOR,
-                hasAnyGuildPermission,
-                normalizePermissionValue
-        } from '$lib/utils/permissions';
+	import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
+	import {
+		loadGuildRolesCached,
+		loadChannelRoleIds,
+		primeGuildChannelRoles,
+		pruneChannelRoleCache,
+		refreshChannelRoleIds,
+		invalidateChannelRoleIds
+	} from '$lib/utils/guildRoles';
+	import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
+	import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
+	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
+	import {
+		PERMISSION_MANAGE_CHANNELS,
+		PERMISSION_MANAGE_GUILD,
+		PERMISSION_MANAGE_ROLES,
+		PERMISSION_ADMINISTRATOR,
+		hasAnyGuildPermission,
+		normalizePermissionValue
+	} from '$lib/utils/permissions';
 	const guilds = auth.guilds;
 	const me = auth.user;
 
@@ -98,206 +99,204 @@
 	} | null>(null);
 	let editChannelPermissionsLoadToken = 0;
 
-        function toSnowflakeString(value: unknown): string | null {
-                if (value == null) return null;
-                try {
-                        if (typeof value === 'string') return value;
-                        if (typeof value === 'bigint') return value.toString();
-                        if (typeof value === 'number') return BigInt(value).toString();
-                        return String(value);
-                } catch {
-                        try {
-                                return String(value);
-                        } catch {
-                                return null;
-                        }
-                }
-        }
+	function toSnowflakeString(value: unknown): string | null {
+		if (value == null) return null;
+		try {
+			if (typeof value === 'string') return value;
+			if (typeof value === 'bigint') return value.toString();
+			if (typeof value === 'number') return BigInt(value).toString();
+			return String(value);
+		} catch {
+			try {
+				return String(value);
+			} catch {
+				return null;
+			}
+		}
+	}
 
-        function memberUserId(member: DtoMember | undefined): string | null {
-                if (!member) return null;
-                return (
-                        toSnowflakeString((member as any)?.user?.id) ??
-                        toSnowflakeString((member as any)?.user_id) ??
-                        toSnowflakeString((member as any)?.id) ??
-                        null
-                );
-        }
+	function memberUserId(member: DtoMember | undefined): string | null {
+		if (!member) return null;
+		return (
+			toSnowflakeString((member as any)?.user?.id) ??
+			toSnowflakeString((member as any)?.user_id) ??
+			toSnowflakeString((member as any)?.id) ??
+			null
+		);
+	}
 
-        function collectMemberRoleIds(member: DtoMember | undefined): string[] {
-                if (!member) return [];
-                const roles = (member as any)?.roles;
-                const list = Array.isArray(roles) ? roles : [];
-                const seen = new Set<string>();
-                const result: string[] = [];
-                for (const entry of list) {
-                        const id =
-                                entry && typeof entry === 'object'
-                                        ? toSnowflakeString((entry as any)?.id ?? (entry as any)?.role_id ?? entry)
-                                        : toSnowflakeString(entry);
-                        if (id && !seen.has(id)) {
-                                seen.add(id);
-                                result.push(id);
-                        }
-                }
-                return result;
-        }
+	function collectMemberRoleIds(member: DtoMember | undefined): string[] {
+		if (!member) return [];
+		const roles = (member as any)?.roles;
+		const list = Array.isArray(roles) ? roles : [];
+		const seen = new Set<string>();
+		const result: string[] = [];
+		for (const entry of list) {
+			const id =
+				entry && typeof entry === 'object'
+					? toSnowflakeString((entry as any)?.id ?? (entry as any)?.role_id ?? entry)
+					: toSnowflakeString(entry);
+			if (id && !seen.has(id)) {
+				seen.add(id);
+				result.push(id);
+			}
+		}
+		return result;
+	}
 
-        function myGuildRoleIds(guildId: string): Set<string> {
-                const gid = String(guildId ?? '');
-                const set = new Set<string>();
-                if (!gid) return set;
-                const memberList = $membersByGuild[gid];
-                if (Array.isArray(memberList)) {
-                        const meId = toSnowflakeString($me?.id);
-                        if (meId) {
-                                const entry = memberList.find((member) => memberUserId(member) === meId);
-                                if (entry) {
-                                        for (const roleId of collectMemberRoleIds(entry)) {
-                                                set.add(roleId);
-                                        }
-                                }
-                        }
-                }
-                set.add(gid);
-                return set;
-        }
+	function myGuildRoleIds(guildId: string): Set<string> {
+		const gid = String(guildId ?? '');
+		const set = new Set<string>();
+		if (!gid) return set;
+		const memberList = $membersByGuild[gid];
+		if (Array.isArray(memberList)) {
+			const meId = toSnowflakeString($me?.id);
+			if (meId) {
+				const entry = memberList.find((member) => memberUserId(member) === meId);
+				if (entry) {
+					for (const roleId of collectMemberRoleIds(entry)) {
+						set.add(roleId);
+					}
+				}
+			}
+		}
+		set.add(gid);
+		return set;
+	}
 
-        function inlineChannelRoleIds(channel: DtoChannel): string[] {
-                const inlineRoles = (channel as any)?.roles;
-                if (!Array.isArray(inlineRoles)) {
-                        return [];
-                }
-                return filterViewableRoleIds(inlineRoles as any);
-        }
+	function inlineChannelRoleIds(channel: DtoChannel): string[] {
+		const inlineRoles = (channel as any)?.roles;
+		if (!Array.isArray(inlineRoles)) {
+			return [];
+		}
+		return filterViewableRoleIds(inlineRoles as any);
+	}
 
-        function rememberInlineChannelRoles(
-                guildId: string,
-                channels: DtoChannel | DtoChannel[] | null | undefined
-        ) {
-                const gid = String(guildId ?? '');
-                if (!gid) return;
-                const list = Array.isArray(channels) ? channels : channels ? [channels] : [];
-                if (!list.length) return;
-                const pending: Record<string, string[]> = {};
-                for (const channel of list) {
-                        const cid = toSnowflakeString((channel as any)?.id);
-                        if (!cid) continue;
-                        const roles = inlineChannelRoleIds(channel);
-                        if (!roles.length) continue;
-                        pending[cid] = roles;
-                }
-                if (!Object.keys(pending).length) return;
-                queueMicrotask(() => {
-                        channelRolesByGuild.update((map) => {
-                                const currentGuild = map[gid] ?? {};
-                                const nextGuild = { ...currentGuild } as Record<string, string[]>;
-                                let changed = false;
-                                for (const [cid, roles] of Object.entries(pending)) {
-                                        const existing = nextGuild[cid];
-                                        if (
-                                                existing &&
-                                                existing.length === roles.length &&
-                                                existing.every((value, index) => value === roles[index])
-                                        ) {
-                                                continue;
-                                        }
-                                        nextGuild[cid] = roles;
-                                        changed = true;
-                                }
-                                if (!changed) return map;
-                                return { ...map, [gid]: nextGuild };
-                        });
-                });
-        }
+	function rememberInlineChannelRoles(
+		guildId: string,
+		channels: DtoChannel | DtoChannel[] | null | undefined
+	) {
+		const gid = String(guildId ?? '');
+		if (!gid) return;
+		const list = Array.isArray(channels) ? channels : channels ? [channels] : [];
+		if (!list.length) return;
+		const pending: Record<string, string[]> = {};
+		for (const channel of list) {
+			const cid = toSnowflakeString((channel as any)?.id);
+			if (!cid) continue;
+			const roles = inlineChannelRoleIds(channel);
+			if (!roles.length) continue;
+			pending[cid] = roles;
+		}
+		if (!Object.keys(pending).length) return;
+		queueMicrotask(() => {
+			channelRolesByGuild.update((map) => {
+				const currentGuild = map[gid] ?? {};
+				const nextGuild = { ...currentGuild } as Record<string, string[]>;
+				let changed = false;
+				for (const [cid, roles] of Object.entries(pending)) {
+					const existing = nextGuild[cid];
+					if (
+						existing &&
+						existing.length === roles.length &&
+						existing.every((value, index) => value === roles[index])
+					) {
+						continue;
+					}
+					nextGuild[cid] = roles;
+					changed = true;
+				}
+				if (!changed) return map;
+				return { ...map, [gid]: nextGuild };
+			});
+		});
+	}
 
-        function channelAssignedRoleIds(guildId: string, channel: DtoChannel): string[] {
-                const gid = String(guildId ?? '');
-                const cid = toSnowflakeString((channel as any)?.id);
-                if (!gid || !cid) return [];
-                const stored = $channelRolesByGuild[gid]?.[cid];
-                if (Array.isArray(stored)) return stored;
-                const inline = inlineChannelRoleIds(channel);
-                if ((channel as any)?.private) {
-                        void loadChannelRoleIds(gid, cid).catch(() => {});
-                }
-                return inline;
-        }
+	function channelAssignedRoleIds(guildId: string, channel: DtoChannel): string[] {
+		const gid = String(guildId ?? '');
+		const cid = toSnowflakeString((channel as any)?.id);
+		if (!gid || !cid) return [];
+		const stored = $channelRolesByGuild[gid]?.[cid];
+		if (!stored && Boolean((channel as any)?.private)) {
+			void loadChannelRoleIds(gid, cid).catch(() => {});
+		}
+		return channelAllowListedRoleIds(gid, channel, $channelRolesByGuild);
+	}
 
-        function canAccessChannel(guildId: string, channel: DtoChannel): boolean {
-                const type = (channel as any)?.type ?? 0;
-                if (type === 2) return true;
-                if (!Boolean((channel as any)?.private)) return true;
-                const gid = String(guildId ?? '');
-                if (!gid) return false;
-                const guild = $guilds.find((g) => toSnowflakeString((g as any)?.id) === gid) ?? null;
-                if (guild && hasAnyGuildPermission(guild, $me?.id, PERMISSION_ADMINISTRATOR)) {
-                        return true;
-                }
-                const allowed = channelAssignedRoleIds(gid, channel);
-                if (!allowed.length) {
-                        return false;
-                }
-                const myRoles = myGuildRoleIds(gid);
-                for (const rid of allowed) {
-                        if (myRoles.has(rid)) {
-                                return true;
-                        }
-                }
-                return false;
-        }
+	function canAccessChannel(guildId: string, channel: DtoChannel): boolean {
+		const type = (channel as any)?.type ?? 0;
+		if (type === 2) return true;
+		if (!Boolean((channel as any)?.private)) return true;
+		const gid = String(guildId ?? '');
+		if (!gid) return false;
+		const guild = $guilds.find((g) => toSnowflakeString((g as any)?.id) === gid) ?? null;
+		if (guild && hasAnyGuildPermission(guild, $me?.id, PERMISSION_ADMINISTRATOR)) {
+			return true;
+		}
+		const allowed = channelAssignedRoleIds(gid, channel);
+		if (!allowed.length) {
+			return false;
+		}
+		const myRoles = myGuildRoleIds(gid);
+		for (const rid of allowed) {
+			if (myRoles.has(rid)) {
+				return true;
+			}
+		}
+		return false;
+	}
 
-        function currentGuildChannels(): DtoChannel[] {
-                const gid = $selectedGuildId ?? '';
-                if (!gid) return [];
-                const list = $channelsByGuild[gid] ?? [];
-                return list.filter((channel) => canAccessChannel(gid, channel));
-        }
+	function currentGuildChannels(): DtoChannel[] {
+		const gid = $selectedGuildId ?? '';
+		if (!gid) return [];
+		const list = $channelsByGuild[gid] ?? [];
+		return list.filter((channel) => canAccessChannel(gid, channel));
+	}
 
-        $effect(() => {
-                const gid = $selectedGuildId ?? '';
-                if (!gid) return;
-                const selected = $selectedChannelId ? String($selectedChannelId) : '';
-                const accessibleTextChannels = currentGuildChannels().filter(
-                        (channel) => (channel as any)?.type === 0
-                );
-                const accessibleIds = accessibleTextChannels.map((channel) =>
-                        String((channel as any)?.id ?? '')
-                );
-                if (selected && accessibleIds.includes(selected)) {
-                        return;
-                }
-                const fallback = accessibleIds[0] ?? null;
-                if (fallback) {
-                        if (fallback !== selected) {
-                                selectChannel(fallback);
-                        }
-                } else if (selected) {
-                        selectedChannelId.set(null);
-                        channelReady.set(false);
-                }
-        });
+	$effect(() => {
+		const gid = $selectedGuildId ?? '';
+		if (!gid) return;
+		const selected = $selectedChannelId ? String($selectedChannelId) : '';
+		const accessibleTextChannels = currentGuildChannels().filter(
+			(channel) => (channel as any)?.type === 0
+		);
+		const accessibleIds = accessibleTextChannels.map((channel) =>
+			String((channel as any)?.id ?? '')
+		);
+		if (selected && accessibleIds.includes(selected)) {
+			return;
+		}
+		const fallback = accessibleIds[0] ?? null;
+		if (fallback) {
+			if (fallback !== selected) {
+				selectChannel(fallback);
+			}
+		} else if (selected) {
+			selectedChannelId.set(null);
+			channelReady.set(false);
+		}
+	});
 
-        async function refreshChannels() {
-                const gid = $selectedGuildId ? String($selectedGuildId) : '';
-                if (!gid) return;
-                const res = await auth.api.guild.guildGuildIdChannelGet({
-                        guildId: BigInt(gid) as any
-                });
-                const list = res.data ?? [];
-                channelsByGuild.update((m) => ({ ...m, [gid]: list }));
-                pruneChannelRoleCache(gid, list);
-                rememberInlineChannelRoles(gid, list);
-                await primeGuildChannelRoles(gid, list).catch(() => {});
-                // If selected channel is not present in this guild or not a text channel, auto-fix.
-                const textChannels = list.filter(
-                        (c: any) => c?.type === 0 && canAccessChannel(gid, c as DtoChannel)
-                );
-                const sel = $selectedChannelId ? String($selectedChannelId) : '';
-                const selValid = sel && textChannels.some((c: any) => String((c as any).id) === sel);
-                if (!selValid) {
-                        const first = textChannels[0] as any;
-                        const firstId = first ? String(first.id) : '';
+	async function refreshChannels() {
+		const gid = $selectedGuildId ? String($selectedGuildId) : '';
+		if (!gid) return;
+		const res = await auth.api.guild.guildGuildIdChannelGet({
+			guildId: BigInt(gid) as any
+		});
+		const list = res.data ?? [];
+		channelsByGuild.update((m) => ({ ...m, [gid]: list }));
+		pruneChannelRoleCache(gid, list);
+		rememberInlineChannelRoles(gid, list);
+		await primeGuildChannelRoles(gid, list).catch(() => {});
+		// If selected channel is not present in this guild or not a text channel, auto-fix.
+		const textChannels = list.filter(
+			(c: any) => c?.type === 0 && canAccessChannel(gid, c as DtoChannel)
+		);
+		const sel = $selectedChannelId ? String($selectedChannelId) : '';
+		const selValid = sel && textChannels.some((c: any) => String((c as any).id) === sel);
+		if (!selValid) {
+			const first = textChannels[0] as any;
+			const firstId = first ? String(first.id) : '';
 			if (firstId && $selectedGuildId === gid) {
 				selectedChannelId.set(firstId);
 				subscribeWS([gid], firstId);
@@ -481,79 +480,79 @@
 	$effect(() => {
 		const ev = $wsEvent as any;
 		if (ev?.op === 0 && ev?.d?.guild_id != null) {
-                        if (ev?.t === 108 && Array.isArray(ev?.d?.channels)) {
-                                const gid = String(ev.d.guild_id);
-                                let nextList: DtoChannel[] = [];
-                                channelsByGuild.update((map) => {
-                                        const list = [...(map[gid] ?? [])];
-                                        const pos = new Map<string, number>();
-                                        for (const ch of ev.d.channels) {
-                                                pos.set(String(ch.id), ch.position ?? 0);
-                                        }
-                                        for (const ch of list) {
-                                                const p = pos.get(String((ch as any).id));
-                                                if (p != null) (ch as any).position = p;
-                                        }
-                                        list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
-                                        nextList = list;
-                                        return { ...map, [gid]: list };
-                                });
-                                pruneChannelRoleCache(gid, nextList);
-                                rememberInlineChannelRoles(gid, nextList);
-                        }
+			if (ev?.t === 108 && Array.isArray(ev?.d?.channels)) {
+				const gid = String(ev.d.guild_id);
+				let nextList: DtoChannel[] = [];
+				channelsByGuild.update((map) => {
+					const list = [...(map[gid] ?? [])];
+					const pos = new Map<string, number>();
+					for (const ch of ev.d.channels) {
+						pos.set(String(ch.id), ch.position ?? 0);
+					}
+					for (const ch of list) {
+						const p = pos.get(String((ch as any).id));
+						if (p != null) (ch as any).position = p;
+					}
+					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+					nextList = list;
+					return { ...map, [gid]: list };
+				});
+				pruneChannelRoleCache(gid, nextList);
+				rememberInlineChannelRoles(gid, nextList);
+			}
 
-                        if ((ev?.t === 106 || ev?.t === 107) && ev?.d?.channel) {
-                                const gid = String(ev.d.guild_id);
-                                const updated = ev.d.channel;
-                                let nextList: DtoChannel[] = [];
-                                channelsByGuild.update((map) => {
-                                        const list = [...(map[gid] ?? [])];
-                                        const id = String(updated.id);
-                                        const idx = list.findIndex((c) => String((c as any).id) === id);
-                                        if (idx !== -1) {
-                                                const target = list[idx] as any;
-                                                Object.assign(target, updated);
-                                                target.parent_id = updated.parent_id != null ? String(updated.parent_id) : null;
-                                                if (updated.position != null) target.position = updated.position;
-                                        } else {
-                                                list.push({
-                                                        ...updated,
-                                                        parent_id: updated.parent_id != null ? String(updated.parent_id) : null
-                                                } as any);
-                                        }
-                                        list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
-                                        nextList = list;
-                                        return { ...map, [gid]: list };
-                                });
-                                pruneChannelRoleCache(gid, nextList);
-                                rememberInlineChannelRoles(gid, updated as DtoChannel);
-                                const channelId = String(updated?.id ?? '');
-                                if (channelId) {
-                                        const type = (updated as any)?.type ?? 0;
-                                        const isPrivate = Boolean((updated as any)?.private);
-                                        if (type === 2 || !isPrivate) {
-                                                invalidateChannelRoleIds(gid, channelId);
-                                        } else {
-                                                void refreshChannelRoleIds(gid, channelId).catch(() => {});
-                                        }
-                                }
-                        }
+			if ((ev?.t === 106 || ev?.t === 107) && ev?.d?.channel) {
+				const gid = String(ev.d.guild_id);
+				const updated = ev.d.channel;
+				let nextList: DtoChannel[] = [];
+				channelsByGuild.update((map) => {
+					const list = [...(map[gid] ?? [])];
+					const id = String(updated.id);
+					const idx = list.findIndex((c) => String((c as any).id) === id);
+					if (idx !== -1) {
+						const target = list[idx] as any;
+						Object.assign(target, updated);
+						target.parent_id = updated.parent_id != null ? String(updated.parent_id) : null;
+						if (updated.position != null) target.position = updated.position;
+					} else {
+						list.push({
+							...updated,
+							parent_id: updated.parent_id != null ? String(updated.parent_id) : null
+						} as any);
+					}
+					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+					nextList = list;
+					return { ...map, [gid]: list };
+				});
+				pruneChannelRoleCache(gid, nextList);
+				rememberInlineChannelRoles(gid, updated as DtoChannel);
+				const channelId = String(updated?.id ?? '');
+				if (channelId) {
+					const type = (updated as any)?.type ?? 0;
+					const isPrivate = Boolean((updated as any)?.private);
+					if (type === 2 || !isPrivate) {
+						invalidateChannelRoleIds(gid, channelId);
+					} else {
+						void refreshChannelRoleIds(gid, channelId).catch(() => {});
+					}
+				}
+			}
 
-                        if (ev?.t === 109 && ev?.d?.channel_id != null) {
-                                const gid = String(ev.d.guild_id);
-                                const cid = String(ev.d.channel_id);
-                                let list: DtoChannel[] = [];
-                                channelsByGuild.update((map) => {
-                                        list = (map[gid] ?? []).filter((c) => String((c as any).id) !== cid);
-                                        return { ...map, [gid]: list };
-                                });
-                                pruneChannelRoleCache(gid, list);
-                                invalidateChannelRoleIds(gid, cid);
-                                messagesByChannel.update((map) => {
-                                        if (map[cid]) {
-                                                const { [cid]: _removed, ...rest } = map;
-                                                return rest;
-                                        }
+			if (ev?.t === 109 && ev?.d?.channel_id != null) {
+				const gid = String(ev.d.guild_id);
+				const cid = String(ev.d.channel_id);
+				let list: DtoChannel[] = [];
+				channelsByGuild.update((map) => {
+					list = (map[gid] ?? []).filter((c) => String((c as any).id) !== cid);
+					return { ...map, [gid]: list };
+				});
+				pruneChannelRoleCache(gid, list);
+				invalidateChannelRoleIds(gid, cid);
+				messagesByChannel.update((map) => {
+					if (map[cid]) {
+						const { [cid]: _removed, ...rest } = map;
+						return rest;
+					}
 					return map;
 				});
 				const curGuild = String(get(selectedGuildId) ?? '');
@@ -634,20 +633,20 @@
 		}
 	}
 
-        function selectChannel(id: string) {
-                const gid = $selectedGuildId ? String($selectedGuildId) : '';
-                if (!gid) return;
-                // validate the channel belongs to current guild and is a text channel
-                const list = $channelsByGuild[gid] ?? [];
-                const ok = list.some(
-                        (c: any) =>
-                                String((c as any).id) === String(id) &&
-                                (c as any)?.type === 0 &&
-                                canAccessChannel(gid, c as DtoChannel)
-                );
-                if (!ok) return;
-                selectedChannelId.set(String(id));
-                subscribeWS([gid], id);
+	function selectChannel(id: string) {
+		const gid = $selectedGuildId ? String($selectedGuildId) : '';
+		if (!gid) return;
+		// validate the channel belongs to current guild and is a text channel
+		const list = $channelsByGuild[gid] ?? [];
+		const ok = list.some(
+			(c: any) =>
+				String((c as any).id) === String(id) &&
+				(c as any)?.type === 0 &&
+				canAccessChannel(gid, c as DtoChannel)
+		);
+		if (!ok) return;
+		selectedChannelId.set(String(id));
+		subscribeWS([gid], id);
 		lastChannelByGuild.update((map) => ({ ...map, [gid]: String(id) }));
 		try {
 			const raw = localStorage.getItem('lastChannels');
