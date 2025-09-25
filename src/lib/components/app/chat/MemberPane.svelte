@@ -4,17 +4,20 @@
 	import {
 		channelOverridesRefreshToken,
 		channelsByGuild,
+		channelRolesByGuild,
 		membersByGuild,
 		selectedChannelId,
 		selectedGuildId
 	} from '$lib/stores/appState';
-        import { colorIntToHex } from '$lib/utils/color';
-        import { loadGuildRolesCached } from '$lib/utils/guildRoles';
-        import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
-        import { applyViewChannelOverrides, finalChannelAccessDecision } from '$lib/utils/channelOverrides';
-        import { normalizePermissionValue, PERMISSION_ADMINISTRATOR } from '$lib/utils/permissions';
+	import { colorIntToHex } from '$lib/utils/color';
+	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
+	import type { ChannelOverrideMap } from '$lib/utils/channelOverrides';
+	import { normalizePermissionValue } from '$lib/utils/permissions';
 	import { m } from '$lib/paraglide/messages.js';
 	import { openUserContextMenu } from '$lib/utils/userContextMenu';
+	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
+	import { memberHasChannelAccess as resolveMemberChannelAccess } from '$lib/utils/memberChannelAccess';
 
 	const guilds = auth.guilds;
 
@@ -23,7 +26,7 @@
 	let loadingMembers = $state(false);
 	let membersError = $state<string | null>(null);
 	let roleMap = $state<Record<string, DtoRole>>({});
-	let channelOverrides = $state<Record<string, { accept: number; deny: number }>>({});
+	let channelOverrides = $state<ChannelOverrideMap>({});
 
 	let membersLoadToken = 0;
 	let overridesLoadToken = 0;
@@ -180,30 +183,20 @@
 			toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
 		const roleIds = collectMemberRoleIds(member, guildId);
 		const basePerms = aggregateRolePermissions(roleIds);
+		const allowListedRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
 
-                let allowed =
-                        Boolean(basePerms & VIEW_CHANNEL) || Boolean(basePerms & PERMISSION_ADMINISTRATOR);
-
-                allowed = applyViewChannelOverrides(
-                        allowed,
-                        roleIds,
-                        guildId,
-                        channelOverrides,
-                        VIEW_CHANNEL
-                );
-
-                const ownerId = toSnowflakeString((guild as any)?.owner);
-                const memberId = toSnowflakeString((member as any)?.user?.id);
-
-                return finalChannelAccessDecision(
-                        allowed,
-                        basePerms,
-                        PERMISSION_ADMINISTRATOR,
-                        ownerId,
-                        memberId,
-                        Boolean((channel as any)?.private)
-                );
-        }
+		return resolveMemberChannelAccess({
+			member,
+			channel,
+			guild,
+			guildId,
+			roleIds,
+			basePermissions: basePerms,
+			channelOverrides,
+			allowListedRoleIds,
+			viewPermissionBit: VIEW_CHANNEL
+		});
+	}
 
 	const currentGuild = $derived.by(() => {
 		const gid = $selectedGuildId;
