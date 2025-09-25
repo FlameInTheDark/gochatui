@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 import type { DtoChannel, DtoRole, GuildChannelRolePermission } from '$lib/api';
 import { auth } from '$lib/stores/auth';
 import { channelRolesByGuild } from '$lib/stores/appState';
+import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
 
 const guildRolesResolved = new Map<string, DtoRole[]>();
 const guildRolesInFlight = new Map<string, Promise<DtoRole[]>>();
@@ -192,11 +193,7 @@ async function fetchChannelRoleIds(guildId: string, channelId: string): Promise<
                 channelId: toApiSnowflake(channelId)
         });
         const list = ((response as any)?.data ?? response ?? []) as GuildChannelRolePermission[];
-        const ids: string[] = [];
-        for (const entry of list) {
-                const rid = toSnowflakeString(entry?.role_id);
-                if (rid) ids.push(rid);
-        }
+        const ids = filterViewableRoleIds(list);
         setChannelRoleCacheEntry(guildId, channelId, ids);
         return ids;
 }
