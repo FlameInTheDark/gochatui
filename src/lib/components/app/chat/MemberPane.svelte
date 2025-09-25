@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { DtoMember, DtoRole, GuildChannelRolePermission } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
-        import {
-                channelOverridesRefreshToken,
-                channelsByGuild,
-                membersByGuild,
-                selectedChannelId,
-                selectedGuildId
-        } from '$lib/stores/appState';
+	import {
+		channelOverridesRefreshToken,
+		channelsByGuild,
+		membersByGuild,
+		selectedChannelId,
+		selectedGuildId
+	} from '$lib/stores/appState';
+	import { colorIntToHex } from '$lib/utils/color';
 	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
 	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 	import { normalizePermissionValue, PERMISSION_ADMINISTRATOR } from '$lib/utils/permissions';
@@ -123,6 +124,39 @@
 			ids.add(guildId);
 		}
 		return Array.from(ids);
+	}
+
+	function resolveMemberRoleColor(
+		member: DtoMember | null | undefined,
+		guildId: string | null
+	): string | null {
+		const roleIds = collectMemberRoleIds(member, guildId);
+		if (!roleIds.length) return null;
+
+		const orderedRoleIds: string[] = [];
+		const seen = new Set<string>();
+		const appendUnique = (value: string | null | undefined) => {
+			if (value == null) return;
+			const normalized = String(value);
+			if (!normalized || seen.has(normalized)) return;
+			seen.add(normalized);
+			orderedRoleIds.push(normalized);
+		};
+
+		for (const id of roleIds) {
+			appendUnique(id);
+		}
+		appendUnique(guildId);
+
+		for (const id of orderedRoleIds) {
+			const role = roleMap[id];
+			if (!role) continue;
+			const rawColor = (role as any)?.color;
+			if (rawColor == null) continue;
+			return colorIntToHex(rawColor as number | string | bigint | null);
+		}
+
+		return null;
 	}
 
 	function aggregateRolePermissions(roleIds: Iterable<string>): number {
@@ -261,44 +295,39 @@
 		};
 	});
 
-        $effect(() => {
-                const refreshToken = $channelOverridesRefreshToken;
-                const gid = $selectedGuildId ?? '';
-                const cid = $selectedChannelId ?? '';
-                if (!gid || !cid) {
-                        channelOverrides = {};
-                        return;
-                }
-                const token = { id: ++overridesLoadToken, refreshToken };
-                (async () => {
-                        try {
-                                const res = await auth.api.guildRoles.guildGuildIdChannelChannelIdRolesGet({
-                                        guildId: toApiSnowflake(gid),
-                                        channelId: toApiSnowflake(cid)
-                                });
-                                if (
-                                        token.id !== overridesLoadToken ||
-                                        token.refreshToken !== $channelOverridesRefreshToken
-                                )
-                                        return;
-                                const list = ((res as any)?.data ?? res ?? []) as GuildChannelRolePermission[];
-                                channelOverrides = resolveChannelOverrides(list);
-                        } catch {
-                                if (
-                                        token.id !== overridesLoadToken ||
-                                        token.refreshToken !== $channelOverridesRefreshToken
-                                )
-                                        return;
-                                channelOverrides = {};
-                        }
-                })();
-        });
+	$effect(() => {
+		const refreshToken = $channelOverridesRefreshToken;
+		const gid = $selectedGuildId ?? '';
+		const cid = $selectedChannelId ?? '';
+		if (!gid || !cid) {
+			channelOverrides = {};
+			return;
+		}
+		const token = { id: ++overridesLoadToken, refreshToken };
+		(async () => {
+			try {
+				const res = await auth.api.guildRoles.guildGuildIdChannelChannelIdRolesGet({
+					guildId: toApiSnowflake(gid),
+					channelId: toApiSnowflake(cid)
+				});
+				if (token.id !== overridesLoadToken || token.refreshToken !== $channelOverridesRefreshToken)
+					return;
+				const list = ((res as any)?.data ?? res ?? []) as GuildChannelRolePermission[];
+				channelOverrides = resolveChannelOverrides(list);
+			} catch {
+				if (token.id !== overridesLoadToken || token.refreshToken !== $channelOverridesRefreshToken)
+					return;
+				channelOverrides = {};
+			}
+		})();
+	});
 
 	type DecoratedMember = {
 		member: DtoMember;
 		hasAccess: boolean;
 		name: string;
 		secondary: string;
+		color: string | null;
 	};
 
 	const decoratedMembers = $derived.by(() => {
@@ -308,11 +337,13 @@
 		if (!channel) return [] as DecoratedMember[];
 		const entries = list.map<DecoratedMember>((member) => {
 			const hasAccess = memberHasChannelAccess(member, channel, guild);
+			const guildId = toSnowflakeString((guild as any)?.id) ?? null;
 			return {
 				member,
 				hasAccess,
 				name: memberPrimaryName(member),
-				secondary: memberSecondaryName(member)
+				secondary: memberSecondaryName(member),
+				color: resolveMemberRoleColor(member, guildId)
 			};
 		});
 		const hideWithoutAccess = Boolean((channel as any)?.private);
@@ -368,7 +399,9 @@
 							{memberInitial(entry.member)}
 						</div>
 						<div class="min-w-0 flex-1">
-							<div class="truncate font-medium">{entry.name}</div>
+							<div class="truncate font-medium" style:color={entry.color ?? null}>
+								{entry.name}
+							</div>
 							{#if entry.secondary}
 								<div class="truncate text-xs text-[var(--muted)]">{entry.secondary}</div>
 							{:else if !entry.hasAccess}
