@@ -10,6 +10,7 @@ import {
         rememberRoleGuild,
         refreshChannelRoleIds
 } from '$lib/utils/guildRoles';
+import { refreshChannelRoleIds } from '$lib/utils/channelRoles';
 import { normalizePermissionValue } from '$lib/utils/permissions';
 import {
         channelOverridesRefreshToken,
