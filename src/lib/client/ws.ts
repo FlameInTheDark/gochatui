@@ -62,6 +62,41 @@ function sendRaw(raw: string) {
   try { socket.send(raw); } catch {}
 }
 
+function normalizeSnowflake(value: unknown): string | null {
+  if (value == null) return null;
+  try {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'bigint') return value.toString();
+    if (typeof value === 'number') return BigInt(value).toString();
+    return String(value);
+  } catch {
+    try { return String(value); } catch { return null; }
+  }
+}
+
+function collectGuildSubscriptionIds(): string[] {
+  const ids = new Set<string>();
+  const guildList = get(auth.guilds) as any[] | undefined;
+  if (Array.isArray(guildList)) {
+    for (const guild of guildList) {
+      const gid =
+        normalizeSnowflake(guild?.id) ??
+        normalizeSnowflake(guild?.guild_id);
+      if (gid) ids.add(gid);
+    }
+  }
+  const selected = normalizeSnowflake(get(selectedGuildId));
+  if (selected) ids.add(selected);
+  return Array.from(ids).filter(Boolean);
+}
+
+function resubscribe(channelOverride?: string | null) {
+  if (!authed) return;
+  const guildIds = collectGuildSubscriptionIds();
+  const channelId = channelOverride ?? normalizeSnowflake(get(selectedChannelId));
+  subscribeWS(guildIds, channelId ?? undefined);
+}
+
 // Preserve large int64 values as strings when parsing WS frames
 function parseJSONPreserveLargeInts(data: string) {
   let out = '';
@@ -176,16 +211,14 @@ export function connectWS() {
     try { data = typeof ev.data === 'string' ? parseJSONPreserveLargeInts(ev.data) : ev.data; } catch { return; }
 
     // Handshake: server sends op=1 with d.heartbeat_interval (some servers may send root-level heartbeat_interval)
-    if ((data?.op === 1 && typeof data?.d?.heartbeat_interval === 'number') || typeof data?.heartbeat_interval === 'number') {
+      if ((data?.op === 1 && typeof data?.d?.heartbeat_interval === 'number') || typeof data?.heartbeat_interval === 'number') {
       const interval = (data?.d?.heartbeat_interval ?? data?.heartbeat_interval) as number;
       heartbeatMs = interval;
       startHeartbeat();
       // Mark authed and subscribe to current selections
       authed = true;
       // After auth, (re)subscribe to current selections
-      const gid = get(selectedGuildId);
-      const ch = get(selectedChannelId);
-      if (gid || ch) subscribeWS(gid ? [gid] : [], ch ?? undefined);
+      resubscribe();
       return;
     }
 
@@ -243,12 +276,15 @@ if (browser) {
   });
 
   selectedChannelId.subscribe((ch) => {
-    const gid = get(selectedGuildId);
-    if (ch || gid) subscribeWS(gid ? [gid] : [], ch ?? undefined);
+    const channelId = normalizeSnowflake(ch);
+    resubscribe(channelId);
   });
 
-  selectedGuildId.subscribe((gid) => {
-    const ch = get(selectedChannelId);
-    if (gid || ch) subscribeWS(gid ? [gid] : [], ch ?? undefined);
+  selectedGuildId.subscribe(() => {
+    resubscribe();
+  });
+
+  auth.guilds.subscribe(() => {
+    resubscribe();
   });
 }

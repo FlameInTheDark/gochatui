@@ -1,14 +1,28 @@
 import { get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import {
-	channelReady,
-	channelsByGuild,
-	lastChannelByGuild,
-	selectedChannelId,
-	selectedGuildId
+        channelReady,
+        channelsByGuild,
+        lastChannelByGuild,
+        selectedChannelId,
+        selectedGuildId
 } from '$lib/stores/appState';
 import { subscribeWS } from '$lib/client/ws';
 import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
+import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
+import {
+        loadGuildRolesCached,
+        primeGuildChannelRoles,
+        pruneChannelRoleCache
+} from '$lib/utils/guildRoles';
+
+function toApiSnowflake(value: string): any {
+        try {
+                return BigInt(value) as any;
+        } catch {
+                return value as any;
+        }
+}
 
 function readLastChannels(): Record<string, string> {
 	if (typeof localStorage === 'undefined') return {};
@@ -59,13 +73,23 @@ export async function selectGuild(guildId: string | number | bigint | null | und
 	selectedGuildId.set(gid);
 	rememberLastGuild(gid);
 
-	try {
-		const res = await auth.api.guild.guildGuildIdChannelGet({ guildId: gid as any });
-		const list = res.data ?? [];
+        try {
+                const channelRequest = auth.api.guild.guildGuildIdChannelGet({
+                        guildId: toApiSnowflake(gid)
+                });
+                const rolesPromise = loadGuildRolesCached(gid).catch(() => []);
+                const membersPromise = ensureGuildMembersLoaded(gid).catch(() => []);
 
-		if (get(selectedGuildId) !== gid || myToken !== switchToken) return;
+                const res = await channelRequest;
+                await Promise.all([rolesPromise, membersPromise]);
+
+                const list = res.data ?? [];
+
+                if (get(selectedGuildId) !== gid || myToken !== switchToken) return;
 
                 channelsByGuild.update((map) => ({ ...map, [gid]: list }));
+                pruneChannelRoleCache(gid, list);
+                await primeGuildChannelRoles(gid, list).catch(() => {});
 
                 void refreshGuildEffectivePermissions(gid);
 
