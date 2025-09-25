@@ -8,6 +8,7 @@
 		selectedGuildId
 	} from '$lib/stores/appState';
 	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 	import { normalizePermissionValue, PERMISSION_ADMINISTRATOR } from '$lib/utils/permissions';
 	import { m } from '$lib/paraglide/messages.js';
 	import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -223,21 +224,16 @@
 		const token = ++membersLoadToken;
 		loadingMembers = true;
 		membersError = null;
-		(async () => {
-			try {
-				const res = await auth.api.guild.guildGuildIdMembersGet({ guildId: toApiSnowflake(gid) });
-				if (token !== membersLoadToken) return;
-				const list = ((res as any)?.data ?? res ?? []) as DtoMember[];
-				membersByGuild.update((value) => ({ ...value, [gid]: list }));
-			} catch (err: any) {
+		ensureGuildMembersLoaded(gid)
+			.catch((err: any) => {
 				if (token !== membersLoadToken) return;
 				membersError = err?.response?.data?.message ?? err?.message ?? m.channel_members_error();
-			} finally {
+			})
+			.finally(() => {
 				if (token === membersLoadToken) {
 					loadingMembers = false;
 				}
-			}
-		})();
+			});
 	});
 
 	$effect(() => {
