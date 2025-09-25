@@ -547,22 +547,23 @@
 	$effect(() => {
 		const guildId = $selectedGuildId;
 		const initialRoleIds = extractAuthorRoleIds(message);
-		const authorId = toSnowflake((message as any)?.author?.id);
-		const guildMemberList = guildId ? ($membersByGuild[guildId] ?? undefined) : undefined;
-		const memberIndex = new Map<string, DtoMember>();
-		if (Array.isArray(guildMemberList)) {
-			for (const entry of guildMemberList) {
-				const id = memberUserId(entry);
-				if (id) {
-					memberIndex.set(id, entry);
-				}
-			}
-		}
-		const requestId = ++roleColorRequest;
-		primaryRoleColor = null;
+                const authorId = toSnowflake((message as any)?.author?.id);
+                const guildMemberList = guildId ? ($membersByGuild[guildId] ?? undefined) : undefined;
+                const memberIndex = new Map<string, DtoMember>();
+                if (Array.isArray(guildMemberList)) {
+                        for (const entry of guildMemberList) {
+                                const id = memberUserId(entry);
+                                if (id) {
+                                        memberIndex.set(id, entry);
+                                }
+                        }
+                }
+                const cachedMember = authorId ? memberIndex.get(authorId) ?? null : null;
+                const requestId = ++roleColorRequest;
+                primaryRoleColor = null;
 
-		if (!guildId) {
-			return;
+                if (!guildId) {
+                        return;
 		}
 
 		const activeGuildId = guildId;
@@ -570,21 +571,18 @@
 		void (async () => {
 			try {
 				let roleIds: string[] = (initialRoleIds ?? []).filter((id) => id != null && id !== '');
-				if (roleIds.length === 0 && authorId) {
-					const cachedMember = memberIndex.get(authorId);
-					if (cachedMember) {
-						const cached = collectMemberRoleIds(cachedMember, activeGuildId);
-						if (cached.length > 0) {
-							roleIds = cached;
-						}
-					}
-				}
-				if (roleIds.length === 0 && activeGuildId && authorId) {
-					const fetched = await loadMemberRoleIds(activeGuildId, authorId);
-					if (requestId !== roleColorRequest) {
-						return;
-					}
-					roleIds = Array.from(fetched);
+                                if (roleIds.length === 0 && cachedMember) {
+                                        const cached = collectMemberRoleIds(cachedMember, activeGuildId);
+                                        if (cached.length > 0) {
+                                                roleIds = cached;
+                                        }
+                                }
+                                if (roleIds.length === 0 && activeGuildId && authorId && cachedMember) {
+                                        const fetched = await loadMemberRoleIds(activeGuildId, authorId);
+                                        if (requestId !== roleColorRequest) {
+                                                return;
+                                        }
+                                        roleIds = Array.from(fetched);
 				}
 
 				const orderedRoleIds: string[] = [];
