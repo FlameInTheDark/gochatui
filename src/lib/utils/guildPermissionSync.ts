@@ -190,20 +190,48 @@ function collectRoleIdCandidates(data: any): string[] {
 }
 
 function findGuildIdFromRoles(candidateIds: Iterable<string>): string | null {
-	const unique = new Set<string>();
-	for (const id of candidateIds) {
-		const rid = toSnowflakeString(id);
-		if (!rid || unique.has(rid)) continue;
-		unique.add(rid);
-		const mapped = getGuildIdForRole(rid);
-		if (mapped) return mapped;
-	}
-	const guildList = get(auth.guilds);
-	for (const rid of unique) {
-		const match = guildList.find((guild) => toSnowflakeString((guild as any)?.id) === rid);
-		if (match) return rid;
-	}
-	return null;
+        const seen = new Set<string>();
+        const unresolved = new Set<string>();
+
+        for (const id of candidateIds) {
+                const rid = toSnowflakeString(id);
+                if (!rid || seen.has(rid)) continue;
+                seen.add(rid);
+
+                const mapped = getGuildIdForRole(rid);
+                if (mapped) return mapped;
+
+                unresolved.add(rid);
+        }
+
+        if (!unresolved.size) return null;
+
+        const memberMap = get(membersByGuild);
+        if (memberMap) {
+                for (const [rawGuildId, members] of Object.entries(memberMap)) {
+                        if (!Array.isArray(members) || !members.length) continue;
+                        const guildId = toSnowflakeString(rawGuildId);
+                        if (!guildId) continue;
+
+                        let matched = false;
+                        for (const member of members) {
+                                const roleIds = getMemberRoleIds(member);
+                                if (!roleIds.length) continue;
+                                for (const rid of roleIds) {
+                                        if (!unresolved.has(rid)) continue;
+                                        rememberRoleGuild(rid, guildId);
+                                        unresolved.delete(rid);
+                                        matched = true;
+                                }
+                        }
+
+                        if (matched) {
+                                return guildId;
+                        }
+                }
+        }
+
+        return null;
 }
 
 function resolveRoleIdCandidate(candidate: any): string | null {
