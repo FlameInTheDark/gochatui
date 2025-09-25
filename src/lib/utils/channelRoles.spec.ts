@@ -17,6 +17,8 @@ vi.mock('$lib/stores/auth', () => {
 import { auth } from '$lib/stores/auth';
 import { channelRolesByGuild } from '$lib/stores/appState';
 import { loadChannelRoleIds, invalidateGuildRolesCache } from '$lib/utils/guildRoles';
+import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
+import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
 import { PERMISSION_VIEW_CHANNEL } from '$lib/utils/permissions';
 
 describe('channel role access filtering', () => {
@@ -50,5 +52,30 @@ describe('channel role access filtering', () => {
                 expect(roleIds).toEqual([allowedRoleId]);
                 const store = get(channelRolesByGuild);
                 expect(store[guildId]?.[channelId]).toEqual([allowedRoleId]);
+        });
+
+        it('accepts primitive role IDs when filtering allow-lists', () => {
+                const result = filterViewableRoleIds([
+                        '5005',
+                        6006,
+                        7007n,
+                        { role_id: '8008', accept: PERMISSION_VIEW_CHANNEL },
+                        { roleId: '9009', accept: 0 },
+                        { id: '10010', accept: PERMISSION_VIEW_CHANNEL }
+                ]);
+
+                expect(result).toEqual(['5005', '6006', '7007', '8008', '10010']);
+        });
+
+        it('falls back to inline channel role allow-lists when API data is unavailable', () => {
+                const inlineChannel = {
+                        id: channelId,
+                        guild_id: guildId,
+                        roles: ['11011', { role_id: '12012', accept: PERMISSION_VIEW_CHANNEL }, 13013n]
+                } as any;
+
+                const result = channelAllowListedRoleIds(guildId, inlineChannel);
+
+                expect(result).toEqual(['11011', '12012', '13013']);
         });
 });
