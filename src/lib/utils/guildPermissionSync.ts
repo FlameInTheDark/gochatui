@@ -13,6 +13,7 @@ import { refreshChannelRoleIds } from '$lib/utils/channelRoles';
 import { normalizePermissionValue } from '$lib/utils/permissions';
 import {
         channelOverridesRefreshToken,
+        channelRolesByGuild,
         membersByGuild,
         selectedChannelId,
         selectedGuildId
@@ -231,6 +232,42 @@ function findGuildIdFromRoles(candidateIds: Iterable<string>): string | null {
 
                         if (matched) {
                                 return guildId;
+                        }
+                }
+        }
+
+        if (!unresolved.size) return null;
+
+        const channelRoleMap = get(channelRolesByGuild);
+        if (channelRoleMap) {
+                for (const [rawGuildId, channels] of Object.entries(channelRoleMap)) {
+                        const guildId = toSnowflakeString(rawGuildId);
+                        if (!guildId || !channels || typeof channels !== 'object') continue;
+
+                        let matched = false;
+                        for (const roleList of Object.values(channels ?? {})) {
+                                if (!roleList || typeof roleList !== 'object') continue;
+                                const list = Array.isArray(roleList)
+                                        ? roleList
+                                        : typeof (roleList as any)[Symbol.iterator] === 'function'
+                                                ? Array.from(roleList as Iterable<unknown>)
+                                                : [];
+                                for (const entry of list) {
+                                        const rid = toSnowflakeString(entry);
+                                        if (!rid || !unresolved.has(rid)) continue;
+                                        rememberRoleGuild(rid, guildId);
+                                        unresolved.delete(rid);
+                                        matched = true;
+                                }
+                                if (!unresolved.size) break;
+                        }
+
+                        if (matched) {
+                                return guildId;
+                        }
+
+                        if (!unresolved.size) {
+                                break;
                         }
                 }
         }
