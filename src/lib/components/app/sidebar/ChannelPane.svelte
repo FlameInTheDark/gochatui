@@ -162,38 +162,77 @@
                 return set;
         }
 
+        function inlineChannelRoleIds(channel: DtoChannel): string[] {
+                const inlineRoles = (channel as any)?.roles;
+                const seen = new Set<string>();
+                const collected: string[] = [];
+                if (!Array.isArray(inlineRoles)) {
+                        return collected;
+                }
+                for (const entry of inlineRoles) {
+                        const rid =
+                                entry && typeof entry === 'object'
+                                        ? toSnowflakeString((entry as any)?.id ?? (entry as any)?.role_id ?? entry)
+                                        : toSnowflakeString(entry);
+                        if (rid && !seen.has(rid)) {
+                                seen.add(rid);
+                                collected.push(rid);
+                        }
+                }
+                return collected;
+        }
+
+        function rememberInlineChannelRoles(
+                guildId: string,
+                channels: DtoChannel | DtoChannel[] | null | undefined
+        ) {
+                const gid = String(guildId ?? '');
+                if (!gid) return;
+                const list = Array.isArray(channels) ? channels : channels ? [channels] : [];
+                if (!list.length) return;
+                const pending: Record<string, string[]> = {};
+                for (const channel of list) {
+                        const cid = toSnowflakeString((channel as any)?.id);
+                        if (!cid) continue;
+                        const roles = inlineChannelRoleIds(channel);
+                        if (!roles.length) continue;
+                        pending[cid] = roles;
+                }
+                if (!Object.keys(pending).length) return;
+                queueMicrotask(() => {
+                        channelRolesByGuild.update((map) => {
+                                const currentGuild = map[gid] ?? {};
+                                const nextGuild = { ...currentGuild } as Record<string, string[]>;
+                                let changed = false;
+                                for (const [cid, roles] of Object.entries(pending)) {
+                                        const existing = nextGuild[cid];
+                                        if (
+                                                existing &&
+                                                existing.length === roles.length &&
+                                                existing.every((value, index) => value === roles[index])
+                                        ) {
+                                                continue;
+                                        }
+                                        nextGuild[cid] = roles;
+                                        changed = true;
+                                }
+                                if (!changed) return map;
+                                return { ...map, [gid]: nextGuild };
+                        });
+                });
+        }
+
         function channelAssignedRoleIds(guildId: string, channel: DtoChannel): string[] {
                 const gid = String(guildId ?? '');
                 const cid = toSnowflakeString((channel as any)?.id);
                 if (!gid || !cid) return [];
                 const stored = $channelRolesByGuild[gid]?.[cid];
                 if (Array.isArray(stored)) return stored;
-                const inlineRoles = (channel as any)?.roles;
-                const seen = new Set<string>();
-                const collected: string[] = [];
-                if (Array.isArray(inlineRoles)) {
-                        for (const entry of inlineRoles) {
-                                const rid =
-                                        entry && typeof entry === 'object'
-                                                ? toSnowflakeString((entry as any)?.id ?? (entry as any)?.role_id ?? entry)
-                                                : toSnowflakeString(entry);
-                                if (rid && !seen.has(rid)) {
-                                        seen.add(rid);
-                                        collected.push(rid);
-                                }
-                        }
-                        if (collected.length) {
-                                channelRolesByGuild.update((map) => {
-                                        const nextGuild = { ...(map[gid] ?? {}) };
-                                        nextGuild[cid] = collected;
-                                        return { ...map, [gid]: nextGuild };
-                                });
-                        }
-                }
+                const inline = inlineChannelRoleIds(channel);
                 if ((channel as any)?.private) {
                         void loadChannelRoleIds(gid, cid).catch(() => {});
                 }
-                return collected;
+                return inline;
         }
 
         function canAccessChannel(guildId: string, channel: DtoChannel): boolean {
@@ -259,6 +298,7 @@
                 const list = res.data ?? [];
                 channelsByGuild.update((m) => ({ ...m, [gid]: list }));
                 pruneChannelRoleCache(gid, list);
+                rememberInlineChannelRoles(gid, list);
                 await primeGuildChannelRoles(gid, list).catch(() => {});
                 // If selected channel is not present in this guild or not a text channel, auto-fix.
                 const textChannels = list.filter(
@@ -470,6 +510,7 @@
                                         return { ...map, [gid]: list };
                                 });
                                 pruneChannelRoleCache(gid, nextList);
+                                rememberInlineChannelRoles(gid, nextList);
                         }
 
                         if ((ev?.t === 106 || ev?.t === 107) && ev?.d?.channel) {
@@ -496,6 +537,7 @@
                                         return { ...map, [gid]: list };
                                 });
                                 pruneChannelRoleCache(gid, nextList);
+                                rememberInlineChannelRoles(gid, updated as DtoChannel);
                                 const channelId = String(updated?.id ?? '');
                                 if (channelId) {
                                         const type = (updated as any)?.type ?? 0;
