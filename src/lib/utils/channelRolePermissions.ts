@@ -30,9 +30,23 @@ export function filterViewableRoleIds(
         for (const entry of entries) {
                 if (!entry) continue;
                 const rawRoleId = (entry as any)?.role_id ?? (entry as any)?.roleId ?? (entry as any)?.id;
-                const roleId = toSnowflakeString(rawRoleId);
+                let roleSource: unknown = rawRoleId;
+                let accept: number | undefined;
+                if (roleSource == null) {
+                        if (
+                                typeof entry === 'string' ||
+                                typeof entry === 'number' ||
+                                typeof entry === 'bigint'
+                        ) {
+                                roleSource = entry;
+                                accept = PERMISSION_VIEW_CHANNEL;
+                        }
+                }
+                const roleId = toSnowflakeString(roleSource);
                 if (!roleId || seen.has(roleId)) continue;
-                const accept = normalizePermissionValue((entry as any)?.accept);
+                if (accept == null) {
+                        accept = normalizePermissionValue((entry as any)?.accept);
+                }
                 if (!(accept & PERMISSION_VIEW_CHANNEL)) continue;
                 seen.add(roleId);
                 allowed.push(roleId);
