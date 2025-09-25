@@ -8,6 +8,8 @@ export const channelsByGuild = writable<Record<string, DtoChannel[]>>({});
 export const messagesByChannel = writable<Record<string, DtoMessage[]>>({});
 export const membersByGuild = writable<Record<string, DtoMember[] | undefined>>({});
 
+export const channelOverridesRefreshToken = writable(0);
+
 export const searchOpen = writable(false);
 export const searchQuery = writable('');
 export const searchAnchor = writable<{ x: number; y: number } | null>(null);

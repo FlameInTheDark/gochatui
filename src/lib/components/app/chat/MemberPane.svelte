@@ -1,12 +1,13 @@
 <script lang="ts">
 	import type { DtoMember, DtoRole, GuildChannelRolePermission } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
-	import {
-		channelsByGuild,
-		membersByGuild,
-		selectedChannelId,
-		selectedGuildId
-	} from '$lib/stores/appState';
+        import {
+                channelOverridesRefreshToken,
+                channelsByGuild,
+                membersByGuild,
+                selectedChannelId,
+                selectedGuildId
+        } from '$lib/stores/appState';
 	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
 	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 	import { normalizePermissionValue, PERMISSION_ADMINISTRATOR } from '$lib/utils/permissions';
@@ -260,29 +261,38 @@
 		};
 	});
 
-	$effect(() => {
-		const gid = $selectedGuildId ?? '';
-		const cid = $selectedChannelId ?? '';
-		if (!gid || !cid) {
-			channelOverrides = {};
-			return;
-		}
-		const token = ++overridesLoadToken;
-		(async () => {
-			try {
-				const res = await auth.api.guildRoles.guildGuildIdChannelChannelIdRolesGet({
-					guildId: toApiSnowflake(gid),
-					channelId: toApiSnowflake(cid)
-				});
-				if (token !== overridesLoadToken) return;
-				const list = ((res as any)?.data ?? res ?? []) as GuildChannelRolePermission[];
-				channelOverrides = resolveChannelOverrides(list);
-			} catch {
-				if (token !== overridesLoadToken) return;
-				channelOverrides = {};
-			}
-		})();
-	});
+        $effect(() => {
+                const refreshToken = $channelOverridesRefreshToken;
+                const gid = $selectedGuildId ?? '';
+                const cid = $selectedChannelId ?? '';
+                if (!gid || !cid) {
+                        channelOverrides = {};
+                        return;
+                }
+                const token = { id: ++overridesLoadToken, refreshToken };
+                (async () => {
+                        try {
+                                const res = await auth.api.guildRoles.guildGuildIdChannelChannelIdRolesGet({
+                                        guildId: toApiSnowflake(gid),
+                                        channelId: toApiSnowflake(cid)
+                                });
+                                if (
+                                        token.id !== overridesLoadToken ||
+                                        token.refreshToken !== $channelOverridesRefreshToken
+                                )
+                                        return;
+                                const list = ((res as any)?.data ?? res ?? []) as GuildChannelRolePermission[];
+                                channelOverrides = resolveChannelOverrides(list);
+                        } catch {
+                                if (
+                                        token.id !== overridesLoadToken ||
+                                        token.refreshToken !== $channelOverridesRefreshToken
+                                )
+                                        return;
+                                channelOverrides = {};
+                        }
+                })();
+        });
 
 	type DecoratedMember = {
 		member: DtoMember;
