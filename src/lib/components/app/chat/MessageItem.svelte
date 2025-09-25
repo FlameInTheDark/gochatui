@@ -835,36 +835,39 @@
 		dispatch('deleted');
 	}
 
-	function openMessageMenu(e: MouseEvent) {
-		e.preventDefault();
-		e.stopPropagation();
-		const mid = String((message as any)?.id ?? '');
-		const items: ContextMenuItem[] = [];
-		if (canDeleteMessage) {
-			items.push({
-				label: m.ctx_delete_message(),
-				action: () => deleteMsg(),
-				danger: true,
-				disabled: !message?.id
-			});
-		}
-		items.push({
-			label: m.ctx_copy_message_id(),
-			action: () => copyToClipboard(mid),
-			disabled: !mid
-		});
-		if (canEditMessage) {
-			items.push({
-				label: m.ctx_edit_message(),
-				action: () => {
-					void startEditing();
-				},
-				disabled: !message?.id
-			});
-		}
-		if (items.length === 0) return;
-		contextMenu.openFromEvent(e, items);
-	}
+        function openMessageMenu(e: MouseEvent) {
+                e.preventDefault();
+                e.stopPropagation();
+                const mid = String((message as any)?.id ?? '');
+                const items: ContextMenuItem[] = [];
+                const deleteItem: ContextMenuItem | null = canDeleteMessage
+                        ? {
+                                      label: m.ctx_delete_message(),
+                                      action: () => deleteMsg(),
+                                      danger: true,
+                                      disabled: !message?.id
+                              }
+                        : null;
+                items.push({
+                        label: m.ctx_copy_message_id(),
+                        action: () => copyToClipboard(mid),
+                        disabled: !mid
+                });
+                if (canEditMessage) {
+                        items.push({
+                                label: m.ctx_edit_message(),
+                                action: () => {
+                                        void startEditing();
+                                },
+                                disabled: !message?.id
+                        });
+                }
+                if (deleteItem) {
+                        items.push(deleteItem);
+                }
+                if (items.length === 0) return;
+                contextMenu.openFromEvent(e, items);
+        }
 
 	function openUserMenu(event: MouseEvent) {
 		openUserContextMenu(
