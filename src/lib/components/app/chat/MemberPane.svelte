@@ -8,10 +8,11 @@
 		selectedChannelId,
 		selectedGuildId
 	} from '$lib/stores/appState';
-	import { colorIntToHex } from '$lib/utils/color';
-	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
-	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
-	import { normalizePermissionValue, PERMISSION_ADMINISTRATOR } from '$lib/utils/permissions';
+        import { colorIntToHex } from '$lib/utils/color';
+        import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
+        import { applyViewChannelOverrides, finalChannelAccessDecision } from '$lib/utils/channelOverrides';
+        import { normalizePermissionValue, PERMISSION_ADMINISTRATOR } from '$lib/utils/permissions';
 	import { m } from '$lib/paraglide/messages.js';
 	import { openUserContextMenu } from '$lib/utils/userContextMenu';
 
@@ -180,46 +181,29 @@
 		const roleIds = collectMemberRoleIds(member, guildId);
 		const basePerms = aggregateRolePermissions(roleIds);
 
-		let allowed =
-			Boolean(basePerms & VIEW_CHANNEL) || Boolean(basePerms & PERMISSION_ADMINISTRATOR);
-		let overrideAllowed = false;
-		let overrideDenied = false;
+                let allowed =
+                        Boolean(basePerms & VIEW_CHANNEL) || Boolean(basePerms & PERMISSION_ADMINISTRATOR);
 
-		for (const id of roleIds) {
-			const override = channelOverrides[id];
-			if (!override) continue;
-			if ((override.deny & VIEW_CHANNEL) === VIEW_CHANNEL) {
-				overrideDenied = true;
-			}
-			if ((override.accept & VIEW_CHANNEL) === VIEW_CHANNEL) {
-				overrideAllowed = true;
-			}
-		}
+                allowed = applyViewChannelOverrides(
+                        allowed,
+                        roleIds,
+                        guildId,
+                        channelOverrides,
+                        VIEW_CHANNEL
+                );
 
-		if (overrideDenied) {
-			allowed = false;
-		} else if (overrideAllowed) {
-			allowed = true;
-		}
+                const ownerId = toSnowflakeString((guild as any)?.owner);
+                const memberId = toSnowflakeString((member as any)?.user?.id);
 
-		if (!allowed) {
-			if (basePerms & PERMISSION_ADMINISTRATOR) {
-				allowed = true;
-			} else {
-				const ownerId = toSnowflakeString((guild as any)?.owner);
-				const memberId = toSnowflakeString((member as any)?.user?.id);
-				if (ownerId && memberId && ownerId === memberId) {
-					allowed = true;
-				}
-			}
-		}
-
-		if (!allowed && !(channel as any)?.private) {
-			allowed = true;
-		}
-
-		return allowed;
-	}
+                return finalChannelAccessDecision(
+                        allowed,
+                        basePerms,
+                        PERMISSION_ADMINISTRATOR,
+                        ownerId,
+                        memberId,
+                        Boolean((channel as any)?.private)
+                );
+        }
 
 	const currentGuild = $derived.by(() => {
 		const gid = $selectedGuildId;
