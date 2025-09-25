@@ -24,15 +24,15 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
-	import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
-        import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
         import {
+                loadGuildRolesCached,
                 loadChannelRoleIds,
                 primeGuildChannelRoles,
                 pruneChannelRoleCache,
                 refreshChannelRoleIds,
                 invalidateChannelRoleIds
-        } from '$lib/utils/channelRoles';
+        } from '$lib/utils/guildRoles';
         import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
         import {
                 PERMISSION_MANAGE_CHANNELS,

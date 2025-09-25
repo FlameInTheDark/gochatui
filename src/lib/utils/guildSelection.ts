@@ -10,8 +10,11 @@ import {
 import { subscribeWS } from '$lib/client/ws';
 import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
-import { loadGuildRolesCached } from '$lib/utils/guildRoles';
-import { primeGuildChannelRoles, pruneChannelRoleCache } from '$lib/utils/channelRoles';
+import {
+        loadGuildRolesCached,
+        primeGuildChannelRoles,
+        pruneChannelRoleCache
+} from '$lib/utils/guildRoles';
 
 function toApiSnowflake(value: string): any {
         try {
