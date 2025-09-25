@@ -9,6 +9,7 @@ import {
         getGuildIdForRole,
         rememberRoleGuild
 } from '$lib/utils/guildRoles';
+import { refreshChannelRoleIds } from '$lib/utils/channelRoles';
 import { normalizePermissionValue } from '$lib/utils/permissions';
 import {
         channelOverridesRefreshToken,
@@ -19,6 +20,9 @@ import {
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 
 const guildPermissionInFlight = new Map<string, Promise<number>>();
+
+const WS_EVENT_MEMBER_ROLE_ADD = 203;
+const WS_EVENT_MEMBER_ROLE_REMOVE = 204;
 
 function toSnowflakeString(value: unknown): string | null {
 	if (value == null) return null;
@@ -273,7 +277,11 @@ function getMemberRoleIds(member: DtoMember | undefined): string[] {
         return collectRoleIds(Array.isArray(roles) ? roles : []);
 }
 
-function computeUpdatedMemberRoleIds(member: DtoMember | undefined, data: any): string[] | null {
+function computeUpdatedMemberRoleIds(
+        member: DtoMember | undefined,
+        data: any,
+        eventType: number | null | undefined
+): string[] | null {
         const directRoles = collectRoleIds(data?.roles);
         if (directRoles.length > 0) return directRoles;
 
@@ -329,13 +337,25 @@ function computeUpdatedMemberRoleIds(member: DtoMember | undefined, data: any): 
         applyRemovals(data?.remove_role);
         applyRemovals(data?.remove_role_id);
 
+        const directPayloads = [data?.role, data?.role_id, data?.roleId, data?.role?.id];
+        if (eventType === WS_EVENT_MEMBER_ROLE_ADD) {
+                for (const payload of directPayloads) {
+                        applyAdditions(payload);
+                }
+        } else if (eventType === WS_EVENT_MEMBER_ROLE_REMOVE) {
+                for (const payload of directPayloads) {
+                        applyRemovals(payload);
+                }
+        }
+
         return changed ? next : null;
 }
 
 function updateCachedMemberRoles(
         guildId: string,
         userId: string,
-        payload: any
+        payload: any,
+        eventType: number | null | undefined
 ): 'updated' | 'missing' | 'noop' {
         let result: 'updated' | 'missing' | 'noop' = 'missing';
         membersByGuild.update((map) => {
@@ -356,7 +376,7 @@ function updateCachedMemberRoles(
                         return map;
                 }
                 const member = list[index];
-                const updatedRoleIds = computeUpdatedMemberRoleIds(member, payload);
+                const updatedRoleIds = computeUpdatedMemberRoleIds(member, payload, eventType);
                 if (!updatedRoleIds) {
                         result = 'noop';
                         return map;
@@ -385,6 +405,7 @@ type MemberRoleEvent = {
         userId: string;
         payload: any;
         isCurrentUser: boolean;
+        eventType: number | null;
 };
 
 function handleMemberRoleEvent(event: any): MemberRoleEvent | null {
@@ -421,11 +442,13 @@ function handleMemberRoleEvent(event: any): MemberRoleEvent | null {
         }
         if (!guildId) return null;
         const meId = toSnowflakeString(get(auth.user)?.id);
+        const eventType = typeof event?.t === 'number' ? event.t : typeof data?.t === 'number' ? data.t : null;
         return {
                 guildId,
                 userId,
                 payload: data,
-                isCurrentUser: Boolean(meId && meId === userId)
+                isCurrentUser: Boolean(meId && meId === userId),
+                eventType
         };
 }
 
@@ -499,13 +522,17 @@ function handleChannelOverrideEvent(event: any): boolean {
                 data.removed_roles != null;
         if (!hasRolePayload) return false;
 
-        const selectedChannel = toSnowflakeString(get(selectedChannelId));
-        if (!selectedChannel || selectedChannel !== channelId) return false;
-
         const eventGuildId =
                 toSnowflakeString(data.guild_id) ||
                 toSnowflakeString(data.guildId) ||
                 toSnowflakeString(data.guild?.id);
+        if (eventGuildId && channelId) {
+                void refreshChannelRoleIds(eventGuildId, channelId).catch(() => {});
+        }
+
+        const selectedChannel = toSnowflakeString(get(selectedChannelId));
+        if (!selectedChannel || selectedChannel !== channelId) return false;
+
         const currentGuildId = toSnowflakeString(get(selectedGuildId));
         if (currentGuildId && eventGuildId && currentGuildId !== eventGuildId) return false;
         if (!currentGuildId && !eventGuildId) return false;
@@ -519,8 +546,8 @@ if (browser) {
                 if (!ev || ev.op !== 0) return;
                 const memberEvent = handleMemberRoleEvent(ev);
                 if (memberEvent) {
-                        const { guildId, userId, payload, isCurrentUser } = memberEvent;
-                        const status = updateCachedMemberRoles(guildId, userId, payload);
+                        const { guildId, userId, payload, isCurrentUser, eventType } = memberEvent;
+                        const status = updateCachedMemberRoles(guildId, userId, payload, eventType);
                         if (status === 'missing') {
                                 void ensureGuildMembersLoaded(guildId);
                         }
