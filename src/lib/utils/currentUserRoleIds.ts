@@ -33,10 +33,15 @@ export function collectMemberRoleIds(member: DtoMember | undefined): string[] {
 	const seen = new Set<string>();
 	const result: string[] = [];
 	for (const entry of list) {
-		const id =
-			entry && typeof entry === 'object'
-				? toSnowflakeString((entry as any)?.id ?? (entry as any)?.role_id ?? entry)
-				: toSnowflakeString(entry);
+                const id =
+                        entry && typeof entry === 'object'
+                                ? toSnowflakeString(
+                                          (entry as any)?.id ??
+                                                  (entry as any)?.role_id ??
+                                                  (entry as any)?.roleId ??
+                                                  entry
+                                      )
+                                : toSnowflakeString(entry);
 		if (id && !seen.has(id)) {
 			seen.add(id);
 			result.push(id);
