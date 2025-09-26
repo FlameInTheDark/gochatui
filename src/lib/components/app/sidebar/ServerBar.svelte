@@ -161,7 +161,7 @@
 				if (e.key === 'Enter') createGuild();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
 			<div
 				class="panel absolute top-1/2 left-1/2 w-64 -translate-x-1/2 -translate-y-1/2 p-3"
 				role="document"
@@ -200,7 +200,7 @@
 				if (e.key === 'Enter') confirmLeaveGuild();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
 			<div
 				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-4"
 				role="document"

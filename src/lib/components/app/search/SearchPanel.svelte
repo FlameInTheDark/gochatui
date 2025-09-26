@@ -441,9 +441,10 @@
                         }
                 }}
         >
+                <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
                 <div
                         bind:this={panelEl}
-                        class="panel absolute w-[min(90vw,720px)] p-5"
+                        class="panel absolute z-10 w-[min(90vw,720px)] p-5"
                         role="dialog"
                         tabindex="-1"
                         style={`left:${posX}px; top:${posY}px`}
