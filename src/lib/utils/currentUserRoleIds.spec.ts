@@ -74,6 +74,17 @@ describe('resolveCurrentUserRoleIds', () => {
                 expect(result.sort()).toEqual(['6666', '7777', '8888', '9999']);
         });
 
+        it('collectMemberRoleIds includes nested role identifiers', () => {
+                const member = {
+                        user: { id: currentUserId },
+                        roles: [{ role: { id: '5005' } }]
+                } as any;
+
+                const result = collectMemberRoleIds(member);
+
+                expect(result).toEqual(['5005']);
+        });
+
         it('collectMemberRoleIds picks nested role identifiers before raw entries', () => {
                 const member = {
                         user: { id: currentUserId },
