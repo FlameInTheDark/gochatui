@@ -1,22 +1,19 @@
 <script lang="ts">
-	import type { DtoMember, DtoRole, GuildChannelRolePermission } from '$lib/api';
-	import { auth } from '$lib/stores/auth';
-	import {
-		channelOverridesRefreshToken,
-		channelsByGuild,
-		channelRolesByGuild,
-		membersByGuild,
-		selectedChannelId,
-		selectedGuildId
-	} from '$lib/stores/appState';
-	import { colorIntToHex } from '$lib/utils/color';
-	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
-	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
-	import type { ChannelOverrideMap } from '$lib/utils/channelOverrides';
-	import { normalizePermissionValue } from '$lib/utils/permissions';
-	import { m } from '$lib/paraglide/messages.js';
-	import { openUserContextMenu } from '$lib/utils/userContextMenu';
-	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
+        import type { DtoMember, DtoRole } from '$lib/api';
+        import { auth } from '$lib/stores/auth';
+        import {
+                channelsByGuild,
+                channelRolesByGuild,
+                membersByGuild,
+                selectedChannelId,
+                selectedGuildId
+        } from '$lib/stores/appState';
+        import { colorIntToHex } from '$lib/utils/color';
+        import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
+        import { m } from '$lib/paraglide/messages.js';
+        import { openUserContextMenu } from '$lib/utils/userContextMenu';
+        import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
         import {
                 memberHasChannelAccess as resolveMemberChannelAccess,
                 describeMemberChannelAccess as describeMemberChannelAccessDev,
@@ -26,15 +23,11 @@
 
 	const guilds = auth.guilds;
 
-	const VIEW_CHANNEL = 1 << 0;
+        let loadingMembers = $state(false);
+        let membersError = $state<string | null>(null);
+        let roleMap = $state<Record<string, DtoRole>>({});
 
-	let loadingMembers = $state(false);
-	let membersError = $state<string | null>(null);
-	let roleMap = $state<Record<string, DtoRole>>({});
-	let channelOverrides = $state<ChannelOverrideMap>({});
-
-	let membersLoadToken = 0;
-	let overridesLoadToken = 0;
+        let membersLoadToken = 0;
 
 	function toSnowflakeString(value: unknown): string | null {
 		if (value == null) return null;
@@ -49,14 +42,6 @@
 			} catch {
 				return null;
 			}
-		}
-	}
-
-	function toApiSnowflake(value: string): any {
-		try {
-			return BigInt(value) as any;
-		} catch {
-			return value as any;
 		}
 	}
 
@@ -99,21 +84,6 @@
 			const id = toSnowflakeString((role as any)?.id);
 			if (!id) continue;
 			map[id] = role;
-		}
-		return map;
-	}
-
-	function resolveChannelOverrides(
-		list: GuildChannelRolePermission[]
-	): Record<string, { accept: number; deny: number }> {
-		const map: Record<string, { accept: number; deny: number }> = {};
-		for (const entry of list) {
-			const id = toSnowflakeString((entry as any)?.role_id);
-			if (!id) continue;
-			map[id] = {
-				accept: normalizePermissionValue((entry as any)?.accept),
-				deny: normalizePermissionValue((entry as any)?.deny)
-			};
 		}
 		return map;
 	}
@@ -180,16 +150,6 @@
 		return null;
 	}
 
-	function aggregateRolePermissions(roleIds: Iterable<string>): number {
-		let perms = 0;
-		for (const id of roleIds) {
-			const role = roleMap[id];
-			if (!role) continue;
-			perms |= normalizePermissionValue((role as any)?.permissions);
-		}
-		return perms;
-	}
-
         const describeMemberChannelAccess = import.meta.env.DEV ? describeMemberChannelAccessDev : undefined;
 
         function describeMemberAccess(
@@ -200,20 +160,16 @@
                 if (!describeMemberChannelAccess || !member || !channel) return null;
                 const guildId =
                         toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
-                const roleIds = collectMemberRoleIds(member, guildId);
-                const basePerms = aggregateRolePermissions(roleIds);
-                const allowListedRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
+                const memberRoleIds = collectMemberRoleIds(member, guildId);
+                const channelRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
 
                 return describeMemberChannelAccess({
                         member,
                         channel,
                         guild,
                         guildId,
-                        roleIds,
-                        basePermissions: basePerms,
-                        channelOverrides,
-                        allowListedRoleIds,
-                        viewPermissionBit: VIEW_CHANNEL
+                        memberRoleIds,
+                        channelRoleIds
                 });
         }
 
@@ -221,24 +177,20 @@
                 member: DtoMember | null | undefined,
                 channel: any,
                 guild: any
-	): boolean {
-		if (!member || !channel) return false;
-		const guildId =
-			toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
-		const roleIds = collectMemberRoleIds(member, guildId);
-		const basePerms = aggregateRolePermissions(roleIds);
-		const allowListedRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
+        ): boolean {
+                if (!member || !channel) return false;
+                const guildId =
+                        toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
+                const memberRoleIds = collectMemberRoleIds(member, guildId);
+                const channelRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
 
                 return resolveMemberChannelAccess({
                         member,
                         channel,
-			guild,
-			guildId,
-			roleIds,
-			basePermissions: basePerms,
-			channelOverrides,
-			allowListedRoleIds,
-			viewPermissionBit: VIEW_CHANNEL
+                        guild,
+                        guildId,
+                        memberRoleIds,
+                        channelRoleIds
                 });
         }
 
@@ -323,8 +275,7 @@
                                         memberId: description.memberId,
                                         finalAllowed: description.finalAllowed,
                                         privateGateAllows: description.privateGateAllows,
-                                        overrideAllowed: description.overrideAllowed,
-                                        allowList: description.allowList,
+                                        channelRoleIds: description.channelRoleIds,
                                         intersectingRoleIds: description.intersectingRoleIds
                                 });
                         }
@@ -403,33 +354,6 @@
 		return () => {
 			cancelled = true;
 		};
-	});
-
-	$effect(() => {
-		const refreshToken = $channelOverridesRefreshToken;
-		const gid = $selectedGuildId ?? '';
-		const cid = $selectedChannelId ?? '';
-		if (!gid || !cid) {
-			channelOverrides = {};
-			return;
-		}
-		const token = { id: ++overridesLoadToken, refreshToken };
-		(async () => {
-			try {
-				const res = await auth.api.guildRoles.guildGuildIdChannelChannelIdRolesGet({
-					guildId: toApiSnowflake(gid),
-					channelId: toApiSnowflake(cid)
-				});
-				if (token.id !== overridesLoadToken || token.refreshToken !== $channelOverridesRefreshToken)
-					return;
-				const list = ((res as any)?.data ?? res ?? []) as GuildChannelRolePermission[];
-				channelOverrides = resolveChannelOverrides(list);
-			} catch {
-				if (token.id !== overridesLoadToken || token.refreshToken !== $channelOverridesRefreshToken)
-					return;
-				channelOverrides = {};
-			}
-		})();
 	});
 
 	type DecoratedMember = {
