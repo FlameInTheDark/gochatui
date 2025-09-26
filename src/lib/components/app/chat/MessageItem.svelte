@@ -104,22 +104,35 @@
 		);
 	}
 
-	function collectMemberRoleIds(
-		member: DtoMember | null | undefined,
-		guildId: string | null
-	): string[] {
-		const ids = new Set<string>();
-		if (member && Array.isArray((member as any)?.roles)) {
-			for (const raw of (member as any)?.roles ?? []) {
-				const id = toSnowflake(raw);
-				if (id) ids.add(id);
-			}
-		}
-		if (guildId) {
-			ids.add(guildId);
-		}
-		return Array.from(ids);
-	}
+        function collectMemberRoleIds(
+                member: DtoMember | null | undefined,
+                guildId: string | null
+        ): string[] {
+                const ids = new Set<string>();
+                const roles = (member as any)?.roles;
+                const list = Array.isArray(roles) ? roles : [];
+
+                for (const entry of list) {
+                        const id =
+                                entry && typeof entry === 'object'
+                                        ? toSnowflake(
+                                                  (entry as any)?.id ??
+                                                          (entry as any)?.role_id ??
+                                                          (entry as any)?.roleId ??
+                                                          entry
+                                          )
+                                        : toSnowflake(entry);
+                        if (id) {
+                                ids.add(id);
+                        }
+                }
+
+                if (guildId) {
+                        ids.add(guildId);
+                }
+
+                return Array.from(ids);
+        }
 
 	function extractAuthorRoleIds(msg: DtoMessage | null | undefined): string[] {
 		if (!msg) return [];
