@@ -27,17 +27,24 @@ export function memberUserId(member: DtoMember | undefined): string | null {
 }
 
 export function collectMemberRoleIds(member: DtoMember | undefined): string[] {
-	if (!member) return [];
-	const roles = (member as any)?.roles;
-	const list = Array.isArray(roles) ? roles : [];
-	const seen = new Set<string>();
-	const result: string[] = [];
+        if (!member) return [];
+        const roles = (member as any)?.roles;
+        const list = Array.isArray(roles) ? roles : [];
+        const seen = new Set<string>();
+        const result: string[] = [];
         for (const entry of list) {
+                const nestedRoleId = toSnowflakeString((entry as any)?.role?.id);
+                if (nestedRoleId && !seen.has(nestedRoleId)) {
+                        seen.add(nestedRoleId);
+                        result.push(nestedRoleId);
+                        continue;
+                }
+
                 const candidates: unknown[] = [];
 
                 if (entry && typeof entry === 'object') {
                         const obj = entry as any;
-                        candidates.push(obj?.role?.id, obj?.id, obj?.role_id, obj?.roleId);
+                        candidates.push(obj?.id, obj?.role_id, obj?.roleId);
                 }
 
                 candidates.push(entry);
