@@ -161,33 +161,38 @@
 				if (e.key === 'Enter') createGuild();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-			<div
-				class="panel absolute top-1/2 left-1/2 w-64 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<div class="mb-2 text-sm font-medium">{m.new_server()}</div>
-				{#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}
-				<input
-					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					placeholder={m.server_name()}
-					bind:value={newGuildName}
-				/>
-				<div class="flex justify-end gap-2">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-3 py-1"
-						onclick={() => (creating = false)}>{m.cancel()}</button
-					>
-					<button
-						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-						onclick={createGuild}>{m.create()}</button
-					>
-				</div>
-			</div>
-		</div>
-	{/if}
+                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                                <div class="relative">
+                                        <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
+                                        <div
+                                                class="panel relative z-10 w-64 p-3"
+                                                role="document"
+                                                tabindex="-1"
+                                                onpointerdown={(e) => e.stopPropagation()}
+                                        >
+                                                <div class="mb-2 text-sm font-medium">{m.new_server()}</div>
+                                                {#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}
+                                                <input
+                                                        class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                        placeholder={m.server_name()}
+                                                        bind:value={newGuildName}
+                                                />
+                                                <div class="flex justify-end gap-2">
+                                                        <button
+                                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                                onclick={() => (creating = false)}>{m.cancel()}</button
+                                                        >
+                                                        <button
+                                                                class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                                onclick={createGuild}>{m.create()}</button
+                                                        >
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 
 	{#if leavingGuild}
 		<div
@@ -200,30 +205,35 @@
 				if (e.key === 'Enter') confirmLeaveGuild();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-			<div
-				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-4"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<div class="mb-2 text-base font-semibold">{m.leave_server_confirm_title({ server: leavingGuild.name })}</div>
-				<p class="mb-4 text-sm text-[var(--muted)]">{m.leave_server_confirm_description({ server: leavingGuild.name })}</p>
-				<div class="flex justify-end gap-2">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-3 py-1"
-						onclick={() => (leavingGuild = null)}
-					>
-						{m.cancel()}
-					</button>
-					<button
-						class="rounded-md bg-[var(--danger)] px-3 py-1 text-[var(--bg)]"
-						onclick={confirmLeaveGuild}
-					>
-						{m.leave_server()}
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
+                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                                <div class="relative">
+                                        <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
+                                        <div
+                                                class="panel relative z-10 w-72 p-4"
+                                                role="document"
+                                                tabindex="-1"
+                                                onpointerdown={(e) => e.stopPropagation()}
+                                        >
+                                                <div class="mb-2 text-base font-semibold">{m.leave_server_confirm_title({ server: leavingGuild.name })}</div>
+                                                <p class="mb-4 text-sm text-[var(--muted)]">{m.leave_server_confirm_description({ server: leavingGuild.name })}</p>
+                                                <div class="flex justify-end gap-2">
+                                                        <button
+                                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                                onclick={() => (leavingGuild = null)}
+                                                        >
+                                                                {m.cancel()}
+                                                        </button>
+                                                        <button
+                                                                class="rounded-md bg-[var(--danger)] px-3 py-1 text-[var(--bg)]"
+                                                                onclick={confirmLeaveGuild}
+                                                        >
+                                                                {m.leave_server()}
+                                                        </button>
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 </div>
