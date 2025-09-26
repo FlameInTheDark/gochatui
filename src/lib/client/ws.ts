@@ -1,6 +1,15 @@
 import { writable, get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
-import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
+import {
+  channelRolesByGuild,
+  channelsByGuild,
+  lastChannelByGuild,
+  membersByGuild,
+  messagesByChannel,
+  myGuildRoleIdsByGuild,
+  selectedChannelId,
+  selectedGuildId
+} from '$lib/stores/appState';
 import { browser } from '$app/environment';
 import { env as publicEnv } from '$env/dynamic/public';
 import { getRuntimeConfig } from '$lib/runtime/config';
@@ -20,6 +29,9 @@ let lastEventId = 0; // track last received/sent event id
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let shouldReconnect = true;
 let latestToken: string | null = get(auth.token);
+
+const WS_EVENT_MEMBER_JOIN = 200;
+const WS_EVENT_MEMBER_LEAVE = 202;
 
 function nextT() {
   lastT += 1;
@@ -72,6 +84,104 @@ function normalizeSnowflake(value: unknown): string | null {
   } catch {
     try { return String(value); } catch { return null; }
   }
+}
+
+function snapshotGuildIds(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  const ids: string[] = [];
+  for (const guild of list) {
+    const id = normalizeSnowflake((guild as any)?.id);
+    if (id) ids.push(id);
+  }
+  return ids;
+}
+
+function removeMapEntries<T extends Record<string, any>>(map: T, keys: Iterable<string>): T {
+  const keySet = new Set<string>();
+  for (const key of keys) {
+    const normalized = String(key);
+    if (normalized) keySet.add(normalized);
+  }
+  if (!keySet.size) return map;
+  let changed = false;
+  const copy: Record<string, any> = { ...map };
+  for (const key of keySet) {
+    if (Object.prototype.hasOwnProperty.call(copy, key)) {
+      changed = true;
+      delete copy[key];
+    }
+  }
+  return (changed ? (copy as T) : map);
+}
+
+function pruneGuildCaches(guildIds: string[]) {
+  if (!guildIds.length) return;
+  const guildIdSet = new Set(guildIds.filter(Boolean));
+  if (!guildIdSet.size) return;
+
+  const channelIdsToRemove = new Set<string>();
+  const currentChannels = get(channelsByGuild);
+  for (const gid of guildIdSet) {
+    const list = currentChannels?.[gid];
+    if (Array.isArray(list)) {
+      for (const channel of list) {
+        const cid = normalizeSnowflake((channel as any)?.id);
+        if (cid) channelIdsToRemove.add(cid);
+      }
+    }
+  }
+
+  channelsByGuild.update((map) => removeMapEntries(map, guildIdSet));
+  membersByGuild.update((map) => removeMapEntries(map, guildIdSet));
+  myGuildRoleIdsByGuild.update((map) => removeMapEntries(map, guildIdSet));
+  channelRolesByGuild.update((map) => removeMapEntries(map, guildIdSet));
+  lastChannelByGuild.update((map) => removeMapEntries(map, guildIdSet));
+
+  if (channelIdsToRemove.size > 0) {
+    messagesByChannel.update((map) => removeMapEntries(map, channelIdsToRemove));
+  }
+}
+
+async function refreshGuildsAfterMembershipChange(prevGuildIds: string[]) {
+  const previousSelected = normalizeSnowflake(get(selectedGuildId));
+  let nextList: any[] | null = null;
+  try {
+    nextList = (await auth.loadGuilds()) ?? null;
+  } catch {
+    nextList = null;
+  }
+  if (!Array.isArray(nextList)) return;
+
+  const nextIds = new Set(snapshotGuildIds(nextList));
+  const removed = prevGuildIds.filter((id) => !nextIds.has(id));
+  if (removed.length) {
+    pruneGuildCaches(removed);
+  }
+
+  if (!previousSelected || !removed.includes(previousSelected)) return;
+
+  const currentSelected = normalizeSnowflake(get(selectedGuildId));
+  if (currentSelected && removed.includes(currentSelected)) {
+    selectedChannelId.set(null);
+    selectedGuildId.set(null);
+  }
+}
+
+function handleSelfGuildMembershipEvent(data: AnyRecord) {
+  if (!data || data.op !== 0) return;
+  const eventType = typeof data?.t === 'number' ? data.t : null;
+  if (eventType !== WS_EVENT_MEMBER_JOIN && eventType !== WS_EVENT_MEMBER_LEAVE) return;
+
+  const eventUserId =
+    normalizeSnowflake(data?.d?.user_id) ??
+    normalizeSnowflake(data?.d?.member?.user?.id) ??
+    normalizeSnowflake(data?.d?.member?.user_id) ??
+    normalizeSnowflake(data?.d?.member?.id);
+  const meId = normalizeSnowflake(get(auth.user)?.id);
+  if (!meId || !eventUserId || meId !== eventUserId) return;
+
+  const prevGuildIds = snapshotGuildIds(get(auth.guilds));
+  void refreshGuildsAfterMembershipChange(prevGuildIds);
 }
 
 function collectGuildSubscriptionIds(): string[] {
@@ -224,6 +334,8 @@ export function connectWS() {
 
     updateLastT(data?.t);
     wsEvent.set(data);
+
+    handleSelfGuildMembershipEvent(data);
 
     // On message create event (op 0)
     if (data?.op === 0 && data?.d?.message) {
