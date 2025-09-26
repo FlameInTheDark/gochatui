@@ -20,6 +20,11 @@
 	import { colorIntToHex } from '$lib/utils/color';
 	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
 	import { openUserContextMenu } from '$lib/utils/userContextMenu';
+	import {
+		collectMemberRoleIds,
+		extractAuthorRoleIds,
+		toSnowflake
+	} from './MessageItem.helpers';
 
 	type MessageSegment =
 		| { type: 'text'; content: string }
@@ -65,24 +70,10 @@
 		}
 	}
 
-	function toSnowflake(value: unknown): string | null {
-		if (value == null) return null;
-		if (typeof value === 'string') return value;
-		if (typeof value === 'bigint') return value.toString();
-		if (typeof value === 'number') {
-			try {
-				return BigInt(value).toString();
-			} catch {
-				return String(value);
-			}
-		}
-		return null;
-	}
-
-	async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<string>> {
-		const res = await auth.api.guildRoles.guildGuildIdMemberUserIdRolesGet({
-			guildId: BigInt(guildId) as any,
-			userId: BigInt(userId) as any
+        async function loadMemberRoleIds(guildId: string, userId: string): Promise<Set<string>> {
+                const res = await auth.api.guildRoles.guildGuildIdMemberUserIdRolesGet({
+                        guildId: BigInt(guildId) as any,
+                        userId: BigInt(userId) as any
 		});
 		const list = ((res as any)?.data ?? res ?? []) as DtoRole[];
 		const ids = new Set<string>();
@@ -104,75 +95,7 @@
 		);
 	}
 
-        function collectMemberRoleIds(
-                member: DtoMember | null | undefined,
-                guildId: string | null
-        ): string[] {
-                const ids = new Set<string>();
-                const roles = (member as any)?.roles;
-                const list = Array.isArray(roles) ? roles : [];
-
-                for (const entry of list) {
-                        const id =
-                                entry && typeof entry === 'object'
-                                        ? toSnowflake(
-                                                  (entry as any)?.id ??
-                                                          (entry as any)?.role_id ??
-                                                          (entry as any)?.roleId ??
-                                                          entry
-                                          )
-                                        : toSnowflake(entry);
-                        if (id) {
-                                ids.add(id);
-                        }
-                }
-
-                if (guildId) {
-                        ids.add(guildId);
-                }
-
-                return Array.from(ids);
-        }
-
-	function extractAuthorRoleIds(msg: DtoMessage | null | undefined): string[] {
-		if (!msg) return [];
-		const anyMsg = msg as any;
-		const candidates = [
-			anyMsg?.member?.roles,
-			anyMsg?.member_roles,
-			anyMsg?.member?.role_ids,
-			anyMsg?.member?.roleIds,
-			anyMsg?.memberRoles
-		];
-
-		for (const candidate of candidates) {
-			if (!candidate) continue;
-
-			const list = Array.isArray(candidate)
-				? candidate
-				: typeof candidate[Symbol.iterator] === 'function'
-					? Array.from(candidate as Iterable<unknown>)
-					: [];
-
-			if (!list.length) continue;
-
-			const normalized: string[] = [];
-			for (const value of list) {
-				const id = toSnowflake(value);
-				if (id) {
-					normalized.push(id);
-				}
-			}
-
-			if (normalized.length) {
-				return normalized;
-			}
-		}
-
-		return [];
-	}
-
-	function normalizeCodeBlock(raw: string): string {
+        function normalizeCodeBlock(raw: string): string {
 		if (!raw) return '';
 
 		const normalized = raw.replace(/\r\n?/g, '\n');
