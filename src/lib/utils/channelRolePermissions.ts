@@ -44,9 +44,17 @@ export function filterViewableRoleIds(
                 }
                 const roleId = toSnowflakeString(roleSource);
                 if (!roleId || seen.has(roleId)) continue;
+                const rawAccept = (entry as any)?.accept;
                 if (accept == null) {
-                        accept = normalizePermissionValue((entry as any)?.accept);
+                        accept =
+                                rawAccept == null
+                                        ? PERMISSION_VIEW_CHANNEL
+                                        : normalizePermissionValue(rawAccept);
+                } else if (rawAccept != null) {
+                        accept = normalizePermissionValue(rawAccept);
                 }
+                const deny = normalizePermissionValue((entry as any)?.deny);
+                if (deny & PERMISSION_VIEW_CHANNEL) continue;
                 if (!(accept & PERMISSION_VIEW_CHANNEL)) continue;
                 seen.add(roleId);
                 allowed.push(roleId);

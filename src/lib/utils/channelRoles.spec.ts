@@ -62,9 +62,21 @@ describe('channel role access filtering', () => {
                         { role_id: '8008', accept: PERMISSION_VIEW_CHANNEL },
                         { roleId: '9009', accept: 0 },
                         { id: '10010', accept: PERMISSION_VIEW_CHANNEL }
-                ]);
+                ] as any);
 
                 expect(result).toEqual(['5005', '6006', '7007', '8008', '10010']);
+        });
+
+        it('defaults missing accept masks to allow while respecting explicit denies', () => {
+                const result = filterViewableRoleIds([
+                        { role_id: '13013' },
+                        { role_id: '14014', accept: null },
+                        { role_id: '15015', accept: undefined },
+                        { role_id: '16016', deny: PERMISSION_VIEW_CHANNEL },
+                        { role_id: '17017', accept: 0 }
+                ] as any);
+
+                expect(result).toEqual(['13013', '14014', '15015']);
         });
 
         it('falls back to inline channel role allow-lists when API data is unavailable', () => {
