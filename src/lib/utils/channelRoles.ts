@@ -2,7 +2,6 @@ import { get } from 'svelte/store';
 import type { DtoChannel, GuildChannelRolePermission } from '$lib/api';
 import { auth } from '$lib/stores/auth';
 import { channelRolesByGuild } from '$lib/stores/appState';
-import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
 
 function toSnowflakeString(value: unknown): string | null {
 	if (value == null) return null;
@@ -84,34 +83,57 @@ export function getCachedChannelRoleIds(
 }
 
 export function channelAllowListedRoleIds(
-	guildId: string | number | bigint | null | undefined,
-	channel: Pick<DtoChannel, 'id' | 'roles'> | null | undefined,
-	snapshot?: Record<string, Record<string, string[]>>
+        guildId: string | number | bigint | null | undefined,
+        channel: Pick<DtoChannel, 'id' | 'roles'> | null | undefined,
+        snapshot?: Record<string, Record<string, string[]>>
 ): string[] {
-	const gid = toSnowflakeString(guildId ?? (channel as any)?.guild_id);
-	const cid = toSnowflakeString((channel as any)?.id);
-	if (!gid || !cid) return [];
-	const store = snapshot ?? get(channelRolesByGuild);
-	const stored = store?.[gid]?.[cid];
-	if (Array.isArray(stored)) {
-		return stored;
-	}
-	const inlineRoles = (channel as any)?.roles;
-	if (!Array.isArray(inlineRoles)) {
-		return [];
-	}
-	return filterViewableRoleIds(inlineRoles as any);
+        const gid = toSnowflakeString(guildId ?? (channel as any)?.guild_id);
+        const cid = toSnowflakeString((channel as any)?.id);
+        if (!gid || !cid) return [];
+        const store = snapshot ?? get(channelRolesByGuild);
+        const stored = store?.[gid]?.[cid];
+        if (Array.isArray(stored)) {
+                return stored;
+        }
+        const inlineRoles = (channel as any)?.roles;
+        if (!Array.isArray(inlineRoles)) {
+                return [];
+        }
+        return normalizeChannelRoleIds(inlineRoles as any);
+}
+
+export function normalizeChannelRoleIds(list: Iterable<any>): string[] {
+        const result: string[] = [];
+        const seen = new Set<string>();
+        for (const entry of list) {
+                const candidates: unknown[] = [];
+                if (entry && typeof entry === 'object') {
+                        const obj = entry as any;
+                        candidates.push(obj?.role?.id, obj?.id, obj?.role_id, obj?.roleId);
+                }
+                candidates.push(entry);
+
+                for (const candidate of candidates) {
+                        const id = toSnowflakeString(candidate);
+                        if (!id) continue;
+                        if (seen.has(id)) break;
+                        seen.add(id);
+                        result.push(id);
+                        break;
+                }
+        }
+        return result;
 }
 
 async function fetchChannelRoleIds(guildId: string, channelId: string): Promise<string[]> {
-	const response = await auth.api.guildRoles.guildGuildIdChannelChannelIdRolesGet({
-		guildId: toApiSnowflake(guildId),
-		channelId: toApiSnowflake(channelId)
-	});
-	const list = ((response as any)?.data ?? response ?? []) as GuildChannelRolePermission[];
-	const ids = filterViewableRoleIds(list);
-	setCacheEntry(guildId, channelId, ids);
-	return ids;
+        const response = await auth.api.guildRoles.guildGuildIdChannelChannelIdRolesGet({
+                guildId: toApiSnowflake(guildId),
+                channelId: toApiSnowflake(channelId)
+        });
+        const list = ((response as any)?.data ?? response ?? []) as GuildChannelRolePermission[];
+        const ids = normalizeChannelRoleIds(list as any);
+        setCacheEntry(guildId, channelId, ids);
+        return ids;
 }
 
 export async function loadChannelRoleIds(
