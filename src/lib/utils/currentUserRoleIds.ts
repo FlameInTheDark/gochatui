@@ -32,23 +32,31 @@ export function collectMemberRoleIds(member: DtoMember | undefined): string[] {
 	const list = Array.isArray(roles) ? roles : [];
 	const seen = new Set<string>();
 	const result: string[] = [];
-	for (const entry of list) {
-                const id =
-                        entry && typeof entry === 'object'
-                                ? toSnowflakeString(
-                                          (entry as any)?.id ??
-                                                  (entry as any)?.role_id ??
-                                                  (entry as any)?.roleId ??
-                                                  (entry as any)?.role?.id ??
-                                                  entry
-                                      )
-                                : toSnowflakeString(entry);
-		if (id && !seen.has(id)) {
-			seen.add(id);
-			result.push(id);
-		}
-	}
-	return result;
+        for (const entry of list) {
+                const candidates: unknown[] = [];
+
+                if (entry && typeof entry === 'object') {
+                        const obj = entry as any;
+                        candidates.push(obj?.id, obj?.role_id, obj?.roleId, obj?.role?.id);
+                }
+
+                candidates.push(entry);
+
+                for (const candidate of candidates) {
+                        const id = toSnowflakeString(candidate);
+                        if (!id) {
+                                continue;
+                        }
+
+                        if (!seen.has(id)) {
+                                seen.add(id);
+                                result.push(id);
+                        }
+
+                        break;
+                }
+        }
+        return result;
 }
 
 export type ResolveCurrentUserRoleIdsParams = {
