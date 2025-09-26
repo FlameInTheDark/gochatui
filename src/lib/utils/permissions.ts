@@ -1,5 +1,6 @@
 import type { DtoGuild } from '$lib/api';
 
+export const PERMISSION_VIEW_CHANNEL = 1 << 0;
 export const PERMISSION_MANAGE_CHANNELS = 1 << 1;
 export const PERMISSION_MANAGE_ROLES = 1 << 2;
 export const PERMISSION_MANAGE_GUILD = 1 << 4;

@@ -1,11 +1,16 @@
 import { writable } from 'svelte/store';
-import type { DtoChannel, DtoMessage } from '$lib/api';
+import type { DtoChannel, DtoMember, DtoMessage } from '$lib/api';
 
 export const selectedGuildId = writable<string | null>(null);
 export const selectedChannelId = writable<string | null>(null);
 
 export const channelsByGuild = writable<Record<string, DtoChannel[]>>({});
 export const messagesByChannel = writable<Record<string, DtoMessage[]>>({});
+export const membersByGuild = writable<Record<string, DtoMember[] | undefined>>({});
+export const myGuildRoleIdsByGuild = writable<Record<string, string[]>>({});
+export const channelRolesByGuild = writable<Record<string, Record<string, string[]>>>({});
+
+export const channelOverridesRefreshToken = writable(0);
 
 export const searchOpen = writable(false);
 export const searchQuery = writable('');

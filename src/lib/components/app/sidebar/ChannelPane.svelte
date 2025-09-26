@@ -8,10 +8,14 @@
 		messagesByChannel,
 		lastChannelByGuild,
 		channelReady,
-		guildSettingsOpen
+		guildSettingsOpen,
+		membersByGuild,
+		myGuildRoleIdsByGuild,
+		channelRolesByGuild
 	} from '$lib/stores/appState';
 	import type {
 		DtoChannel,
+		DtoMember,
 		DtoRole,
 		GuildChannelOrder,
 		GuildChannelRolePermission
@@ -20,13 +24,25 @@
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
+	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
 	import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
-	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+	import {
+		loadGuildRolesCached,
+		loadChannelRoleIds,
+		primeGuildChannelRoles,
+		pruneChannelRoleCache,
+		refreshChannelRoleIds,
+		invalidateChannelRoleIds
+	} from '$lib/utils/guildRoles';
 	import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
+	import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
+	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
+	import { resolveCurrentUserRoleIds } from '$lib/utils/currentUserRoleIds';
 	import {
 		PERMISSION_MANAGE_CHANNELS,
 		PERMISSION_MANAGE_GUILD,
 		PERMISSION_MANAGE_ROLES,
+		PERMISSION_ADMINISTRATOR,
 		hasAnyGuildPermission,
 		normalizePermissionValue
 	} from '$lib/utils/permissions';
@@ -61,20 +77,20 @@
 	let editChannelName = $state('');
 	let editChannelTopic = $state('');
 	let editChannelPrivate = $state(false);
-        let editChannelError: string | null = $state(null);
-        let editChannelTab = $state<'overview' | 'permissions'>('overview');
-        let editChannelRoles = $state<DtoRole[]>([]);
-        let editChannelRoleToAdd = $state('');
-        let editChannelOverrides = $state<Record<string, { accept: number; deny: number }>>({});
-        let editChannelOverridesInitial = $state<Record<string, { accept: number; deny: number }>>({});
-        let editChannelSelectedOverride = $state<string | null>(null);
-        let editChannelOrderedOverrideRoleIds = $state<string[]>([]);
-        let editChannelPermissionsLoading = $state(false);
-        let editChannelPermissionsError: string | null = $state(null);
-        let editChannelInitialName = $state('');
-        let editChannelInitialTopic = $state('');
-        let editChannelInitialPrivate = $state(false);
-        let editChannelSaving = $state(false);
+	let editChannelError: string | null = $state(null);
+	let editChannelTab = $state<'overview' | 'permissions'>('overview');
+	let editChannelRoles = $state<DtoRole[]>([]);
+	let editChannelRoleToAdd = $state('');
+	let editChannelOverrides = $state<Record<string, { accept: number; deny: number }>>({});
+	let editChannelOverridesInitial = $state<Record<string, { accept: number; deny: number }>>({});
+	let editChannelSelectedOverride = $state<string | null>(null);
+	let editChannelOrderedOverrideRoleIds = $state<string[]>([]);
+	let editChannelPermissionsLoading = $state(false);
+	let editChannelPermissionsError: string | null = $state(null);
+	let editChannelInitialName = $state('');
+	let editChannelInitialTopic = $state('');
+	let editChannelInitialPrivate = $state(false);
+	let editChannelSaving = $state(false);
 	let editCategoryName = $state('');
 	let editCategoryError: string | null = $state(null);
 	let dragging: { id: string; parent: string | null; type: number } | null = null;
@@ -85,10 +101,150 @@
 	} | null>(null);
 	let editChannelPermissionsLoadToken = 0;
 
+	function toSnowflakeString(value: unknown): string | null {
+		if (value == null) return null;
+		try {
+			if (typeof value === 'string') return value;
+			if (typeof value === 'bigint') return value.toString();
+			if (typeof value === 'number') return BigInt(value).toString();
+			return String(value);
+		} catch {
+			try {
+				return String(value);
+			} catch {
+				return null;
+			}
+		}
+	}
+
+	function myGuildRoleIds(guildId: string): Set<string> {
+		const gid = String(guildId ?? '');
+		const members = Array.isArray($membersByGuild[gid])
+			? ($membersByGuild[gid] as DtoMember[])
+			: undefined;
+		const fallbackRoles = Array.isArray($myGuildRoleIdsByGuild[gid])
+			? ($myGuildRoleIdsByGuild[gid] as string[])
+			: undefined;
+		return resolveCurrentUserRoleIds({
+			guildId: gid,
+			members,
+			currentUserId: $me?.id,
+			fallbackRoleIds: fallbackRoles
+		});
+	}
+
+	function inlineChannelRoleIds(channel: DtoChannel): string[] {
+		const inlineRoles = (channel as any)?.roles;
+		if (!Array.isArray(inlineRoles)) {
+			return [];
+		}
+		return filterViewableRoleIds(inlineRoles as any);
+	}
+
+	function rememberInlineChannelRoles(
+		guildId: string,
+		channels: DtoChannel | DtoChannel[] | null | undefined
+	) {
+		const gid = String(guildId ?? '');
+		if (!gid) return;
+		const list = Array.isArray(channels) ? channels : channels ? [channels] : [];
+		if (!list.length) return;
+		const pending: Record<string, string[]> = {};
+		for (const channel of list) {
+			const cid = toSnowflakeString((channel as any)?.id);
+			if (!cid) continue;
+			const roles = inlineChannelRoleIds(channel);
+			if (!roles.length) continue;
+			pending[cid] = roles;
+		}
+		if (!Object.keys(pending).length) return;
+		queueMicrotask(() => {
+			channelRolesByGuild.update((map) => {
+				const currentGuild = map[gid] ?? {};
+				const nextGuild = { ...currentGuild } as Record<string, string[]>;
+				let changed = false;
+				for (const [cid, roles] of Object.entries(pending)) {
+					const existing = nextGuild[cid];
+					if (
+						existing &&
+						existing.length === roles.length &&
+						existing.every((value, index) => value === roles[index])
+					) {
+						continue;
+					}
+					nextGuild[cid] = roles;
+					changed = true;
+				}
+				if (!changed) return map;
+				return { ...map, [gid]: nextGuild };
+			});
+		});
+	}
+
+	function channelAssignedRoleIds(guildId: string, channel: DtoChannel): string[] {
+		const gid = String(guildId ?? '');
+		const cid = toSnowflakeString((channel as any)?.id);
+		if (!gid || !cid) return [];
+		const stored = $channelRolesByGuild[gid]?.[cid];
+		if (!stored && Boolean((channel as any)?.private)) {
+			void loadChannelRoleIds(gid, cid).catch(() => {});
+		}
+		return channelAllowListedRoleIds(gid, channel, $channelRolesByGuild);
+	}
+
+	function canAccessChannel(guildId: string, channel: DtoChannel): boolean {
+		const type = (channel as any)?.type ?? 0;
+		if (type === 2) return true;
+		if (!Boolean((channel as any)?.private)) return true;
+		const gid = String(guildId ?? '');
+		if (!gid) return false;
+		const guild = $guilds.find((g) => toSnowflakeString((g as any)?.id) === gid) ?? null;
+		if (guild && hasAnyGuildPermission(guild, $me?.id, PERMISSION_ADMINISTRATOR)) {
+			return true;
+		}
+		const allowed = channelAssignedRoleIds(gid, channel);
+		if (!allowed.length) {
+			return false;
+		}
+		const myRoles = myGuildRoleIds(gid);
+		for (const rid of allowed) {
+			if (myRoles.has(rid)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	function currentGuildChannels(): DtoChannel[] {
 		const gid = $selectedGuildId ?? '';
-		return $channelsByGuild[gid] ?? [];
+		if (!gid) return [];
+		const list = $channelsByGuild[gid] ?? [];
+		return list.filter((channel) => canAccessChannel(gid, channel));
 	}
+
+	$effect(() => {
+		const gid = $selectedGuildId ?? '';
+		if (!gid) return;
+		const selected = $selectedChannelId ? String($selectedChannelId) : '';
+		const accessibleTextChannels = currentGuildChannels().filter(
+			(channel) => (channel as any)?.type === 0
+		);
+		const accessibleIds = accessibleTextChannels.map((channel) =>
+			String((channel as any)?.id ?? '')
+		);
+		if (selected && accessibleIds.includes(selected)) {
+			return;
+		}
+		const fallback = accessibleIds[0] ?? null;
+		if (fallback) {
+			if (fallback !== selected) {
+				selectChannel(fallback);
+			}
+		} else if (selected) {
+			selectedChannelId.set(null);
+			channelReady.set(false);
+		}
+	});
 
 	async function refreshChannels() {
 		const gid = $selectedGuildId ? String($selectedGuildId) : '';
@@ -98,8 +254,13 @@
 		});
 		const list = res.data ?? [];
 		channelsByGuild.update((m) => ({ ...m, [gid]: list }));
+		pruneChannelRoleCache(gid, list);
+		rememberInlineChannelRoles(gid, list);
+		await primeGuildChannelRoles(gid, list).catch(() => {});
 		// If selected channel is not present in this guild or not a text channel, auto-fix.
-		const textChannels = list.filter((c: any) => c?.type === 0);
+		const textChannels = list.filter(
+			(c: any) => c?.type === 0 && canAccessChannel(gid, c as DtoChannel)
+		);
 		const sel = $selectedChannelId ? String($selectedChannelId) : '';
 		const selValid = sel && textChannels.some((c: any) => String((c as any).id) === sel);
 		if (!selValid) {
@@ -290,6 +451,7 @@
 		if (ev?.op === 0 && ev?.d?.guild_id != null) {
 			if (ev?.t === 108 && Array.isArray(ev?.d?.channels)) {
 				const gid = String(ev.d.guild_id);
+				let nextList: DtoChannel[] = [];
 				channelsByGuild.update((map) => {
 					const list = [...(map[gid] ?? [])];
 					const pos = new Map<string, number>();
@@ -301,13 +463,17 @@
 						if (p != null) (ch as any).position = p;
 					}
 					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+					nextList = list;
 					return { ...map, [gid]: list };
 				});
+				pruneChannelRoleCache(gid, nextList);
+				rememberInlineChannelRoles(gid, nextList);
 			}
 
 			if ((ev?.t === 106 || ev?.t === 107) && ev?.d?.channel) {
 				const gid = String(ev.d.guild_id);
 				const updated = ev.d.channel;
+				let nextList: DtoChannel[] = [];
 				channelsByGuild.update((map) => {
 					const list = [...(map[gid] ?? [])];
 					const id = String(updated.id);
@@ -324,8 +490,21 @@
 						} as any);
 					}
 					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+					nextList = list;
 					return { ...map, [gid]: list };
 				});
+				pruneChannelRoleCache(gid, nextList);
+				rememberInlineChannelRoles(gid, updated as DtoChannel);
+				const channelId = String(updated?.id ?? '');
+				if (channelId) {
+					const type = (updated as any)?.type ?? 0;
+					const isPrivate = Boolean((updated as any)?.private);
+					if (type === 2 || !isPrivate) {
+						invalidateChannelRoleIds(gid, channelId);
+					} else {
+						void refreshChannelRoleIds(gid, channelId).catch(() => {});
+					}
+				}
 			}
 
 			if (ev?.t === 109 && ev?.d?.channel_id != null) {
@@ -336,6 +515,8 @@
 					list = (map[gid] ?? []).filter((c) => String((c as any).id) !== cid);
 					return { ...map, [gid]: list };
 				});
+				pruneChannelRoleCache(gid, list);
+				invalidateChannelRoleIds(gid, cid);
 				messagesByChannel.update((map) => {
 					if (map[cid]) {
 						const { [cid]: _removed, ...rest } = map;
@@ -427,7 +608,10 @@
 		// validate the channel belongs to current guild and is a text channel
 		const list = $channelsByGuild[gid] ?? [];
 		const ok = list.some(
-			(c: any) => String((c as any).id) === String(id) && (c as any)?.type === 0
+			(c: any) =>
+				String((c as any).id) === String(id) &&
+				(c as any)?.type === 0 &&
+				canAccessChannel(gid, c as DtoChannel)
 		);
 		if (!ok) return;
 		selectedChannelId.set(String(id));
@@ -492,32 +676,32 @@
 		contextMenu.openFromEvent(e, items);
 	}
 
-        function openEditChannel(ch: DtoChannel) {
-                editingChannel = ch;
-                const name = ch.name ?? '';
-                const topic = (ch as any).topic ?? '';
-                const isPrivate = !!(ch as any).private;
-                editChannelName = name;
-                editChannelTopic = topic;
-                editChannelPrivate = isPrivate;
-                editChannelInitialName = name;
-                editChannelInitialTopic = topic;
-                editChannelInitialPrivate = isPrivate;
-                editChannelError = null;
-                editChannelTab = 'overview';
-                editChannelRoleToAdd = '';
-                editChannelPermissionsError = null;
-                editChannelOverrides = {};
-                editChannelOverridesInitial = {};
-                editChannelSelectedOverride = null;
-                editChannelOrderedOverrideRoleIds = [];
-                editChannelRoles = [];
-                editChannelSaving = false;
-                const channelId = String((ch as any)?.id ?? '');
-                if (channelId) {
-                        loadChannelPermissions(channelId);
-                }
-        }
+	function openEditChannel(ch: DtoChannel) {
+		editingChannel = ch;
+		const name = ch.name ?? '';
+		const topic = (ch as any).topic ?? '';
+		const isPrivate = !!(ch as any).private;
+		editChannelName = name;
+		editChannelTopic = topic;
+		editChannelPrivate = isPrivate;
+		editChannelInitialName = name;
+		editChannelInitialTopic = topic;
+		editChannelInitialPrivate = isPrivate;
+		editChannelError = null;
+		editChannelTab = 'overview';
+		editChannelRoleToAdd = '';
+		editChannelPermissionsError = null;
+		editChannelOverrides = {};
+		editChannelOverridesInitial = {};
+		editChannelSelectedOverride = null;
+		editChannelOrderedOverrideRoleIds = [];
+		editChannelRoles = [];
+		editChannelSaving = false;
+		const channelId = String((ch as any)?.id ?? '');
+		if (channelId) {
+			loadChannelPermissions(channelId);
+		}
+	}
 
 	function channelPermissionState(roleId: string, value: number): 'deny' | 'inherit' | 'allow' {
 		const override = editChannelOverrides[roleId];
@@ -598,11 +782,11 @@
 		});
 	}
 
-        function orderedOverrideRoleIds(): string[] {
-                const ids = Object.keys(editChannelOverrides);
-                if (!ids.length) {
-                        if (editChannelOrderedOverrideRoleIds.length) {
-                                editChannelOrderedOverrideRoleIds = [];
+	function orderedOverrideRoleIds(): string[] {
+		const ids = Object.keys(editChannelOverrides);
+		if (!ids.length) {
+			if (editChannelOrderedOverrideRoleIds.length) {
+				editChannelOrderedOverrideRoleIds = [];
 			}
 			return ids;
 		}
@@ -621,87 +805,87 @@
 		}
 		for (const id of remaining) {
 			next.push(id);
-                }
-                if (
-                        next.length !== editChannelOrderedOverrideRoleIds.length ||
-                        next.some((id, index) => editChannelOrderedOverrideRoleIds[index] !== id)
-                ) {
-                        editChannelOrderedOverrideRoleIds = next;
-                }
-                return next;
-        }
+		}
+		if (
+			next.length !== editChannelOrderedOverrideRoleIds.length ||
+			next.some((id, index) => editChannelOrderedOverrideRoleIds[index] !== id)
+		) {
+			editChannelOrderedOverrideRoleIds = next;
+		}
+		return next;
+	}
 
-        function hasEditChannelChanges(): boolean {
-                if (!editingChannel) return false;
-                if (editChannelName !== editChannelInitialName) return true;
-                if (editChannelTopic !== editChannelInitialTopic) return true;
-                if (editChannelPrivate !== editChannelInitialPrivate) return true;
-                const currentIds = Object.keys(editChannelOverrides);
-                const initialIds = Object.keys(editChannelOverridesInitial);
-                if (currentIds.length !== initialIds.length) return true;
-                for (const roleId of new Set([...currentIds, ...initialIds])) {
-                        const current = editChannelOverrides[roleId];
-                        const initial = editChannelOverridesInitial[roleId];
-                        if (!current && initial) return true;
-                        if (current && !initial) return true;
-                        if (!current || !initial) continue;
-                        if (current.accept !== initial.accept || current.deny !== initial.deny) {
-                                return true;
-                        }
-                }
-                return false;
-        }
+	function hasEditChannelChanges(): boolean {
+		if (!editingChannel) return false;
+		if (editChannelName !== editChannelInitialName) return true;
+		if (editChannelTopic !== editChannelInitialTopic) return true;
+		if (editChannelPrivate !== editChannelInitialPrivate) return true;
+		const currentIds = Object.keys(editChannelOverrides);
+		const initialIds = Object.keys(editChannelOverridesInitial);
+		if (currentIds.length !== initialIds.length) return true;
+		for (const roleId of new Set([...currentIds, ...initialIds])) {
+			const current = editChannelOverrides[roleId];
+			const initial = editChannelOverridesInitial[roleId];
+			if (!current && initial) return true;
+			if (current && !initial) return true;
+			if (!current || !initial) continue;
+			if (current.accept !== initial.accept || current.deny !== initial.deny) {
+				return true;
+			}
+		}
+		return false;
+	}
 
-        const editChannelHasChanges = $derived.by(() => hasEditChannelChanges());
+	const editChannelHasChanges = $derived.by(() => hasEditChannelChanges());
 
-        async function saveChannelPermissionOverrides(gid: string, channelId: string) {
-                const updates: Promise<any>[] = [];
-                const roleIds = new Set([
-                        ...Object.keys(editChannelOverridesInitial),
-                        ...Object.keys(editChannelOverrides)
-                ]);
-                for (const roleId of roleIds) {
-                        if (!roleId) continue;
-                        const next = editChannelOverrides[roleId];
-                        const initial = editChannelOverridesInitial[roleId];
-                        const hasNext = next != null;
-                        const hasInitial = initial != null;
-                        const nextAccept = next?.accept ?? 0;
-                        const nextDeny = next?.deny ?? 0;
-                        const initialAccept = initial?.accept ?? 0;
-                        const initialDeny = initial?.deny ?? 0;
-                        const baseParams = {
-                                guildId: toApiSnowflake(gid),
-                                channelId: toApiSnowflake(channelId),
-                                roleId: toApiSnowflake(roleId)
-                        } as const;
-                        if (!hasNext && hasInitial) {
-                                updates.push(
-                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
-                                                ...baseParams
-                                        })
-                                );
-                                continue;
-                        }
-                        if (hasNext && !hasInitial) {
-                                updates.push(
-                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdPut({
-                                                ...baseParams,
-                                                guildChannelRolePermissionRequest: {
-                                                        accept: nextAccept,
-                                                        deny: nextDeny
-                                                } as any
-                                        })
-                                );
-                                continue;
-                        }
-                        if (!hasNext && !hasInitial) continue;
-                        if (nextAccept === initialAccept && nextDeny === initialDeny) continue;
-                        if (nextAccept === 0 && nextDeny === 0) {
-                                updates.push(
-                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
-                                                ...baseParams
-                                        })
+	async function saveChannelPermissionOverrides(gid: string, channelId: string) {
+		const updates: Promise<any>[] = [];
+		const roleIds = new Set([
+			...Object.keys(editChannelOverridesInitial),
+			...Object.keys(editChannelOverrides)
+		]);
+		for (const roleId of roleIds) {
+			if (!roleId) continue;
+			const next = editChannelOverrides[roleId];
+			const initial = editChannelOverridesInitial[roleId];
+			const hasNext = next != null;
+			const hasInitial = initial != null;
+			const nextAccept = next?.accept ?? 0;
+			const nextDeny = next?.deny ?? 0;
+			const initialAccept = initial?.accept ?? 0;
+			const initialDeny = initial?.deny ?? 0;
+			const baseParams = {
+				guildId: toApiSnowflake(gid),
+				channelId: toApiSnowflake(channelId),
+				roleId: toApiSnowflake(roleId)
+			} as const;
+			if (!hasNext && hasInitial) {
+				updates.push(
+					auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
+						...baseParams
+					})
+				);
+				continue;
+			}
+			if (hasNext && !hasInitial) {
+				updates.push(
+					auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdPut({
+						...baseParams,
+						guildChannelRolePermissionRequest: {
+							accept: nextAccept,
+							deny: nextDeny
+						} as any
+					})
+				);
+				continue;
+			}
+			if (!hasNext && !hasInitial) continue;
+			if (nextAccept === initialAccept && nextDeny === initialDeny) continue;
+			if (nextAccept === 0 && nextDeny === 0) {
+				updates.push(
+					auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
+						...baseParams
+					})
 				);
 			} else {
 				updates.push(
@@ -720,58 +904,58 @@
 		}
 	}
 
-        function closeEditChannel() {
-                editChannelPermissionsLoadToken += 1;
-                editingChannel = null;
-                editChannelError = null;
-                editChannelTab = 'overview';
-                editChannelRoles = [];
-                editChannelRoleToAdd = '';
-                editChannelOverrides = {};
-                editChannelOverridesInitial = {};
-                editChannelPermissionsLoading = false;
-                editChannelPermissionsError = null;
-                editChannelSelectedOverride = null;
-                editChannelOrderedOverrideRoleIds = [];
-                editChannelInitialName = '';
-                editChannelInitialTopic = '';
-                editChannelInitialPrivate = false;
-                editChannelSaving = false;
-        }
+	function closeEditChannel() {
+		editChannelPermissionsLoadToken += 1;
+		editingChannel = null;
+		editChannelError = null;
+		editChannelTab = 'overview';
+		editChannelRoles = [];
+		editChannelRoleToAdd = '';
+		editChannelOverrides = {};
+		editChannelOverridesInitial = {};
+		editChannelPermissionsLoading = false;
+		editChannelPermissionsError = null;
+		editChannelSelectedOverride = null;
+		editChannelOrderedOverrideRoleIds = [];
+		editChannelInitialName = '';
+		editChannelInitialTopic = '';
+		editChannelInitialPrivate = false;
+		editChannelSaving = false;
+	}
 
-        async function saveEditChannel() {
-                if (!editingChannel || !$selectedGuildId || editChannelSaving) return;
-                if (!hasEditChannelChanges()) return;
-                const channelId = String((editingChannel as any)?.id ?? '');
-                if (!channelId) return;
-                editChannelSaving = true;
-                try {
-                        const shouldPatchChannel =
-                                editChannelName !== editChannelInitialName ||
-                                editChannelTopic !== editChannelInitialTopic ||
-                                editChannelPrivate !== editChannelInitialPrivate;
-                        if (shouldPatchChannel) {
-                                await auth.api.guild.guildGuildIdChannelChannelIdPatch({
-                                        guildId: BigInt($selectedGuildId) as any,
-                                        channelId: BigInt((editingChannel as any).id) as any,
-                                        guildPatchGuildChannelRequest: {
-                                                name: editChannelName,
-                                                topic: editChannelTopic,
-                                                private: editChannelPrivate
-                                        } as any
-                                });
-                        }
-                        await saveChannelPermissionOverrides($selectedGuildId, channelId);
-                        closeEditChannel();
-                        await refreshChannels();
-                } catch (e: any) {
-                        editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
-                } finally {
-                        if (editingChannel) {
-                                editChannelSaving = false;
-                        }
-                }
-        }
+	async function saveEditChannel() {
+		if (!editingChannel || !$selectedGuildId || editChannelSaving) return;
+		if (!hasEditChannelChanges()) return;
+		const channelId = String((editingChannel as any)?.id ?? '');
+		if (!channelId) return;
+		editChannelSaving = true;
+		try {
+			const shouldPatchChannel =
+				editChannelName !== editChannelInitialName ||
+				editChannelTopic !== editChannelInitialTopic ||
+				editChannelPrivate !== editChannelInitialPrivate;
+			if (shouldPatchChannel) {
+				await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+					guildId: BigInt($selectedGuildId) as any,
+					channelId: BigInt((editingChannel as any).id) as any,
+					guildPatchGuildChannelRequest: {
+						name: editChannelName,
+						topic: editChannelTopic,
+						private: editChannelPrivate
+					} as any
+				});
+			}
+			await saveChannelPermissionOverrides($selectedGuildId, channelId);
+			closeEditChannel();
+			await refreshChannels();
+		} catch (e: any) {
+			editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
+		} finally {
+			if (editingChannel) {
+				editChannelSaving = false;
+			}
+		}
+	}
 
 	function openEditCategory(cat: DtoChannel) {
 		editingCategory = cat;
@@ -959,10 +1143,10 @@
 									</div>
 								</div>
 							</div>
-                                                {/if}
-                                        {:else}
-                                                <div
-                                                        class="mt-2"
+						{/if}
+					{:else}
+						<div
+							class="mt-2"
 							ondragover={(e) => {
 								e.preventDefault();
 								dragOverContainer(String((sec.cat as any)?.id));
@@ -1098,287 +1282,247 @@
 	<UserPanel />
 
 	{#if editingChannel}
-		<div
-			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-			role="dialog"
-			aria-modal="true"
-			onpointerdown={closeEditChannel}
-		>
-			<div
-				class="relative flex h-[80vh] w-full max-w-4xl overflow-hidden rounded-lg bg-[var(--bg)] shadow-xl"
-				role="document"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
+		<SettingsPanel maxWidthClass="max-w-4xl" on:close={closeEditChannel} let:close={dismissPanel}>
+			<svelte:fragment slot="sidebar">
+				<div class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
+					{m.channel_settings()}
+				</div>
 				<button
-					aria-label={m.close()}
-					class="absolute top-3 right-3 rounded p-1 text-xl leading-none hover:bg-[var(--panel)]"
-					onclick={closeEditChannel}
+					class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
+						editChannelTab === 'overview' ? 'bg-[var(--panel)] font-semibold' : ''
+					}`}
+					onclick={() => (editChannelTab = 'overview')}
 				>
-					&times;
+					{m.channel_tab_overview()}
 				</button>
-				<aside class="w-48 space-y-2 border-r border-[var(--stroke)] p-4">
-					<div class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
-						{m.channel_settings()}
+				<button
+					class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
+						editChannelTab === 'permissions' ? 'bg-[var(--panel)] font-semibold' : ''
+					}`}
+					onclick={() => (editChannelTab = 'permissions')}
+				>
+					{m.channel_tab_permissions()}
+				</button>
+			</svelte:fragment>
+
+			<h2 class="text-lg font-semibold">{m.edit_channel()}</h2>
+			{#if editChannelError}
+				<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
+					{editChannelError}
+				</div>
+			{/if}
+			{#if editChannelTab === 'overview'}
+				<div class="space-y-4">
+					<div>
+						<label for="channel-name" class="mb-1 block text-sm font-medium">
+							{m.channel_name()}
+						</label>
+						<input
+							id="channel-name"
+							class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
+							placeholder={m.channel_name()}
+							bind:value={editChannelName}
+						/>
 					</div>
-					<button
-						class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
-							editChannelTab === 'overview' ? 'bg-[var(--panel)] font-semibold' : ''
-						}`}
-						onclick={() => (editChannelTab = 'overview')}
-					>
-						{m.channel_tab_overview()}
-					</button>
-					<button
-						class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
-							editChannelTab === 'permissions' ? 'bg-[var(--panel)] font-semibold' : ''
-						}`}
-						onclick={() => (editChannelTab = 'permissions')}
-					>
-						{m.channel_tab_permissions()}
-					</button>
-				</aside>
-                                <section class="flex flex-1 flex-col">
-                                        <div class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
-                                                <h2 class="text-lg font-semibold">{m.edit_channel()}</h2>
-                                                {#if editChannelError}
-                                                        <div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
-                                                                {editChannelError}
-							</div>
+					<div>
+						<label for="channel-topic" class="mb-1 block text-sm font-medium">
+							{m.channel_topic()}
+						</label>
+						<input
+							id="channel-topic"
+							class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
+							placeholder={m.channel_topic()}
+							bind:value={editChannelTopic}
+						/>
+					</div>
+				</div>
+			{:else if editChannelTab === 'permissions'}
+				{@const availableRoleOptions = availableRolesForOverrides()}
+				{@const overrideRoleIds = orderedOverrideRoleIds()}
+				<div class="space-y-4">
+					{#if editChannelPermissionsError}
+						<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
+							{editChannelPermissionsError}
+						</div>
+					{/if}
+					<div class="rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
+						<label class="flex items-center gap-2 text-sm font-medium">
+							<input type="checkbox" bind:checked={editChannelPrivate} />
+							{m.channel_permissions_private_label()}
+						</label>
+						<p class="mt-1 text-xs text-[var(--muted)]">
+							{m.channel_permissions_private_desc()}
+						</p>
+					</div>
+					<div class="space-y-4 rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
+						<div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+							<select
+								class="flex-1 rounded border border-[var(--stroke)] bg-[var(--bg)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
+								bind:value={editChannelRoleToAdd}
+								disabled={editChannelPermissionsLoading || availableRoleOptions.length === 0}
+							>
+								<option value="">{m.channel_permissions_select_role()}</option>
+								{#each availableRoleOptions as role}
+									{@const rid = getRoleId(role)!}
+									<option value={rid}>{roleDisplayName(role, rid)}</option>
+								{/each}
+							</select>
+							<button
+								class="rounded bg-[var(--brand)] px-3 py-2 text-[var(--bg)] disabled:opacity-50"
+								onclick={addRoleOverride}
+								disabled={!editChannelRoleToAdd}
+							>
+								{m.channel_permissions_add_role()}
+							</button>
+						</div>
+						{#if editChannelPermissionsLoading}
+							<p class="text-sm text-[var(--muted)]">{m.loading()}</p>
 						{/if}
-						{#if editChannelTab === 'overview'}
-							<div class="space-y-4">
-								<div>
-									<label for="channel-name" class="mb-1 block text-sm font-medium">
-										{m.channel_name()}
-									</label>
-									<input
-										id="channel-name"
-										class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
-										placeholder={m.channel_name()}
-										bind:value={editChannelName}
-									/>
-								</div>
-								<div>
-									<label for="channel-topic" class="mb-1 block text-sm font-medium">
-										{m.channel_topic()}
-									</label>
-									<input
-										id="channel-topic"
-										class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
-										placeholder={m.channel_topic()}
-										bind:value={editChannelTopic}
-									/>
-								</div>
-							</div>
-						{:else if editChannelTab === 'permissions'}
-							{@const availableRoleOptions = availableRolesForOverrides()}
-							{@const overrideRoleIds = orderedOverrideRoleIds()}
-							<div class="space-y-4">
-								{#if editChannelPermissionsError}
-									<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
-										{editChannelPermissionsError}
+						{#if overrideRoleIds.length > 0}
+							<div class="space-y-3">
+								<div class="space-y-2">
+									<div class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
+										{m.channel_permissions_role_overrides_label()}
 									</div>
-								{/if}
-								<div class="rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
-									<label class="flex items-center gap-2 text-sm font-medium">
-										<input type="checkbox" bind:checked={editChannelPrivate} />
-										{m.channel_permissions_private_label()}
-									</label>
-									<p class="mt-1 text-xs text-[var(--muted)]">
-										{m.channel_permissions_private_desc()}
-									</p>
-								</div>
-								<div class="space-y-4 rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
-									<div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-										<select
-											class="flex-1 rounded border border-[var(--stroke)] bg-[var(--bg)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
-											bind:value={editChannelRoleToAdd}
-											disabled={editChannelPermissionsLoading || availableRoleOptions.length === 0}
-										>
-											<option value="">{m.channel_permissions_select_role()}</option>
-											{#each availableRoleOptions as role}
-												{@const rid = getRoleId(role)!}
-												<option value={rid}>{roleDisplayName(role, rid)}</option>
-											{/each}
-										</select>
-										<button
-											class="rounded bg-[var(--brand)] px-3 py-2 text-[var(--bg)] disabled:opacity-50"
-											onclick={addRoleOverride}
-											disabled={!editChannelRoleToAdd}
-										>
-											{m.channel_permissions_add_role()}
-										</button>
+									<div class="flex gap-2 overflow-x-auto pb-1">
+										{#each overrideRoleIds as roleId}
+											{@const role = editChannelRoles.find((r) => getRoleId(r) === roleId)}
+											<button
+												type="button"
+												class={`rounded-full border border-[var(--stroke)] px-3 py-1 text-sm whitespace-nowrap transition ${
+													editChannelSelectedOverride === roleId
+														? 'bg-[var(--brand)] text-[var(--bg)]'
+														: 'bg-[var(--bg)] hover:bg-[var(--panel-strong)]'
+												}`}
+												onclick={() => (editChannelSelectedOverride = roleId)}
+												aria-pressed={editChannelSelectedOverride === roleId}
+											>
+												{roleDisplayName(role, roleId)}
+											</button>
+										{/each}
 									</div>
-									{#if editChannelPermissionsLoading}
-										<p class="text-sm text-[var(--muted)]">{m.loading()}</p>
-									{/if}
-									{#if overrideRoleIds.length > 0}
-										<div class="space-y-3">
-											<div class="space-y-2">
+								</div>
+								{#if editChannelSelectedOverride && overrideRoleIds.includes(editChannelSelectedOverride)}
+									{@const selectedOverrideId = editChannelSelectedOverride as string}
+									{@const selectedRole = editChannelRoles.find(
+										(r) => getRoleId(r) === selectedOverrideId
+									)}
+									<div class="space-y-3 rounded border border-[var(--stroke)] bg-[var(--bg)] p-4">
+										<div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+											<div class="text-sm font-semibold">
+												{roleDisplayName(selectedRole, selectedOverrideId)}
+											</div>
+											<button
+												type="button"
+												class="text-xs text-red-500 hover:underline"
+												onclick={() => removeRoleOverride(selectedOverrideId)}
+											>
+												{m.channel_permissions_remove_role()}
+											</button>
+										</div>
+										{#each CHANNEL_PERMISSION_CATEGORIES as category}
+											<div>
 												<div
-													class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
+													class="mb-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
 												>
-													{m.channel_permissions_role_overrides_label()}
+													{category.label()}
 												</div>
-												<div class="flex gap-2 overflow-x-auto pb-1">
-													{#each overrideRoleIds as roleId}
-														{@const role = editChannelRoles.find((r) => getRoleId(r) === roleId)}
-														<button
-															type="button"
-															class={`rounded-full border border-[var(--stroke)] px-3 py-1 text-sm whitespace-nowrap transition ${
-																editChannelSelectedOverride === roleId
-																	? 'bg-[var(--brand)] text-[var(--bg)]'
-																	: 'bg-[var(--bg)] hover:bg-[var(--panel-strong)]'
-															}`}
-															onclick={() => (editChannelSelectedOverride = roleId)}
-															aria-pressed={editChannelSelectedOverride === roleId}
-														>
-															{roleDisplayName(role, roleId)}
-														</button>
+												<div class="space-y-3">
+													{#each category.permissions as perm}
+														{@const state = channelPermissionState(selectedOverrideId, perm.value)}
+														<div class="rounded border border-[var(--stroke)] bg-[var(--bg)] p-3">
+															<div class="flex items-start justify-between gap-4">
+																<div>
+																	<div class="text-sm font-medium">{perm.label()}</div>
+																	<div class="text-xs text-[var(--muted)]">
+																		{perm.description()}
+																	</div>
+																</div>
+																<div
+																	class="flex overflow-hidden rounded border border-[var(--stroke)] text-xs font-semibold"
+																>
+																	<button
+																		class={`px-2 py-1 transition ${
+																			state === 'deny'
+																				? 'bg-red-500 text-white'
+																				: 'bg-transparent hover:bg-red-500/10'
+																		}`}
+																		onclick={() =>
+																			setChannelPermission(selectedOverrideId, perm.value, 'deny')}
+																		aria-label={m.permission_deny()}
+																		title={m.permission_deny()}
+																	>
+																		<X class="h-4 w-4" stroke-width={2} />
+																	</button>
+																	<button
+																		class={`px-2 py-1 transition ${
+																			state === 'inherit'
+																				? 'bg-[var(--panel)]'
+																				: 'bg-transparent hover:bg-[var(--panel)]/60'
+																		}`}
+																		onclick={() =>
+																			setChannelPermission(
+																				selectedOverrideId,
+																				perm.value,
+																				'inherit'
+																			)}
+																		aria-label={m.permission_default()}
+																		title={m.permission_default()}
+																	>
+																		<Slash class="h-4 w-4" stroke-width={2} />
+																	</button>
+																	<button
+																		class={`px-2 py-1 transition ${
+																			state === 'allow'
+																				? 'bg-green-500 text-white'
+																				: 'bg-transparent hover:bg-green-500/10'
+																		}`}
+																		onclick={() =>
+																			setChannelPermission(selectedOverrideId, perm.value, 'allow')}
+																		aria-label={m.permission_allow()}
+																		title={m.permission_allow()}
+																	>
+																		<Check class="h-4 w-4" stroke-width={2} />
+																	</button>
+																</div>
+															</div>
+														</div>
 													{/each}
 												</div>
 											</div>
-											{#if editChannelSelectedOverride && overrideRoleIds.includes(editChannelSelectedOverride)}
-												{@const selectedOverrideId = editChannelSelectedOverride as string}
-												{@const selectedRole = editChannelRoles.find(
-													(r) => getRoleId(r) === selectedOverrideId
-												)}
-												<div
-													class="space-y-3 rounded border border-[var(--stroke)] bg-[var(--bg)] p-4"
-												>
-													<div
-														class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
-													>
-														<div class="text-sm font-semibold">
-															{roleDisplayName(selectedRole, selectedOverrideId)}
-														</div>
-														<button
-															type="button"
-															class="text-xs text-red-500 hover:underline"
-															onclick={() => removeRoleOverride(selectedOverrideId)}
-														>
-															{m.channel_permissions_remove_role()}
-														</button>
-													</div>
-													{#each CHANNEL_PERMISSION_CATEGORIES as category}
-														<div>
-															<div
-																class="mb-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
-															>
-																{category.label()}
-															</div>
-															<div class="space-y-3">
-																{#each category.permissions as perm}
-																	{@const state = channelPermissionState(
-																		selectedOverrideId,
-																		perm.value
-																	)}
-																	<div
-																		class="rounded border border-[var(--stroke)] bg-[var(--bg)] p-3"
-																	>
-																		<div class="flex items-start justify-between gap-4">
-																			<div>
-																				<div class="text-sm font-medium">{perm.label()}</div>
-																				<div class="text-xs text-[var(--muted)]">
-																					{perm.description()}
-																				</div>
-																			</div>
-																			<div
-																				class="flex overflow-hidden rounded border border-[var(--stroke)] text-xs font-semibold"
-																			>
-																				<button
-																					class={`px-2 py-1 transition ${
-																						state === 'deny'
-																							? 'bg-red-500 text-white'
-																							: 'bg-transparent hover:bg-red-500/10'
-																					}`}
-																					onclick={() =>
-																						setChannelPermission(
-																							selectedOverrideId,
-																							perm.value,
-																							'deny'
-																						)}
-																					aria-label={m.permission_deny()}
-																					title={m.permission_deny()}
-																				>
-																					<X class="h-4 w-4" stroke-width={2} />
-																				</button>
-																				<button
-																					class={`px-2 py-1 transition ${
-																						state === 'inherit'
-																							? 'bg-[var(--panel)]'
-																							: 'bg-transparent hover:bg-[var(--panel)]/60'
-																					}`}
-																					onclick={() =>
-																						setChannelPermission(
-																							selectedOverrideId,
-																							perm.value,
-																							'inherit'
-																						)}
-																					aria-label={m.permission_default()}
-																					title={m.permission_default()}
-																				>
-																					<Slash class="h-4 w-4" stroke-width={2} />
-																				</button>
-																				<button
-																					class={`px-2 py-1 transition ${
-																						state === 'allow'
-																							? 'bg-green-500 text-white'
-																							: 'bg-transparent hover:bg-green-500/10'
-																					}`}
-																					onclick={() =>
-																						setChannelPermission(
-																							selectedOverrideId,
-																							perm.value,
-																							'allow'
-																						)}
-																					aria-label={m.permission_allow()}
-																					title={m.permission_allow()}
-																				>
-																					<Check class="h-4 w-4" stroke-width={2} />
-																				</button>
-																			</div>
-																		</div>
-																	</div>
-																{/each}
-															</div>
-														</div>
-													{/each}
-												</div>
-											{:else}
-												<p class="text-sm text-[var(--muted)]">
-													{m.channel_permissions_select_override_prompt()}
-												</p>
-											{/if}
-										</div>
-									{:else if !editChannelPermissionsLoading}
-										<p class="text-sm text-[var(--muted)]">
-											{m.channel_permissions_empty()}
-										</p>
-									{/if}
-								</div>
-                                                        </div>
-                                                {/if}
-                                        </div>
-                                        <div class="flex justify-end gap-2 border-t border-[var(--stroke)] bg-[var(--panel)] p-4">
-                                                <button
-                                                        class="rounded-md border border-[var(--stroke)] px-3 py-1"
-                                                        onclick={closeEditChannel}
-                                                >
-                                                        {m.cancel()}
-                                                </button>
-                                                <button
-                                                        class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:cursor-not-allowed disabled:opacity-50"
-                                                        onclick={saveEditChannel}
-                                                        disabled={!editChannelHasChanges || editChannelSaving}
-                                                >
-                                                        {m.save()}
-                                                </button>
-                                        </div>
-                                </section>
-                        </div>
-                </div>
-        {/if}
+										{/each}
+									</div>
+								{:else}
+									<p class="text-sm text-[var(--muted)]">
+										{m.channel_permissions_select_override_prompt()}
+									</p>
+								{/if}
+							</div>
+						{:else if !editChannelPermissionsLoading}
+							<p class="text-sm text-[var(--muted)]">
+								{m.channel_permissions_empty()}
+							</p>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<svelte:fragment slot="footer">
+				<div class="flex justify-end gap-2">
+					<button class="rounded-md border border-[var(--stroke)] px-3 py-1" onclick={dismissPanel}>
+						{m.cancel()}
+					</button>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:cursor-not-allowed disabled:opacity-50"
+						onclick={saveEditChannel}
+						disabled={!editChannelHasChanges || editChannelSaving}
+					>
+						{m.save()}
+					</button>
+				</div>
+			</svelte:fragment>
+		</SettingsPanel>
+	{/if}
 
 	{#if editingCategory}
 		<div

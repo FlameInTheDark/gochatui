@@ -1,5 +1,6 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { extractInvite } from './extractInvite';
+import { extractAuthorRoleIds } from './MessageItem.helpers';
 
 const originalWindow = (globalThis as any).window;
 const originalLocation = (globalThis as any).location;
@@ -48,5 +49,17 @@ describe('extractInvite', () => {
                 delete (globalThis as any).location;
 
                 expect(extractInvite('https://chat.example.com/app/i/ABC123')).toBeNull();
+        });
+});
+
+describe('MessageItem helpers', () => {
+        it('extractAuthorRoleIds returns roleId from objects within member roles', () => {
+                const message = {
+                        member: {
+                                roles: [{ roleId: '5005' }]
+                        }
+                } as any;
+
+                expect(extractAuthorRoleIds(message)).toEqual(['5005']);
         });
 });
