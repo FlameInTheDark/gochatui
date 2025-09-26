@@ -62,7 +62,8 @@
 		);
 	});
 
-	let creatingChannel = $state(false);
+        let dismissPanel: (() => void) | null = null;
+        let creatingChannel = $state(false);
 	let creatingCategory = $state(false);
 	let newChannelName = $state('');
 	let newChannelPrivate = $state(false);
@@ -1509,9 +1510,12 @@
 
 			<svelte:fragment slot="footer">
 				<div class="flex justify-end gap-2">
-					<button class="rounded-md border border-[var(--stroke)] px-3 py-1" onclick={dismissPanel}>
-						{m.cancel()}
-					</button>
+                                        <button
+                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                onclick={() => dismissPanel?.()}
+                                        >
+                                                {m.cancel()}
+                                        </button>
 					<button
 						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:cursor-not-allowed disabled:opacity-50"
 						onclick={saveEditChannel}
