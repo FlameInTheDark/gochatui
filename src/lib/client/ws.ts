@@ -13,6 +13,7 @@ import {
 import { browser } from '$app/environment';
 import { env as publicEnv } from '$env/dynamic/public';
 import { getRuntimeConfig } from '$lib/runtime/config';
+import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 
 type AnyRecord = Record<string, any>;
 
@@ -167,21 +168,80 @@ async function refreshGuildsAfterMembershipChange(prevGuildIds: string[]) {
   }
 }
 
-function handleSelfGuildMembershipEvent(data: AnyRecord) {
+function handleGuildMembershipEvent(data: AnyRecord) {
   if (!data || data.op !== 0) return;
   const eventType = typeof data?.t === 'number' ? data.t : null;
   if (eventType !== WS_EVENT_MEMBER_JOIN && eventType !== WS_EVENT_MEMBER_LEAVE) return;
 
+  const payload = data?.d ?? {};
   const eventUserId =
-    normalizeSnowflake(data?.d?.user_id) ??
-    normalizeSnowflake(data?.d?.member?.user?.id) ??
-    normalizeSnowflake(data?.d?.member?.user_id) ??
-    normalizeSnowflake(data?.d?.member?.id);
+    normalizeSnowflake(payload?.user_id) ??
+    normalizeSnowflake(payload?.member?.user?.id) ??
+    normalizeSnowflake(payload?.member?.user_id) ??
+    normalizeSnowflake(payload?.member?.id);
   const meId = normalizeSnowflake(get(auth.user)?.id);
-  if (!meId || !eventUserId || meId !== eventUserId) return;
+  const isSelf = Boolean(meId && eventUserId && meId === eventUserId);
 
-  const prevGuildIds = snapshotGuildIds(get(auth.guilds));
-  void refreshGuildsAfterMembershipChange(prevGuildIds);
+  if (!eventUserId) return;
+
+  const candidateMemberId = (value: any): string | null =>
+    normalizeSnowflake(value?.user?.id) ??
+    normalizeSnowflake(value?.user_id) ??
+    normalizeSnowflake(value?.id);
+
+  const guildId =
+    normalizeSnowflake(payload?.guild_id) ??
+    normalizeSnowflake(payload?.member?.guild_id) ??
+    normalizeSnowflake(payload?.member?.guild?.id) ??
+    normalizeSnowflake(payload?.guild?.id);
+
+  if (!guildId) {
+    if (isSelf) {
+      const prevGuildIds = snapshotGuildIds(get(auth.guilds));
+      void refreshGuildsAfterMembershipChange(prevGuildIds);
+    }
+    return;
+  }
+
+  if (eventType === WS_EVENT_MEMBER_JOIN) {
+    const member = payload?.member;
+    if (member) {
+      const cachedMembers = get(membersByGuild)[guildId];
+      if (!Array.isArray(cachedMembers)) {
+        void ensureGuildMembersLoaded(guildId);
+      } else {
+        membersByGuild.update((map) => {
+          const list = map[guildId];
+          if (!Array.isArray(list)) return map;
+          const idx = list.findIndex((entry) => {
+            const candidateId = candidateMemberId(entry as any);
+            return candidateId === eventUserId;
+          });
+          const nextList =
+            idx >= 0
+              ? [...list.slice(0, idx), member, ...list.slice(idx + 1)]
+              : [...list, member];
+          return { ...map, [guildId]: nextList };
+        });
+      }
+    }
+  } else if (eventType === WS_EVENT_MEMBER_LEAVE) {
+    membersByGuild.update((map) => {
+      const list = map[guildId];
+      if (!Array.isArray(list)) return map;
+      const nextList = list.filter((entry) => {
+        const candidateId = candidateMemberId(entry as any);
+        return candidateId !== eventUserId;
+      });
+      if (nextList.length === list.length) return map;
+      return { ...map, [guildId]: nextList };
+    });
+  }
+
+  if (isSelf) {
+    const prevGuildIds = snapshotGuildIds(get(auth.guilds));
+    void refreshGuildsAfterMembershipChange(prevGuildIds);
+  }
 }
 
 function collectGuildSubscriptionIds(): string[] {
@@ -335,7 +395,7 @@ export function connectWS() {
     updateLastT(data?.t);
     wsEvent.set(data);
 
-    handleSelfGuildMembershipEvent(data);
+    handleGuildMembershipEvent(data);
 
     // On message create event (op 0)
     if (data?.op === 0 && data?.d?.message) {
