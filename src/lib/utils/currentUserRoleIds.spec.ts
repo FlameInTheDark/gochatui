@@ -85,6 +85,20 @@ describe('resolveCurrentUserRoleIds', () => {
                 expect(result).toEqual(['5005']);
         });
 
+        it('collectMemberRoleIds prioritizes nested role identifiers over fallback properties', () => {
+                const member = {
+                        user: { id: currentUserId },
+                        roles: [
+                                { role: { id: '5005' }, id: '9999', role_id: '8888', roleId: '7777' },
+                                { id: '6006' }
+                        ]
+                } as any;
+
+                const result = collectMemberRoleIds(member);
+
+                expect(result).toEqual(['5005', '6006']);
+        });
+
         it('collectMemberRoleIds picks nested role identifiers before raw entries', () => {
                 const member = {
                         user: { id: currentUserId },
