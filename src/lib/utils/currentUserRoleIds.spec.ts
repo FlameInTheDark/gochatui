@@ -77,7 +77,7 @@ describe('resolveCurrentUserRoleIds', () => {
         it('collectMemberRoleIds picks nested role identifiers before raw entries', () => {
                 const member = {
                         user: { id: currentUserId },
-                        roles: [{ role: { id: '5005' } }]
+                        roles: [{ role: { id: '5005' } }, '5005']
                 } as any;
 
                 const result = collectMemberRoleIds(member);
