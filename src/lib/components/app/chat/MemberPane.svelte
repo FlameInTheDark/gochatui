@@ -113,22 +113,35 @@
 		return map;
 	}
 
-	function collectMemberRoleIds(
-		member: DtoMember | null | undefined,
-		guildId: string | null
-	): string[] {
-		const ids = new Set<string>();
-		if (member && Array.isArray((member as any)?.roles)) {
-			for (const raw of (member as any)?.roles ?? []) {
-				const id = toSnowflakeString(raw);
-				if (id) ids.add(id);
-			}
-		}
-		if (guildId) {
-			ids.add(guildId);
-		}
-		return Array.from(ids);
-	}
+        function collectMemberRoleIds(
+                member: DtoMember | null | undefined,
+                guildId: string | null
+        ): string[] {
+                const ids = new Set<string>();
+                const roles = (member as any)?.roles;
+                const list = Array.isArray(roles) ? roles : [];
+
+                for (const entry of list) {
+                        const id =
+                                entry && typeof entry === 'object'
+                                        ? toSnowflakeString(
+                                                  (entry as any)?.id ??
+                                                          (entry as any)?.role_id ??
+                                                          (entry as any)?.roleId ??
+                                                          entry
+                                          )
+                                        : toSnowflakeString(entry);
+                        if (id) {
+                                ids.add(id);
+                        }
+                }
+
+                if (guildId) {
+                        ids.add(guildId);
+                }
+
+                return Array.from(ids);
+        }
 
 	function resolveMemberRoleColor(
 		member: DtoMember | null | undefined,

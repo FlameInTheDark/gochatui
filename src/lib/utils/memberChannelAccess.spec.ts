@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { memberHasChannelAccess } from '$lib/utils/memberChannelAccess';
+import { collectMemberRoleIds } from '$lib/utils/currentUserRoleIds';
 import { PERMISSION_VIEW_CHANNEL, PERMISSION_ADMINISTRATOR } from '$lib/utils/permissions';
 
 describe('memberHasChannelAccess', () => {
@@ -43,11 +44,11 @@ describe('memberHasChannelAccess', () => {
 		expect(result).toBe(true);
 	});
 
-	it('allows administrators even without allow-listed roles', () => {
-		const member = { user: { id: '103' } } as any;
-		const roleIds = ['4004', guildId];
-		const result = memberHasChannelAccess({
-			member,
+        it('allows administrators even without allow-listed roles', () => {
+                const member = { user: { id: '103' } } as any;
+                const roleIds = ['4004', guildId];
+                const result = memberHasChannelAccess({
+                        member,
 			channel: baseChannel,
 			guild: baseGuild,
 			guildId,
@@ -58,6 +59,28 @@ describe('memberHasChannelAccess', () => {
 			viewPermissionBit: PERMISSION_VIEW_CHANNEL
 		});
 
-		expect(result).toBe(true);
-	});
+        expect(result).toBe(true);
+        });
+
+        it('allows members whose roles are provided as objects with roleId fields', () => {
+                const member = {
+                        user: { id: '104' },
+                        roles: [{ roleId: '5005' }]
+                } as any;
+                const roleIds = [...collectMemberRoleIds(member), guildId];
+
+                const result = memberHasChannelAccess({
+                        member,
+                        channel: baseChannel,
+                        guild: baseGuild,
+                        guildId,
+                        roleIds,
+                        basePermissions: PERMISSION_VIEW_CHANNEL,
+                        channelOverrides: {},
+                        allowListedRoleIds: ['5005'],
+                        viewPermissionBit: PERMISSION_VIEW_CHANNEL
+                });
+
+                expect(result).toBe(true);
+        });
 });
