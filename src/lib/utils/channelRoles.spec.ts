@@ -59,6 +59,7 @@ describe('channel role access filtering', () => {
                         '5005',
                         6006,
                         7007n,
+                        { role: { id: '5005' }, accept: PERMISSION_VIEW_CHANNEL },
                         { role_id: '8008', accept: PERMISSION_VIEW_CHANNEL },
                         { roleId: '9009', accept: 0 },
                         { id: '10010', accept: PERMISSION_VIEW_CHANNEL }
@@ -83,11 +84,16 @@ describe('channel role access filtering', () => {
                 const inlineChannel = {
                         id: channelId,
                         guild_id: guildId,
-                        roles: ['11011', { role_id: '12012', accept: PERMISSION_VIEW_CHANNEL }, 13013n]
+                        roles: [
+                                '11011',
+                                { role: { id: '12012' }, accept: PERMISSION_VIEW_CHANNEL },
+                                { role_id: '13013', accept: PERMISSION_VIEW_CHANNEL },
+                                14014n
+                        ]
                 } as any;
 
                 const result = channelAllowListedRoleIds(guildId, inlineChannel);
 
-                expect(result).toEqual(['11011', '12012', '13013']);
+                expect(result).toEqual(['11011', '12012', '13013', '14014']);
         });
 });
