@@ -17,7 +17,8 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import { openUserContextMenu } from '$lib/utils/userContextMenu';
 	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
-	import { memberHasChannelAccess as resolveMemberChannelAccess } from '$lib/utils/memberChannelAccess';
+        import { memberHasChannelAccess as resolveMemberChannelAccess } from '$lib/utils/memberChannelAccess';
+        import { collectMemberRoleIds as normalizeMemberRoleIds } from '$lib/utils/currentUserRoleIds';
 
 	const guilds = auth.guilds;
 
@@ -117,30 +118,24 @@
                 member: DtoMember | null | undefined,
                 guildId: string | null
         ): string[] {
-                const ids = new Set<string>();
-                const roles = (member as any)?.roles;
-                const list = Array.isArray(roles) ? roles : [];
+                const seen = new Set<string>();
+                const result: string[] = [];
 
-                for (const entry of list) {
-                        const id =
-                                entry && typeof entry === 'object'
-                                        ? toSnowflakeString(
-                                                  (entry as any)?.id ??
-                                                          (entry as any)?.role_id ??
-                                                          (entry as any)?.roleId ??
-                                                          entry
-                                          )
-                                        : toSnowflakeString(entry);
-                        if (id) {
-                                ids.add(id);
+                if (member) {
+                        for (const roleId of normalizeMemberRoleIds(member)) {
+                                if (!seen.has(roleId)) {
+                                        seen.add(roleId);
+                                        result.push(roleId);
+                                }
                         }
                 }
 
-                if (guildId) {
-                        ids.add(guildId);
+                if (guildId && !seen.has(guildId)) {
+                        seen.add(guildId);
+                        result.push(guildId);
                 }
 
-                return Array.from(ids);
+                return result;
         }
 
 	function resolveMemberRoleColor(

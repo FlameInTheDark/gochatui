@@ -83,4 +83,26 @@ describe('memberHasChannelAccess', () => {
 
                 expect(result).toBe(true);
         });
+
+        it('allows members whose roles provide nested role.id fields', () => {
+                const member = {
+                        user: { id: '105' },
+                        roles: [{ role: { id: '6006' } }]
+                } as any;
+                const roleIds = [...collectMemberRoleIds(member), guildId];
+
+                const result = memberHasChannelAccess({
+                        member,
+                        channel: baseChannel,
+                        guild: baseGuild,
+                        guildId,
+                        roleIds,
+                        basePermissions: PERMISSION_VIEW_CHANNEL,
+                        channelOverrides: {},
+                        allowListedRoleIds: ['6006'],
+                        viewPermissionBit: PERMISSION_VIEW_CHANNEL
+                });
+
+                expect(result).toBe(true);
+        });
 });
