@@ -37,7 +37,7 @@ export function collectMemberRoleIds(member: DtoMember | undefined): string[] {
 
                 if (entry && typeof entry === 'object') {
                         const obj = entry as any;
-                        candidates.push(obj?.id, obj?.role_id, obj?.roleId, obj?.role?.id);
+                        candidates.push(obj?.role?.id, obj?.id, obj?.role_id, obj?.roleId);
                 }
 
                 candidates.push(entry);
