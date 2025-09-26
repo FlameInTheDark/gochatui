@@ -89,7 +89,9 @@ describe('memberHasChannelAccess', () => {
                         user: { id: '105' },
                         roles: [{ role: { id: '5005' } }]
                 } as any;
-                const roleIds = [...collectMemberRoleIds(member), guildId];
+                const baseRoleIds = collectMemberRoleIds(member);
+                expect(baseRoleIds).toEqual(['5005']);
+                const roleIds = [...baseRoleIds, guildId];
 
                 const result = memberHasChannelAccess({
                         member,
