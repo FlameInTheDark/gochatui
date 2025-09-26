@@ -10,6 +10,7 @@
 		channelReady,
 		guildSettingsOpen,
 		membersByGuild,
+		myGuildRoleIdsByGuild,
 		channelRolesByGuild
 	} from '$lib/stores/appState';
 	import type {
@@ -36,6 +37,7 @@
 	import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
 	import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
 	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
+	import { resolveCurrentUserRoleIds } from '$lib/utils/currentUserRoleIds';
 	import {
 		PERMISSION_MANAGE_CHANNELS,
 		PERMISSION_MANAGE_GUILD,
@@ -115,53 +117,20 @@
 		}
 	}
 
-	function memberUserId(member: DtoMember | undefined): string | null {
-		if (!member) return null;
-		return (
-			toSnowflakeString((member as any)?.user?.id) ??
-			toSnowflakeString((member as any)?.user_id) ??
-			toSnowflakeString((member as any)?.id) ??
-			null
-		);
-	}
-
-	function collectMemberRoleIds(member: DtoMember | undefined): string[] {
-		if (!member) return [];
-		const roles = (member as any)?.roles;
-		const list = Array.isArray(roles) ? roles : [];
-		const seen = new Set<string>();
-		const result: string[] = [];
-		for (const entry of list) {
-			const id =
-				entry && typeof entry === 'object'
-					? toSnowflakeString((entry as any)?.id ?? (entry as any)?.role_id ?? entry)
-					: toSnowflakeString(entry);
-			if (id && !seen.has(id)) {
-				seen.add(id);
-				result.push(id);
-			}
-		}
-		return result;
-	}
-
 	function myGuildRoleIds(guildId: string): Set<string> {
 		const gid = String(guildId ?? '');
-		const set = new Set<string>();
-		if (!gid) return set;
-		const memberList = $membersByGuild[gid];
-		if (Array.isArray(memberList)) {
-			const meId = toSnowflakeString($me?.id);
-			if (meId) {
-				const entry = memberList.find((member) => memberUserId(member) === meId);
-				if (entry) {
-					for (const roleId of collectMemberRoleIds(entry)) {
-						set.add(roleId);
-					}
-				}
-			}
-		}
-		set.add(gid);
-		return set;
+		const members = Array.isArray($membersByGuild[gid])
+			? ($membersByGuild[gid] as DtoMember[])
+			: undefined;
+		const fallbackRoles = Array.isArray($myGuildRoleIdsByGuild[gid])
+			? ($myGuildRoleIdsByGuild[gid] as string[])
+			: undefined;
+		return resolveCurrentUserRoleIds({
+			guildId: gid,
+			members,
+			currentUserId: $me?.id,
+			fallbackRoleIds: fallbackRoles
+		});
 	}
 
 	function inlineChannelRoleIds(channel: DtoChannel): string[] {
