@@ -121,6 +121,14 @@
                 const seen = new Set<string>();
                 const result: string[] = [];
 
+                const rawRoles = Array.isArray((member as any)?.roles) ? (member as any).roles : [];
+                for (const entry of rawRoles) {
+                        const nestedId = toSnowflakeString((entry as any)?.role?.id);
+                        if (!nestedId || seen.has(nestedId)) continue;
+                        seen.add(nestedId);
+                        result.push(nestedId);
+                }
+
                 for (const roleId of baseCollectMemberRoleIds(member ?? undefined)) {
                         if (seen.has(roleId)) continue;
                         seen.add(roleId);
