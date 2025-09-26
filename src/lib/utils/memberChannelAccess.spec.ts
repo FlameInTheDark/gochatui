@@ -65,7 +65,29 @@ describe('memberHasChannelAccess', () => {
         it('allows members whose roles are provided as objects with roleId fields', () => {
                 const member = {
                         user: { id: '104' },
-                        roles: [{ roleId: '5005' }]
+                        roles: [{ roleId: '5004' }]
+                } as any;
+                const roleIds = [...collectMemberRoleIds(member), guildId];
+
+                const result = memberHasChannelAccess({
+                        member,
+                        channel: baseChannel,
+                        guild: baseGuild,
+                        guildId,
+                        roleIds,
+                        basePermissions: PERMISSION_VIEW_CHANNEL,
+                        channelOverrides: {},
+                        allowListedRoleIds: ['5004'],
+                        viewPermissionBit: PERMISSION_VIEW_CHANNEL
+                });
+
+                expect(result).toBe(true);
+        });
+
+        it('allows members whose roles provide nested role.id fields', () => {
+                const member = {
+                        user: { id: '105' },
+                        roles: [{ role: { id: '5005' } }]
                 } as any;
                 const roleIds = [...collectMemberRoleIds(member), guildId];
 
@@ -78,28 +100,6 @@ describe('memberHasChannelAccess', () => {
                         basePermissions: PERMISSION_VIEW_CHANNEL,
                         channelOverrides: {},
                         allowListedRoleIds: ['5005'],
-                        viewPermissionBit: PERMISSION_VIEW_CHANNEL
-                });
-
-                expect(result).toBe(true);
-        });
-
-        it('allows members whose roles provide nested role.id fields', () => {
-                const member = {
-                        user: { id: '105' },
-                        roles: [{ role: { id: '6006' } }]
-                } as any;
-                const roleIds = [...collectMemberRoleIds(member), guildId];
-
-                const result = memberHasChannelAccess({
-                        member,
-                        channel: baseChannel,
-                        guild: baseGuild,
-                        guildId,
-                        roleIds,
-                        basePermissions: PERMISSION_VIEW_CHANNEL,
-                        channelOverrides: {},
-                        allowListedRoleIds: ['6006'],
                         viewPermissionBit: PERMISSION_VIEW_CHANNEL
                 });
 
