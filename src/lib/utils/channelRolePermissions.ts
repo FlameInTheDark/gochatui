@@ -29,7 +29,11 @@ export function filterViewableRoleIds(
         const seen = new Set<string>();
         for (const entry of entries) {
                 if (!entry) continue;
-                const rawRoleId = (entry as any)?.role_id ?? (entry as any)?.roleId ?? (entry as any)?.id;
+                const rawRoleId =
+                        (entry as any)?.role?.id ??
+                        (entry as any)?.role_id ??
+                        (entry as any)?.roleId ??
+                        (entry as any)?.id;
                 let roleSource: unknown = rawRoleId;
                 let accept: number | undefined;
                 if (roleSource == null) {
