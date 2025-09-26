@@ -18,7 +18,7 @@
 	import { openUserContextMenu } from '$lib/utils/userContextMenu';
 	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
         import { memberHasChannelAccess as resolveMemberChannelAccess } from '$lib/utils/memberChannelAccess';
-        import { collectMemberRoleIds as normalizeMemberRoleIds } from '$lib/utils/currentUserRoleIds';
+        import { collectMemberRoleIds as resolveMemberRoleIds } from '$lib/utils/currentUserRoleIds';
 
 	const guilds = auth.guilds;
 
@@ -121,13 +121,10 @@
                 const seen = new Set<string>();
                 const result: string[] = [];
 
-                if (member) {
-                        for (const roleId of normalizeMemberRoleIds(member)) {
-                                if (!seen.has(roleId)) {
-                                        seen.add(roleId);
-                                        result.push(roleId);
-                                }
-                        }
+                for (const roleId of resolveMemberRoleIds(member ?? undefined)) {
+                        if (seen.has(roleId)) continue;
+                        seen.add(roleId);
+                        result.push(roleId);
                 }
 
                 if (guildId && !seen.has(guildId)) {
