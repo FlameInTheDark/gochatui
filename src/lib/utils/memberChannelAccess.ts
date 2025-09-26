@@ -31,61 +31,99 @@ export type MemberChannelAccessParams = {
 	viewPermissionBit: number;
 };
 
-export function memberHasChannelAccess({
-	member,
-	channel,
-	guild,
-	guildId,
-	roleIds,
-	basePermissions,
-	channelOverrides,
-	allowListedRoleIds,
-	viewPermissionBit
-}: MemberChannelAccessParams): boolean {
-	if (!member || !channel) return false;
+export type MemberChannelAccessDescription = {
+        memberId: string | null;
+        ownerId: string | null;
+        guildId: string | null;
+        roleIds: string[];
+        allowList: string[];
+        intersectingRoleIds: string[];
+        isAdmin: boolean;
+        isOwner: boolean;
+        channelIsPrivate: boolean;
+        privateGateAllows: boolean;
+        basePermissions: number;
+        viewPermissionBit: number;
+        baseAllowed: boolean;
+        overrideAllowed: boolean;
+        finalAllowed: boolean;
+};
 
-	const ownerId = toSnowflakeString((guild as any)?.owner);
-	const memberId = toSnowflakeString((member as any)?.user?.id);
-	const isAdmin = Boolean(basePermissions & PERMISSION_ADMINISTRATOR);
-	const isOwner = Boolean(ownerId && memberId && ownerId === memberId);
-	const channelIsPrivate = Boolean((channel as any)?.private);
+function describeMemberChannelAccessInternal({
+        member,
+        channel,
+        guild,
+        guildId,
+        roleIds,
+        basePermissions,
+        channelOverrides,
+        allowListedRoleIds,
+        viewPermissionBit
+}: MemberChannelAccessParams): MemberChannelAccessDescription {
+        const ownerId = toSnowflakeString((guild as any)?.owner);
+        const memberId = toSnowflakeString((member as any)?.user?.id);
+        const channelIsPrivate = Boolean((channel as any)?.private);
+        const allowList = channelIsPrivate ? Array.from(allowListedRoleIds ?? []) : [];
+        const allowSet = new Set(allowList);
+        const intersectingRoleIds = channelIsPrivate
+                ? roleIds.filter((roleId) => allowSet.has(roleId))
+                : [];
+        const isAdmin = Boolean(basePermissions & PERMISSION_ADMINISTRATOR);
+        const isOwner = Boolean(ownerId && memberId && ownerId === memberId);
 
-	if (channelIsPrivate) {
-		const allowList = Array.from(allowListedRoleIds ?? []);
-		const allowSet = new Set(allowList);
-		if (!allowSet.size) {
-			if (!isAdmin && !isOwner) {
-				return false;
-			}
-		} else {
-			let intersects = false;
-			for (const roleId of roleIds) {
-				if (allowSet.has(roleId)) {
-					intersects = true;
-					break;
-				}
-			}
-			if (!intersects && !isAdmin && !isOwner) {
-				return false;
-			}
-		}
-	}
+        let privateGateAllows = true;
+        if (channelIsPrivate) {
+                if (!allowSet.size) {
+                        privateGateAllows = isAdmin || isOwner;
+                } else {
+                        privateGateAllows = Boolean(intersectingRoleIds.length || isAdmin || isOwner);
+                }
+        }
 
-	let allowed = Boolean(basePermissions & viewPermissionBit) || isAdmin;
-	allowed = applyViewChannelOverrides(
-		allowed,
-		roleIds,
-		guildId,
-		channelOverrides,
-		viewPermissionBit
-	);
+        const baseAllowed = Boolean(basePermissions & viewPermissionBit) || isAdmin;
+        const overrideAllowed = applyViewChannelOverrides(
+                baseAllowed,
+                roleIds,
+                guildId,
+                channelOverrides,
+                viewPermissionBit
+        );
 
-	return finalChannelAccessDecision(
-		allowed,
-		basePermissions,
-		PERMISSION_ADMINISTRATOR,
-		ownerId,
-		memberId,
-		channelIsPrivate
-	);
+        const finalAllowed = privateGateAllows
+                ? finalChannelAccessDecision(
+                          overrideAllowed,
+                          basePermissions,
+                          PERMISSION_ADMINISTRATOR,
+                          ownerId,
+                          memberId,
+                          channelIsPrivate
+                  )
+                : false;
+
+        return {
+                memberId,
+                ownerId,
+                guildId,
+                roleIds: [...roleIds],
+                allowList,
+                intersectingRoleIds,
+                isAdmin,
+                isOwner,
+                channelIsPrivate,
+                privateGateAllows,
+                basePermissions,
+                viewPermissionBit,
+                baseAllowed,
+                overrideAllowed,
+                finalAllowed
+        };
+}
+
+export const describeMemberChannelAccess = import.meta.env.DEV
+        ? describeMemberChannelAccessInternal
+        : undefined;
+
+export function memberHasChannelAccess(params: MemberChannelAccessParams): boolean {
+        if (!params.member || !params.channel) return false;
+        return describeMemberChannelAccessInternal(params).finalAllowed;
 }
