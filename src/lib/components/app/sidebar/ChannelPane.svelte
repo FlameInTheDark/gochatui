@@ -1539,35 +1539,40 @@
 				if (e.key === 'Enter') saveEditCategory();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-			<div
-				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<div class="mb-2 text-sm font-medium">{m.edit_category()}</div>
-				{#if editCategoryError}
-					<div class="mb-2 text-sm text-red-500">{editCategoryError}</div>
-				{/if}
-				<input
-					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					placeholder={m.category_name()}
-					bind:value={editCategoryName}
-				/>
-				<div class="flex justify-end gap-2">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-3 py-1"
-						onclick={() => (editingCategory = null)}>{m.cancel()}</button
-					>
-					<button
-						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-						onclick={saveEditCategory}>{m.save()}</button
-					>
-				</div>
-			</div>
-		</div>
-	{/if}
+                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                                <div class="relative">
+                                        <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
+                                        <div
+                                                class="panel relative z-10 w-72 p-3"
+                                                role="document"
+                                                tabindex="-1"
+                                                onpointerdown={(e) => e.stopPropagation()}
+                                        >
+                                                <div class="mb-2 text-sm font-medium">{m.edit_category()}</div>
+                                                {#if editCategoryError}
+                                                        <div class="mb-2 text-sm text-red-500">{editCategoryError}</div>
+                                                {/if}
+                                                <input
+                                                        class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                        placeholder={m.category_name()}
+                                                        bind:value={editCategoryName}
+                                                />
+                                                <div class="flex justify-end gap-2">
+                                                        <button
+                                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                                onclick={() => (editingCategory = null)}>{m.cancel()}</button
+                                                        >
+                                                        <button
+                                                                class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                                onclick={saveEditCategory}>{m.save()}</button
+                                                        >
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 
 	{#if creatingChannel}
 		<div
@@ -1580,42 +1585,47 @@
 				if (e.key === 'Enter') createChannel();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-			<div
-				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
-				{#if channelError}
-					<div class="mb-2 text-sm text-red-500">{channelError}</div>
-				{/if}
-				<input
-					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					placeholder={m.channel_name()}
-					bind:value={newChannelName}
-				/>
-				{#if creatingChannelParent}
-					<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
-				{/if}
-				<label class="mb-2 flex items-center gap-2 text-sm">
-					<input type="checkbox" bind:checked={newChannelPrivate} />
-					{m.channel_private()}
-				</label>
-				<div class="flex justify-end gap-2">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-3 py-1"
-						onclick={() => (creatingChannel = false)}>{m.cancel()}</button
-					>
-					<button
-						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-						onclick={createChannel}>{m.create()}</button
-					>
-				</div>
-			</div>
-		</div>
-	{/if}
+                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                                <div class="relative">
+                                        <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
+                                        <div
+                                                class="panel relative z-10 w-72 p-3"
+                                                role="document"
+                                                tabindex="-1"
+                                                onpointerdown={(e) => e.stopPropagation()}
+                                        >
+                                                <div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
+                                                {#if channelError}
+                                                        <div class="mb-2 text-sm text-red-500">{channelError}</div>
+                                                {/if}
+                                                <input
+                                                        class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                        placeholder={m.channel_name()}
+                                                        bind:value={newChannelName}
+                                                />
+                                                {#if creatingChannelParent}
+                                                        <div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
+                                                {/if}
+                                                <label class="mb-2 flex items-center gap-2 text-sm">
+                                                        <input type="checkbox" bind:checked={newChannelPrivate} />
+                                                        {m.channel_private()}
+                                                </label>
+                                                <div class="flex justify-end gap-2">
+                                                        <button
+                                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                                onclick={() => (creatingChannel = false)}>{m.cancel()}</button
+                                                        >
+                                                        <button
+                                                                class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                                onclick={createChannel}>{m.create()}</button
+                                                        >
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 
 	{#if creatingCategory}
 		<div
@@ -1628,33 +1638,38 @@
 				if (e.key === 'Enter') createCategory();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-			<div
-				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
-				{#if categoryError}
-					<div class="mb-2 text-sm text-red-500">{categoryError}</div>
-				{/if}
-				<input
-					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					placeholder={m.category_name()}
-					bind:value={newCategoryName}
-				/>
-				<div class="flex justify-end gap-2">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-3 py-1"
-						onclick={() => (creatingCategory = false)}>{m.cancel()}</button
-					>
-					<button
-						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-						onclick={createCategory}>{m.create()}</button
-					>
-				</div>
-			</div>
-		</div>
-	{/if}
+                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                                <div class="relative">
+                                        <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
+                                        <div
+                                                class="panel relative z-10 w-72 p-3"
+                                                role="document"
+                                                tabindex="-1"
+                                                onpointerdown={(e) => e.stopPropagation()}
+                                        >
+                                                <div class="mb-2 text-sm font-medium">{m.new_category()}</div>
+                                                {#if categoryError}
+                                                        <div class="mb-2 text-sm text-red-500">{categoryError}</div>
+                                                {/if}
+                                                <input
+                                                        class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                        placeholder={m.category_name()}
+                                                        bind:value={newCategoryName}
+                                                />
+                                                <div class="flex justify-end gap-2">
+                                                        <button
+                                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                                onclick={() => (creatingCategory = false)}>{m.cancel()}</button
+                                                        >
+                                                        <button
+                                                                class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                                onclick={createCategory}>{m.create()}</button
+                                                        >
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 </div>

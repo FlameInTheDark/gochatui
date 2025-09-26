@@ -441,95 +441,100 @@
                         }
                 }}
         >
-                <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+                <div class="absolute inset-0 bg-black/40"></div>
                 <div
-                        bind:this={panelEl}
-                        class="panel absolute z-10 w-[min(90vw,720px)] p-5"
-                        role="dialog"
-                        tabindex="-1"
+                        class="absolute z-10"
                         style={`left:${posX}px; top:${posY}px`}
-                        onpointerdown={(e) => e.stopPropagation()}
                 >
-                        <div class="flex flex-col gap-3">
+                        <div class="relative">
+                                <div class="pointer-events-none absolute inset-0 z-0 rounded-xl bg-[var(--panel)]/30 backdrop-blur-sm"></div>
                                 <div
-                                        class="relative"
-                                        onpointerdown={(event) => {
-                                                if (
-                                                        showKeywordHelp &&
-                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help') &&
-                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help-button')
-                                                ) {
-                                                        showKeywordHelp = false;
-                                                }
-                                        }}
+                                        bind:this={panelEl}
+                                        class="panel relative z-10 w-[min(90vw,720px)] p-5"
+                                        role="dialog"
+                                        tabindex="-1"
+                                        onpointerdown={(e) => e.stopPropagation()}
                                 >
-                                        <div
-                                                class="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm shadow-sm transition focus-within:border-[var(--brand)] focus-within:shadow-[0_0_0_2px_var(--brand)]"
-                                        >
-                                                <Search class="h-5 w-5 text-[var(--muted)]" stroke-width={2} />
-                                                {#if authorFilter}
-                                                        <span
-                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                        <div class="flex flex-col gap-3">
+                                                <div
+                                                        class="relative"
+                                                        onpointerdown={(event) => {
+                                                                if (
+                                                                        showKeywordHelp &&
+                                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help') &&
+                                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help-button')
+                                                                ) {
+                                                                        showKeywordHelp = false;
+                                                                }
+                                                        }}
+                                                >
+                                                        <div
+                                                                class="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm shadow-sm transition focus-within:border-[var(--brand)] focus-within:shadow-[0_0_0_2px_var(--brand)]"
                                                         >
-                                                                <span class="font-semibold text-[var(--muted)]">
-                                                                        {m.search_filter_from()}
-                                                                </span>
-                                                                <span>{authorFilter.display}</span>
-                                                                <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
-                                                                        type="button"
-                                                                        aria-label={m.search_filter_remove()}
-                                                                        onclick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                removeAuthor();
-                                                                        }}
-                                                                >
-                                                                        ×
-                                                                </button>
-                                                        </span>
-                                                {/if}
-                                                {#each mentionFilters as mention, index}
-                                                        <span
-                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
-                                                        >
-                                                                <span class="font-semibold text-[var(--muted)]">
-                                                                        {m.search_filter_mentions()}
-                                                                </span>
-                                                                <span>{mention.display}</span>
-                                                                <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
-                                                                        type="button"
-                                                                        aria-label={m.search_filter_remove()}
-                                                                        onclick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                removeMention(index);
-                                                                        }}
-                                                                >
-                                                                        ×
-                                                                </button>
-                                                        </span>
-                                                {/each}
-                                                {#each hasSelected as option}
-                                                        <span
-                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
-                                                        >
-                                                                <span class="font-semibold text-[var(--muted)]">
-                                                                        {m.search_filter_has()}
-                                                                </span>
-                                                                <span>{hasLabel(option)}</span>
-                                                                <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
-                                                                        type="button"
-                                                                        aria-label={m.search_filter_remove()}
-                                                                        onclick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                removeHas(option);
-                                                                        }}
-                                                                >
-                                                                        ×
-                                                                </button>
-                                                        </span>
-                                                {/each}
+                                                                <Search class="h-5 w-5 text-[var(--muted)]" stroke-width={2} />
+                                                                {#if authorFilter}
+                                                                        <span
+                                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        >
+                                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                                        {m.search_filter_from()}
+                                                                                </span>
+                                                                                <span>{authorFilter.display}</span>
+                                                                                <button
+                                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+                                                                                        type="button"
+                                                                                        aria-label={m.search_filter_remove()}
+                                                                                        onclick={(event) => {
+                                                                                                event.stopPropagation();
+                                                                                                removeAuthor();
+                                                                                        }}
+                                                                                >
+                                                                                        ×
+                                                                                </button>
+                                                                        </span>
+                                                                {/if}
+                                                                {#each mentionFilters as mention, index}
+                                                                        <span
+                                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        >
+                                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                                        {m.search_filter_mentions()}
+                                                                                </span>
+                                                                                <span>{mention.display}</span>
+                                                                                <button
+                                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+                                                                                        type="button"
+                                                                                        aria-label={m.search_filter_remove()}
+                                                                                        onclick={(event) => {
+                                                                                                event.stopPropagation();
+                                                                                                removeMention(index);
+                                                                                        }}
+                                                                                >
+                                                                                        ×
+                                                                                </button>
+                                                                        </span>
+                                                                {/each}
+                                                                {#each hasSelected as option}
+                                                                        <span
+                                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        >
+                                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                                        {m.search_filter_has()}
+                                                                                </span>
+                                                                                <span>{hasLabel(option)}</span>
+                                                                                <button
+                                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+                                                                                        type="button"
+                                                                                        aria-label={m.search_filter_remove()}
+                                                                                        onclick={(event) => {
+                                                                                                event.stopPropagation();
+                                                                                                removeHas(option);
+                                                                                        }}
+                                                                                >
+                                                                                        ×
+                                                                                </button>
+                                                                        </span>
+                                                                {/each}
                                                 {#if pendingFilter === 'from' || pendingFilter === 'mentions'}
                                                         <div class="flex items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]">
                                                                 <span class="font-semibold text-[var(--muted)]">
@@ -801,6 +806,8 @@
                                                 </button>
                                         </div>
                                 {/if}
+                        </div>
+                                </div>
                         </div>
                 </div>
         </div>
