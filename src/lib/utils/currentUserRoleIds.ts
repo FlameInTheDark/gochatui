@@ -39,6 +39,7 @@ export function collectMemberRoleIds(member: DtoMember | undefined): string[] {
                                           (entry as any)?.id ??
                                                   (entry as any)?.role_id ??
                                                   (entry as any)?.roleId ??
+                                                  (entry as any)?.role?.id ??
                                                   entry
                                       )
                                 : toSnowflakeString(entry);
