@@ -17,7 +17,11 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import { openUserContextMenu } from '$lib/utils/userContextMenu';
 	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
-        import { memberHasChannelAccess as resolveMemberChannelAccess } from '$lib/utils/memberChannelAccess';
+        import {
+                memberHasChannelAccess as resolveMemberChannelAccess,
+                describeMemberChannelAccess as describeMemberChannelAccessDev,
+                type MemberChannelAccessDescription
+        } from '$lib/utils/memberChannelAccess';
         import { collectMemberRoleIds as baseCollectMemberRoleIds } from '$lib/utils/currentUserRoleIds';
 
 	const guilds = auth.guilds;
@@ -186,10 +190,37 @@
 		return perms;
 	}
 
-	function memberHasChannelAccess(
-		member: DtoMember | null | undefined,
-		channel: any,
-		guild: any
+        const describeMemberChannelAccess = import.meta.env.DEV ? describeMemberChannelAccessDev : undefined;
+
+        function describeMemberAccess(
+                member: DtoMember | null | undefined,
+                channel: any,
+                guild: any
+        ): MemberChannelAccessDescription | null {
+                if (!describeMemberChannelAccess || !member || !channel) return null;
+                const guildId =
+                        toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
+                const roleIds = collectMemberRoleIds(member, guildId);
+                const basePerms = aggregateRolePermissions(roleIds);
+                const allowListedRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
+
+                return describeMemberChannelAccess({
+                        member,
+                        channel,
+                        guild,
+                        guildId,
+                        roleIds,
+                        basePermissions: basePerms,
+                        channelOverrides,
+                        allowListedRoleIds,
+                        viewPermissionBit: VIEW_CHANNEL
+                });
+        }
+
+        function memberHasChannelAccess(
+                member: DtoMember | null | undefined,
+                channel: any,
+                guild: any
 	): boolean {
 		if (!member || !channel) return false;
 		const guildId =
@@ -198,9 +229,9 @@
 		const basePerms = aggregateRolePermissions(roleIds);
 		const allowListedRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
 
-		return resolveMemberChannelAccess({
-			member,
-			channel,
+                return resolveMemberChannelAccess({
+                        member,
+                        channel,
 			guild,
 			guildId,
 			roleIds,
@@ -208,8 +239,97 @@
 			channelOverrides,
 			allowListedRoleIds,
 			viewPermissionBit: VIEW_CHANNEL
-		});
-	}
+                });
+        }
+
+        if (import.meta.env.DEV) {
+                let debugLogEnabled = $state(false);
+
+                const ensureDebugBridge = () => {
+                        if (!describeMemberChannelAccess || typeof window === 'undefined') return null;
+                        const w = window as any;
+                        const root = (w.__gochatuiDebug = w.__gochatuiDebug ?? {});
+                        const memberDebug = (root.memberAccess = root.memberAccess ?? {});
+
+                        let internalLog = Boolean(memberDebug.log);
+                        if (!memberDebug.__configured) {
+                                Object.defineProperty(memberDebug, 'log', {
+                                        configurable: true,
+                                        enumerable: true,
+                                        get() {
+                                                return internalLog;
+                                        },
+                                        set(value: any) {
+                                                const next = Boolean(value);
+                                                if (internalLog !== next) {
+                                                        internalLog = next;
+                                                        debugLogEnabled = next;
+                                                }
+                                        }
+                                });
+                                memberDebug.__configured = true;
+                                memberDebug.log = internalLog;
+                        } else {
+                                debugLogEnabled = internalLog;
+                        }
+
+                        memberDebug.describe = (rawMember: unknown) => {
+                                const normalizedId =
+                                        typeof rawMember === 'object' && rawMember
+                                                ? toSnowflakeString((rawMember as any)?.user?.id ?? (rawMember as any)?.id)
+                                                : toSnowflakeString(rawMember);
+                                const channel = currentChannel;
+                                const guild = currentGuild;
+                                const members = currentMembers ?? [];
+                                const memberEntry =
+                                        members.find((candidate) =>
+                                                toSnowflakeString((candidate as any)?.user?.id) === normalizedId
+                                        ) ?? null;
+                                const description = memberEntry && channel
+                                        ? describeMemberAccess(memberEntry, channel, guild)
+                                        : null;
+
+                                console.groupCollapsed('[memberAccess.describe]', {
+                                        channelId: channel ? toSnowflakeString((channel as any)?.id) : null,
+                                        memberId: normalizedId
+                                });
+                                if (description) {
+                                        console.log(description);
+                                } else {
+                                        console.warn('No member/channel found for inspection');
+                                }
+                                console.groupEnd();
+                                return description;
+                        };
+
+                        return memberDebug;
+                };
+
+                $effect(() => {
+                        const debug = ensureDebugBridge();
+                        if (!debug || !debugLogEnabled) {
+                                return;
+                        }
+                        const channel = currentChannel;
+                        if (!channel) return;
+                        const guild = currentGuild;
+                        const channelId = toSnowflakeString((channel as any)?.id);
+                        const members = currentMembers ?? [];
+                        for (const member of members) {
+                                const description = describeMemberAccess(member, channel, guild);
+                                if (!description) continue;
+                                console.debug('[memberAccess.log]', {
+                                        channelId,
+                                        memberId: description.memberId,
+                                        finalAllowed: description.finalAllowed,
+                                        privateGateAllows: description.privateGateAllows,
+                                        overrideAllowed: description.overrideAllowed,
+                                        allowList: description.allowList,
+                                        intersectingRoleIds: description.intersectingRoleIds
+                                });
+                        }
+                });
+        }
 
 	const currentGuild = $derived.by(() => {
 		const gid = $selectedGuildId;
