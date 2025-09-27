@@ -1512,7 +1512,10 @@
 				<div class="flex justify-end gap-2">
                                         <button
                                                 class="rounded-md border border-[var(--stroke)] px-3 py-1"
-                                                onclick={() => dismissPanel?.()}
+                                                onclick={() => {
+                                                        dismissPanel?.();
+                                                        closeEditChannel();
+                                                }}
                                         >
                                                 {m.cancel()}
                                         </button>
