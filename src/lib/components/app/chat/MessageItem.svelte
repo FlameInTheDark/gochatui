@@ -732,25 +732,32 @@
 		}).format(d);
 	}
 
-	function fmtEditFull(m: DtoMessage) {
-		if (!m.updated_at) return '';
-		const d = new Date(m.updated_at);
-		if (Number.isNaN(d.getTime())) return '';
-		return new Intl.DateTimeFormat(undefined, {
+        function fmtEditFull(m: DtoMessage) {
+                if (!m.updated_at) return '';
+                const d = new Date(m.updated_at);
+                if (Number.isNaN(d.getTime())) return '';
+                return new Intl.DateTimeFormat(undefined, {
 			year: 'numeric',
 			month: 'short',
 			day: '2-digit',
 			hour: '2-digit',
 			minute: '2-digit',
-			second: '2-digit'
-		}).format(d);
-	}
+                        second: '2-digit'
+                }).format(d);
+        }
 
-	async function saveEdit() {
-		if (!$selectedChannelId || !message.id) return;
-		saving = true;
-		try {
-			await auth.api.message.messageChannelChannelIdMessageIdPatch({
+        function messageDomId(value: any): string {
+                if (value == null) return '';
+                const str = String(value);
+                const digits = str.replace(/[^0-9]/g, '');
+                return digits || str;
+        }
+
+        async function saveEdit() {
+                if (!$selectedChannelId || !message.id) return;
+                saving = true;
+                try {
+                        await auth.api.message.messageChannelChannelIdMessageIdPatch({
 				channelId: $selectedChannelId as any,
 				messageId: message.id as any,
 				messageUpdateMessageRequest: { content: draft }
@@ -838,10 +845,11 @@
 </script>
 
 <div
-	role="listitem"
-	class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
-	onpointerup={handleRootPointerUp}
-	oncontextmenu={openMessageMenu}
+        role="listitem"
+        class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
+        onpointerup={handleRootPointerUp}
+        oncontextmenu={openMessageMenu}
+        data-message-id={messageDomId((message as any)?.id)}
 >
 	{#if compact}
 		<div
