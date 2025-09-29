@@ -18,7 +18,8 @@
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
-	let endReached = $state(false);
+        let endReached = $state(false);
+        let latestReached = $state(true);
 
 	let scroller: HTMLDivElement | null = null;
         let wasAtBottom = $state(false);
@@ -111,6 +112,7 @@
                         if ((chan as any)?.type === 2) return;
                         messages = [];
                         endReached = false;
+                        latestReached = false;
                         initialLoaded = false;
                         const token = ++channelSwitchToken;
                         const pendingJump = untrack(() => $messageJumpRequest);
@@ -127,6 +129,7 @@
                         error = null;
                         messages = [];
                         endReached = false;
+                        latestReached = false;
                         initialLoaded = false;
                 }
         });
@@ -209,11 +212,11 @@
                 return true;
         }
 
-	async function loadMore() {
-		if (!$selectedChannelId || loading || endReached) return;
-		loading = true;
-		const prevHeight = scroller?.scrollHeight ?? 0;
-		const prevTop = scroller?.scrollTop ?? 0;
+        async function loadMore() {
+                if (!$selectedChannelId || loading || endReached) return;
+                loading = true;
+                const prevHeight = scroller?.scrollHeight ?? 0;
+                const prevTop = scroller?.scrollTop ?? 0;
 		let inserted = 0;
 		let mutatedExisting = false;
 		try {
@@ -273,12 +276,73 @@
 					scroller.scrollTop = prevTop + diff;
 				}
 			}
-		}
-	}
+                }
+        }
 
-	function onSent() {
-		loadLatest();
-	}
+        async function loadNewer() {
+                if (!$selectedChannelId || loading || latestReached) return;
+                if (!messages.length) {
+                        await loadLatest();
+                        return;
+                }
+                loading = true;
+                let mutatedExisting = false;
+                try {
+                        const last = messages[messages.length - 1];
+                        const from = extractId(last);
+                        const params: Record<string, any> = {
+                                channelId: $selectedChannelId as any,
+                                limit: PAGE_SIZE
+                        };
+                        if (from) {
+                                params.from = from as any;
+                                params.direction = 'after';
+                        }
+                        const res = await auth.api.message.messageChannelChannelIdGet(params);
+                        const batch = res.data ?? [];
+                        if (batch.length === 0) {
+                                latestReached = true;
+                                error = null;
+                                return;
+                        }
+                        const incoming = sortMessagesAscending(batch);
+                        const existingIds = new Map<string, number>();
+                        for (let i = 0; i < messages.length; i += 1) {
+                                const key = extractId(messages[i]);
+                                if (key) existingIds.set(key, i);
+                        }
+                        const seenNew = new Set<string>();
+                        const unique: DtoMessage[] = [];
+                        for (const item of incoming) {
+                                const key = extractId(item);
+                                if (!key) continue;
+                                if (existingIds.has(key)) {
+                                        const idx = existingIds.get(key)!;
+                                        messages[idx] = { ...messages[idx], ...item };
+                                        mutatedExisting = true;
+                                        continue;
+                                }
+                                if (seenNew.has(key)) continue;
+                                seenNew.add(key);
+                                unique.push(item);
+                        }
+                        if (unique.length > 0) {
+                                messages = [...messages, ...unique];
+                        } else if (mutatedExisting) {
+                                messages = [...messages];
+                        }
+                        latestReached = unique.length === 0 ? true : batch.length < PAGE_SIZE;
+                        error = null;
+                } catch (e: any) {
+                        error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
+                } finally {
+                        loading = false;
+                }
+        }
+
+        function onSent() {
+                loadLatest();
+        }
 
         async function loadLatest() {
                 if (!$selectedChannelId) return;
@@ -290,9 +354,11 @@
                         const batch = res.data ?? [];
                         messages = [...batch].reverse();
                         endReached = batch.length < PAGE_SIZE;
+                        latestReached = true;
                         error = null;
                         scrollToBottom(false);
                         wasAtBottom = true;
+                        newCount = 0;
                 } catch (e: any) {
                         error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
                 }
@@ -303,6 +369,11 @@
                 const targetId = extractId(targetRaw);
                 if (!targetId) return;
                 let fetched = false;
+                const hadFutureMessages = messages.some((msg) => {
+                        const key = extractId(msg);
+                        if (!key) return false;
+                        return compareMessageIds(key, targetId) > 0;
+                });
                 const exists = messages.some((msg) => extractId(msg) === targetId);
                 if (!exists) {
                         loading = true;
@@ -323,6 +394,9 @@
                                 error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
                         } finally {
                                 loading = false;
+                        }
+                        if (!hadFutureMessages) {
+                                latestReached = false;
                         }
                 } else {
                         error = null;
@@ -393,10 +467,14 @@
 	class="scroll-area relative flex-1 overflow-y-auto"
 	bind:this={scroller}
         onscroll={() => {
-                wasAtBottom = isNearBottom();
-                if (wasAtBottom) newCount = 0;
+                const nearBottom = isNearBottom();
+                wasAtBottom = nearBottom;
+                if (nearBottom) newCount = 0;
                 if (!loading && !endReached && isNearTop()) {
                         loadMore();
+                }
+                if (!loading && !latestReached && nearBottom) {
+                        loadNewer();
                 }
         }}
 >
