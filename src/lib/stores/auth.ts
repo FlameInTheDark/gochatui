@@ -99,10 +99,13 @@ function createAuthStore() {
 	async function refresh(): Promise<boolean> {
 		const rt = get(refreshToken);
 		if (!rt) return false;
-		try {
-			const res = await refreshApi.auth.authRefreshGet({
-				headers: { Authorization: `Bearer ${rt}` }
-			});
+                try {
+                        const headerValue = rt.startsWith('Bearer ')
+                                ? rt
+                                : `Bearer ${rt}`;
+                        const res = await refreshApi.auth.authRefreshGet({
+                                authentication: headerValue
+                        });
 			const t = res.data.token ?? '';
 			const r = res.data.refresh_token ?? '';
 			if (t) token.set(t);
