@@ -674,6 +674,12 @@ export interface GuildCreateGuildChannelCategoryRequest {
      */
     'name'?: string;
     /**
+     * Channel position in the list. Should be set as the last position in the channel list, or it will be one of the first in the list.
+     * @type {number}
+     * @memberof GuildCreateGuildChannelCategoryRequest
+     */
+    'position'?: number;
+    /**
      * Whether the category channel is private. Private channels can only be seen by users with roles assigned to this channel.
      * @type {boolean}
      * @memberof GuildCreateGuildChannelCategoryRequest
@@ -698,6 +704,12 @@ export interface GuildCreateGuildChannelRequest {
      * @memberof GuildCreateGuildChannelRequest
      */
     'parent_id'?: number;
+    /**
+     * Channel position in the list. Should be set as the last position in the channel list, or it will be one of the first in the list.
+     * @type {number}
+     * @memberof GuildCreateGuildChannelRequest
+     */
+    'position'?: number;
     /**
      * Whether the channel is private. Private channels can only be seen by users with roles assigned to this channel.
      * @type {boolean}
@@ -1438,10 +1450,13 @@ export const AuthApiAxiosParamCreator = function (configuration?: Configuration)
         /**
          * 
          * @summary Refresh authentication token
+         * @param {string} authentication Refresh token instead of auth
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        authRefreshGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        authRefreshGet: async (authentication: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'authentication' is not null or undefined
+            assertParamExists('authRefreshGet', 'authentication', authentication)
             const localVarPath = `/auth/refresh`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -1456,6 +1471,9 @@ export const AuthApiAxiosParamCreator = function (configuration?: Configuration)
 
 
     
+            if (authentication != null) {
+                localVarHeaderParameter['Authentication'] = String(authentication);
+            }
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
@@ -1589,11 +1607,12 @@ export const AuthApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary Refresh authentication token
+         * @param {string} authentication Refresh token instead of auth
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async authRefreshGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<AuthRefreshTokenResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.authRefreshGet(options);
+        async authRefreshGet(authentication: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<AuthRefreshTokenResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.authRefreshGet(authentication, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['AuthApi.authRefreshGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1667,11 +1686,12 @@ export const AuthApiFactory = function (configuration?: Configuration, basePath?
         /**
          * 
          * @summary Refresh authentication token
+         * @param {AuthApiAuthRefreshGetRequest} requestParameters Request parameters.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        authRefreshGet(options?: RawAxiosRequestConfig): AxiosPromise<AuthRefreshTokenResponse> {
-            return localVarFp.authRefreshGet(options).then((request) => request(axios, basePath));
+        authRefreshGet(requestParameters: AuthApiAuthRefreshGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<AuthRefreshTokenResponse> {
+            return localVarFp.authRefreshGet(requestParameters.authentication, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1735,11 +1755,12 @@ export interface AuthApiInterface {
     /**
      * 
      * @summary Refresh authentication token
+     * @param {AuthApiAuthRefreshGetRequest} requestParameters Request parameters.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      * @memberof AuthApiInterface
      */
-    authRefreshGet(options?: RawAxiosRequestConfig): AxiosPromise<AuthRefreshTokenResponse>;
+    authRefreshGet(requestParameters: AuthApiAuthRefreshGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<AuthRefreshTokenResponse>;
 
     /**
      * 
@@ -1803,6 +1824,20 @@ export interface AuthApiAuthRecoveryPostRequest {
      * @memberof AuthApiAuthRecoveryPost
      */
     readonly authPasswordRecoveryRequest: AuthPasswordRecoveryRequest
+}
+
+/**
+ * Request parameters for authRefreshGet operation in AuthApi.
+ * @export
+ * @interface AuthApiAuthRefreshGetRequest
+ */
+export interface AuthApiAuthRefreshGetRequest {
+    /**
+     * Refresh token instead of auth
+     * @type {string}
+     * @memberof AuthApiAuthRefreshGet
+     */
+    readonly authentication: string
 }
 
 /**
@@ -1879,12 +1914,13 @@ export class AuthApi extends BaseAPI implements AuthApiInterface {
     /**
      * 
      * @summary Refresh authentication token
+     * @param {AuthApiAuthRefreshGetRequest} requestParameters Request parameters.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      * @memberof AuthApi
      */
-    public authRefreshGet(options?: RawAxiosRequestConfig) {
-        return AuthApiFp(this.configuration).authRefreshGet(options).then((request) => request(this.axios, this.basePath));
+    public authRefreshGet(requestParameters: AuthApiAuthRefreshGetRequest, options?: RawAxiosRequestConfig) {
+        return AuthApiFp(this.configuration).authRefreshGet(requestParameters.authentication, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -5197,12 +5233,12 @@ export const MessageApiAxiosParamCreator = function (configuration?: Configurati
          * @summary Get messages
          * @param {number} channelId Channel id
          * @param {number} [from] Start point for messages
-         * @param {string} [direction] Select direction
+         * @param {MessageChannelChannelIdGetDirectionEnum} [direction] Select direction
          * @param {number} [limit] Message count limit
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        messageChannelChannelIdGet: async (channelId: number, from?: number, direction?: string, limit?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        messageChannelChannelIdGet: async (channelId: number, from?: number, direction?: MessageChannelChannelIdGetDirectionEnum, limit?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'channelId' is not null or undefined
             assertParamExists('messageChannelChannelIdGet', 'channelId', channelId)
             const localVarPath = `/message/channel/{channel_id}`
@@ -5392,12 +5428,12 @@ export const MessageApiFp = function(configuration?: Configuration) {
          * @summary Get messages
          * @param {number} channelId Channel id
          * @param {number} [from] Start point for messages
-         * @param {string} [direction] Select direction
+         * @param {MessageChannelChannelIdGetDirectionEnum} [direction] Select direction
          * @param {number} [limit] Message count limit
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async messageChannelChannelIdGet(channelId: number, from?: number, direction?: string, limit?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<DtoMessage>>> {
+        async messageChannelChannelIdGet(channelId: number, from?: number, direction?: MessageChannelChannelIdGetDirectionEnum, limit?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<DtoMessage>>> {
             const localVarAxiosArgs = await localVarAxiosParamCreator.messageChannelChannelIdGet(channelId, from, direction, limit, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['MessageApi.messageChannelChannelIdGet']?.[localVarOperationServerIndex]?.url;
@@ -5610,10 +5646,10 @@ export interface MessageApiMessageChannelChannelIdGetRequest {
 
     /**
      * Select direction
-     * @type {string}
+     * @type {'before' | 'after' | 'around'}
      * @memberof MessageApiMessageChannelChannelIdGet
      */
-    readonly direction?: string
+    readonly direction?: MessageChannelChannelIdGetDirectionEnum
 
     /**
      * Message count limit
@@ -5761,6 +5797,15 @@ export class MessageApi extends BaseAPI implements MessageApiInterface {
     }
 }
 
+/**
+ * @export
+ */
+export const MessageChannelChannelIdGetDirectionEnum = {
+    Before: 'before',
+    After: 'after',
+    Around: 'around'
+} as const;
+export type MessageChannelChannelIdGetDirectionEnum = typeof MessageChannelChannelIdGetDirectionEnum[keyof typeof MessageChannelChannelIdGetDirectionEnum];
 
 
 /**
@@ -5772,7 +5817,7 @@ export const SearchApiAxiosParamCreator = function (configuration?: Configuratio
         /**
          * 
          * @summary Search messages
-         * @param {number} guildId Channel id
+         * @param {number} guildId Guild id
          * @param {SearchMessageSearchRequest} searchMessageSearchRequest Search request data
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -5822,7 +5867,7 @@ export const SearchApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary Search messages
-         * @param {number} guildId Channel id
+         * @param {number} guildId Guild id
          * @param {SearchMessageSearchRequest} searchMessageSearchRequest Search request data
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -5881,7 +5926,7 @@ export interface SearchApiInterface {
  */
 export interface SearchApiSearchGuildIdMessagesPostRequest {
     /**
-     * Channel id
+     * Guild id
      * @type {number}
      * @memberof SearchApiSearchGuildIdMessagesPost
      */
