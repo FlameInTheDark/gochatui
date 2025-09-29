@@ -1450,13 +1450,13 @@ export const AuthApiAxiosParamCreator = function (configuration?: Configuration)
         /**
          * 
          * @summary Refresh authentication token
-         * @param {string} authentication Refresh token instead of auth
+         * @param {string} authorization Refresh token instead of auth
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        authRefreshGet: async (authentication: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'authentication' is not null or undefined
-            assertParamExists('authRefreshGet', 'authentication', authentication)
+        authRefreshGet: async (authorization: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'authorization' is not null or undefined
+            assertParamExists('authRefreshGet', 'authorization', authorization)
             const localVarPath = `/auth/refresh`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -1471,8 +1471,8 @@ export const AuthApiAxiosParamCreator = function (configuration?: Configuration)
 
 
     
-            if (authentication != null) {
-                localVarHeaderParameter['Authentication'] = String(authentication);
+            if (authorization != null) {
+                localVarHeaderParameter['Authorization'] = String(authorization);
             }
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -1607,12 +1607,12 @@ export const AuthApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary Refresh authentication token
-         * @param {string} authentication Refresh token instead of auth
+         * @param {string} authorization Refresh token instead of auth
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async authRefreshGet(authentication: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<AuthRefreshTokenResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.authRefreshGet(authentication, options);
+        async authRefreshGet(authorization: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<AuthRefreshTokenResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.authRefreshGet(authorization, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['AuthApi.authRefreshGet']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1691,7 +1691,7 @@ export const AuthApiFactory = function (configuration?: Configuration, basePath?
          * @throws {RequiredError}
          */
         authRefreshGet(requestParameters: AuthApiAuthRefreshGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<AuthRefreshTokenResponse> {
-            return localVarFp.authRefreshGet(requestParameters.authentication, options).then((request) => request(axios, basePath));
+            return localVarFp.authRefreshGet(requestParameters.authorization, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -1837,7 +1837,7 @@ export interface AuthApiAuthRefreshGetRequest {
      * @type {string}
      * @memberof AuthApiAuthRefreshGet
      */
-    readonly authentication: string
+    readonly authorization: string
 }
 
 /**
@@ -1920,7 +1920,7 @@ export class AuthApi extends BaseAPI implements AuthApiInterface {
      * @memberof AuthApi
      */
     public authRefreshGet(requestParameters: AuthApiAuthRefreshGetRequest, options?: RawAxiosRequestConfig) {
-        return AuthApiFp(this.configuration).authRefreshGet(requestParameters.authentication, options).then((request) => request(this.axios, this.basePath));
+        return AuthApiFp(this.configuration).authRefreshGet(requestParameters.authorization, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

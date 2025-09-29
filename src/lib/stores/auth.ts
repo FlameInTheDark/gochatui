@@ -115,7 +115,7 @@ function createAuthStore() {
                 if (!rt) return false;
                 try {
                         const res = await refreshApi.auth.authRefreshGet({
-                                authentication: rt
+                                authorization: rt
                         });
                         const t = res.data.token ?? '';
                         const r = normalizeRefreshToken(res.data.refresh_token);
