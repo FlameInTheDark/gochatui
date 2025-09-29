@@ -22,5 +22,14 @@ export const lastChannelByGuild = writable<Record<string, string>>({});
 // Gate to control when MessageList is allowed to fetch
 export const channelReady = writable(false);
 
+// Cross-component request to jump to a specific message within a channel
+export const messageJumpRequest = writable<
+        | {
+                channelId: string;
+                messageId: string;
+        }
+        | null
+>(null);
+
 // Guild settings overlay state
 export const guildSettingsOpen = writable(false);

@@ -6,7 +6,10 @@
                 searchOpen,
                 searchAnchor,
                 selectedChannelId,
-                channelsByGuild
+                channelsByGuild,
+                channelReady,
+                lastChannelByGuild,
+                messageJumpRequest
         } from '$lib/stores/appState';
         import { tick } from 'svelte';
         import { m } from '$lib/paraglide/messages.js';
@@ -357,9 +360,37 @@
                 }
         }
 
+        function normalizeId(value: any): string | null {
+                if (value == null) return null;
+                const str = String(value);
+                const digits = str.replace(/[^0-9]/g, '');
+                return digits || str;
+        }
+
         function openMessage(m: DtoMessage) {
-                if (!m.channel_id) return;
-                selectedChannelId.set(String(m.channel_id));
+                const channelId = normalizeId((m as any)?.channel_id);
+                const messageId = normalizeId((m as any)?.id);
+                if (!channelId || !messageId) return;
+
+                selectedChannelId.set(channelId);
+                channelReady.set(true);
+
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                if (gid) {
+                        lastChannelByGuild.update((map) => ({ ...map, [gid]: channelId }));
+                        if (typeof localStorage !== 'undefined') {
+                                try {
+                                        const raw = localStorage.getItem('lastChannels');
+                                        const saved = raw ? JSON.parse(raw) : {};
+                                        saved[gid] = channelId;
+                                        localStorage.setItem('lastChannels', JSON.stringify(saved));
+                                } catch {
+                                        /* ignore */
+                                }
+                        }
+                }
+
+                messageJumpRequest.set({ channelId, messageId });
                 searchOpen.set(false);
         }
 

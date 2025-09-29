@@ -5,7 +5,8 @@
                 selectedChannelId,
                 channelsByGuild,
                 selectedGuildId,
-                channelReady
+                channelReady,
+                messageJumpRequest
         } from '$lib/stores/appState';
         import MessageItem from './MessageItem.svelte';
         import { wsEvent } from '$lib/client/ws';
@@ -20,9 +21,11 @@
 	let endReached = $state(false);
 
 	let scroller: HTMLDivElement | null = null;
-	let wasAtBottom = $state(false);
-	let newCount = $state(0);
-	let initialLoaded = $state(false);
+        let wasAtBottom = $state(false);
+        let newCount = $state(0);
+        let initialLoaded = $state(false);
+        let channelSwitchToken = 0;
+        let jumpRequestToken = 0;
 
 	function isNearBottom() {
 		if (!scroller) return true;
@@ -97,36 +100,114 @@
 		return topic;
 	}
 
-	$effect(() => {
-		if ($selectedChannelId && $channelReady) {
-			const gid = $selectedGuildId ?? '';
-			const list = $channelsByGuild[gid] ?? [];
-			const chan = list.find((c: any) => String(c?.id) === $selectedChannelId);
-			if (!chan) return;
-			if ((chan as any)?.type === 2) return;
-			messages = [];
-			endReached = false;
-			(async () => {
-				await loadLatest();
-				initialLoaded = true;
-			})();
-		} else {
-			error = null;
-			messages = [];
-			endReached = false;
-		}
-	});
+        $effect(() => {
+                const channelId = $selectedChannelId;
+                const ready = $channelReady;
+                if (channelId && ready) {
+                        const gid = $selectedGuildId ?? '';
+                        const list = $channelsByGuild[gid] ?? [];
+                        const chan = list.find((c: any) => String(c?.id) === channelId);
+                        if (!chan) return;
+                        if ((chan as any)?.type === 2) return;
+                        messages = [];
+                        endReached = false;
+                        initialLoaded = false;
+                        const token = ++channelSwitchToken;
+                        const pendingJump = untrack(() => $messageJumpRequest);
+                        if (pendingJump && pendingJump.channelId === channelId) {
+                                return;
+                        }
+                        (async () => {
+                                await loadLatest();
+                                if (token === channelSwitchToken) {
+                                        initialLoaded = true;
+                                }
+                        })();
+                } else {
+                        error = null;
+                        messages = [];
+                        endReached = false;
+                        initialLoaded = false;
+                }
+        });
 
 	const PAGE_SIZE = 50;
 
-	function extractId(value: any): string | null {
-		if (value == null) return null;
-		const raw = typeof value === 'object' ? ((value as any)?.id ?? value) : value;
-		if (raw == null) return null;
-		const str = String(raw);
-		const digits = str.replace(/[^0-9]/g, '');
-		return digits || str;
-	}
+        function extractId(value: any): string | null {
+                if (value == null) return null;
+                const raw = typeof value === 'object' ? ((value as any)?.id ?? value) : value;
+                if (raw == null) return null;
+                const str = String(raw);
+                const digits = str.replace(/[^0-9]/g, '');
+                return digits || str;
+        }
+
+        function compareMessageIds(a: string, b: string): number {
+                if (a === b) return 0;
+                const digitsA = /^\d+$/.test(a);
+                const digitsB = /^\d+$/.test(b);
+                if (digitsA && digitsB) {
+                        try {
+                                const ai = BigInt(a);
+                                const bi = BigInt(b);
+                                if (ai < bi) return -1;
+                                if (ai > bi) return 1;
+                                return 0;
+                        } catch {
+                                if (a.length !== b.length) {
+                                        return a.length - b.length;
+                                }
+                        }
+                }
+                return a.localeCompare(b);
+        }
+
+        function sortMessagesAscending(list: DtoMessage[]): DtoMessage[] {
+                return [...list].sort((a, b) => {
+                        const ak = extractId(a);
+                        const bk = extractId(b);
+                        if (ak && bk) return compareMessageIds(ak, bk);
+                        if (ak) return -1;
+                        if (bk) return 1;
+                        return 0;
+                });
+        }
+
+        function mergeMessageLists(base: DtoMessage[], incoming: DtoMessage[]): DtoMessage[] {
+                if (!incoming.length) return base.slice();
+                const map = new Map<string, DtoMessage>();
+                for (const msg of base) {
+                        const key = extractId(msg);
+                        if (!key) continue;
+                        map.set(key, msg);
+                }
+                for (const msg of incoming) {
+                        const key = extractId(msg);
+                        if (!key) continue;
+                        const prev = map.get(key);
+                        map.set(key, prev ? { ...prev, ...msg } : msg);
+                }
+                const merged = Array.from(map.entries())
+                        .sort((a, b) => compareMessageIds(a[0], b[0]))
+                        .map(([, value]) => value);
+                return merged;
+        }
+
+        async function scrollToMessageId(id: string, smooth = true): Promise<boolean> {
+                if (!scroller) return false;
+                await tick();
+                const selector = `[data-message-id="${id.replace(/"/g, '\"')}"]`;
+                const target = scroller.querySelector<HTMLElement>(selector);
+                if (!target) return false;
+                const scrollerRect = scroller.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const offset = targetRect.top - scrollerRect.top + scroller.scrollTop - 72;
+                const top = Math.max(0, offset);
+                scroller.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+                wasAtBottom = false;
+                newCount = 0;
+                return true;
+        }
 
 	async function loadMore() {
 		if (!$selectedChannelId || loading || endReached) return;
@@ -199,27 +280,82 @@
 		loadLatest();
 	}
 
-	async function loadLatest() {
-		if (!$selectedChannelId) return;
-		try {
-			const res = await auth.api.message.messageChannelChannelIdGet({
-				channelId: $selectedChannelId as any,
-				limit: PAGE_SIZE
-			});
-			const batch = res.data ?? [];
-			messages = [...batch].reverse();
-			endReached = batch.length < PAGE_SIZE;
-			error = null;
-			scrollToBottom(false);
-			wasAtBottom = true;
-		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
-		}
-	}
+        async function loadLatest() {
+                if (!$selectedChannelId) return;
+                try {
+                        const res = await auth.api.message.messageChannelChannelIdGet({
+                                channelId: $selectedChannelId as any,
+                                limit: PAGE_SIZE
+                        });
+                        const batch = res.data ?? [];
+                        messages = [...batch].reverse();
+                        endReached = batch.length < PAGE_SIZE;
+                        error = null;
+                        scrollToBottom(false);
+                        wasAtBottom = true;
+                } catch (e: any) {
+                        error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
+                }
+        }
 
-	export function refresh() {
-		loadLatest();
-	}
+        async function jumpToMessage(targetRaw: any) {
+                if (!$selectedChannelId) return;
+                const targetId = extractId(targetRaw);
+                if (!targetId) return;
+                let fetched = false;
+                const exists = messages.some((msg) => extractId(msg) === targetId);
+                if (!exists) {
+                        loading = true;
+                        try {
+                                const res = await auth.api.message.messageChannelChannelIdGet({
+                                        channelId: $selectedChannelId as any,
+                                        from: targetId as any,
+                                        direction: 'around',
+                                        limit: PAGE_SIZE
+                                });
+                                const batch = res.data ?? [];
+                                const normalized = sortMessagesAscending(batch);
+                                messages = mergeMessageLists(messages, normalized);
+                                endReached = false;
+                                error = null;
+                                fetched = true;
+                        } catch (e: any) {
+                                error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
+                        } finally {
+                                loading = false;
+                        }
+                } else {
+                        error = null;
+                }
+                initialLoaded = true;
+                const scrolled = await scrollToMessageId(targetId, !fetched);
+                if (!scrolled && fetched) {
+                        error = error ?? 'Failed to load messages';
+                }
+        }
+
+        $effect(() => {
+                const request = $messageJumpRequest;
+                if (!request) return;
+                if (!$channelReady) return;
+                if (request.channelId !== $selectedChannelId) return;
+                const targetId = request.messageId;
+                if (!targetId) {
+                        messageJumpRequest.set(null);
+                        return;
+                }
+                const token = ++jumpRequestToken;
+                (async () => {
+                        await jumpToMessage(targetId);
+                        if (token === jumpRequestToken) {
+                                messageJumpRequest.set(null);
+                        }
+                })();
+        });
+
+        export function refresh() {
+                loadLatest();
+        }
 
 	$effect(() => {
 		const ev: any = $wsEvent;
