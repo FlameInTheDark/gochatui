@@ -62,13 +62,27 @@ function toSnowflakeString(value: unknown): string | null {
         }
 }
 
+function normalizeRefreshToken(value: string | null | undefined): string | null {
+        if (!value) return null;
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const bearerMatch = trimmed.match(/^bearer\s+/i);
+        if (bearerMatch) {
+                const token = trimmed.slice(bearerMatch[0].length).trim();
+                return token ? `Bearer ${token}` : null;
+        }
+        return `Bearer ${trimmed}`;
+}
+
 function createAuthStore() {
-	const token = writable<string | null>(
-		typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
-	);
-	const refreshToken = writable<string | null>(
-		typeof localStorage !== 'undefined' ? localStorage.getItem(REFRESH_KEY) : null
-	);
+        const token = writable<string | null>(
+                typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
+        );
+        const refreshToken = writable<string | null>(
+                typeof localStorage !== 'undefined'
+                        ? normalizeRefreshToken(localStorage.getItem(REFRESH_KEY))
+                        : null
+        );
 
 	let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -97,19 +111,19 @@ function createAuthStore() {
 	}
 
 	async function refresh(): Promise<boolean> {
-		const rt = get(refreshToken);
-		if (!rt) return false;
-		try {
-			const res = await refreshApi.auth.authRefreshGet({
-				headers: { Authorization: `Bearer ${rt}` }
-			});
-			const t = res.data.token ?? '';
-			const r = res.data.refresh_token ?? '';
-			if (t) token.set(t);
-			if (r) refreshToken.set(r);
-			scheduleTokenRefresh(t || get(token));
-			return true;
-		} catch {
+                const rt = get(refreshToken);
+                if (!rt) return false;
+                try {
+                        const res = await refreshApi.auth.authRefreshGet({
+                                authorization: rt
+                        });
+                        const t = res.data.token ?? '';
+                        const r = normalizeRefreshToken(res.data.refresh_token);
+                        if (t) token.set(t);
+                        if (r) refreshToken.set(r);
+                        scheduleTokenRefresh(t || get(token));
+                        return true;
+                } catch {
 			logout();
 			return false;
 		}
@@ -142,12 +156,12 @@ function createAuthStore() {
 
 	async function login(data: AuthLoginRequest) {
 		const res = await api.auth.authLoginPost({ authLoginRequest: data });
-		const t = res.data.token ?? '';
-		const r = res.data.refresh_token ?? '';
-		token.set(t);
-		refreshToken.set(r);
-		return t;
-	}
+                const t = res.data.token ?? '';
+                const r = normalizeRefreshToken(res.data.refresh_token);
+                token.set(t);
+                refreshToken.set(r);
+                return t;
+        }
 
 	function logout() {
 		clearRefreshTimer();
