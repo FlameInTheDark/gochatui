@@ -1019,10 +1019,10 @@ export interface ModelUserSettingsData {
     'favorite_gifs'?: Array<string>;
     /**
      * 
-     * @type {ModelUserSettingsGuildFolders}
+     * @type {Array<ModelUserSettingsGuildFolders>}
      * @memberof ModelUserSettingsData
      */
-    'guild_folders'?: ModelUserSettingsGuildFolders;
+    'guild_folders'?: Array<ModelUserSettingsGuildFolders>;
     /**
      * 
      * @type {Array<ModelUserSettingsGuilds>}
