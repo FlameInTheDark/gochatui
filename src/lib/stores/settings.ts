@@ -122,6 +122,50 @@ const defaultSettings: AppSettings = {
 };
 
 export const appSettings = writable<AppSettings>(defaultSettings);
+export type GuildChannelReadStateLookup = Record<string, Record<string, GuildChannelReadState>>;
+
+function collectReadStatesFromGuild(
+        lookup: GuildChannelReadStateLookup,
+        guild: GuildLayoutGuild | null | undefined
+) {
+        if (!guild?.guildId) return;
+        const gid = guild.guildId;
+        const readStates = Array.isArray(guild.readStates) ? guild.readStates : [];
+        if (!readStates.length) return;
+        const nextGuild: Record<string, GuildChannelReadState> = { ...(lookup[gid] ?? {}) };
+        let changed = false;
+        for (const state of readStates) {
+                const channelId = toSnowflakeString((state as any)?.channelId ?? (state as any)?.channel_id);
+                if (!channelId) continue;
+                const entry: GuildChannelReadState = {
+                        channelId,
+                        lastReadMessageId: state.lastReadMessageId ?? null,
+                        scrollPosition:
+                                typeof state.scrollPosition === 'number' && Number.isFinite(state.scrollPosition)
+                                        ? state.scrollPosition
+                                        : null
+                };
+                nextGuild[channelId] = entry;
+                changed = true;
+        }
+        if (changed) {
+                lookup[gid] = nextGuild;
+        }
+}
+
+export const guildChannelReadStateLookup = derived(appSettings, ($settings) => {
+        const lookup: GuildChannelReadStateLookup = {};
+        for (const item of $settings.guildLayout) {
+                if (item.kind === 'guild') {
+                        collectReadStatesFromGuild(lookup, item);
+                } else {
+                        for (const guild of item.guilds) {
+                                collectReadStatesFromGuild(lookup, guild);
+                        }
+                }
+        }
+        return lookup;
+});
 export const settingsOpen = writable(false);
 export const settingsReady = writable(false);
 export const settingsSaving = writable(false);
