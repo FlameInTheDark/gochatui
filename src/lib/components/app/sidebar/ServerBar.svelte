@@ -178,16 +178,16 @@
                 const selected = $selectedGuildId;
                 if (!selected) return;
                 for (const item of displayItems) {
-                        if (item.type === 'folder') {
-                                if (item.guilds.some((g) => g.guildId === selected)) {
-                                        if (!expandedFolders[item.folder.id]) {
-                                                expandedFolders = {
-                                                        ...expandedFolders,
-                                                        [item.folder.id]: true
-                                                };
-                                        }
-                                }
+                        if (item.type !== 'folder') continue;
+                        if (!item.guilds.some((g) => g.guildId === selected)) continue;
+
+                        if (!Object.prototype.hasOwnProperty.call(expandedFolders, item.folder.id)) {
+                                expandedFolders = {
+                                        ...expandedFolders,
+                                        [item.folder.id]: true
+                                };
                         }
+                        break;
                 }
         });
 
