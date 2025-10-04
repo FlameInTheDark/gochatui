@@ -407,7 +407,7 @@
                                         </button>
                                 </div>
                         {:else}
-                                <div class="flex flex-col gap-2">
+                                <div class="flex flex-col items-center gap-2">
                                         <div class="relative">
                                                 <div
                                                         class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
@@ -463,7 +463,7 @@
 
                                         {#if expandedFolders[item.folder.id]}
                                                 <div
-                                                        class="mt-2 flex flex-col gap-2 rounded-2xl border border-[var(--stroke)] p-2"
+                                                        class="mt-2 flex w-full flex-col gap-2 self-stretch rounded-2xl border border-[var(--stroke)] p-2"
                                                         style:background="color-mix(in srgb, var(--panel-strong) 70%, transparent)"
                                                 >
                                                         <div
