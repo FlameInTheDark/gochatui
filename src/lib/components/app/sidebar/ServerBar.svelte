@@ -67,6 +67,11 @@
                                 next[id] = expandedFolders[id];
                         }
                 }
+
+                const keys = new Set([...Object.keys(next), ...Object.keys(expandedFolders)]);
+                const changed = Array.from(keys).some((key) => expandedFolders[key] !== next[key]);
+                if (!changed) return;
+
                 expandedFolders = next;
         });
 
