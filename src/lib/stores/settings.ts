@@ -1,11 +1,11 @@
 import { browser } from '$app/environment';
 import {
-	type DtoGuild,
-	type ModelGuildChannelReadState,
-	type ModelUserSettingsData,
-	type ModelUserSettingsGuildFolders,
-	type ModelUserSettingsGuilds,
-	type ModelUserSettingsNotifications
+        type DtoGuild,
+        type ModelGuildChannelReadState,
+        type ModelUserSettingsData,
+        type ModelUserSettingsGuildFolders,
+        type ModelUserSettingsGuilds,
+        type ModelUserSettingsNotifications
 } from '$lib/api';
 import { setLocale } from '$lib/paraglide/runtime';
 import { auth } from '$lib/stores/auth';
@@ -76,10 +76,17 @@ locale.subscribe((value) => {
 	}
 });
 
+export interface GuildChannelReadState {
+        channelId: string;
+        lastReadMessageId: string | null;
+        scrollPosition: number | null;
+}
+
 export interface GuildLayoutGuild {
-	guildId: string;
-	notifications?: ModelUserSettingsNotifications;
-	readStates?: ModelGuildChannelReadState[];
+        guildId: string;
+        notifications?: ModelUserSettingsNotifications;
+        selectedChannelId?: string | null;
+        readStates?: GuildChannelReadState[];
 }
 
 export interface GuildTopLevelItem extends GuildLayoutGuild {
@@ -146,27 +153,35 @@ function cloneSettings(settings: AppSettings): AppSettings {
 		chatSpacing: settings.chatSpacing,
 		selectedGuildId: settings.selectedGuildId,
 		guildLayout: settings.guildLayout.map((item) => {
-			if (item.kind === 'guild') {
-				return {
-					kind: 'guild',
-					guildId: item.guildId,
-					notifications: item.notifications ? structuredCloneSafe(item.notifications) : undefined,
-					readStates: item.readStates ? structuredCloneSafe(item.readStates) : undefined
-				} satisfies GuildTopLevelItem;
-			}
-			return {
-				kind: 'folder',
-				id: item.id,
-				name: item.name,
-				color: item.color,
-				guilds: item.guilds.map((guild) => ({
-					guildId: guild.guildId,
-					notifications: guild.notifications ? structuredCloneSafe(guild.notifications) : undefined,
-					readStates: guild.readStates ? structuredCloneSafe(guild.readStates) : undefined
-				}))
-			} satisfies GuildFolderItem;
-		})
-	};
+                        if (item.kind === 'guild') {
+                                return {
+                                        kind: 'guild',
+                                        guildId: item.guildId,
+                                        notifications: item.notifications
+                                                ? structuredCloneSafe(item.notifications)
+                                                : undefined,
+                                        selectedChannelId: item.selectedChannelId ?? null,
+                                        readStates: item.readStates
+                                                ? structuredCloneSafe(item.readStates)
+                                                : undefined
+                                } satisfies GuildTopLevelItem;
+                        }
+                        return {
+                                kind: 'folder',
+                                id: item.id,
+                                name: item.name,
+                                color: item.color,
+                                guilds: item.guilds.map((guild) => ({
+                                        guildId: guild.guildId,
+                                        notifications: guild.notifications ? structuredCloneSafe(guild.notifications) : undefined,
+                                        selectedChannelId: guild.selectedChannelId ?? null,
+                                        readStates: guild.readStates
+                                                ? structuredCloneSafe(guild.readStates)
+                                                : undefined
+                                }))
+                        } satisfies GuildFolderItem;
+                })
+        };
 }
 
 function toSnowflakeString(value: unknown): string | null {
@@ -193,10 +208,49 @@ function toApiSnowflake(value: string): any {
 }
 
 function normalizeFolderArray(
-	input: ModelUserSettingsGuildFolders | ModelUserSettingsGuildFolders[] | undefined
+        input: ModelUserSettingsGuildFolders | ModelUserSettingsGuildFolders[] | undefined
 ): ModelUserSettingsGuildFolders[] {
-	if (!input) return [];
-	return Array.isArray(input) ? input : [input];
+        if (!input) return [];
+        return Array.isArray(input) ? input : [input];
+}
+
+function normalizeReadStatesFromApi(
+        states: ModelGuildChannelReadState[] | undefined
+): GuildChannelReadState[] | undefined {
+        if (!Array.isArray(states)) return undefined;
+        const mapped = states
+                .map((state) => {
+                        const channelId = toSnowflakeString(state?.channel_id);
+                        if (!channelId) return null;
+                        const lastRead = toSnowflakeString(state?.last_read_message_id);
+                        const scroll =
+                                typeof state?.scroll_position === 'number' && Number.isFinite(state.scroll_position)
+                                        ? state.scroll_position
+                                        : null;
+                        return {
+                                channelId,
+                                lastReadMessageId: lastRead,
+                                scrollPosition: scroll
+                        } satisfies GuildChannelReadState;
+                })
+                .filter((value): value is GuildChannelReadState => value !== null);
+        return mapped.length ? mapped : undefined;
+}
+
+function convertReadStatesToApi(
+        states: GuildChannelReadState[] | undefined
+): ModelGuildChannelReadState[] | undefined {
+        if (!Array.isArray(states) || states.length === 0) return undefined;
+        return states.map((state) => ({
+                channel_id: toApiSnowflake(state.channelId),
+                last_read_message_id: state.lastReadMessageId
+                        ? toApiSnowflake(state.lastReadMessageId)
+                        : undefined,
+                scroll_position:
+                        typeof state.scrollPosition === 'number' && Number.isFinite(state.scrollPosition)
+                                ? Math.round(state.scrollPosition)
+                                : undefined
+        }));
 }
 
 function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
@@ -246,21 +300,22 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
 	const layoutWithPositions: Array<{ item: GuildLayoutItem; position: number }> = [];
 	const guildsArray = Array.isArray(data.guilds) ? data.guilds : [];
 
-	for (const guildSetting of guildsArray) {
-		const guildId = toSnowflakeString(guildSetting.guild_id);
-		if (!guildId) continue;
-		const baseGuild: GuildLayoutGuild = {
-			guildId,
-			notifications: guildSetting.notifications
-				? structuredCloneSafe(guildSetting.notifications)
-				: undefined,
-			readStates: guildSetting.read_states
-				? structuredCloneSafe(guildSetting.read_states)
-				: undefined
-		};
+        for (const guildSetting of guildsArray) {
+                const guildId = toSnowflakeString(guildSetting.guild_id);
+                if (!guildId) continue;
+                const selectedChannelId = toSnowflakeString(guildSetting.selected_channel);
+                const readStates = normalizeReadStatesFromApi(guildSetting.read_states);
+                const baseGuild: GuildLayoutGuild = {
+                        guildId,
+                        notifications: guildSetting.notifications
+                                ? structuredCloneSafe(guildSetting.notifications)
+                                : undefined,
+                        selectedChannelId: selectedChannelId ?? null,
+                        readStates: readStates ? structuredCloneSafe(readStates) : undefined
+                };
 
-		const folderEntry = folderByGuild.get(guildId);
-		if (folderEntry) {
+                const folderEntry = folderByGuild.get(guildId);
+                if (folderEntry) {
 			const position = typeof guildSetting.position === 'number' ? guildSetting.position : 0;
 			(baseGuild as any).__position = position;
 			folderEntry.folder.guilds.push(baseGuild);
@@ -313,31 +368,43 @@ function convertToApi(settings: AppSettings): ModelUserSettingsData {
 
 	let topPosition = 0;
 	for (const item of settings.guildLayout) {
-		if (item.kind === 'guild') {
-			payloadGuilds.push({
-				guild_id: toApiSnowflake(item.guildId),
-				position: topPosition,
-				notifications: item.notifications ? structuredCloneSafe(item.notifications) : undefined,
-				read_states: item.readStates ? structuredCloneSafe(item.readStates) : undefined
-			});
-			topPosition++;
-		} else {
-			payloadFolders.push({
-				name: item.name ?? undefined,
+                if (item.kind === 'guild') {
+                        const readStates = convertReadStatesToApi(item.readStates);
+                        payloadGuilds.push({
+                                guild_id: toApiSnowflake(item.guildId),
+                                position: topPosition,
+                                notifications: item.notifications
+                                        ? structuredCloneSafe(item.notifications)
+                                        : undefined,
+                                read_states: readStates,
+                                selected_channel: item.selectedChannelId
+                                        ? toApiSnowflake(item.selectedChannelId)
+                                        : undefined
+                        });
+                        topPosition++;
+                } else {
+                        payloadFolders.push({
+                                name: item.name ?? undefined,
 				color: item.color ?? undefined,
 				guilds: item.guilds.map((guild) => toApiSnowflake(guild.guildId)),
 				position: topPosition
 			});
-			let inner = 0;
-			for (const guild of item.guilds) {
-				payloadGuilds.push({
-					guild_id: toApiSnowflake(guild.guildId),
-					position: inner,
-					notifications: guild.notifications ? structuredCloneSafe(guild.notifications) : undefined,
-					read_states: guild.readStates ? structuredCloneSafe(guild.readStates) : undefined
-				});
-				inner++;
-			}
+                        let inner = 0;
+                        for (const guild of item.guilds) {
+                                const nestedReadStates = convertReadStatesToApi(guild.readStates);
+                                payloadGuilds.push({
+                                        guild_id: toApiSnowflake(guild.guildId),
+                                        position: inner,
+                                        notifications: guild.notifications
+                                                ? structuredCloneSafe(guild.notifications)
+                                                : undefined,
+                                        read_states: nestedReadStates,
+                                        selected_channel: guild.selectedChannelId
+                                                ? toApiSnowflake(guild.selectedChannelId)
+                                                : undefined
+                                });
+                                inner++;
+                        }
 			topPosition++;
 		}
 	}
@@ -437,13 +504,37 @@ async function persistSettings() {
 type SettingsMutator = (settings: AppSettings) => boolean;
 
 export function mutateAppSettings(mutator: SettingsMutator) {
-	appSettings.update((current) => {
-		const cloned = cloneSettings(current);
-		const changed = mutator(cloned);
-		if (!changed) return current;
-		scheduleSave();
-		return cloned;
-	});
+        appSettings.update((current) => {
+                const cloned = cloneSettings(current);
+                const changed = mutator(cloned);
+                if (!changed) return current;
+                scheduleSave();
+                return cloned;
+        });
+}
+
+function findGuildLayoutGuild(layout: GuildLayoutItem[], guildId: string): GuildLayoutGuild | null {
+        for (const item of layout) {
+                if (item.kind === 'guild') {
+                        if (item.guildId === guildId) return item;
+                        continue;
+                }
+                for (const guild of item.guilds) {
+                        if (guild.guildId === guildId) return guild;
+                }
+        }
+        return null;
+}
+
+export function updateGuildSelectedChannel(guildId: string, channelId: string | null) {
+        mutateAppSettings((settings) => {
+                const entry = findGuildLayoutGuild(settings.guildLayout, guildId);
+                if (!entry) return false;
+                const nextValue = channelId ?? null;
+                if ((entry.selectedChannelId ?? null) === nextValue) return false;
+                entry.selectedChannelId = nextValue;
+                return true;
+        });
 }
 
 function generateFolderId(): string {
@@ -463,20 +554,21 @@ function detachGuild(
 		if (item.kind === 'guild') {
 			if (item.guildId === guildId) {
 				layout.splice(i, 1);
-				return {
-					guild: {
-						guildId: item.guildId,
-						notifications: item.notifications,
-						readStates: item.readStates
-					},
-					removedIndex: i
-				};
-			}
+                                return {
+                                        guild: {
+                                                guildId: item.guildId,
+                                                notifications: item.notifications,
+                                                selectedChannelId: item.selectedChannelId,
+                                                readStates: item.readStates
+                                        },
+                                        removedIndex: i
+                                };
+                        }
 			continue;
 		}
 		const idx = item.guilds.findIndex((guild) => guild.guildId === guildId);
 		if (idx === -1) continue;
-		const [removed] = item.guilds.splice(idx, 1);
+                const [removed] = item.guilds.splice(idx, 1);
 		if (item.guilds.length === 0) {
 			layout.splice(i, 1);
 			return { guild: removed, removedIndex: i };

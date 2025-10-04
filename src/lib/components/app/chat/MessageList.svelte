@@ -12,8 +12,14 @@
         import { wsEvent } from '$lib/client/ws';
         import { m } from '$lib/paraglide/messages.js';
         import { fly } from 'svelte/transition';
-        import { tick, untrack } from 'svelte';
+        import { afterUpdate, onDestroy, onMount, tick, untrack } from 'svelte';
         import { Sparkles } from 'lucide-svelte';
+        import {
+                mutateAppSettings,
+                type GuildChannelReadState,
+                type GuildLayoutGuild,
+                type GuildLayoutItem
+        } from '$lib/stores/settings';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -21,12 +27,192 @@
         let endReached = $state(false);
         let latestReached = $state(true);
 
-	let scroller: HTMLDivElement | null = null;
+        let scroller: HTMLDivElement | null = null;
         let wasAtBottom = $state(false);
         let newCount = $state(0);
         let initialLoaded = $state(false);
         let channelSwitchToken = 0;
         let jumpRequestToken = 0;
+
+        const READ_STATE_FLUSH_INTERVAL = 60_000;
+
+        interface PendingReadState {
+                guildId: string;
+                channelId: string;
+                lastReadMessageId: string | null;
+                scrollPosition: number;
+        }
+
+        interface PersistedReadState {
+                lastReadMessageId: string | null;
+                scrollPosition: number;
+        }
+
+        const pendingReadStates = new Map<string, PendingReadState>();
+        const lastPersistedReadStates = new Map<string, PersistedReadState>();
+        const dirtyGuilds = new Set<string>();
+        let readStateFlushTimer: ReturnType<typeof setInterval> | null = null;
+        let activeGuildId: string | null = null;
+        let activeChannelId: string | null = null;
+        let previousChannelKey: string | null = null;
+
+        function findGuildLayoutEntry(layout: GuildLayoutItem[], guildId: string): GuildLayoutGuild | null {
+                for (const item of layout) {
+                        if (item.kind === 'guild') {
+                                if (item.guildId === guildId) return item;
+                                continue;
+                        }
+                        for (const guild of item.guilds) {
+                                if (guild.guildId === guildId) return guild;
+                        }
+                }
+                return null;
+        }
+
+        function computeLastVisibleMessageId(): string | null {
+                if (!scroller) return null;
+                const scrollerRect = scroller.getBoundingClientRect();
+                const nodes = scroller.querySelectorAll<HTMLElement>('[data-message-id]');
+                let lastVisible: string | null = null;
+                for (const node of nodes) {
+                        const rect = node.getBoundingClientRect();
+                        const isVisible = rect.bottom > scrollerRect.top && rect.top < scrollerRect.bottom;
+                        if (!isVisible) continue;
+                        const id = node.getAttribute('data-message-id');
+                        if (id) {
+                                lastVisible = id;
+                        }
+                }
+                return lastVisible;
+        }
+
+        function recordReadState() {
+                if (!initialLoaded) return;
+                const gid = activeGuildId ?? '';
+                const cid = activeChannelId ?? '';
+                if (!gid || !cid) return;
+                if (!scroller) return;
+                const lastVisibleId = computeLastVisibleMessageId();
+                const scrollPosition = Math.max(0, Math.round(scroller.scrollTop));
+                const key = `${gid}:${cid}`;
+                const nextState: PendingReadState = {
+                        guildId: gid,
+                        channelId: cid,
+                        lastReadMessageId: lastVisibleId ?? null,
+                        scrollPosition
+                };
+                const prev = pendingReadStates.get(key);
+                if (
+                        prev &&
+                        prev.lastReadMessageId === nextState.lastReadMessageId &&
+                        prev.scrollPosition === nextState.scrollPosition
+                ) {
+                        return;
+                }
+                pendingReadStates.set(key, nextState);
+                const persisted = lastPersistedReadStates.get(key);
+                if (
+                        !persisted ||
+                        persisted.lastReadMessageId !== nextState.lastReadMessageId ||
+                        persisted.scrollPosition !== nextState.scrollPosition
+                ) {
+                        dirtyGuilds.add(gid);
+                }
+        }
+
+        function flushPendingReadStates() {
+                if (!dirtyGuilds.size) return;
+                const updatesByGuild = new Map<string, PendingReadState[]>();
+                for (const state of pendingReadStates.values()) {
+                        if (!dirtyGuilds.has(state.guildId)) continue;
+                        const list = updatesByGuild.get(state.guildId);
+                        if (list) {
+                                list.push(state);
+                        } else {
+                                updatesByGuild.set(state.guildId, [state]);
+                        }
+                }
+                if (!updatesByGuild.size) {
+                        dirtyGuilds.clear();
+                        return;
+                }
+                mutateAppSettings((settings) => {
+                        let changed = false;
+                        for (const [guildId, states] of updatesByGuild) {
+                                const entry = findGuildLayoutEntry(settings.guildLayout, guildId);
+                                if (!entry) continue;
+                                const existing = Array.isArray(entry.readStates) ? [...entry.readStates] : [];
+                                const stateMap = new Map<string, GuildChannelReadState>();
+                                for (const state of existing) {
+                                        stateMap.set(state.channelId, { ...state });
+                                }
+                                let guildChanged = false;
+                                for (const state of states) {
+                                        const current = stateMap.get(state.channelId);
+                                        const next: GuildChannelReadState = {
+                                                channelId: state.channelId,
+                                                lastReadMessageId: state.lastReadMessageId,
+                                                scrollPosition: state.scrollPosition
+                                        };
+                                        if (
+                                                current &&
+                                                current.lastReadMessageId === next.lastReadMessageId &&
+                                                current.scrollPosition === next.scrollPosition
+                                        ) {
+                                                continue;
+                                        }
+                                        stateMap.set(state.channelId, next);
+                                        guildChanged = true;
+                                }
+                                if (guildChanged) {
+                                        entry.readStates = Array.from(stateMap.values());
+                                        changed = true;
+                                }
+                        }
+                        return changed;
+                });
+                for (const [guildId, states] of updatesByGuild) {
+                        for (const state of states) {
+                                const key = `${state.guildId}:${state.channelId}`;
+                                lastPersistedReadStates.set(key, {
+                                        lastReadMessageId: state.lastReadMessageId,
+                                        scrollPosition: state.scrollPosition
+                                });
+                        }
+                        dirtyGuilds.delete(guildId);
+                }
+        }
+
+        onMount(() => {
+                if (readStateFlushTimer) clearInterval(readStateFlushTimer);
+                readStateFlushTimer = setInterval(() => {
+                        flushPendingReadStates();
+                }, READ_STATE_FLUSH_INTERVAL);
+        });
+
+        onDestroy(() => {
+                if (readStateFlushTimer) {
+                        clearInterval(readStateFlushTimer);
+                        readStateFlushTimer = null;
+                }
+                flushPendingReadStates();
+        });
+
+        afterUpdate(() => {
+                recordReadState();
+        });
+
+        $effect(() => {
+                const gid = $selectedGuildId;
+                const cid = $selectedChannelId;
+                activeGuildId = gid;
+                activeChannelId = cid;
+                const key = gid && cid ? `${gid}:${cid}` : null;
+                if (previousChannelKey && previousChannelKey !== key) {
+                        flushPendingReadStates();
+                }
+                previousChannelKey = key;
+        });
 
 	function isNearBottom() {
 		if (!scroller) return true;
@@ -123,6 +309,8 @@
                                 await loadLatest();
                                 if (token === channelSwitchToken) {
                                         initialLoaded = true;
+                                        await tick();
+                                        recordReadState();
                                 }
                         })();
                 } else {
@@ -267,15 +455,16 @@
 			error = null;
 		} catch (e: any) {
 			error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
-		} finally {
-			loading = false;
-			if (inserted > 0 && scroller) {
-				await tick();
-				const diff = scroller.scrollHeight - prevHeight;
-				if (prevTop > 0) {
-					scroller.scrollTop = prevTop + diff;
-				}
-			}
+                } finally {
+                        loading = false;
+                        if (inserted > 0 && scroller) {
+                                await tick();
+                                const diff = scroller.scrollHeight - prevHeight;
+                                if (prevTop > 0) {
+                                        scroller.scrollTop = prevTop + diff;
+                                }
+                        }
+                        void tick().then(() => recordReadState());
                 }
         }
 
@@ -338,6 +527,7 @@
                         error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
                 } finally {
                         loading = false;
+                        void tick().then(() => recordReadState());
                 }
         }
 
@@ -360,6 +550,7 @@
                         scrollToBottom(false);
                         wasAtBottom = true;
                         newCount = 0;
+                        void tick().then(() => recordReadState());
                 } catch (e: any) {
                         error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
                 }
@@ -407,6 +598,7 @@
                 if (!scrolled && fetched) {
                         error = error ?? 'Failed to load messages';
                 }
+                void tick().then(() => recordReadState());
         }
 
         $effect(() => {
@@ -477,6 +669,7 @@
                 if (!loading && !latestReached && nearBottom) {
                         loadNewer();
                 }
+                recordReadState();
         }}
 >
 	<div
