@@ -12,7 +12,7 @@
         import { wsEvent } from '$lib/client/ws';
         import { m } from '$lib/paraglide/messages.js';
         import { fly } from 'svelte/transition';
-        import { afterUpdate, onDestroy, onMount, tick, untrack } from 'svelte';
+        import { onDestroy, onMount, tick, untrack } from 'svelte';
         import { Sparkles } from 'lucide-svelte';
         import {
                 mutateAppSettings,
@@ -198,8 +198,19 @@
                 flushPendingReadStates();
         });
 
-        afterUpdate(() => {
-                recordReadState();
+        $effect(() => {
+                if (!initialLoaded) return;
+                const dependencies = {
+                        count: messages.length,
+                        wasAtBottom,
+                        endReached,
+                        latestReached,
+                        newCount
+                };
+                void dependencies;
+                queueMicrotask(() => {
+                        recordReadState();
+                });
         });
 
         $effect(() => {
