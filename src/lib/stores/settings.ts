@@ -181,6 +181,7 @@ let saveInFlight = false;
 let latestGuilds: DtoGuild[] = [];
 let guildsHydrated = false;
 let hasSyncedGuildLayout = false;
+let loadedSettingsToken: string | null = null;
 
 function structuredCloneSafe<T>(value: T): T {
 	if (typeof structuredClone === 'function') {
@@ -784,18 +785,19 @@ function syncLayoutWithGuilds() {
 	});
 }
 
-async function loadSettingsFromApi() {
-	hasSyncedGuildLayout = false;
-	if (!get(auth.isAuthenticated)) {
-		suppressSave = true;
-		appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
-		suppressSave = false;
-		settingsReady.set(false);
-		return;
-	}
-	try {
-		const response = await auth.api.user.userMeSettingsGet();
-		if (response.status === 204 || !response.data?.settings) {
+async function loadSettingsFromApi(currentToken: string | null = get(auth.token)) {
+        hasSyncedGuildLayout = false;
+        if (!get(auth.isAuthenticated)) {
+                suppressSave = true;
+                appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
+                suppressSave = false;
+                settingsReady.set(false);
+                loadedSettingsToken = null;
+                return;
+        }
+        try {
+                const response = await auth.api.user.userMeSettingsGet();
+                if (response.status === 204 || !response.data?.settings) {
 			suppressSave = true;
 			appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
 			applySelectedGuildFromSettings(false);
@@ -810,32 +812,40 @@ async function loadSettingsFromApi() {
 			theme.set(parsed.theme);
 			locale.set(parsed.language);
 			suppressThemePropagation = false;
-			suppressLocalePropagation = false;
-			suppressSave = false;
-		}
-	} catch (error) {
-		console.error('Failed to load settings', error);
-		suppressSave = true;
-		appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
-		applySelectedGuildFromSettings(false);
-		suppressSave = false;
-	}
-	settingsReady.set(true);
-	applySelectedGuildFromSettings(true);
-	syncLayoutWithGuilds();
+                        suppressLocalePropagation = false;
+                        suppressSave = false;
+                }
+                if (currentToken) {
+                        loadedSettingsToken = currentToken;
+                }
+        } catch (error) {
+                console.error('Failed to load settings', error);
+                suppressSave = true;
+                appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
+                applySelectedGuildFromSettings(false);
+                suppressSave = false;
+                loadedSettingsToken = null;
+        }
+        settingsReady.set(true);
+        applySelectedGuildFromSettings(true);
+        syncLayoutWithGuilds();
 }
 
 auth.token.subscribe((token) => {
-	if (token) {
-		void loadSettingsFromApi();
-	} else {
-		hasSyncedGuildLayout = false;
-		guildsHydrated = false;
-		suppressSave = true;
-		appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
-		suppressSave = false;
-		settingsReady.set(false);
-	}
+        if (token) {
+                if (!get(settingsReady) || loadedSettingsToken !== token) {
+                        loadedSettingsToken = token;
+                        void loadSettingsFromApi(token);
+                }
+        } else {
+                hasSyncedGuildLayout = false;
+                guildsHydrated = false;
+                suppressSave = true;
+                appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
+                suppressSave = false;
+                settingsReady.set(false);
+                loadedSettingsToken = null;
+        }
 });
 
 auth.guilds.subscribe((guilds) => {
