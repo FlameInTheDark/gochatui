@@ -7,6 +7,7 @@ import {
   membersByGuild,
   messagesByChannel,
   myGuildRoleIdsByGuild,
+  appHasFocus,
   selectedChannelId,
   selectedGuildId
 } from '$lib/stores/appState';
@@ -418,7 +419,21 @@ export function connectWS() {
           normalizeSnowflake(message?.id) ??
           normalizeSnowflake(payload?.id);
         if (guildId && channelId && messageId) {
-          markChannelUnread(guildId, channelId, messageId);
+          let shouldMarkUnread = true;
+          if (browser) {
+            const focused = Boolean(get(appHasFocus));
+            if (focused) {
+              const activeGuildId = normalizeSnowflake(get(selectedGuildId));
+              const activeChannelId = normalizeSnowflake(get(selectedChannelId));
+              if (guildId === activeGuildId && channelId === activeChannelId) {
+                shouldMarkUnread = false;
+              }
+            }
+          }
+
+          if (shouldMarkUnread) {
+            markChannelUnread(guildId, channelId, messageId);
+          }
         }
       }
 
