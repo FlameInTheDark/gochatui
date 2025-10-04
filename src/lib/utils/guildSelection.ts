@@ -1,27 +1,28 @@
 import { get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import {
-        channelReady,
-        channelsByGuild,
-        lastChannelByGuild,
-        selectedChannelId,
-        selectedGuildId
+	channelReady,
+	channelsByGuild,
+	lastChannelByGuild,
+	selectedChannelId,
+	selectedGuildId
 } from '$lib/stores/appState';
+import { mutateAppSettings } from '$lib/stores/settings';
 import { subscribeWS } from '$lib/client/ws';
 import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 import {
-        loadGuildRolesCached,
-        primeGuildChannelRoles,
-        pruneChannelRoleCache
+	loadGuildRolesCached,
+	primeGuildChannelRoles,
+	pruneChannelRoleCache
 } from '$lib/utils/guildRoles';
 
 function toApiSnowflake(value: string): any {
-        try {
-                return BigInt(value) as any;
-        } catch {
-                return value as any;
-        }
+	try {
+		return BigInt(value) as any;
+	} catch {
+		return value as any;
+	}
 }
 
 function readLastChannels(): Record<string, string> {
@@ -50,10 +51,19 @@ function writeLastChannel(guildId: string, channelId: string) {
 	}
 }
 
-function rememberLastGuild(guildId: string) {
+export function persistSelectedGuildId(guildId: string | null) {
+	mutateAppSettings((settings) => {
+		if (settings.selectedGuildId === guildId) return false;
+		settings.selectedGuildId = guildId;
+		return true;
+	});
 	if (typeof localStorage === 'undefined') return;
 	try {
-		localStorage.setItem('lastGuild', guildId);
+		if (guildId) {
+			localStorage.setItem('lastGuild', guildId);
+		} else {
+			localStorage.removeItem('lastGuild');
+		}
 	} catch {
 		/* ignore */
 	}
@@ -71,27 +81,27 @@ export async function selectGuild(guildId: string | number | bigint | null | und
 	channelReady.set(false);
 	selectedChannelId.set(null);
 	selectedGuildId.set(gid);
-	rememberLastGuild(gid);
+	persistSelectedGuildId(gid);
 
-        try {
-                const channelRequest = auth.api.guild.guildGuildIdChannelGet({
-                        guildId: toApiSnowflake(gid)
-                });
-                const rolesPromise = loadGuildRolesCached(gid).catch(() => []);
-                const membersPromise = ensureGuildMembersLoaded(gid).catch(() => []);
+	try {
+		const channelRequest = auth.api.guild.guildGuildIdChannelGet({
+			guildId: toApiSnowflake(gid)
+		});
+		const rolesPromise = loadGuildRolesCached(gid).catch(() => []);
+		const membersPromise = ensureGuildMembersLoaded(gid).catch(() => []);
 
-                const res = await channelRequest;
-                await Promise.all([rolesPromise, membersPromise]);
+		const res = await channelRequest;
+		await Promise.all([rolesPromise, membersPromise]);
 
-                const list = res.data ?? [];
+		const list = res.data ?? [];
 
-                if (get(selectedGuildId) !== gid || myToken !== switchToken) return;
+		if (get(selectedGuildId) !== gid || myToken !== switchToken) return;
 
-                channelsByGuild.update((map) => ({ ...map, [gid]: list }));
-                pruneChannelRoleCache(gid, list);
-                await primeGuildChannelRoles(gid, list).catch(() => {});
+		channelsByGuild.update((map) => ({ ...map, [gid]: list }));
+		pruneChannelRoleCache(gid, list);
+		await primeGuildChannelRoles(gid, list).catch(() => {});
 
-                void refreshGuildEffectivePermissions(gid);
+		void refreshGuildEffectivePermissions(gid);
 
 		const textChannels = list.filter((channel: any) => channel?.type === 0);
 
