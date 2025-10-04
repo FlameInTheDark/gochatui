@@ -20,6 +20,7 @@
                 type GuildLayoutGuild,
                 type GuildLayoutItem
         } from '$lib/stores/settings';
+        import { acknowledgeChannelRead } from '$lib/stores/unread';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -178,6 +179,7 @@
                                         lastReadMessageId: state.lastReadMessageId,
                                         scrollPosition: state.scrollPosition
                                 });
+                                acknowledgeChannelRead(state.guildId, state.channelId);
                         }
                         dirtyGuilds.delete(guildId);
                 }

@@ -10,6 +10,7 @@ import {
   selectedChannelId,
   selectedGuildId
 } from '$lib/stores/appState';
+import { markChannelUnread } from '$lib/stores/unread';
 import { browser } from '$app/environment';
 import { env as publicEnv } from '$env/dynamic/public';
 import { getRuntimeConfig } from '$lib/runtime/config';
@@ -397,9 +398,33 @@ export function connectWS() {
 
     handleGuildMembershipEvent(data);
 
-    // On message create event (op 0)
-    if (data?.op === 0 && data?.d?.message) {
-      // nothing here; consumers react via wsEvent
+    if (data?.op === 0 && typeof data?.t === 'number') {
+      if (data.t === 300) {
+        const payload = (data?.d as AnyRecord) ?? {};
+        const message = (payload?.message as AnyRecord) ?? payload;
+        const guildId =
+          normalizeSnowflake(payload?.guild_id) ??
+          normalizeSnowflake(message?.guild_id) ??
+          normalizeSnowflake(payload?.guild?.id) ??
+          normalizeSnowflake(message?.guild?.id);
+        const channelId =
+          normalizeSnowflake(payload?.channel_id) ??
+          normalizeSnowflake(message?.channel_id) ??
+          normalizeSnowflake(payload?.channel?.id) ??
+          normalizeSnowflake(message?.channel?.id);
+        const messageId =
+          normalizeSnowflake(payload?.message_id) ??
+          normalizeSnowflake(message?.message_id) ??
+          normalizeSnowflake(message?.id) ??
+          normalizeSnowflake(payload?.id);
+        if (guildId && channelId && messageId) {
+          markChannelUnread(guildId, channelId, messageId);
+        }
+      }
+
+      if (data?.d?.message) {
+        // nothing here; consumers react via wsEvent
+      }
     }
   };
 
