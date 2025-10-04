@@ -1,20 +1,79 @@
 <script lang="ts">
+        import type { DtoGuild } from '$lib/api';
+        import { m } from '$lib/paraglide/messages.js';
+        import { appSettings, createFolderWithGuilds, moveFolder, moveGuildToFolder, moveGuildToTop } from '$lib/stores/settings';
         import { auth } from '$lib/stores/auth';
-        import { selectedGuildId, guildSettingsOpen } from '$lib/stores/appState';
+        import { guildSettingsOpen, selectedGuildId } from '$lib/stores/appState';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
         import type { ContextMenuItem } from '$lib/stores/contextMenu';
-        const guilds = auth.guilds;
-        import { m } from '$lib/paraglide/messages.js';
+        import type { GuildFolderItem, GuildLayoutItem, GuildLayoutGuild } from '$lib/stores/settings';
+        import { Plus } from 'lucide-svelte';
         import { onMount } from 'svelte';
         import { selectGuild } from '$lib/utils/guildSelection';
-        import { Plus } from 'lucide-svelte';
         import {
                 PERMISSION_MANAGE_CHANNELS,
                 PERMISSION_MANAGE_GUILD,
                 PERMISSION_MANAGE_ROLES,
                 hasAnyGuildPermission
         } from '$lib/utils/permissions';
+
+        const guilds = auth.guilds;
         const me = auth.user;
+
+        type DisplayGuild = {
+                type: 'guild';
+                guild: DtoGuild;
+                guildId: string;
+                topIndex: number;
+                folderId: string | null;
+                folderIndex: number | null;
+                layout: GuildLayoutGuild | null;
+        };
+
+        type DisplayFolder = {
+                type: 'folder';
+                folder: GuildFolderItem;
+                topIndex: number;
+                guilds: DisplayGuild[];
+        };
+
+        type DisplayItem = DisplayGuild | DisplayFolder;
+
+        type DragState =
+                | { type: 'guild'; guildId: string; fromFolderId: string | null }
+                | { type: 'folder'; folderId: string };
+
+        let creating = $state(false);
+        let newGuildName = $state('');
+        let error: string | null = $state(null);
+        let leavingGuild = $state<{ id: string; name: string } | null>(null);
+
+        let expandedFolders = $state<Record<string, boolean>>({});
+        let dragging: DragState | null = $state(null);
+        let topDropIndex: number | null = $state(null);
+        let folderDropTarget = $state<{ folderId: string; index: number } | null>(null);
+        let mergeTargetGuild: string | null = $state(null);
+        let displayItems = $state<DisplayItem[]>([]);
+
+        $effect(() => {
+                const availableFolders = new Set(
+                        $appSettings.guildLayout
+                                .filter((item): item is GuildFolderItem => item.kind === 'folder')
+                                .map((folder) => folder.id)
+                );
+                const next: Record<string, boolean> = {};
+                for (const id of Object.keys(expandedFolders)) {
+                        if (availableFolders.has(id)) {
+                                next[id] = expandedFolders[id];
+                        }
+                }
+                expandedFolders = next;
+        });
+
+        function guildInitials(guild: DtoGuild | null | undefined): string {
+                const name = String((guild as any)?.name ?? '?');
+                return name.slice(0, 2).toUpperCase();
+        }
 
         function canAccessGuildSettings(guild: any): boolean {
                 return hasAnyGuildPermission(
@@ -25,61 +84,6 @@
                         PERMISSION_MANAGE_CHANNELS
                 );
         }
-	onMount(() => {
-		const unsub = guilds.subscribe((arr) => {
-			if (!$selectedGuildId && (arr?.length ?? 0) > 0) {
-				let target = '';
-				try {
-					const saved = localStorage.getItem('lastGuild');
-					if (saved) target = saved;
-				} catch {}
-				const exists = target && arr.some((g: any) => String(g?.id) === target);
-				const pick = exists ? target : String((arr[0] as any)?.id || '');
-				if (pick) {
-					selectGuild(pick);
-					try {
-						localStorage.setItem('lastGuild', pick);
-					} catch {}
-				}
-			}
-		});
-		return () => unsub();
-	});
-
-	let creating = $state(false);
-	let newGuildName = $state('');
-	let error: string | null = $state(null);
-	let leavingGuild = $state<{ id: string; name: string } | null>(null);
-
-	async function createGuild() {
-		if (!newGuildName.trim()) return;
-		try {
-			await auth.api.guild.guildPost({ guildCreateGuildRequest: { name: newGuildName } });
-			creating = false;
-			newGuildName = '';
-			error = null;
-			await auth.loadGuilds();
-		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? 'Failed to create guild';
-		}
-	}
-
-	async function leaveGuildDirect(gid: string) {
-		try {
-			await auth.api.user.userMeGuildsGuildIdDelete({ guildId: gid as any });
-			await auth.loadGuilds();
-		} catch {}
-	}
-
-	async function confirmLeaveGuild() {
-		if (!leavingGuild) return;
-		const { id } = leavingGuild;
-		leavingGuild = null;
-		await leaveGuildDirect(id);
-		if ($selectedGuildId === id) {
-			selectedGuildId.set(null);
-		}
-	}
 
         function openGuildSettings(gid: string) {
                 const targetGuild = $guilds.find((g) => String((g as any)?.id) === gid);
@@ -87,59 +91,427 @@
                 selectGuild(gid);
                 guildSettingsOpen.set(true);
         }
+
+        function buildDisplayItems(list: DtoGuild[], layout: GuildLayoutItem[]): DisplayItem[] {
+                const guildMap = new Map<string, DtoGuild>();
+                for (const guild of list) {
+                        const gid = String((guild as any)?.id ?? '');
+                        if (gid) guildMap.set(gid, guild);
+                }
+
+                const seen = new Set<string>();
+                const items: DisplayItem[] = [];
+                let index = 0;
+                for (const item of layout) {
+                        if (item.kind === 'guild') {
+                                const guild = guildMap.get(item.guildId);
+                                if (!guild) {
+                                        index++;
+                                        continue;
+                                }
+                                seen.add(item.guildId);
+                                items.push({
+                                        type: 'guild',
+                                        guild,
+                                        guildId: item.guildId,
+                                        topIndex: index++,
+                                        folderId: null,
+                                        folderIndex: null,
+                                        layout: item
+                                });
+                        } else {
+                                const folderGuilds: DisplayGuild[] = [];
+                                item.guilds.forEach((entry, folderIndex) => {
+                                        const guild = guildMap.get(entry.guildId);
+                                        if (!guild) return;
+                                        seen.add(entry.guildId);
+                                        folderGuilds.push({
+                                                type: 'guild',
+                                                guild,
+                                                guildId: entry.guildId,
+                                                topIndex: index,
+                                                folderId: item.id,
+                                                folderIndex,
+                                                layout: entry
+                                        });
+                                });
+                                if (folderGuilds.length > 0) {
+                                        items.push({
+                                                type: 'folder',
+                                                folder: item,
+                                                topIndex: index++,
+                                                guilds: folderGuilds
+                                        });
+                                } else {
+                                        index++;
+                                }
+                        }
+                }
+
+                for (const guild of list) {
+                        const gid = String((guild as any)?.id ?? '');
+                        if (!gid || seen.has(gid)) continue;
+                        items.push({
+                                type: 'guild',
+                                guild,
+                                guildId: gid,
+                                topIndex: index++,
+                                folderId: null,
+                                folderIndex: null,
+                                layout: null
+                        });
+                }
+
+                return items;
+        }
+
+        $effect(() => {
+                displayItems = buildDisplayItems($guilds ?? [], $appSettings.guildLayout);
+        });
+
+        $effect(() => {
+                const selected = $selectedGuildId;
+                if (!selected) return;
+                for (const item of displayItems) {
+                        if (item.type === 'folder') {
+                                if (item.guilds.some((g) => g.guildId === selected)) {
+                                        expandedFolders = { ...expandedFolders, [item.folder.id]: true };
+                                }
+                        }
+                }
+        });
+
+        function startGuildDrag(event: DragEvent, guildId: string, fromFolderId: string | null) {
+                dragging = { type: 'guild', guildId, fromFolderId };
+                topDropIndex = null;
+                folderDropTarget = null;
+                mergeTargetGuild = null;
+                event.dataTransfer?.setData('text/plain', guildId);
+                event.dataTransfer?.setDragImage(new Image(), 0, 0);
+        }
+
+        function startFolderDrag(event: DragEvent, folderId: string) {
+                dragging = { type: 'folder', folderId };
+                topDropIndex = null;
+                folderDropTarget = null;
+                mergeTargetGuild = null;
+                event.dataTransfer?.setData('text/plain', folderId);
+                event.dataTransfer?.setDragImage(new Image(), 0, 0);
+        }
+
+        function endDrag() {
+                dragging = null;
+                topDropIndex = null;
+                folderDropTarget = null;
+                mergeTargetGuild = null;
+        }
+
+        function onTopDragOver(event: DragEvent, index: number) {
+                if (!dragging) return;
+                event.preventDefault();
+                topDropIndex = index;
+                folderDropTarget = null;
+                mergeTargetGuild = null;
+        }
+
+        function onTopDrop(event: DragEvent, index: number) {
+                if (!dragging) return;
+                event.preventDefault();
+                if (dragging.type === 'guild') {
+                        moveGuildToTop(dragging.guildId, index);
+                } else {
+                        moveFolder(dragging.folderId, index);
+                }
+                endDrag();
+        }
+
+        function onFolderDropZoneOver(event: DragEvent, folderId: string, index: number) {
+                if (!dragging || dragging.type !== 'guild') return;
+                event.preventDefault();
+                event.stopPropagation();
+                folderDropTarget = { folderId, index };
+                topDropIndex = null;
+                mergeTargetGuild = null;
+        }
+
+        function onFolderDrop(event: DragEvent, folderId: string, index: number) {
+                if (!dragging || dragging.type !== 'guild') return;
+                event.preventDefault();
+                event.stopPropagation();
+                moveGuildToFolder(dragging.guildId, folderId, index);
+                expandedFolders = { ...expandedFolders, [folderId]: true };
+                endDrag();
+        }
+
+        function onGuildMergeOver(event: DragEvent, guildId: string, topIndex: number, folderId: string | null) {
+                if (!dragging || dragging.type !== 'guild') return;
+                if (dragging.guildId === guildId) return;
+                if (folderId) return;
+                event.preventDefault();
+                event.stopPropagation();
+                mergeTargetGuild = guildId;
+                topDropIndex = null;
+                folderDropTarget = null;
+        }
+
+        function onGuildMergeDrop(event: DragEvent, guildId: string, topIndex: number) {
+                if (!dragging || dragging.type !== 'guild') return;
+                if (dragging.guildId === guildId) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const folderId = createFolderWithGuilds(guildId, dragging.guildId, topIndex);
+                if (folderId) {
+                        expandedFolders = { ...expandedFolders, [folderId]: true };
+                }
+                endDrag();
+        }
+
+        async function createGuild() {
+                if (!newGuildName.trim()) return;
+                try {
+                        await auth.api.guild.guildPost({ guildCreateGuildRequest: { name: newGuildName } });
+                        creating = false;
+                        newGuildName = '';
+                        error = null;
+                        await auth.loadGuilds();
+                } catch (e: any) {
+                        error = e?.response?.data?.message ?? e?.message ?? 'Failed to create guild';
+                }
+        }
+
+        async function leaveGuildDirect(gid: string) {
+                try {
+                        await auth.api.user.userMeGuildsGuildIdDelete({ guildId: gid as any });
+                        await auth.loadGuilds();
+                } catch {
+                        /* ignore */
+                }
+        }
+
+        async function confirmLeaveGuild() {
+                if (!leavingGuild) return;
+                const { id } = leavingGuild;
+                leavingGuild = null;
+                await leaveGuildDirect(id);
+                if ($selectedGuildId === id) {
+                        selectedGuildId.set(null);
+                }
+        }
+
+        function openGuildMenu(event: MouseEvent, guild: DtoGuild) {
+                event.preventDefault();
+                const gid = String((guild as any)?.id ?? '');
+                const name = String((guild as any)?.name ?? 'Server');
+                const menuItems: ContextMenuItem[] = [
+                        { label: m.copy_server_id(), action: () => copyToClipboard(gid) }
+                ];
+                if (canAccessGuildSettings(guild)) {
+                        menuItems.push({
+                                label: m.server_settings(),
+                                action: () => openGuildSettings(gid)
+                        });
+                }
+                menuItems.push({
+                        label: m.leave_server(),
+                        action: () => {
+                                leavingGuild = { id: gid, name };
+                        },
+                        danger: true
+                });
+                contextMenu.openFromEvent(event, menuItems);
+        }
+
+        function isGuildSelected(guildId: string): boolean {
+                return $selectedGuildId === guildId;
+        }
+
+        function selectGuildAndStore(id: string) {
+                selectGuild(id);
+                try {
+                        localStorage.setItem('lastGuild', id);
+                } catch {
+                        /* ignore */
+                }
+        }
+
+        onMount(() => {
+                const unsubscribe = guilds.subscribe((arr) => {
+                        if (!$selectedGuildId && (arr?.length ?? 0) > 0) {
+                                let target = '';
+                                try {
+                                        const saved = localStorage.getItem('lastGuild');
+                                        if (saved) target = saved;
+                                } catch {
+                                        /* ignore */
+                                }
+                                const exists = target && arr.some((g: any) => String(g?.id) === target);
+                                const pick = exists ? target : String((arr[0] as any)?.id || '');
+                                if (pick) {
+                                        selectGuildAndStore(pick);
+                                }
+                        }
+                });
+                return () => unsubscribe();
+        });
 </script>
 
-<div
-	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-hidden border-r border-[var(--stroke)] p-2"
->
+<div class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-hidden border-r border-[var(--stroke)] p-2">
         <div class="scroll-area flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
-		{#each $guilds as g}
-			<div class="group relative">
-				<div
-					class="absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all {$selectedGuildId ===
-					String((g as any).id)
-						? 'h-6 opacity-100'
-						: 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-60'}"
-				></div>
-				<button
-					class="flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none {$selectedGuildId ===
-					String((g as any).id)
-						? 'shadow ring-2 ring-[var(--brand)] ring-inset'
-						: ''}"
-					title={g.name}
-					aria-current={$selectedGuildId === String((g as any).id) ? 'true' : 'false'}
-					onclick={() => selectGuild(String((g as any).id))}
-					oncontextmenu={(e) => {
-						e.preventDefault();
-						const gid = String((g as any).id);
-						const name = String((g as any).name ?? 'Server');
-                                                const menuItems: ContextMenuItem[] = [
-                                                        { label: m.copy_server_id(), action: () => copyToClipboard(gid) }
-                                                ];
-                                                if (canAccessGuildSettings(g)) {
-                                                        menuItems.push({
-                                                                label: m.server_settings(),
-                                                                action: async () => {
-                                                                        openGuildSettings(gid);
-                                                                }
-                                                        });
-                                                }
-                                                menuItems.push({
-                                                        label: m.leave_server(),
-                                                        action: async () => {
-                                                                leavingGuild = { id: gid, name };
-                                                        },
-                                                        danger: true
-                                                });
-                                                contextMenu.openFromEvent(e, menuItems);
-                                        }}
-                                >
-					<span class="font-bold">{(g.name ?? '?').slice(0, 2).toUpperCase()}</span>
-				</button>
-			</div>
-		{/each}
-	</div>
-	<div>
+                <div
+                        class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
+                                topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
+                        }`}
+                        ondragover={(event) => onTopDragOver(event, 0)}
+                        ondrop={(event) => onTopDrop(event, 0)}
+                        role="presentation"
+                ></div>
+                {#each displayItems as item, displayIndex}
+                        {#if item.type === 'guild'}
+                                <div class="group relative">
+                                        <div
+                                                class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
+                                                        isGuildSelected(item.guildId)
+                                                                ? 'h-6 opacity-100'
+                                                                : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-60'
+                                                }`}
+                                        ></div>
+                                        <button
+                                                class={`flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                        isGuildSelected(item.guildId)
+                                                                ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                : ''
+                                                } ${
+                                                        mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''
+                                                }`}
+                                                title={item.guild.name}
+                                                aria-current={isGuildSelected(item.guildId) ? 'true' : 'false'}
+                                                draggable="true"
+                                                ondragstart={(event) => startGuildDrag(event, item.guildId, item.folderId)}
+                                                ondragend={endDrag}
+                                                ondragover={(event) => onGuildMergeOver(event, item.guildId, item.topIndex, item.folderId)}
+                                                ondrop={(event) => onGuildMergeDrop(event, item.guildId, item.topIndex)}
+                                                onclick={() => selectGuildAndStore(item.guildId)}
+                                                oncontextmenu={(event) => openGuildMenu(event, item.guild)}
+                                        >
+                                                <span class="font-bold">{guildInitials(item.guild)}</span>
+                                        </button>
+                                </div>
+                        {:else}
+                                <div class="flex flex-col gap-2">
+                                        <div class="relative">
+                                                <div
+                                                        class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
+                                                                item.guilds.some((g) => isGuildSelected(g.guildId))
+                                                                        ? 'h-6 opacity-100'
+                                                                        : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-60'
+                                                        }`}
+                                                ></div>
+                                                <button
+                                                        class={`flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                item.guilds.some((g) => isGuildSelected(g.guildId))
+                                                                        ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                        : ''
+                                                        } ${
+                                                                folderDropTarget?.folderId === item.folder.id
+                                                                        ? 'ring-2 ring-[var(--brand)]'
+                                                                        : ''
+                                                        }`}
+                                                        type="button"
+                                                        draggable="true"
+                                                        aria-label={m.guild_folder()}
+                                                        ondragstart={(event) => startFolderDrag(event, item.folder.id)}
+                                                        ondragend={endDrag}
+                                                        ondragover={(event) => onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
+                                                        ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
+                                                        onclick={() =>
+                                                                (expandedFolders = {
+                                                                        ...expandedFolders,
+                                                                        [item.folder.id]: !expandedFolders[item.folder.id]
+                                                                })
+                                                        }
+                                                >
+                                                        <div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
+                                                                {#each item.guilds.slice(0, 4) as guildPreview, idx}
+                                                                        <div
+                                                                                class={`flex items-center justify-center rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
+                                                                                        guildPreview.guildId === $selectedGuildId
+                                                                                                ? 'border-[var(--brand)]'
+                                                                                                : ''
+                                                                                }`}
+                                                                        >
+                                                                                {guildInitials(guildPreview.guild)}
+                                                                        </div>
+                                                                {/each}
+                                                                {#if item.guilds.length < 4}
+                                                                        {#each Array(4 - item.guilds.length) as _, fillerIdx}
+                                                                                <div class="rounded-lg border border-dashed border-[var(--stroke)]"></div>
+                                                                        {/each}
+                                                                {/if}
+                                                        </div>
+                                                </button>
+                                        </div>
+
+                                        {#if expandedFolders[item.folder.id]}
+                                                <div class="ml-2 flex flex-col gap-2">
+                                                        <div
+                                                                class={`h-2 rounded bg-[var(--brand)] transition-opacity ${
+                                                                        folderDropTarget?.folderId === item.folder.id && folderDropTarget.index === 0
+                                                                                ? 'opacity-80'
+                                                                                : 'opacity-0'
+                                                                }`}
+                                                                ondragover={(event) => onFolderDropZoneOver(event, item.folder.id, 0)}
+                                                                ondrop={(event) => onFolderDrop(event, item.folder.id, 0)}
+                                                                role="presentation"
+                                                        ></div>
+                                                        {#each item.guilds as nestedGuild, nestedIndex}
+                                                                <div class="group relative">
+                                                                        <div
+                                                                                class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
+                                                                                        isGuildSelected(nestedGuild.guildId)
+                                                                                                ? 'h-6 opacity-100'
+                                                                                                : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-60'
+                                                                                }`}
+                                                                        ></div>
+                                                                        <button
+                                                                                class={`flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                                        isGuildSelected(nestedGuild.guildId)
+                                                                                                ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                                                : ''
+                                                                                } ${
+                                                                                        folderDropTarget?.folderId === item.folder.id &&
+                                                                                        folderDropTarget.index === nestedIndex + 1
+                                                                                                ? 'ring-2 ring-[var(--brand)]'
+                                                                                                : ''
+                                                                                }`}
+                                                                                title={nestedGuild.guild.name}
+                                                                                aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
+                                                                                draggable="true"
+                                                                                ondragstart={(event) => startGuildDrag(event, nestedGuild.guildId, nestedGuild.folderId)}
+                                                                                ondragend={endDrag}
+                                                                                ondragover={(event) => onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
+                                                                                ondrop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
+                                                                                onclick={() => selectGuildAndStore(nestedGuild.guildId)}
+                                                                                oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
+                                                                        >
+                                                                                <span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
+                                                                        </button>
+                                                                </div>
+                                                        {/each}
+                                                </div>
+                                        {/if}
+                                </div>
+                        {/if}
+                        <div
+                                class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
+                                        topDropIndex === displayIndex + 1 ? 'opacity-80' : 'opacity-0'
+                                }`}
+                                ondragover={(event) => onTopDragOver(event, displayIndex + 1)}
+                                ondrop={(event) => onTopDrop(event, displayIndex + 1)}
+                                role="presentation"
+                        ></div>
+                {/each}
+        </div>
+        <div>
                 <button
                         class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
                         onclick={() => (creating = !creating)}
@@ -148,19 +520,19 @@
                 >
                         <Plus class="h-[18px] w-[18px]" stroke-width={2} />
                 </button>
-	</div>
+        </div>
 
-	{#if creating}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creating = false)}
-			onkeydown={(e) => {
-				if (e.key === 'Escape') creating = false;
-				if (e.key === 'Enter') createGuild();
-			}}
-		>
+        {#if creating}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onpointerdown={() => (creating = false)}
+                        onkeydown={(event) => {
+                                if (event.key === 'Escape') creating = false;
+                                if (event.key === 'Enter') createGuild();
+                        }}
+                >
                         <div class="absolute inset-0 bg-black/40"></div>
                         <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
                                 <div class="relative">
@@ -169,7 +541,7 @@
                                                 class="panel relative z-10 w-64 p-3"
                                                 role="document"
                                                 tabindex="-1"
-                                                onpointerdown={(e) => e.stopPropagation()}
+                                                onpointerdown={(event) => event.stopPropagation()}
                                         >
                                                 <div class="mb-2 text-sm font-medium">{m.new_server()}</div>
                                                 {#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}
@@ -181,12 +553,16 @@
                                                 <div class="flex justify-end gap-2">
                                                         <button
                                                                 class="rounded-md border border-[var(--stroke)] px-3 py-1"
-                                                                onclick={() => (creating = false)}>{m.cancel()}</button
+                                                                onclick={() => (creating = false)}
                                                         >
+                                                                {m.cancel()}
+                                                        </button>
                                                         <button
                                                                 class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-                                                                onclick={createGuild}>{m.create()}</button
+                                                                onclick={createGuild}
                                                         >
+                                                                {m.create()}
+                                                        </button>
                                                 </div>
                                         </div>
                                 </div>
@@ -194,17 +570,17 @@
                 </div>
         {/if}
 
-	{#if leavingGuild}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (leavingGuild = null)}
-			onkeydown={(e) => {
-				if (e.key === 'Escape') leavingGuild = null;
-				if (e.key === 'Enter') confirmLeaveGuild();
-			}}
-		>
+        {#if leavingGuild}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onpointerdown={() => (leavingGuild = null)}
+                        onkeydown={(event) => {
+                                if (event.key === 'Escape') leavingGuild = null;
+                                if (event.key === 'Enter') confirmLeaveGuild();
+                        }}
+                >
                         <div class="absolute inset-0 bg-black/40"></div>
                         <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
                                 <div class="relative">
@@ -213,10 +589,14 @@
                                                 class="panel relative z-10 w-72 p-4"
                                                 role="document"
                                                 tabindex="-1"
-                                                onpointerdown={(e) => e.stopPropagation()}
+                                                onpointerdown={(event) => event.stopPropagation()}
                                         >
-                                                <div class="mb-2 text-base font-semibold">{m.leave_server_confirm_title({ server: leavingGuild.name })}</div>
-                                                <p class="mb-4 text-sm text-[var(--muted)]">{m.leave_server_confirm_description({ server: leavingGuild.name })}</p>
+                                                <div class="mb-2 text-base font-semibold">
+                                                        {m.leave_server_confirm_title({ server: leavingGuild.name })}
+                                                </div>
+                                                <p class="mb-4 text-sm text-[var(--muted)]">
+                                                        {m.leave_server_confirm_description({ server: leavingGuild.name })}
+                                                </p>
                                                 <div class="flex justify-end gap-2">
                                                         <button
                                                                 class="rounded-md border border-[var(--stroke)] px-3 py-1"

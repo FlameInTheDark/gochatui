@@ -1,5 +1,5 @@
 ﻿<script lang="ts">
-	import type { DtoMessage } from '$lib/api';
+        import type { DtoMessage, MessageApiMessageChannelChannelIdGetRequest } from '$lib/api';
         import { auth } from '$lib/stores/auth';
         import {
                 selectedChannelId,
@@ -290,13 +290,14 @@
                 try {
                         const last = messages[messages.length - 1];
                         const from = extractId(last);
-                        const params: Record<string, any> = {
+                        const params: MessageApiMessageChannelChannelIdGetRequest = {
                                 channelId: $selectedChannelId as any,
                                 limit: PAGE_SIZE
                         };
+                        const mutableParams = params as Record<string, any>;
                         if (from) {
-                                params.from = from as any;
-                                params.direction = 'after';
+                                mutableParams.from = from as any;
+                                mutableParams.direction = 'after';
                         }
                         const res = await auth.api.message.messageChannelChannelIdGet(params);
                         const batch = res.data ?? [];
