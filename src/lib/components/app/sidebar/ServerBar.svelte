@@ -377,7 +377,7 @@
                 ></div>
                 {#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
                         {#if item.type === 'guild'}
-                                <div class="group relative">
+                                <div class="group relative flex justify-center">
                                         <div
                                                 class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
                                                         isGuildSelected(item.guildId)
@@ -483,7 +483,7 @@
                                                                 role="presentation"
                                                         ></div>
                                                         {#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
-                                                                <div class="group relative">
+                                                                <div class="group relative flex justify-center">
                                                                         <div
                                                                                 class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
                                                                                         isGuildSelected(nestedGuild.guildId)
