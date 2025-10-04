@@ -973,6 +973,12 @@ export interface ModelGuildChannelReadState {
      * @memberof ModelGuildChannelReadState
      */
     'last_read_message_id'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelGuildChannelReadState
+     */
+    'scroll_position'?: number;
 }
 /**
  * 
@@ -1019,10 +1025,10 @@ export interface ModelUserSettingsData {
     'favorite_gifs'?: Array<string>;
     /**
      * 
-     * @type {ModelUserSettingsGuildFolders}
+     * @type {Array<ModelUserSettingsGuildFolders>}
      * @memberof ModelUserSettingsData
      */
-    'guild_folders'?: ModelUserSettingsGuildFolders;
+    'guild_folders'?: Array<ModelUserSettingsGuildFolders>;
     /**
      * 
      * @type {Array<ModelUserSettingsGuilds>}
@@ -1035,6 +1041,12 @@ export interface ModelUserSettingsData {
      * @memberof ModelUserSettingsData
      */
     'language'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelUserSettingsData
+     */
+    'selected_guild'?: number;
 }
 /**
  * 
@@ -1097,6 +1109,12 @@ export interface ModelUserSettingsGuilds {
      * @memberof ModelUserSettingsGuilds
      */
     'read_states'?: Array<ModelGuildChannelReadState>;
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelUserSettingsGuilds
+     */
+    'selected_channel'?: number;
 }
 /**
  * 

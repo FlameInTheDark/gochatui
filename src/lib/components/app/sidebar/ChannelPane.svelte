@@ -20,8 +20,9 @@
 		GuildChannelOrder,
 		GuildChannelRolePermission
 	} from '$lib/api';
-	import { subscribeWS, wsEvent } from '$lib/client/ws';
-	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import { subscribeWS, wsEvent } from '$lib/client/ws';
+        import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import { updateGuildSelectedChannel } from '$lib/stores/settings';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
@@ -264,26 +265,27 @@
 		);
 		const sel = $selectedChannelId ? String($selectedChannelId) : '';
 		const selValid = sel && textChannels.some((c: any) => String((c as any).id) === sel);
-		if (!selValid) {
-			const first = textChannels[0] as any;
-			const firstId = first ? String(first.id) : '';
-			if (firstId && $selectedGuildId === gid) {
-				selectedChannelId.set(firstId);
-				subscribeWS([gid], firstId);
-				// persist last visited for this guild
-				lastChannelByGuild.update((map) => {
-					const next = { ...map, [gid]: firstId } as Record<string, string>;
-					try {
-						localStorage.setItem('lastChannels', JSON.stringify(next));
-					} catch {}
-					return next;
-				});
-			} else {
-				// no valid text channels; keep selection empty
-				selectedChannelId.set(null);
-			}
-		}
-	}
+                if (!selValid) {
+                        const first = textChannels[0] as any;
+                        const firstId = first ? String(first.id) : '';
+                        if (firstId && $selectedGuildId === gid) {
+                                selectedChannelId.set(firstId);
+                                subscribeWS([gid], firstId);
+                                // persist last visited for this guild
+                                lastChannelByGuild.update((map) => ({ ...map, [gid]: firstId }));
+                                updateGuildSelectedChannel(gid, firstId);
+                        } else {
+                                // no valid text channels; keep selection empty
+                                selectedChannelId.set(null);
+                                lastChannelByGuild.update((map) => {
+                                        if (!(gid in map)) return map;
+                                        const { [gid]: _removed, ...rest } = map;
+                                        return rest;
+                                });
+                                updateGuildSelectedChannel(gid, null);
+                        }
+                }
+        }
 
 	function toApiSnowflake(value: string): any {
 		try {
@@ -531,19 +533,21 @@
 					const next = list.find((c: any) => (c as any).type === 0);
 					const nextId = next ? String((next as any).id) : null;
 					selectedChannelId.set(nextId);
-					if (nextId) {
-						subscribeWS([gid], nextId);
-						lastChannelByGuild.update((map) => ({ ...map, [gid]: nextId }));
-					} else {
-						lastChannelByGuild.update((map) => {
-							const { [gid]: _gone, ...rest } = map;
-							return rest;
-						});
-					}
-				}
-			}
-		}
-	});
+                                        if (nextId) {
+                                                subscribeWS([gid], nextId);
+                                                lastChannelByGuild.update((map) => ({ ...map, [gid]: nextId }));
+                                                updateGuildSelectedChannel(gid, nextId);
+                                        } else {
+                                                lastChannelByGuild.update((map) => {
+                                                        const { [gid]: _gone, ...rest } = map;
+                                                        return rest;
+                                                });
+                                                updateGuildSelectedChannel(gid, null);
+                                        }
+                                }
+                        }
+                }
+        });
 
 	function computeSections(channels: DtoChannel[]) {
 		const byParent: Record<string, DtoChannel[]> = {};
@@ -614,18 +618,14 @@
 				(c as any)?.type === 0 &&
 				canAccessChannel(gid, c as DtoChannel)
 		);
-		if (!ok) return;
-		selectedChannelId.set(String(id));
-		subscribeWS([gid], id);
-		lastChannelByGuild.update((map) => ({ ...map, [gid]: String(id) }));
-		try {
-			const raw = localStorage.getItem('lastChannels');
-			const saved = raw ? JSON.parse(raw) : {};
-			saved[gid] = String(id);
-			localStorage.setItem('lastChannels', JSON.stringify(saved));
-		} catch {}
-		channelReady.set(true);
-	}
+                if (!ok) return;
+                const nextId = String(id);
+                selectedChannelId.set(nextId);
+                subscribeWS([gid], nextId);
+                lastChannelByGuild.update((map) => ({ ...map, [gid]: nextId }));
+                updateGuildSelectedChannel(gid, nextId);
+                channelReady.set(true);
+        }
 
 	function openChannelMenu(e: MouseEvent, ch: any) {
 		const id = String(ch?.id ?? '');
