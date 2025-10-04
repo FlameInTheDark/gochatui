@@ -370,7 +370,7 @@
                         ondrop={(event) => onTopDrop(event, 0)}
                         role="presentation"
                 ></div>
-                {#each displayItems as item, displayIndex}
+                {#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
                         {#if item.type === 'guild'}
                                 <div class="group relative">
                                         <div
@@ -436,7 +436,7 @@
                                                         }
                                                 >
                                                         <div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
-                                                                {#each item.guilds.slice(0, 4) as guildPreview, idx}
+                                                                {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
                                                                         <div
                                                                                 class={`flex items-center justify-center rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
                                                                                         guildPreview.guildId === $selectedGuildId
@@ -448,7 +448,7 @@
                                                                         </div>
                                                                 {/each}
                                                                 {#if item.guilds.length < 4}
-                                                                        {#each Array(4 - item.guilds.length) as _, fillerIdx}
+                                                                        {#each Array(4 - item.guilds.length) as _, fillerIdx (fillerIdx)}
                                                                                 <div class="rounded-lg border border-dashed border-[var(--stroke)]"></div>
                                                                         {/each}
                                                                 {/if}
@@ -457,7 +457,10 @@
                                         </div>
 
                                         {#if expandedFolders[item.folder.id]}
-                                                <div class="ml-2 flex flex-col gap-2">
+                                                <div
+                                                        class="mt-2 flex flex-col gap-2 rounded-2xl border border-[var(--stroke)] p-2"
+                                                        style:background="color-mix(in srgb, var(--panel-strong) 70%, transparent)"
+                                                >
                                                         <div
                                                                 class={`h-2 rounded bg-[var(--brand)] transition-opacity ${
                                                                         folderDropTarget?.folderId === item.folder.id && folderDropTarget.index === 0
@@ -468,7 +471,7 @@
                                                                 ondrop={(event) => onFolderDrop(event, item.folder.id, 0)}
                                                                 role="presentation"
                                                         ></div>
-                                                        {#each item.guilds as nestedGuild, nestedIndex}
+                                                        {#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
                                                                 <div class="group relative">
                                                                         <div
                                                                                 class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
