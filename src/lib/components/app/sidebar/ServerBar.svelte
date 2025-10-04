@@ -7,7 +7,7 @@
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
         import type { ContextMenuItem } from '$lib/stores/contextMenu';
         import type { GuildFolderItem, GuildLayoutItem, GuildLayoutGuild } from '$lib/stores/settings';
-        import { Plus } from 'lucide-svelte';
+        import { Folder, Plus } from 'lucide-svelte';
         import { onMount } from 'svelte';
         import { selectGuild } from '$lib/utils/guildSelection';
         import {
@@ -440,24 +440,28 @@
                                                                 })
                                                         }
                                                 >
-                                                        <div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
-                                                                {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
-                                                                        <div
-                                                                                class={`flex items-center justify-center rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
-                                                                                        guildPreview.guildId === $selectedGuildId
-                                                                                                ? 'border-[var(--brand)]'
-                                                                                                : ''
-                                                                                }`}
-                                                                        >
-                                                                                {guildInitials(guildPreview.guild)}
-                                                                        </div>
-                                                                {/each}
-                                                                {#if item.guilds.length < 4}
-                                                                        {#each Array(4 - item.guilds.length) as _, fillerIdx (fillerIdx)}
-                                                                                <div class="rounded-lg border border-dashed border-[var(--stroke)]"></div>
+                                                        {#if expandedFolders[item.folder.id]}
+                                                                <Folder class="h-5 w-5" stroke-width={2} />
+                                                        {:else}
+                                                                <div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
+                                                                        {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
+                                                                                <div
+                                                                                        class={`flex items-center justify-center rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
+                                                                                                guildPreview.guildId === $selectedGuildId
+                                                                                                        ? 'border-[var(--brand)]'
+                                                                                                        : ''
+                                                                                        }`}
+                                                                                >
+                                                                                        {guildInitials(guildPreview.guild)}
+                                                                                </div>
                                                                         {/each}
-                                                                {/if}
-                                                        </div>
+                                                                        {#if item.guilds.length < 4}
+                                                                                {#each Array(4 - item.guilds.length) as _, fillerIdx (fillerIdx)}
+                                                                                        <div class="rounded-lg border border-dashed border-[var(--stroke)]"></div>
+                                                                                {/each}
+                                                                        {/if}
+                                                                </div>
+                                                        {/if}
                                                 </button>
                                         </div>
 
