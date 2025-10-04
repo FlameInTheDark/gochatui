@@ -378,13 +378,6 @@
                 {#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
                         {#if item.type === 'guild'}
                                 <div class="group relative flex justify-center">
-                                        <div
-                                                class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
-                                                        isGuildSelected(item.guildId)
-                                                                ? 'h-6 opacity-100'
-                                                                : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-60'
-                                                }`}
-                                        ></div>
                                         <button
                                                 class={`flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId)
@@ -411,13 +404,6 @@
                                 {@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
                                 <div class="group relative flex flex-col items-center gap-2 rounded-2xl">
                                         <div class="relative">
-                                                <div
-                                                        class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
-                                                                folderHasSelection
-                                                                        ? 'h-6 opacity-100'
-                                                                        : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-60'
-                                                        }`}
-                                                ></div>
                                                 <button
                                                         class={`flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                 folderIsDropTarget
@@ -482,13 +468,6 @@
                                                         ></div>
                                                         {#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
                                                                 <div class="group relative flex justify-center">
-                                                                        <div
-                                                                                class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
-                                                                                        isGuildSelected(nestedGuild.guildId)
-                                                                                                ? 'h-6 opacity-100'
-                                                                                                : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-60'
-                                                                                }`}
-                                                                        ></div>
                                                                         <button
                                                                                 class={`flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                                         isGuildSelected(nestedGuild.guildId)
