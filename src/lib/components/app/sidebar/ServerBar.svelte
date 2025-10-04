@@ -180,7 +180,12 @@
                 for (const item of displayItems) {
                         if (item.type === 'folder') {
                                 if (item.guilds.some((g) => g.guildId === selected)) {
-                                        expandedFolders = { ...expandedFolders, [item.folder.id]: true };
+                                        if (!expandedFolders[item.folder.id]) {
+                                                expandedFolders = {
+                                                        ...expandedFolders,
+                                                        [item.folder.id]: true
+                                                };
+                                        }
                                 }
                         }
                 }
