@@ -174,6 +174,8 @@ let suppressThemePropagation = false;
 let suppressLocalePropagation = false;
 let suppressSave = false;
 
+const SETTINGS_SAVE_DEBOUNCE_MS = 30_000;
+
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 let saveDirty = false;
 let saveInFlight = false;
@@ -510,10 +512,10 @@ function scheduleSave() {
 	if (!get(auth.isAuthenticated)) return;
 	saveDirty = true;
 	if (saveTimeout) clearTimeout(saveTimeout);
-	saveTimeout = setTimeout(() => {
-		saveTimeout = null;
-		void persistSettings();
-	}, 400);
+        saveTimeout = setTimeout(() => {
+                saveTimeout = null;
+                void persistSettings();
+        }, SETTINGS_SAVE_DEBOUNCE_MS);
 }
 
 async function persistSettings() {
@@ -537,13 +539,13 @@ async function persistSettings() {
 	} finally {
 		saveInFlight = false;
 		settingsSaving.set(false);
-		if (saveDirty && !saveTimeout) {
-			saveTimeout = setTimeout(() => {
-				saveTimeout = null;
-				void persistSettings();
-			}, 400);
-		}
-	}
+                if (saveDirty && !saveTimeout) {
+                        saveTimeout = setTimeout(() => {
+                                saveTimeout = null;
+                                void persistSettings();
+                        }, SETTINGS_SAVE_DEBOUNCE_MS);
+                }
+        }
 }
 
 type SettingsMutator = (settings: AppSettings) => boolean;
