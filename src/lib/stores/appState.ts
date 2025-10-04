@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 import type { DtoChannel, DtoMember, DtoMessage } from '$lib/api';
 
 export const selectedGuildId = writable<string | null>(null);
@@ -33,3 +34,8 @@ export const messageJumpRequest = writable<
 
 // Guild settings overlay state
 export const guildSettingsOpen = writable(false);
+
+const currentFocusState = () =>
+        browser ? document.visibilityState === 'visible' && document.hasFocus() : true;
+
+export const appHasFocus = writable(currentFocusState());

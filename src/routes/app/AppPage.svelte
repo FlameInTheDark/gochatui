@@ -1,14 +1,32 @@
 <script lang="ts">
-	import AuthGate from '$lib/components/app/auth/AuthGate.svelte';
-	import ServerBar from '$lib/components/app/sidebar/ServerBar.svelte';
-	import ChannelPane from '$lib/components/app/sidebar/ChannelPane.svelte';
-	import ChatPane from '$lib/components/app/chat/ChatPane.svelte';
-	import SearchPanel from '$lib/components/app/search/SearchPanel.svelte';
+        import { onMount } from 'svelte';
+        import { browser } from '$app/environment';
+        import AuthGate from '$lib/components/app/auth/AuthGate.svelte';
+        import ServerBar from '$lib/components/app/sidebar/ServerBar.svelte';
+        import ChannelPane from '$lib/components/app/sidebar/ChannelPane.svelte';
+        import ChatPane from '$lib/components/app/chat/ChatPane.svelte';
+        import SearchPanel from '$lib/components/app/search/SearchPanel.svelte';
         import DmCreate from '$lib/components/app/dm/DmCreate.svelte';
-	import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
-	import { searchOpen } from '$lib/stores/appState';
-	import '$lib/client/ws';
-	import { m } from '$lib/paraglide/messages.js';
+        import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+        import { appHasFocus, searchOpen } from '$lib/stores/appState';
+        import '$lib/client/ws';
+        import { m } from '$lib/paraglide/messages.js';
+
+        const updateAppFocus = () => {
+                if (!browser) return;
+                appHasFocus.set(document.visibilityState === 'visible' && document.hasFocus());
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                        e.preventDefault();
+                        searchOpen.set(true);
+                }
+        };
+
+        onMount(() => {
+                updateAppFocus();
+        });
 
 </script>
 
@@ -32,10 +50,8 @@
 </AuthGate>
 
 <svelte:window
-	on:keydown={(e) => {
-		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-			e.preventDefault();
-			searchOpen.set(true);
-		}
-	}}
+        on:focus={updateAppFocus}
+        on:blur={updateAppFocus}
+        on:visibilitychange={updateAppFocus}
+        on:keydown={handleKeyDown}
 />
