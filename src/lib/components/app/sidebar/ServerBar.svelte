@@ -463,11 +463,11 @@
 
                                         {#if expandedFolders[item.folder.id]}
                                                 <div
-                                                        class="mt-2 flex w-full flex-col gap-2 self-stretch rounded-2xl border border-[var(--stroke)] p-2"
+                                                        class="mt-2 flex flex-col items-center gap-2 rounded-2xl border border-[var(--stroke)] p-2"
                                                         style:background="color-mix(in srgb, var(--panel-strong) 70%, transparent)"
                                                 >
                                                         <div
-                                                                class={`h-2 rounded bg-[var(--brand)] transition-opacity ${
+                                                                class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
                                                                         folderDropTarget?.folderId === item.folder.id && folderDropTarget.index === 0
                                                                                 ? 'opacity-80'
                                                                                 : 'opacity-0'
