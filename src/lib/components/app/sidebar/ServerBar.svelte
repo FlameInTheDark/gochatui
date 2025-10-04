@@ -409,15 +409,7 @@
                         {:else}
                                 {@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
                                 {@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
-                                <div
-                                        class={`group relative flex flex-col items-center gap-2 rounded-2xl ${
-                                                folderIsDropTarget
-                                                        ? 'ring-2 ring-[var(--brand)]'
-                                                        : folderHasSelection
-                                                                ? 'ring-2 ring-[var(--brand)] ring-inset shadow'
-                                                                : ''
-                                        }`}
-                                >
+                                <div class="group relative flex flex-col items-center gap-2 rounded-2xl">
                                         <div class="relative">
                                                 <div
                                                         class={`absolute top-1/2 -left-2 w-1 -translate-y-1/2 rounded-full bg-[var(--brand)] transition-all ${
@@ -427,7 +419,13 @@
                                                         }`}
                                                 ></div>
                                                 <button
-                                                        class="flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none"
+                                                        class={`flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                folderIsDropTarget
+                                                                        ? 'ring-2 ring-[var(--brand)]'
+                                                                        : folderHasSelection
+                                                                                ? 'ring-2 ring-[var(--brand)] ring-inset shadow'
+                                                                                : ''
+                                                        }`}
                                                         type="button"
                                                         draggable="true"
                                                         aria-label={m.guild_folder()}
