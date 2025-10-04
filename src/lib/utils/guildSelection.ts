@@ -7,7 +7,12 @@ import {
 	selectedChannelId,
 	selectedGuildId
 } from '$lib/stores/appState';
-import { mutateAppSettings } from '$lib/stores/settings';
+import {
+        appSettings,
+        mutateAppSettings,
+        updateGuildSelectedChannel,
+        type AppSettings
+} from '$lib/stores/settings';
 import { subscribeWS } from '$lib/client/ws';
 import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
@@ -25,30 +30,20 @@ function toApiSnowflake(value: string): any {
 	}
 }
 
-function readLastChannels(): Record<string, string> {
-	if (typeof localStorage === 'undefined') return {};
-	try {
-		const raw = localStorage.getItem('lastChannels');
-		const obj = raw ? JSON.parse(raw) : {};
-		const out: Record<string, string> = {};
-		for (const key in obj) {
-			out[String(key)] = String(obj[key]);
-		}
-		return out;
-	} catch {
-		return {};
-	}
-}
-
-function writeLastChannel(guildId: string, channelId: string) {
-	if (typeof localStorage === 'undefined') return;
-	try {
-		const saved = readLastChannels();
-		saved[String(guildId)] = String(channelId);
-		localStorage.setItem('lastChannels', JSON.stringify(saved));
-	} catch {
-		/* ignore */
-	}
+function findGuildSelectedChannel(settings: AppSettings, guildId: string): string | null {
+        for (const item of settings.guildLayout) {
+                if (item.kind === 'guild') {
+                        if (item.guildId === guildId) {
+                                return item.selectedChannelId ?? null;
+                        }
+                        continue;
+                }
+                const match = item.guilds.find((guild) => guild.guildId === guildId);
+                if (match) {
+                        return match.selectedChannelId ?? null;
+                }
+        }
+        return null;
 }
 
 export function persistSelectedGuildId(guildId: string | null) {
@@ -105,12 +100,15 @@ export async function selectGuild(guildId: string | number | bigint | null | und
 
 		const textChannels = list.filter((channel: any) => channel?.type === 0);
 
-		const saved = readLastChannels();
-		let remembered = saved[gid] || '';
-		if (!remembered) {
-			const map = get(lastChannelByGuild);
-			remembered = map[gid];
-		}
+                const runtime = get(lastChannelByGuild);
+                let remembered = runtime[gid] || '';
+                if (!remembered) {
+                        const stored = findGuildSelectedChannel(get(appSettings), gid);
+                        if (stored) {
+                                remembered = stored;
+                                lastChannelByGuild.update((map) => ({ ...map, [gid]: stored }));
+                        }
+                }
 
 		const rememberedOk =
 			!!remembered &&
@@ -123,13 +121,13 @@ export async function selectGuild(guildId: string | number | bigint | null | und
 			targetId = String((textChannels[0] as any)?.id ?? '');
 		}
 
-		if (targetId && get(selectedGuildId) === gid && myToken === switchToken) {
-			selectedChannelId.set(targetId);
-			subscribeWS([gid], targetId);
-			lastChannelByGuild.update((map) => ({ ...map, [gid]: targetId! }));
-			channelReady.set(true);
-			writeLastChannel(gid, targetId);
-		}
+                if (targetId && get(selectedGuildId) === gid && myToken === switchToken) {
+                        selectedChannelId.set(targetId);
+                        subscribeWS([gid], targetId);
+                        lastChannelByGuild.update((map) => ({ ...map, [gid]: targetId! }));
+                        channelReady.set(true);
+                        updateGuildSelectedChannel(gid, targetId);
+                }
 	} catch {
 		// ignore errors fetching guild channels
 	}
