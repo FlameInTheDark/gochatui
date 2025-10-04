@@ -115,6 +115,7 @@ let saveDirty = false;
 let saveInFlight = false;
 
 let latestGuilds: DtoGuild[] = [];
+let hasSyncedGuildLayout = false;
 
 function structuredCloneSafe<T>(value: T): T {
         if (typeof structuredClone === 'function') {
@@ -541,6 +542,13 @@ export function createFolderWithGuilds(
 
 function syncLayoutWithGuilds() {
         const guildList = latestGuilds ?? [];
+
+        if (guildList.length > 0) {
+                hasSyncedGuildLayout = true;
+        } else if (!hasSyncedGuildLayout) {
+                return;
+        }
+
         mutateAppSettings((settings) => {
                 if (guildList.length === 0) {
                         if (settings.guildLayout.length === 0) return false;
@@ -600,6 +608,7 @@ function syncLayoutWithGuilds() {
 }
 
 async function loadSettingsFromApi() {
+        hasSyncedGuildLayout = false;
         if (!get(auth.isAuthenticated)) {
                 suppressSave = true;
                 appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
@@ -639,6 +648,7 @@ auth.token.subscribe((token) => {
         if (token) {
                 void loadSettingsFromApi();
         } else {
+                hasSyncedGuildLayout = false;
                 suppressSave = true;
                 appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
                 suppressSave = false;
