@@ -1,9 +1,8 @@
 <script lang="ts">
-        import { settingsOpen, theme, locale, folderSettingsRequest } from '$lib/stores/settings';
+        import { settingsOpen, theme, locale } from '$lib/stores/settings';
 	import { m } from '$lib/paraglide/messages.js';
 	import ProfileEdit from '$lib/components/app/user/ProfileEdit.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
-	import FolderSettings from '$lib/components/app/settings/FolderSettings.svelte';
 	import type { Theme, Locale } from '$lib/stores/settings';
 
 	type LanguageOption = {
@@ -29,24 +28,11 @@
 		{ value: 'dark', label: () => m.dark() }
 	];
 
-        let category = $state<'profile' | 'general' | 'appearance' | 'folders' | 'other'>('profile');
-        let folderFocusRequest = $state<{
-                folderId: string;
-                requestId: number;
-        } | null>(null);
+        let category = $state<'profile' | 'general' | 'appearance' | 'other'>('profile');
 
         function closeOverlay() {
                 settingsOpen.set(false);
-                folderFocusRequest = null;
         }
-
-        $effect(() => {
-                const request = $folderSettingsRequest;
-                if (!request) return;
-                category = 'folders';
-                folderFocusRequest = request;
-                folderSettingsRequest.set(null);
-        });
 </script>
 
 <SettingsPanel bind:open={$settingsOpen} on:close={closeOverlay}>
@@ -74,14 +60,6 @@
 			onclick={() => (category = 'appearance')}
 		>
 			{m.appearance()}
-		</button>
-		<button
-			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'folders'
-				? 'bg-[var(--panel)] font-semibold'
-				: ''}"
-			onclick={() => (category = 'folders')}
-		>
-			{m.folder_settings()}
 		</button>
 		<button
 			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'other'
@@ -179,9 +157,7 @@
 				{/each}
 			</div>
 		</div>
-        {:else if category === 'folders'}
-                <FolderSettings focusRequest={folderFocusRequest} />
-	{:else}
-		<p>{m.other()}...</p>
-	{/if}
+        {:else}
+                <p>{m.other()}...</p>
+        {/if}
 </SettingsPanel>

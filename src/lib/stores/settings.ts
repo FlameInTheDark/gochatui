@@ -167,6 +167,7 @@ export const guildChannelReadStateLookup = derived(appSettings, ($settings) => {
         return lookup;
 });
 export const settingsOpen = writable(false);
+export const folderSettingsOpen = writable(false);
 export const folderSettingsRequest = writable<
         | {
                 folderId: string;

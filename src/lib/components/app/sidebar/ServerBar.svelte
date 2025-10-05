@@ -7,7 +7,7 @@
                 moveFolder,
                 moveGuildToFolder,
                 moveGuildToTop,
-                settingsOpen,
+                folderSettingsOpen,
                 folderSettingsRequest
         } from '$lib/stores/settings';
 	import { auth } from '$lib/stores/auth';
@@ -376,7 +376,7 @@
                         {
                                 label: m.folder_settings_action(),
                                 action: () => {
-                                        settingsOpen.set(true);
+                                        folderSettingsOpen.set(true);
                                         folderSettingsRequest.set({
                                                 folderId: folder.folder.id,
                                                 requestId: Date.now(),

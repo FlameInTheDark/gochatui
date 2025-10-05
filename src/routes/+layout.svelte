@@ -1,8 +1,9 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import SettingsOverlay from '$lib/components/app/settings/SettingsOverlay.svelte';
-	import GuildSettingsOverlay from '$lib/components/app/settings/GuildSettingsOverlay.svelte';
+        import SettingsOverlay from '$lib/components/app/settings/SettingsOverlay.svelte';
+        import FolderSettingsOverlay from '$lib/components/app/settings/FolderSettingsOverlay.svelte';
+        import GuildSettingsOverlay from '$lib/components/app/settings/GuildSettingsOverlay.svelte';
 	import ConnectionStatusBar from '$lib/components/app/ConnectionStatusBar.svelte';
 
 	let { children } = $props();
@@ -15,5 +16,6 @@
 {@render children?.()}
 
 <SettingsOverlay />
+<FolderSettingsOverlay />
 <GuildSettingsOverlay />
 <ConnectionStatusBar />
