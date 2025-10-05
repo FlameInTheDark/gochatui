@@ -22,6 +22,7 @@
 	"general": "Allgemein",
         "appearance": "Darstellung",
         "folder_settings": "Ordner-Einstellungen",
+        "folder_settings_action": "Ordner-Einstellungen",
         "folder_settings_description": "Verwalte die Serverordner in deiner Seitenleiste.",
         "folder_settings_empty": "Du hast noch keine Ordner.",
         "folder_name": "Ordnername",

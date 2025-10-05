@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { m } from '$lib/paraglide/messages.js';
-	import { appSettings, mutateAppSettings, type GuildFolderItem } from '$lib/stores/settings';
-	import { colorIntToHex } from '$lib/utils/color';
+        import { m } from '$lib/paraglide/messages.js';
+        import { appSettings, mutateAppSettings, type GuildFolderItem } from '$lib/stores/settings';
+        import { colorIntToHex } from '$lib/utils/color';
+        import { tick } from 'svelte';
 
 	type FolderDraft = {
 		name: string;
@@ -9,7 +10,15 @@
 		error: string | null;
 	};
 
-	let drafts = $state<Record<string, FolderDraft>>({});
+        const { focusRequest } = $props<{
+                focusRequest: {
+                        folderId: string;
+                        requestId: number;
+                } | null;
+        }>();
+
+        let drafts = $state<Record<string, FolderDraft>>({});
+        let handledFocusRequestId: number | null = null;
 
 	const normalizeHex = (value: string): string => {
 		const raw = value.startsWith('#') ? value.slice(1) : value;
@@ -89,9 +98,32 @@
 		return name !== currentName || color !== currentColor;
 	};
 
-	$effect(() => {
-		ensureDraftsForFolders(folders);
-	});
+        $effect(() => {
+                ensureDraftsForFolders(folders);
+        });
+
+        $effect(() => {
+                const request = focusRequest;
+                if (!request) return;
+                if (request.requestId === handledFocusRequestId) return;
+                if (typeof document === 'undefined') return;
+                const folderExists = folders.some((folder) => folder.id === request.folderId);
+                handledFocusRequestId = request.requestId;
+                if (!folderExists) {
+                        return;
+                }
+                void (async () => {
+                        await tick();
+                        const input = document.getElementById(
+                                `folder-name-${request.folderId}`
+                        ) as HTMLInputElement | null;
+                        if (input) {
+                                input.focus();
+                                input.select();
+                                input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        }
+                })();
+        });
 </script>
 
 <section class="space-y-4">

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { settingsOpen, theme, locale } from '$lib/stores/settings';
+        import { settingsOpen, theme, locale, folderSettingsRequest } from '$lib/stores/settings';
 	import { m } from '$lib/paraglide/messages.js';
 	import ProfileEdit from '$lib/components/app/user/ProfileEdit.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
@@ -29,11 +29,24 @@
 		{ value: 'dark', label: () => m.dark() }
 	];
 
-	let category = $state<'profile' | 'general' | 'appearance' | 'folders' | 'other'>('profile');
+        let category = $state<'profile' | 'general' | 'appearance' | 'folders' | 'other'>('profile');
+        let folderFocusRequest = $state<{
+                folderId: string;
+                requestId: number;
+        } | null>(null);
 
-	function closeOverlay() {
-		settingsOpen.set(false);
-	}
+        function closeOverlay() {
+                settingsOpen.set(false);
+                folderFocusRequest = null;
+        }
+
+        $effect(() => {
+                const request = $folderSettingsRequest;
+                if (!request) return;
+                category = 'folders';
+                folderFocusRequest = request;
+                folderSettingsRequest.set(null);
+        });
 </script>
 
 <SettingsPanel bind:open={$settingsOpen} on:close={closeOverlay}>
@@ -166,8 +179,8 @@
 				{/each}
 			</div>
 		</div>
-	{:else if category === 'folders'}
-		<FolderSettings />
+        {:else if category === 'folders'}
+                <FolderSettings focusRequest={folderFocusRequest} />
 	{:else}
 		<p>{m.other()}...</p>
 	{/if}

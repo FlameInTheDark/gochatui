@@ -1,13 +1,15 @@
 <script lang="ts">
 	import type { DtoGuild } from '$lib/api';
 	import { m } from '$lib/paraglide/messages.js';
-	import {
-		appSettings,
-		createFolderWithGuilds,
-		moveFolder,
-		moveGuildToFolder,
-		moveGuildToTop
-	} from '$lib/stores/settings';
+        import {
+                appSettings,
+                createFolderWithGuilds,
+                moveFolder,
+                moveGuildToFolder,
+                moveGuildToTop,
+                settingsOpen,
+                folderSettingsRequest
+        } from '$lib/stores/settings';
 	import { auth } from '$lib/stores/auth';
 	import { guildSettingsOpen, selectedGuildId } from '$lib/stores/appState';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
@@ -344,11 +346,11 @@
 		}
 	}
 
-	function openGuildMenu(event: MouseEvent, guild: DtoGuild) {
-		event.preventDefault();
-		const gid = String((guild as any)?.id ?? '');
-		const name = String((guild as any)?.name ?? 'Server');
-		const menuItems: ContextMenuItem[] = [
+        function openGuildMenu(event: MouseEvent, guild: DtoGuild) {
+                event.preventDefault();
+                const gid = String((guild as any)?.id ?? '');
+                const name = String((guild as any)?.name ?? 'Server');
+                const menuItems: ContextMenuItem[] = [
 			{ label: m.copy_server_id(), action: () => copyToClipboard(gid) }
 		];
 		if (canAccessGuildSettings(guild)) {
@@ -364,8 +366,26 @@
 			},
 			danger: true
 		});
-		contextMenu.openFromEvent(event, menuItems);
-	}
+                contextMenu.openFromEvent(event, menuItems);
+        }
+
+        function openFolderMenu(event: MouseEvent, folder: DisplayFolder) {
+                event.preventDefault();
+                event.stopPropagation();
+                const menuItems: ContextMenuItem[] = [
+                        {
+                                label: m.folder_settings_action(),
+                                action: () => {
+                                        settingsOpen.set(true);
+                                        folderSettingsRequest.set({
+                                                folderId: folder.folder.id,
+                                                requestId: Date.now(),
+                                        });
+                                }
+                        }
+                ];
+                contextMenu.openFromEvent(event, menuItems);
+        }
 
 	function isGuildSelected(guildId: string): boolean {
 		return $selectedGuildId === guildId;
@@ -458,10 +478,11 @@
                                                         aria-label={m.guild_folder()}
                                                         ondragstart={(event) => startFolderDrag(event, item.folder.id)}
                                                         ondragend={endDrag}
-							ondragover={(event) =>
-								onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
-							ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
-							onclick={() =>
+                                                        oncontextmenu={(event) => openFolderMenu(event, item)}
+                                                        ondragover={(event) =>
+                                                                onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
+                                                        ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
+                                                        onclick={() =>
 								(expandedFolders = {
 									...expandedFolders,
 									[item.folder.id]: !expandedFolders[item.folder.id]
