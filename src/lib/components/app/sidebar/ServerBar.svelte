@@ -463,6 +463,8 @@
                                 {@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
                                 {@const folderHasUnread = item.guilds.some((g) => guildHasUnread(g.guildId))}
                                 {@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
+                                {@const folderName = item.folder.name?.trim()}
+                                {@const folderLabel = folderName ? folderName : m.guild_folder()}
                                 <div class="group relative flex flex-col items-center gap-2 rounded-2xl">
                                         <div class="relative">
                                                 <button
@@ -475,7 +477,8 @@
                                                         } ${folderHasUnread && !folderIsDropTarget && !folderHasSelection ? 'border-[var(--brand)]' : ''}`}
                                                         type="button"
                                                         draggable="true"
-                                                        aria-label={m.guild_folder()}
+                                                        title={folderLabel}
+                                                        aria-label={folderLabel}
                                                         ondragstart={(event) => startFolderDrag(event, item.folder.id)}
                                                         ondragend={endDrag}
                                                         oncontextmenu={(event) => openFolderMenu(event, item)}
