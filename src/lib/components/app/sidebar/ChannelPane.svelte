@@ -1150,16 +1150,16 @@
                                                                                 openChannelMenu(e, sec.ch);
                                                                         }}
                                                                 >
-                                                                        <div class="flex items-center gap-2 truncate">
-                                                                                <span class="opacity-70">#</span>
-                                                                                {sec.ch.name}
+                                                                        <div class="relative flex w-full items-center gap-2 truncate pl-3">
                                                                                 {#if channelUnread}
                                                                                         <span class="sr-only">{m.unread_indicator()}</span>
                                                                                         <span
                                                                                                 aria-hidden="true"
-                                                                                                class="ml-1 h-2 w-2 rounded-full bg-[var(--brand)]"
+                                                                                                class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
                                                                                         ></span>
                                                                                 {/if}
+                                                                                <span class="opacity-70">#</span>
+                                                                                {sec.ch.name}
                                                                         </div>
                                                                 </div>
                                                         </div>
@@ -1266,16 +1266,16 @@
                                                                                                 openChannelMenu(e, ch);
                                                                                         }}
                                                                                 >
-                                                                                        <div class="flex items-center gap-2 truncate">
-                                                                                                <span class="opacity-70">#</span>
-                                                                                                {ch.name}
+                                                                                        <div class="relative flex w-full items-center gap-2 truncate pl-3">
                                                                                                 {#if nestedChannelUnread}
                                                                                                         <span class="sr-only">{m.unread_indicator()}</span>
                                                                                                         <span
                                                                                                                 aria-hidden="true"
-                                                                                                                class="ml-1 h-2 w-2 rounded-full bg-[var(--brand)]"
+                                                                                                                class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
                                                                                                         ></span>
                                                                                                 {/if}
+                                                                                                <span class="opacity-70">#</span>
+                                                                                                {ch.name}
                                                                                         </div>
                                                                                 </div>
                                                                         </div>
