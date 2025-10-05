@@ -519,7 +519,9 @@
                                 >
                                         <div class="relative">
                                                 <button
-                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 pr-2 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                expandedFolders[item.folder.id] ? '' : 'pr-2'
+                                                        } ${
                                                                 folderIsDropTarget
                                                                         ? 'ring-2 ring-[var(--brand)]'
                                                                         : folderHasSelection
@@ -550,7 +552,11 @@
                                                         {#if expandedFolders[item.folder.id]}
                                                                 <Folder class="h-5 w-5" stroke-width={2} />
                                                         {:else}
-                                                                <div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
+                                                                <div
+                                                                        class={`grid h-full w-full grid-cols-2 grid-rows-2 gap-1 ${
+                                                                                folderHasUnread ? 'pr-1' : ''
+                                                                        }`}
+                                                                >
                                                                         {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
                                                                                 {@const previewUnread = guildHasUnread(guildPreview.guildId)}
                                                                                 <div
