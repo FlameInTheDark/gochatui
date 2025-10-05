@@ -18,13 +18,14 @@
         import { Folder, Plus } from 'lucide-svelte';
         import { onMount } from 'svelte';
         import { persistSelectedGuildId, selectGuild } from '$lib/utils/guildSelection';
-	import {
+        import {
                 PERMISSION_MANAGE_CHANNELS,
                 PERMISSION_MANAGE_GUILD,
                 PERMISSION_MANAGE_ROLES,
                 hasAnyGuildPermission
         } from '$lib/utils/permissions';
         import { guildUnreadSummary } from '$lib/stores/unread';
+        import { colorIntToHex } from '$lib/utils/color';
 
         const guilds = auth.guilds;
         const me = auth.user;
@@ -391,9 +392,43 @@
 		return $selectedGuildId === guildId;
 	}
 
-	function selectGuildAndPersist(id: string) {
-		selectGuild(id);
-	}
+        function selectGuildAndPersist(id: string) {
+                selectGuild(id);
+        }
+
+        function resolveFolderColor(color: GuildFolderItem['color']): string | null {
+                if (color == null) return null;
+
+                const numeric =
+                        typeof color === 'bigint'
+                                ? Number(color)
+                                : typeof color === 'string'
+                                        ? Number(color)
+                                        : typeof color === 'number'
+                                                ? color
+                                                : Number.NaN;
+
+                if (!Number.isFinite(numeric) || numeric <= 0) {
+                        return null;
+                }
+
+                return colorIntToHex(color);
+        }
+
+        function computeFolderColorTokens(color: GuildFolderItem['color']) {
+                const resolved = resolveFolderColor(color);
+                if (!resolved) {
+                        return null;
+                }
+
+                return {
+                        resolved,
+                        collapsedBorder: `color-mix(in srgb, ${resolved} 65%, transparent)`,
+                        collapsedBackground: `color-mix(in srgb, var(--panel-strong) 75%, ${resolved} 25%)`,
+                        expandedBorder: `color-mix(in srgb, ${resolved} 45%, transparent)`,
+                        expandedBackground: `color-mix(in srgb, var(--panel-strong) 85%, ${resolved} 15%)`
+                } as const;
+        }
 
 	onMount(() => {
 		const unsubscribe = guilds.subscribe((arr) => {
@@ -465,16 +500,32 @@
                                 {@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
                                 {@const folderName = item.folder.name?.trim()}
                                 {@const folderLabel = folderName ? folderName : m.guild_folder()}
-                                <div class="group relative flex flex-col items-center gap-2 rounded-2xl">
+                                {@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
+                                <div
+                                        class="group relative flex flex-col items-center gap-2 rounded-2xl"
+                                        style:--folder-collapsed-border={
+                                                folderColorTokens?.collapsedBorder ?? 'var(--stroke)'
+                                        }
+                                        style:--folder-collapsed-bg={
+                                                folderColorTokens?.collapsedBackground ?? 'var(--panel-strong)'
+                                        }
+                                        style:--folder-expanded-border={
+                                                folderColorTokens?.expandedBorder ?? 'var(--stroke)'
+                                        }
+                                        style:--folder-expanded-bg={
+                                                folderColorTokens?.expandedBackground ??
+                                                'color-mix(in srgb, var(--panel-strong) 70%, transparent)'
+                                        }
+                                >
                                         <div class="relative">
                                                 <button
-                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                 folderIsDropTarget
                                                                         ? 'ring-2 ring-[var(--brand)]'
                                                                         : folderHasSelection
                                                                                 ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
                                                                                 : ''
-                                                        } ${folderHasUnread && !folderIsDropTarget && !folderHasSelection ? 'border-[var(--brand)]' : ''}`}
+                                                        }`}
                                                         type="button"
                                                         draggable="true"
                                                         title={folderLabel}
@@ -486,11 +537,16 @@
                                                                 onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
                                                         ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
                                                         onclick={() =>
-								(expandedFolders = {
-									...expandedFolders,
-									[item.folder.id]: !expandedFolders[item.folder.id]
-								})}
-						>
+                                                                (expandedFolders = {
+                                                                        ...expandedFolders,
+                                                                        [item.folder.id]: !expandedFolders[item.folder.id]
+                                                                })}
+                                                        style:--folder-collapsed-border={
+                                                                folderHasUnread && !folderIsDropTarget && !folderHasSelection
+                                                                        ? 'var(--brand)'
+                                                                        : null
+                                                        }
+                                                >
                                                         {#if expandedFolders[item.folder.id]}
                                                                 <Folder class="h-5 w-5" stroke-width={2} />
                                                         {:else}
@@ -530,10 +586,9 @@
                                         </div>
 
 					{#if expandedFolders[item.folder.id]}
-						<div
-							class="flex flex-col items-center gap-2 rounded-2xl border border-[var(--stroke)] p-2"
-							style:background="color-mix(in srgb, var(--panel-strong) 70%, transparent)"
-						>
+                                                <div
+                                                        class="flex flex-col items-center gap-2 rounded-2xl border border-[var(--folder-expanded-border)] bg-[var(--folder-expanded-bg)] p-2"
+                                                >
 							<div
 								class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 									folderDropTarget?.folderId === item.folder.id && folderDropTarget.index === 0
