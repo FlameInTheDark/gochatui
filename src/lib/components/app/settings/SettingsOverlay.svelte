@@ -3,6 +3,7 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import ProfileEdit from '$lib/components/app/user/ProfileEdit.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
+	import FolderSettings from '$lib/components/app/settings/FolderSettings.svelte';
 	import type { Theme, Locale } from '$lib/stores/settings';
 
 	type LanguageOption = {
@@ -28,7 +29,7 @@
 		{ value: 'dark', label: () => m.dark() }
 	];
 
-	let category = $state<'profile' | 'general' | 'appearance' | 'other'>('profile');
+	let category = $state<'profile' | 'general' | 'appearance' | 'folders' | 'other'>('profile');
 
 	function closeOverlay() {
 		settingsOpen.set(false);
@@ -60,6 +61,14 @@
 			onclick={() => (category = 'appearance')}
 		>
 			{m.appearance()}
+		</button>
+		<button
+			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'folders'
+				? 'bg-[var(--panel)] font-semibold'
+				: ''}"
+			onclick={() => (category = 'folders')}
+		>
+			{m.folder_settings()}
 		</button>
 		<button
 			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'other'
@@ -157,6 +166,8 @@
 				{/each}
 			</div>
 		</div>
+	{:else if category === 'folders'}
+		<FolderSettings />
 	{:else}
 		<p>{m.other()}...</p>
 	{/if}
