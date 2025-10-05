@@ -565,13 +565,6 @@
                                                                                         } ${previewUnread ? 'border-[var(--brand)] bg-[var(--brand)]/10' : ''}`}
                                                                                 >
                                                                                         {guildInitials(guildPreview.guild)}
-                                                                                        {#if previewUnread}
-                                                                                                <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                                <span
-                                                                                                        aria-hidden="true"
-                                                                                                        class="absolute -left-1.5 top-1/2 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-                                                                                                ></span>
-                                                                                        {/if}
                                                                                 </div>
                                                                         {/each}
 									{#if item.guilds.length < 4}
