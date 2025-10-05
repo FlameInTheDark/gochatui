@@ -2,7 +2,7 @@
         import { m } from '$lib/paraglide/messages.js';
         import { appSettings, mutateAppSettings, type GuildFolderItem } from '$lib/stores/settings';
         import { colorIntToHex } from '$lib/utils/color';
-        import { tick } from 'svelte';
+        import { tick, untrack } from 'svelte';
 
 	type FolderDraft = {
 		name: string;
@@ -39,18 +39,44 @@
 		return null;
 	};
 
-	const ensureDraftsForFolders = (folders: GuildFolderItem[]) => {
-		const next: Record<string, FolderDraft> = {};
-		for (const folder of folders) {
-			const existing = drafts[folder.id];
-			next[folder.id] = {
-				name: existing?.name ?? folder.name ?? '',
-				color: existing?.color ?? colorIntToHex(folder.color),
-				error: existing?.error ?? null
-			};
-		}
-		drafts = next;
-	};
+        const ensureDraftsForFolders = (folders: GuildFolderItem[]) => {
+                const currentDrafts = untrack(() => drafts);
+                const next: Record<string, FolderDraft> = {};
+                let changed = false;
+
+                for (const folder of folders) {
+                        const existing = currentDrafts[folder.id];
+                        const computed: FolderDraft = {
+                                name: existing?.name ?? folder.name ?? '',
+                                color: existing?.color ?? colorIntToHex(folder.color),
+                                error: existing?.error ?? null
+                        };
+
+                        if (
+                                !existing ||
+                                existing.name !== computed.name ||
+                                existing.color !== computed.color ||
+                                existing.error !== computed.error
+                        ) {
+                                changed = true;
+                        }
+
+                        next[folder.id] = computed;
+                }
+
+                if (!changed) {
+                        for (const key of Object.keys(currentDrafts)) {
+                                if (!(key in next)) {
+                                        changed = true;
+                                        break;
+                                }
+                        }
+                }
+
+                if (changed) {
+                        drafts = next;
+                }
+        };
 
 	const saveFolder = (folder: GuildFolderItem) => {
 		const draft = drafts[folder.id];
