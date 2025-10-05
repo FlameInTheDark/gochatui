@@ -9,6 +9,7 @@
                 messageJumpRequest
         } from '$lib/stores/appState';
         import MessageItem from './MessageItem.svelte';
+        import { applyMessageEventToList } from './messageEventHandlers';
         import { wsEvent } from '$lib/client/ws';
         import { m } from '$lib/paraglide/messages.js';
         import { fly } from 'svelte/transition';
@@ -637,36 +638,26 @@
                 loadLatest();
         }
 
-	$effect(() => {
-		const ev: any = $wsEvent;
-		if (!ev || ev.op !== 0) return;
-		untrack(() => {
-			const d = ev.d || {};
-			if (d.message) {
-				const incoming = d.message as DtoMessage & { author_id?: any };
-				if (!incoming.channel_id || String((incoming as any).channel_id) !== $selectedChannelId)
-					return;
-				if (!incoming.author && (incoming as any).author_id) {
-					(incoming as any).author = (incoming as any).author_id;
-				}
-				const stick = wasAtBottom;
-				const idx = messages.findIndex(
-					(m) => String((m as any).id) === String((incoming as any).id)
-				);
-				if (idx >= 0) {
-					messages[idx] = { ...messages[idx], ...incoming };
-					messages = [...messages];
-				} else {
-					messages = [...messages, incoming];
-					if (stick) scrollToBottom(true);
-					else newCount += 1;
-				}
-			} else if (d.message_id) {
-				if (String(d.channel_id ?? '') !== $selectedChannelId) return;
-				messages = messages.filter((m) => String((m as any).id) !== String(d.message_id));
-			}
-		});
-	});
+        $effect(() => {
+                const ev: any = $wsEvent;
+                if (!ev || ev.op !== 0) return;
+                untrack(() => {
+                        const result = applyMessageEventToList({
+                                event: ev,
+                                currentMessages: messages,
+                                selectedChannelId: $selectedChannelId,
+                                wasAtBottom
+                        });
+                        if (!result) return;
+                        messages = result.messages;
+                        if (result.newCountDelta !== 0) {
+                                newCount = Math.max(0, newCount + result.newCountDelta);
+                        }
+                        if (result.shouldScrollToBottom) {
+                                scrollToBottom(true);
+                        }
+                });
+        });
 </script>
 
 <div
