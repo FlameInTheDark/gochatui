@@ -22,6 +22,7 @@
 	"general": "Général",
         "appearance": "Apparence",
         "folder_settings": "Paramètres des dossiers",
+        "folder_settings_action": "Paramètres des dossiers",
         "folder_settings_description": "Gérez les dossiers de serveurs affichés dans votre barre latérale.",
         "folder_settings_empty": "Vous n'avez encore aucun dossier.",
         "folder_name": "Nom du dossier",

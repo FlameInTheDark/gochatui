@@ -55,6 +55,7 @@
         "general": "Общие",
         "appearance": "Оформление",
         "folder_settings": "Настройки папок",
+        "folder_settings_action": "Настройки папки",
         "folder_settings_description": "Управляйте папками серверов в боковой панели.",
         "folder_settings_empty": "У вас пока нет папок.",
         "folder_name": "Название папки",

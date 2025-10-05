@@ -167,6 +167,13 @@ export const guildChannelReadStateLookup = derived(appSettings, ($settings) => {
         return lookup;
 });
 export const settingsOpen = writable(false);
+export const folderSettingsRequest = writable<
+        | {
+                folderId: string;
+                requestId: number;
+        }
+        | null
+>(null);
 export const settingsReady = writable(false);
 export const settingsSaving = writable(false);
 
@@ -464,7 +471,7 @@ function convertToApi(settings: AppSettings): ModelUserSettingsData {
 			chat_spacing: settings.chatSpacing
 		},
 		guilds: payloadGuilds,
-		guild_folders: payloadFolders as unknown as ModelUserSettingsGuildFolders,
+                guild_folders: payloadFolders as unknown as ModelUserSettingsGuildFolders[],
 		selected_guild: settings.selectedGuildId ? toApiSnowflake(settings.selectedGuildId) : undefined
 	};
 }

@@ -55,6 +55,7 @@
 	"general": "General",
         "appearance": "Appearance",
         "folder_settings": "Folder settings",
+        "folder_settings_action": "Folder settings",
         "folder_settings_description": "Manage server folders shown in your sidebar.",
         "folder_settings_empty": "You don't have any folders yet.",
         "folder_name": "Folder name",
