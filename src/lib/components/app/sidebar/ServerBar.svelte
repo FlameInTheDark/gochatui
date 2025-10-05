@@ -554,7 +554,7 @@
                                                         {:else}
                                                                 <div
                                                                         class={`grid h-full w-full grid-cols-2 grid-rows-2 gap-1 ${
-                                                                                folderHasUnread ? 'pr-1' : ''
+                                                                                folderHasUnread ? 'pl-1' : ''
                                                                         }`}
                                                                 >
                                                                         {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
