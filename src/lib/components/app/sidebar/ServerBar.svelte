@@ -470,7 +470,7 @@
                                 {@const guildUnread = guildHasUnread(item.guildId)}
                                 <div class="group relative flex justify-center">
                                         <button
-                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] pl-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                                 } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
                                                 title={item.guild.name}
@@ -554,7 +554,7 @@
                                                                         {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
                                                                                 {@const previewUnread = guildHasUnread(guildPreview.guildId)}
                                                                                 <div
-                                                                                        class={`relative flex items-center justify-center rounded-lg border border-[var(--stroke)] bg-[var(--panel)] pl-1 text-xs font-semibold ${
+                                                                                        class={`relative flex items-center justify-center rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
                                                                                                 guildPreview.guildId === $selectedGuildId ? 'border-[var(--brand)]' : ''
                                                                                         } ${previewUnread ? 'border-[var(--brand)] bg-[var(--brand)]/10' : ''}`}
                                                                                 >
@@ -603,7 +603,7 @@
                                                                 {@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
                                                                 <div class="group relative flex justify-center">
                                                                         <button
-                                                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] pl-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                                         isGuildSelected(nestedGuild.guildId)
                                                                                                 ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
                                                                                                 : ''
