@@ -519,7 +519,7 @@
                                 >
                                         <div class="relative">
                                                 <button
-                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 pl-2 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 pr-2 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                 folderIsDropTarget
                                                                         ? 'ring-2 ring-[var(--brand)]'
                                                                         : folderHasSelection
