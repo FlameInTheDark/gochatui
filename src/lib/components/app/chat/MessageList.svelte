@@ -676,25 +676,11 @@
                 recordReadState();
         }}
 >
-	<div
-		class="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--stroke)] bg-[var(--bg)]/70 px-3 py-2 backdrop-blur"
-	>
-		<div class="text-xs text-[var(--muted)]">
-			{endReached ? m.start_of_history() : m.load_older_messages()}
-		</div>
-		<button
-			class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 text-sm disabled:opacity-50"
-			disabled={loading || endReached}
-			onclick={loadMore}
-		>
-			{loading ? m.loading() : m.load_older()}
-		</button>
-	</div>
-	{#if error}
-		<div class="border-b border-[var(--stroke)] bg-[var(--panel)] px-4 py-2 text-sm text-red-500">
-			{error}
-		</div>
-	{/if}
+        {#if error}
+                <div class="border-b border-[var(--stroke)] bg-[var(--panel)] px-4 py-2 text-sm text-red-500">
+                        {error}
+                </div>
+        {/if}
 	{#if endReached && initialLoaded}
 		{@const name = channelDisplayName()}
 		{@const topic = channelTopic()}
