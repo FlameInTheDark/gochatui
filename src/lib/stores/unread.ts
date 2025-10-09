@@ -166,7 +166,6 @@ function clearChannelsWithoutUnreadEvidence() {
                                         (channel as any)?.last_message
                         );
                         if (!lastMessageId) {
-                                clearChannelUnread(guildId, channelId);
                                 continue;
                         }
                         const lastRead = readStates?.[channelId]?.lastReadMessageId ?? null;

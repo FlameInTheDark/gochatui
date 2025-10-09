@@ -151,4 +151,57 @@ describe('settings unread snapshot integration', () => {
                 expect(userMeSettingsGet).toHaveBeenCalled();
                 expect(get(unreadChannelsByGuild)).toEqual({});
         });
+
+        it('retains unread entries even when channel metadata lacks last_message_id', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                guilds_last_messages: null,
+                                settings: null
+                        }
+                });
+
+                const { channelsByGuild } = await import('$lib/stores/appState');
+                channelsByGuild.set({
+                        '111': [
+                                {
+                                        id: '222',
+                                        type: 0,
+                                        last_message_id: null
+                                }
+                        ]
+                } as any);
+
+                const { unreadChannelsByGuild, markChannelUnread } = await import('$lib/stores/unread');
+                const { auth } = await import('$lib/stores/auth');
+                await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                markChannelUnread('111', '222', '555');
+
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                channelsByGuild.set({
+                        '111': [
+                                {
+                                        id: '222',
+                                        type: 0,
+                                        last_message_id: null
+                                }
+                        ]
+                } as any);
+
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(get(unreadChannelsByGuild)).toEqual({
+                        '111': {
+                                '222': {
+                                        latestMessageId: '555'
+                                }
+                        }
+                });
+        });
 });
