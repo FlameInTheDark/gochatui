@@ -1,6 +1,7 @@
 import { derived, get, writable } from 'svelte/store';
-import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
-import { guildChannelReadStateLookup } from '$lib/stores/settings';
+import type { DtoChannel } from '$lib/api';
+import { channelsByGuild, selectedChannelId, selectedGuildId } from '$lib/stores/appState';
+import { guildChannelReadStateLookup, type GuildChannelReadStateLookup } from '$lib/stores/settings';
 
 interface ChannelUnreadEntry {
         latestMessageId: string;
@@ -50,6 +51,11 @@ function isMessageNewer(messageId: string | null, lastRead: string | null): bool
 }
 
 const unreadChannelsInternal = writable<UnreadState>({});
+
+const MISSING_READ_STATE_PLACEHOLDER_ID = '0';
+
+let latestChannelsByGuild: Record<string, DtoChannel[]> = {};
+let latestReadStateLookup: GuildChannelReadStateLookup | undefined;
 
 export const unreadChannelsByGuild = derived(unreadChannelsInternal, ($unread) => {
         const result: UnreadState = {};
@@ -143,7 +149,23 @@ export function acknowledgeChannelRead(
         clearChannelUnread(guildId, channelId);
 }
 
+function markChannelsWithoutReadStates() {
+        if (!latestChannelsByGuild) return;
+        for (const [guildId, channels] of Object.entries(latestChannelsByGuild)) {
+                if (!guildId) continue;
+                const readStates = latestReadStateLookup?.[guildId] ?? {};
+                for (const channel of channels ?? []) {
+                        if ((channel as any)?.type !== 0) continue;
+                        const channelId = normalizeId((channel as any)?.id);
+                        if (!channelId) continue;
+                        if (readStates?.[channelId]) continue;
+                        markChannelUnread(guildId, channelId, MISSING_READ_STATE_PLACEHOLDER_ID);
+                }
+        }
+}
+
 guildChannelReadStateLookup.subscribe((lookup) => {
+        latestReadStateLookup = lookup;
         updateState((state) => {
                 let changed = false;
                 const nextState: UnreadState = {};
@@ -166,6 +188,7 @@ guildChannelReadStateLookup.subscribe((lookup) => {
                 }
                 return { next: changed ? nextState : state, changed };
         });
+        markChannelsWithoutReadStates();
 });
 
 selectedChannelId.subscribe((cid) => {
@@ -180,4 +203,9 @@ selectedGuildId.subscribe((gid) => {
         if (gid && cid) {
                 clearChannelUnread(gid, cid);
         }
+});
+
+channelsByGuild.subscribe((map) => {
+        latestChannelsByGuild = map ?? {};
+        markChannelsWithoutReadStates();
 });
