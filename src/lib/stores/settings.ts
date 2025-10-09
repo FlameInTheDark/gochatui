@@ -123,6 +123,7 @@ const defaultSettings: AppSettings = {
 
 export const appSettings = writable<AppSettings>(defaultSettings);
 export type GuildChannelReadStateLookup = Record<string, Record<string, GuildChannelReadState>>;
+export type ChannelGuildLookup = Record<string, string>;
 
 function collectReadStatesFromGuild(
         lookup: GuildChannelReadStateLookup,
@@ -279,6 +280,77 @@ function buildReadStateLookupFromLayout(layout: GuildLayoutItem[]): GuildChannel
         return lookup;
 }
 
+function buildChannelGuildLookupFromSnapshot(snapshot: unknown): ChannelGuildLookup {
+        const lookup: ChannelGuildLookup = {};
+        if (snapshot == null) {
+                return lookup;
+        }
+
+        const recordChannel = (guildId: string | null, channelValue: unknown) => {
+                if (!guildId) return;
+                const channelId = toSnowflakeString(channelValue);
+                if (!channelId || !/^\d+$/.test(channelId)) return;
+                lookup[channelId] = guildId;
+        };
+
+        const processChannelContainer = (guildId: string | null, container: unknown) => {
+                if (!guildId || container == null) return;
+
+                if (container instanceof Map) {
+                        for (const key of container.keys()) {
+                                recordChannel(guildId, key);
+                        }
+                        return;
+                }
+
+                if (Array.isArray(container)) {
+                        for (const entry of container) {
+                                if (Array.isArray(entry) && entry.length) {
+                                        recordChannel(guildId, entry[0]);
+                                        continue;
+                                }
+                                if (entry && typeof entry === 'object') {
+                                        const obj = entry as Record<string, unknown>;
+                                        recordChannel(
+                                                guildId,
+                                                obj['channel_id'] ??
+                                                        obj['channelId'] ??
+                                                        (obj['channel'] as any)?.id ??
+                                                        obj['channel'] ??
+                                                        obj['id']
+                                        );
+                                }
+                        }
+                        return;
+                }
+
+                if (typeof container === 'object') {
+                        for (const [channelKey] of Object.entries(container as Record<string, unknown>)) {
+                                recordChannel(guildId, channelKey);
+                        }
+                }
+        };
+
+        if (snapshot instanceof Map) {
+                for (const [guildKey, channels] of snapshot.entries()) {
+                        const guildId = toSnowflakeString(guildKey);
+                        if (!guildId || !/^\d+$/.test(guildId)) continue;
+                        processChannelContainer(guildId, channels);
+                }
+                return lookup;
+        }
+
+        if (typeof snapshot === 'object') {
+                for (const [guildKey, channels] of Object.entries(snapshot as Record<string, unknown>)) {
+                        const guildId = toSnowflakeString(guildKey);
+                        if (!guildId || !/^\d+$/.test(guildId)) continue;
+                        processChannelContainer(guildId, channels);
+                }
+        }
+
+        return lookup;
+}
+
 function parseReadStateKey(key: string | null | undefined): { guildId: string; channelId: string } | null {
         if (typeof key !== 'string') return null;
         const trimmed = key.trim();
@@ -290,10 +362,11 @@ function parseReadStateKey(key: string | null | undefined): { guildId: string; c
         return { guildId, channelId };
 }
 
-function applyReadStatesMapToLayout(
+export function applyReadStatesMapToLayout(
         layout: GuildLayoutItem[],
         readStateMap: Record<string, unknown> | undefined,
-        previousLayout: GuildLayoutItem[] | undefined
+        previousLayout: GuildLayoutItem[] | undefined,
+        channelGuildLookup?: ChannelGuildLookup
 ) {
         if (!layout.length && !readStateMap) return;
 
@@ -329,8 +402,17 @@ function applyReadStatesMapToLayout(
         if (readStateMap) {
                 for (const [key, value] of Object.entries(readStateMap)) {
                         const parsedKey = parseReadStateKey(key);
-                        if (!parsedKey) continue;
-                        const { guildId, channelId } = parsedKey;
+                        let guildId = parsedKey?.guildId ? toSnowflakeString(parsedKey.guildId) : null;
+                        let channelId = parsedKey?.channelId ? toSnowflakeString(parsedKey.channelId) : null;
+                        if (!channelId) {
+                                channelId = toSnowflakeString(key);
+                        }
+                        if (!guildId && channelId && channelGuildLookup) {
+                                const mappedGuildId = toSnowflakeString(channelGuildLookup[channelId]);
+                                if (mappedGuildId) {
+                                        guildId = mappedGuildId;
+                                }
+                        }
                         const lastRead = toSnowflakeString(value);
                         if (!guildId || !channelId) continue;
                         let guildMap = combined.get(guildId);
@@ -902,13 +984,15 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         (responseData as any)?.channel_last_messages ??
                         (responseData as any)?.last_messages ??
                         null;
+                const channelGuildLookup = buildChannelGuildLookupFromSnapshot(lastMessageSnapshot);
                 if (response.status === 204 || !response.data?.settings) {
                         suppressSave = true;
                         const next = { ...defaultSettings, language: get(locale), theme: get(theme) };
                         applyReadStatesMapToLayout(
                                 next.guildLayout,
                                 responseData?.read_states,
-                                previousSettings.guildLayout
+                                previousSettings.guildLayout,
+                                channelGuildLookup
                         );
                         appSettings.set(next);
                         applySelectedGuildFromSettings(false);
@@ -918,7 +1002,8 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         applyReadStatesMapToLayout(
                                 parsed.guildLayout,
                                 responseData.read_states,
-                                previousSettings.guildLayout
+                                previousSettings.guildLayout,
+                                channelGuildLookup
                         );
                         suppressSave = true;
                         suppressThemePropagation = true;
