@@ -53,8 +53,6 @@ function isMessageNewer(messageId: string | null, lastRead: string | null): bool
 
 const unreadChannelsInternal = writable<UnreadState>({});
 
-const MISSING_READ_STATE_PLACEHOLDER_ID = '0';
-
 let latestChannelsByGuild: Record<string, DtoChannel[]> = {};
 let latestReadStateLookup: GuildChannelReadStateLookup | undefined;
 
@@ -150,7 +148,7 @@ export function acknowledgeChannelRead(
         clearChannelUnread(guildId, channelId);
 }
 
-function markChannelsWithoutReadStates() {
+function clearChannelsWithoutUnreadEvidence() {
         if (!latestChannelsByGuild) return;
         for (const [guildId, channels] of Object.entries(latestChannelsByGuild)) {
                 if (!guildId) continue;
@@ -159,8 +157,22 @@ function markChannelsWithoutReadStates() {
                         if ((channel as any)?.type !== 0) continue;
                         const channelId = normalizeId((channel as any)?.id);
                         if (!channelId) continue;
-                        if (readStates?.[channelId]) continue;
-                        markChannelUnread(guildId, channelId, MISSING_READ_STATE_PLACEHOLDER_ID);
+                        const lastMessageId = normalizeId(
+                                (channel as any)?.last_message_id ??
+                                        (channel as any)?.lastMessageId ??
+                                        (channel as any)?.lastMessage?.id ??
+                                        (channel as any)?.last_message?.id ??
+                                        (channel as any)?.lastMessage ??
+                                        (channel as any)?.last_message
+                        );
+                        if (!lastMessageId) {
+                                clearChannelUnread(guildId, channelId);
+                                continue;
+                        }
+                        const lastRead = readStates?.[channelId]?.lastReadMessageId ?? null;
+                        if (!isMessageNewer(lastMessageId, lastRead)) {
+                                clearChannelUnread(guildId, channelId);
+                        }
                 }
         }
 }
@@ -349,12 +361,12 @@ function buildUnreadStateFromSnapshot(snapshot: unknown): UnreadState {
 function applyLastMessageSnapshot(snapshot: unknown) {
         if (snapshot == null) {
                 unreadChannelsInternal.set({});
-                markChannelsWithoutReadStates();
+                clearChannelsWithoutUnreadEvidence();
                 return;
         }
         const nextState = buildUnreadStateFromSnapshot(snapshot);
         unreadChannelsInternal.set(nextState);
-        markChannelsWithoutReadStates();
+        clearChannelsWithoutUnreadEvidence();
 }
 
 guildChannelReadStateLookup.subscribe((lookup) => {
@@ -381,7 +393,7 @@ guildChannelReadStateLookup.subscribe((lookup) => {
                 }
                 return { next: changed ? nextState : state, changed };
         });
-        markChannelsWithoutReadStates();
+        clearChannelsWithoutUnreadEvidence();
 });
 
 unreadSnapshot.subscribe((snapshot) => {
@@ -404,5 +416,5 @@ selectedGuildId.subscribe((gid) => {
 
 channelsByGuild.subscribe((map) => {
         latestChannelsByGuild = map ?? {};
-        markChannelsWithoutReadStates();
+        clearChannelsWithoutUnreadEvidence();
 });
