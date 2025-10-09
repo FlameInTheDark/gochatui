@@ -975,6 +975,8 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         null;
                 auth.ingestGuilds(guildListRaw);
                 const lastMessageSnapshot =
+                        (responseData as any)?.guilds_last_messages ??
+                        (responseData as any)?.guilds_last_message_ids ??
                         (responseData as any)?.guild_channel_last_messages ??
                         (responseData as any)?.guild_channels_last_messages ??
                         (responseData as any)?.guild_channel_last_message_ids ??
