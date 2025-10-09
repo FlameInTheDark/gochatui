@@ -44,11 +44,14 @@ vi.mock('$lib/stores/auth', () => {
 
 describe('settings unread snapshot integration', () => {
         beforeEach(async () => {
+                vi.resetModules();
                 userMeSettingsGet.mockReset();
                 userMeSettingsPost.mockReset();
                 const { auth } = await import('$lib/stores/auth');
                 auth.token.set(null);
                 auth.guilds.set([]);
+                const { channelsByGuild } = await import('$lib/stores/appState');
+                channelsByGuild.set({});
                 const { updateUnreadSnapshot } = await import('$lib/stores/unreadSeed');
                 updateUnreadSnapshot(null);
         });
@@ -83,5 +86,37 @@ describe('settings unread snapshot integration', () => {
 
                 expect(userMeSettingsGet).toHaveBeenCalledTimes(1);
                 expect(get(unreadSnapshot)).toEqual(guildsLastMessages);
+        });
+
+        it('treats channels without a last message as read when read state is missing', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                guilds_last_messages: { '111': {} },
+                                settings: null
+                        }
+                });
+
+                const { channelsByGuild } = await import('$lib/stores/appState');
+                channelsByGuild.set({
+                        '111': [
+                                {
+                                        id: '222',
+                                        type: 0,
+                                        last_message_id: null
+                                }
+                        ]
+                } as any);
+
+                const { unreadChannelsByGuild } = await import('$lib/stores/unread');
+                const { auth } = await import('$lib/stores/auth');
+                await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(userMeSettingsGet).toHaveBeenCalled();
+                expect(get(unreadChannelsByGuild)).toEqual({});
         });
 });
