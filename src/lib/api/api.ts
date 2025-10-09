@@ -267,6 +267,12 @@ export interface DtoChannel {
      */
     'id'?: number;
     /**
+     * ID of the last message in the channel
+     * @type {number}
+     * @memberof DtoChannel
+     */
+    'last_message_id'?: number;
+    /**
      * Channel name, without spaces
      * @type {string}
      * @memberof DtoChannel
@@ -1245,6 +1251,18 @@ export interface UserModifyUserRequest {
  * @interface UserUserSettingsResponse
  */
 export interface UserUserSettingsResponse {
+    /**
+     * 
+     * @type {Array<DtoGuild>}
+     * @memberof UserUserSettingsResponse
+     */
+    'guilds'?: Array<DtoGuild>;
+    /**
+     * 
+     * @type {{ [key: string]: { [key: string]: number; }; }}
+     * @memberof UserUserSettingsResponse
+     */
+    'guilds_last_messages'?: { [key: string]: { [key: string]: number; }; };
     /**
      * 
      * @type {{ [key: string]: number; }}
