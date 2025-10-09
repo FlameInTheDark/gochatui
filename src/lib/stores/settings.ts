@@ -635,6 +635,21 @@ export function mutateAppSettings(mutator: SettingsMutator) {
         });
 }
 
+export function mutateAppSettingsWithoutSaving(mutator: SettingsMutator) {
+        const previousSuppressSave = suppressSave;
+        suppressSave = true;
+        try {
+                appSettings.update((current) => {
+                        const cloned = cloneSettings(current);
+                        const changed = mutator(cloned);
+                        if (!changed) return current;
+                        return cloned;
+                });
+        } finally {
+                suppressSave = previousSuppressSave;
+        }
+}
+
 function findGuildLayoutGuild(layout: GuildLayoutItem[], guildId: string): GuildLayoutGuild | null {
         for (const item of layout) {
                 if (item.kind === 'guild') {
