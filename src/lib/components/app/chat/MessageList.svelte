@@ -16,12 +16,14 @@
         import { onDestroy, onMount, tick, untrack } from 'svelte';
         import { Sparkles } from 'lucide-svelte';
         import {
+                guildChannelReadStateLookup,
                 mutateAppSettings,
                 type GuildChannelReadState,
                 type GuildLayoutGuild,
                 type GuildLayoutItem
         } from '$lib/stores/settings';
         import { acknowledgeChannelRead } from '$lib/stores/unread';
+        import { isMessageNewer } from './readStateUtils';
 
 	let messages = $state<DtoMessage[]>([]);
 	let loading = $state(false);
@@ -58,6 +60,7 @@
         let activeChannelId: string | null = null;
         let previousChannelKey: string | null = null;
         let lastVisibleMessageId = $state<string | null>(null);
+        let activeChannelReadMarker = $state<string | null>(null);
 
         const ACK_DEBOUNCE_MS = 2_000;
         let ackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -188,6 +191,12 @@
                                         lastReadMessageId: state.lastReadMessageId,
                                         scrollPosition: state.scrollPosition
                                 });
+                                if (
+                                        state.guildId === (activeGuildId ?? '') &&
+                                        state.channelId === (activeChannelId ?? '')
+                                ) {
+                                        activeChannelReadMarker = state.lastReadMessageId ?? null;
+                                }
                                 acknowledgeChannelRead(state.guildId, state.channelId);
                         }
                         dirtyGuilds.delete(guildId);
@@ -220,6 +229,29 @@
                 scheduledAckKey = key;
         }
 
+        function updateReadMarkersAfterAck(guildId: string, channelId: string, messageId: string) {
+                if (!guildId || !channelId || !messageId) return;
+                const key = `${guildId}:${channelId}`;
+                const pending = pendingReadStates.get(key);
+                const persisted = lastPersistedReadStates.get(key);
+                const scrollPosition = pending?.scrollPosition ?? persisted?.scrollPosition ?? 0;
+                const nextPending: PendingReadState = {
+                        guildId,
+                        channelId,
+                        lastReadMessageId: messageId,
+                        scrollPosition
+                };
+                pendingReadStates.set(key, nextPending);
+                lastPersistedReadStates.set(key, {
+                        lastReadMessageId: messageId,
+                        scrollPosition
+                });
+                dirtyGuilds.add(guildId);
+                if (guildId === (activeGuildId ?? '') && channelId === (activeChannelId ?? '')) {
+                        activeChannelReadMarker = messageId;
+                }
+        }
+
         async function runAck(
                 guildId: string,
                 channelId: string,
@@ -244,6 +276,7 @@
                         }
                         if (success) {
                                 lastAckedKey = key;
+                                updateReadMarkersAfterAck(guildId, channelId, messageId);
                                 if (guildId) {
                                         acknowledgeChannelRead(guildId, channelId);
                                 }
@@ -303,8 +336,24 @@
                         ackInFlightKey = null;
                         lastAckedKey = null;
                         lastVisibleMessageId = null;
+                        activeChannelReadMarker = null;
                 }
                 previousChannelKey = key;
+        });
+
+        $effect(() => {
+                const gid = activeGuildId ?? '';
+                const cid = activeChannelId ?? '';
+                const lookup = $guildChannelReadStateLookup;
+                if (!gid || !cid) {
+                        activeChannelReadMarker = null;
+                        return;
+                }
+                const key = `${gid}:${cid}`;
+                const persisted = lastPersistedReadStates.get(key);
+                const nextMarker =
+                        persisted?.lastReadMessageId ?? lookup?.[gid]?.[cid]?.lastReadMessageId ?? null;
+                activeChannelReadMarker = nextMarker;
         });
 
         $effect(() => {
@@ -312,7 +361,16 @@
                 const messageId = lastVisibleMessageId;
                 const gid = $selectedGuildId ?? '';
                 const cid = $selectedChannelId ?? '';
+                const lookup = $guildChannelReadStateLookup;
                 if (!atBottom || !gid || !cid || !messageId) {
+                        clearAckTimer();
+                        return;
+                }
+                const key = `${gid}:${cid}`;
+                const persisted = lastPersistedReadStates.get(key);
+                const lastReadMarker =
+                        persisted?.lastReadMessageId ?? lookup?.[gid]?.[cid]?.lastReadMessageId ?? activeChannelReadMarker;
+                if (!isMessageNewer(messageId, lastReadMarker)) {
                         clearAckTimer();
                         return;
                 }
