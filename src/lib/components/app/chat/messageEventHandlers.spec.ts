@@ -117,6 +117,26 @@ describe('applyMessageEventToList', () => {
                 expect(result).toBeNull();
         });
 
+        it('ignores ack confirmation frames with message_id when t=320', () => {
+                const event = {
+                        op: 0,
+                        t: 320,
+                        d: {
+                                channel_id: '10',
+                                message_id: '1'
+                        }
+                };
+
+                const result = applyMessageEventToList({
+                        event,
+                        currentMessages: [baseMessage()],
+                        selectedChannelId: '10',
+                        wasAtBottom: false
+                });
+
+                expect(result).toBeNull();
+        });
+
         it('scrolls to bottom when sticking to the latest message', () => {
                 const event = {
                         op: 0,

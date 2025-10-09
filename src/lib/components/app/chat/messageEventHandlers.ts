@@ -29,6 +29,10 @@ export interface MessageEventResult {
         shouldScrollToBottom: boolean;
 }
 
+const MESSAGE_DELETE_EVENT_TYPE = 102;
+const MESSAGE_UNREAD_INDICATOR_EVENT_TYPE = 300;
+const MESSAGE_ACK_EVENT_TYPE = 320;
+
 export function applyMessageEventToList({
         event,
         currentMessages,
@@ -75,7 +79,13 @@ export function applyMessageEventToList({
         }
 
         if (payload?.message_id) {
-                if (eventType === 300) return null;
+                const isDeleteEvent = eventType === MESSAGE_DELETE_EVENT_TYPE;
+                const isUnreadIndicator = eventType === MESSAGE_UNREAD_INDICATOR_EVENT_TYPE;
+                const isAckConfirmation = eventType === MESSAGE_ACK_EVENT_TYPE;
+
+                if (!isDeleteEvent || isUnreadIndicator || isAckConfirmation) {
+                        return null;
+                }
 
                 const messageId = normalizeSnowflake(payload.message_id);
                 const channelId = normalizeSnowflake(payload.channel_id);
