@@ -17,7 +17,7 @@
         import { Sparkles } from 'lucide-svelte';
         import {
                 guildChannelReadStateLookup,
-                mutateAppSettings,
+                mutateAppSettingsWithoutSaving,
                 type GuildChannelReadState,
                 type GuildLayoutGuild,
                 type GuildLayoutItem
@@ -149,7 +149,7 @@
                         dirtyGuilds.clear();
                         return;
                 }
-                mutateAppSettings((settings) => {
+                mutateAppSettingsWithoutSaving((settings) => {
                         let changed = false;
                         for (const [guildId, states] of updatesByGuild) {
                                 const entry = findGuildLayoutEntry(settings.guildLayout, guildId);
