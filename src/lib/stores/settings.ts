@@ -1,7 +1,6 @@
 import { browser } from '$app/environment';
 import {
         type DtoGuild,
-        type ModelGuildChannelReadState,
         type ModelUserSettingsData,
         type ModelUserSettingsGuildFolders,
         type ModelUserSettingsGuilds,
@@ -269,43 +268,117 @@ function normalizeFolderArray(
         return Array.isArray(input) ? input : [input];
 }
 
-function normalizeReadStatesFromApi(
-        states: ModelGuildChannelReadState[] | undefined
-): GuildChannelReadState[] | undefined {
-        if (!Array.isArray(states)) return undefined;
-        const mapped = states
-                .map((state) => {
-                        const channelId = toSnowflakeString(state?.channel_id);
-                        if (!channelId) return null;
-                        const lastRead = toSnowflakeString(state?.last_read_message_id);
-                        const scroll =
-                                typeof state?.scroll_position === 'number' && Number.isFinite(state.scroll_position)
-                                        ? state.scroll_position
-                                        : null;
-                        return {
-                                channelId,
-                                lastReadMessageId: lastRead,
-                                scrollPosition: scroll
-                        } satisfies GuildChannelReadState;
-                })
-                .filter((value): value is GuildChannelReadState => value !== null);
-        return mapped.length ? mapped : undefined;
+function buildReadStateLookupFromLayout(layout: GuildLayoutItem[]): GuildChannelReadStateLookup {
+        const lookup: GuildChannelReadStateLookup = {};
+        for (const item of layout) {
+                if (item.kind === 'guild') {
+                        collectReadStatesFromGuild(lookup, item);
+                } else {
+                        for (const guild of item.guilds) {
+                                collectReadStatesFromGuild(lookup, guild);
+                        }
+                }
+        }
+        return lookup;
 }
 
-function convertReadStatesToApi(
-        states: GuildChannelReadState[] | undefined
-): ModelGuildChannelReadState[] | undefined {
-        if (!Array.isArray(states) || states.length === 0) return undefined;
-        return states.map((state) => ({
-                channel_id: toApiSnowflake(state.channelId),
-                last_read_message_id: state.lastReadMessageId
-                        ? toApiSnowflake(state.lastReadMessageId)
-                        : undefined,
-                scroll_position:
-                        typeof state.scrollPosition === 'number' && Number.isFinite(state.scrollPosition)
-                                ? Math.round(state.scrollPosition)
-                                : undefined
-        }));
+function parseReadStateKey(key: string | null | undefined): { guildId: string; channelId: string } | null {
+        if (typeof key !== 'string') return null;
+        const trimmed = key.trim();
+        if (!trimmed) return null;
+        const parts = trimmed.split(/\D+/).filter(Boolean);
+        if (parts.length !== 2) return null;
+        const [guildId, channelId] = parts;
+        if (!guildId || !channelId) return null;
+        return { guildId, channelId };
+}
+
+function applyReadStatesMapToLayout(
+        layout: GuildLayoutItem[],
+        readStateMap: Record<string, unknown> | undefined,
+        previousLayout: GuildLayoutItem[] | undefined
+) {
+        if (!layout.length && !readStateMap) return;
+
+        const combined = new Map<string, Map<string, GuildChannelReadState>>();
+
+        function seedFromLookup(lookup: GuildChannelReadStateLookup | undefined) {
+                if (!lookup) return;
+                for (const [guildId, channels] of Object.entries(lookup)) {
+                        if (!guildId) continue;
+                        let guildMap = combined.get(guildId);
+                        if (!guildMap) {
+                                guildMap = new Map();
+                                combined.set(guildId, guildMap);
+                        }
+                        for (const [channelId, state] of Object.entries(channels ?? {})) {
+                                if (!channelId) continue;
+                                guildMap.set(channelId, {
+                                        channelId,
+                                        lastReadMessageId: state?.lastReadMessageId ?? null,
+                                        scrollPosition:
+                                                typeof state?.scrollPosition === 'number' &&
+                                                Number.isFinite(state.scrollPosition)
+                                                        ? state.scrollPosition
+                                                        : null
+                                });
+                        }
+                }
+        }
+
+        seedFromLookup(previousLayout ? buildReadStateLookupFromLayout(previousLayout) : undefined);
+        seedFromLookup(buildReadStateLookupFromLayout(layout));
+
+        if (readStateMap) {
+                for (const [key, value] of Object.entries(readStateMap)) {
+                        const parsedKey = parseReadStateKey(key);
+                        if (!parsedKey) continue;
+                        const { guildId, channelId } = parsedKey;
+                        const lastRead = toSnowflakeString(value);
+                        if (!guildId || !channelId) continue;
+                        let guildMap = combined.get(guildId);
+                        if (!guildMap) {
+                                guildMap = new Map();
+                                combined.set(guildId, guildMap);
+                        }
+                        const existing = guildMap.get(channelId) ?? {
+                                channelId,
+                                lastReadMessageId: null,
+                                scrollPosition: null
+                        };
+                        guildMap.set(channelId, {
+                                channelId,
+                                lastReadMessageId: lastRead ?? existing.lastReadMessageId ?? null,
+                                scrollPosition: existing.scrollPosition
+                        });
+                }
+        }
+
+        function assignStates(guild: GuildLayoutGuild) {
+                const guildMap = combined.get(guild.guildId);
+                if (guildMap && guildMap.size) {
+                        guild.readStates = Array.from(guildMap.values()).map((state) => ({
+                                channelId: state.channelId,
+                                lastReadMessageId: state.lastReadMessageId ?? null,
+                                scrollPosition:
+                                        typeof state.scrollPosition === 'number' && Number.isFinite(state.scrollPosition)
+                                                ? state.scrollPosition
+                                                : null
+                        }));
+                } else if (guild.readStates) {
+                        delete guild.readStates;
+                }
+        }
+
+        for (const item of layout) {
+                if (item.kind === 'guild') {
+                        assignStates(item);
+                } else {
+                        for (const guild of item.guilds) {
+                                assignStates(guild);
+                        }
+                }
+        }
 }
 
 function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
@@ -359,14 +432,12 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
                 const guildId = toSnowflakeString(guildSetting.guild_id);
                 if (!guildId) continue;
                 const selectedChannelId = toSnowflakeString(guildSetting.selected_channel);
-                const readStates = normalizeReadStatesFromApi(guildSetting.read_states);
                 const baseGuild: GuildLayoutGuild = {
                         guildId,
                         notifications: guildSetting.notifications
                                 ? structuredCloneSafe(guildSetting.notifications)
                                 : undefined,
-                        selectedChannelId: selectedChannelId ?? null,
-                        readStates: readStates ? structuredCloneSafe(readStates) : undefined
+                        selectedChannelId: selectedChannelId ?? null
                 };
 
                 const folderEntry = folderByGuild.get(guildId);
@@ -421,17 +492,15 @@ function convertToApi(settings: AppSettings): ModelUserSettingsData {
 	const payloadGuilds: ModelUserSettingsGuilds[] = [];
 	const payloadFolders: ModelUserSettingsGuildFolders[] = [];
 
-	let topPosition = 0;
-	for (const item of settings.guildLayout) {
+        let topPosition = 0;
+        for (const item of settings.guildLayout) {
                 if (item.kind === 'guild') {
-                        const readStates = convertReadStatesToApi(item.readStates);
                         payloadGuilds.push({
                                 guild_id: toApiSnowflake(item.guildId),
                                 position: topPosition,
                                 notifications: item.notifications
                                         ? structuredCloneSafe(item.notifications)
                                         : undefined,
-                                read_states: readStates,
                                 selected_channel: item.selectedChannelId
                                         ? toApiSnowflake(item.selectedChannelId)
                                         : undefined
@@ -440,20 +509,18 @@ function convertToApi(settings: AppSettings): ModelUserSettingsData {
                 } else {
                         payloadFolders.push({
                                 name: item.name ?? undefined,
-				color: item.color ?? undefined,
-				guilds: item.guilds.map((guild) => toApiSnowflake(guild.guildId)),
-				position: topPosition
-			});
+                                color: item.color ?? undefined,
+                                guilds: item.guilds.map((guild) => toApiSnowflake(guild.guildId)),
+                                position: topPosition
+                        });
                         let inner = 0;
                         for (const guild of item.guilds) {
-                                const nestedReadStates = convertReadStatesToApi(guild.readStates);
                                 payloadGuilds.push({
                                         guild_id: toApiSnowflake(guild.guildId),
                                         position: inner,
                                         notifications: guild.notifications
                                                 ? structuredCloneSafe(guild.notifications)
                                                 : undefined,
-                                        read_states: nestedReadStates,
                                         selected_channel: guild.selectedChannelId
                                                 ? toApiSnowflake(guild.selectedChannelId)
                                                 : undefined
@@ -806,18 +873,30 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                 return;
         }
         try {
+                const previousSettings = get(appSettings);
                 const response = await auth.api.user.userMeSettingsGet();
                 if (response.status === 204 || !response.data?.settings) {
-			suppressSave = true;
-			appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
-			applySelectedGuildFromSettings(false);
-			suppressSave = false;
-		} else {
-			const parsed = convertFromApi(response.data.settings);
-			suppressSave = true;
-			suppressThemePropagation = true;
-			suppressLocalePropagation = true;
-			appSettings.set(parsed);
+                        suppressSave = true;
+                        const next = { ...defaultSettings, language: get(locale), theme: get(theme) };
+                        applyReadStatesMapToLayout(
+                                next.guildLayout,
+                                response.data?.read_states,
+                                previousSettings.guildLayout
+                        );
+                        appSettings.set(next);
+                        applySelectedGuildFromSettings(false);
+                        suppressSave = false;
+                } else {
+                        const parsed = convertFromApi(response.data.settings);
+                        applyReadStatesMapToLayout(
+                                parsed.guildLayout,
+                                response.data.read_states,
+                                previousSettings.guildLayout
+                        );
+                        suppressSave = true;
+                        suppressThemePropagation = true;
+                        suppressLocalePropagation = true;
+                        appSettings.set(parsed);
 			applySelectedGuildFromSettings(false);
 			theme.set(parsed.theme);
 			locale.set(parsed.language);
