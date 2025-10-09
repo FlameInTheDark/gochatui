@@ -57,6 +57,13 @@
         let activeGuildId: string | null = null;
         let activeChannelId: string | null = null;
         let previousChannelKey: string | null = null;
+        let lastVisibleMessageId = $state<string | null>(null);
+
+        const ACK_DEBOUNCE_MS = 2_000;
+        let ackTimer: ReturnType<typeof setTimeout> | null = null;
+        let scheduledAckKey: string | null = null;
+        let lastAckedKey: string | null = null;
+        let ackInFlightKey: string | null = null;
 
         function findGuildLayoutEntry(layout: GuildLayoutItem[], guildId: string): GuildLayoutGuild | null {
                 for (const item of layout) {
@@ -95,6 +102,7 @@
                 if (!gid || !cid) return;
                 if (!scroller) return;
                 const lastVisibleId = computeLastVisibleMessageId();
+                lastVisibleMessageId = lastVisibleId ?? null;
                 const scrollPosition = Math.max(0, Math.round(scroller.scrollTop));
                 const key = `${gid}:${cid}`;
                 const nextState: PendingReadState = {
@@ -186,6 +194,70 @@
                 }
         }
 
+        function buildAckKey(guildId: string, channelId: string, messageId: string | null): string | null {
+                if (!guildId || !channelId || !messageId) return null;
+                return `${guildId}:${channelId}:${messageId}`;
+        }
+
+        function clearAckTimer() {
+                if (ackTimer) {
+                        clearTimeout(ackTimer);
+                        ackTimer = null;
+                }
+                scheduledAckKey = null;
+        }
+
+        function scheduleAck(guildId: string, channelId: string, messageId: string) {
+                const key = buildAckKey(guildId, channelId, messageId);
+                if (!key) return;
+                if (lastAckedKey === key || scheduledAckKey === key || ackInFlightKey === key) {
+                        return;
+                }
+                clearAckTimer();
+                ackTimer = setTimeout(() => {
+                        void runAck(guildId, channelId, messageId, key);
+                }, ACK_DEBOUNCE_MS);
+                scheduledAckKey = key;
+        }
+
+        async function runAck(
+                guildId: string,
+                channelId: string,
+                messageId: string,
+                key: string
+        ) {
+                ackTimer = null;
+                scheduledAckKey = null;
+                ackInFlightKey = key;
+                let success = false;
+                try {
+                        await auth.api.message.messageChannelChannelIdMessageIdAckPost({
+                                channelId: channelId as any,
+                                messageId: messageId as any
+                        });
+                        success = true;
+                } catch (error) {
+                        console.error('Failed to acknowledge channel read', error);
+                } finally {
+                        if (ackInFlightKey === key) {
+                                ackInFlightKey = null;
+                        }
+                        if (success) {
+                                lastAckedKey = key;
+                                if (guildId) {
+                                        acknowledgeChannelRead(guildId, channelId);
+                                }
+                        } else if (
+                                wasAtBottom &&
+                                guildId === (activeGuildId ?? '') &&
+                                channelId === (activeChannelId ?? '') &&
+                                lastVisibleMessageId === messageId
+                        ) {
+                                scheduleAck(guildId, channelId, messageId);
+                        }
+                }
+        }
+
         onMount(() => {
                 if (readStateFlushTimer) clearInterval(readStateFlushTimer);
                 readStateFlushTimer = setInterval(() => {
@@ -198,6 +270,7 @@
                         clearInterval(readStateFlushTimer);
                         readStateFlushTimer = null;
                 }
+                clearAckTimer();
                 flushPendingReadStates();
         });
 
@@ -225,7 +298,25 @@
                 if (previousChannelKey && previousChannelKey !== key) {
                         flushPendingReadStates();
                 }
+                if (previousChannelKey !== key) {
+                        clearAckTimer();
+                        ackInFlightKey = null;
+                        lastAckedKey = null;
+                        lastVisibleMessageId = null;
+                }
                 previousChannelKey = key;
+        });
+
+        $effect(() => {
+                const atBottom = wasAtBottom;
+                const messageId = lastVisibleMessageId;
+                const gid = $selectedGuildId ?? '';
+                const cid = $selectedChannelId ?? '';
+                if (!atBottom || !gid || !cid || !messageId) {
+                        clearAckTimer();
+                        return;
+                }
+                scheduleAck(gid, cid, messageId);
         });
 
 	function isNearBottom() {
