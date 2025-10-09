@@ -1,6 +1,6 @@
 import { derived, get, writable } from 'svelte/store';
 import type { DtoChannel } from '$lib/api';
-import { channelsByGuild, selectedChannelId, selectedGuildId } from '$lib/stores/appState';
+import { channelsByGuild } from '$lib/stores/appState';
 import { guildChannelReadStateLookup, type GuildChannelReadStateLookup } from '$lib/stores/settings';
 import { unreadSnapshot } from '$lib/stores/unreadSeed';
 
@@ -397,20 +397,6 @@ guildChannelReadStateLookup.subscribe((lookup) => {
 
 unreadSnapshot.subscribe((snapshot) => {
         applyLastMessageSnapshot(snapshot);
-});
-
-selectedChannelId.subscribe((cid) => {
-        const gid = get(selectedGuildId);
-        if (gid && cid) {
-                clearChannelUnread(gid, cid);
-        }
-});
-
-selectedGuildId.subscribe((gid) => {
-        const cid = get(selectedChannelId);
-        if (gid && cid) {
-                clearChannelUnread(gid, cid);
-        }
 });
 
 channelsByGuild.subscribe((map) => {
