@@ -119,4 +119,36 @@ describe('settings unread snapshot integration', () => {
                 expect(userMeSettingsGet).toHaveBeenCalled();
                 expect(get(unreadChannelsByGuild)).toEqual({});
         });
+
+        it('does not seed unread entries for channels missing from guilds_last_messages', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                guilds_last_messages: { '111': {} },
+                                settings: null
+                        }
+                });
+
+                const { channelsByGuild } = await import('$lib/stores/appState');
+                channelsByGuild.set({
+                        '111': [
+                                {
+                                        id: '222',
+                                        type: 0,
+                                        last_message_id: '333'
+                                }
+                        ]
+                } as any);
+
+                const { unreadChannelsByGuild } = await import('$lib/stores/unread');
+                const { auth } = await import('$lib/stores/auth');
+                await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(userMeSettingsGet).toHaveBeenCalled();
+                expect(get(unreadChannelsByGuild)).toEqual({});
+        });
 });

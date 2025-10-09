@@ -148,7 +148,7 @@ export function acknowledgeChannelRead(
         clearChannelUnread(guildId, channelId);
 }
 
-function markChannelsWithoutReadStates() {
+function clearChannelsWithoutUnreadEvidence() {
         if (!latestChannelsByGuild) return;
         for (const [guildId, channels] of Object.entries(latestChannelsByGuild)) {
                 if (!guildId) continue;
@@ -169,8 +169,10 @@ function markChannelsWithoutReadStates() {
                                 clearChannelUnread(guildId, channelId);
                                 continue;
                         }
-                        if (readStates?.[channelId]) continue;
-                        markChannelUnread(guildId, channelId, lastMessageId);
+                        const lastRead = readStates?.[channelId]?.lastReadMessageId ?? null;
+                        if (!isMessageNewer(lastMessageId, lastRead)) {
+                                clearChannelUnread(guildId, channelId);
+                        }
                 }
         }
 }
@@ -359,12 +361,12 @@ function buildUnreadStateFromSnapshot(snapshot: unknown): UnreadState {
 function applyLastMessageSnapshot(snapshot: unknown) {
         if (snapshot == null) {
                 unreadChannelsInternal.set({});
-                markChannelsWithoutReadStates();
+                clearChannelsWithoutUnreadEvidence();
                 return;
         }
         const nextState = buildUnreadStateFromSnapshot(snapshot);
         unreadChannelsInternal.set(nextState);
-        markChannelsWithoutReadStates();
+        clearChannelsWithoutUnreadEvidence();
 }
 
 guildChannelReadStateLookup.subscribe((lookup) => {
@@ -391,7 +393,7 @@ guildChannelReadStateLookup.subscribe((lookup) => {
                 }
                 return { next: changed ? nextState : state, changed };
         });
-        markChannelsWithoutReadStates();
+        clearChannelsWithoutUnreadEvidence();
 });
 
 unreadSnapshot.subscribe((snapshot) => {
@@ -414,5 +416,5 @@ selectedGuildId.subscribe((gid) => {
 
 channelsByGuild.subscribe((map) => {
         latestChannelsByGuild = map ?? {};
-        markChannelsWithoutReadStates();
+        clearChannelsWithoutUnreadEvidence();
 });
