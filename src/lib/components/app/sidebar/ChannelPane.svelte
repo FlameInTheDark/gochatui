@@ -23,7 +23,7 @@
         import { subscribeWS, wsEvent } from '$lib/client/ws';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
         import { updateGuildSelectedChannel } from '$lib/stores/settings';
-        import { acknowledgeChannelRead, unreadChannelsByGuild } from '$lib/stores/unread';
+        import { unreadChannelsByGuild } from '$lib/stores/unread';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
@@ -633,7 +633,6 @@
                 subscribeWS([gid], nextId);
                 lastChannelByGuild.update((map) => ({ ...map, [gid]: nextId }));
                 updateGuildSelectedChannel(gid, nextId);
-                acknowledgeChannelRead(gid, nextId);
                 channelReady.set(true);
         }
 
