@@ -209,36 +209,40 @@ function createAuthStore() {
 		}
 	}
 
-	async function loadGuilds() {
-		if (!get(token)) return [];
-		const res = await api.user.userMeGuildsGet();
-		const incoming = res.data ?? [];
-		const previous = get(guilds);
-		const previousMap = new Map<string, any>();
-		for (const guild of previous) {
-			const id = toSnowflakeString((guild as any)?.id);
-			if (id) {
-				previousMap.set(id, guild as any);
-			}
-		}
-		const list = incoming.map((guild) => {
-			const id = toSnowflakeString((guild as any)?.id);
-			const base = normalizePermissionValue((guild as any)?.permissions);
-			const prev = id ? previousMap.get(id) : undefined;
-			const prevEffectiveRaw = prev?.__effectivePermissions;
-			const effective =
-				prevEffectiveRaw != null
-					? normalizePermissionValue(prevEffectiveRaw)
-					: base;
-			return {
-				...guild,
-				__basePermissions: base,
-				__effectivePermissions: effective
-			} as any;
-		});
-		guilds.set(list);
-		return list;
-	}
+        function ingestGuilds(list: unknown): DtoGuild[] {
+                const incoming = Array.isArray(list) ? (list as DtoGuild[]) : [];
+                const previous = get(guilds);
+                const previousMap = new Map<string, any>();
+                for (const guild of previous) {
+                        const id = toSnowflakeString((guild as any)?.id);
+                        if (id) {
+                                previousMap.set(id, guild as any);
+                        }
+                }
+                const nextList = incoming.map((guild) => {
+                        const id = toSnowflakeString((guild as any)?.id);
+                        const base = normalizePermissionValue((guild as any)?.permissions);
+                        const prev = id ? previousMap.get(id) : undefined;
+                        const prevEffectiveRaw = prev?.__effectivePermissions;
+                        const effective =
+                                prevEffectiveRaw != null
+                                        ? normalizePermissionValue(prevEffectiveRaw)
+                                        : base;
+                        return {
+                                ...guild,
+                                __basePermissions: base,
+                                __effectivePermissions: effective
+                        } as any;
+                });
+                guilds.set(nextList);
+                return nextList;
+        }
+
+        async function loadGuilds() {
+                if (!get(token)) return [];
+                const res = await api.user.userMeGuildsGet();
+                return ingestGuilds(res.data ?? []);
+        }
 
 	const isAuthenticated = derived(token, (t) => Boolean(t));
 
@@ -252,14 +256,13 @@ function createAuthStore() {
 			// ignore
 		}
 		scheduleTokenRefresh(t);
-		if (t) {
-			await loadMe();
-			await loadGuilds();
-		} else {
-			user.set(null);
-			guilds.set([]);
-		}
-	});
+                if (t) {
+                        await loadMe();
+                } else {
+                        user.set(null);
+                        guilds.set([]);
+                }
+        });
 
 	refreshToken.subscribe((t) => {
 		try {
@@ -285,16 +288,17 @@ function createAuthStore() {
 		user,
 		guilds,
 		isAuthenticated,
-		api,
-		login,
-		logout,
-		register,
-		confirm,
-		recover,
-		reset,
-		loadMe,
-		loadGuilds
-	};
+                api,
+                login,
+                logout,
+                register,
+                confirm,
+                recover,
+                reset,
+                loadMe,
+                loadGuilds,
+                ingestGuilds
+        };
 }
 
 export const auth = createAuthStore();

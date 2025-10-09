@@ -2,6 +2,7 @@ import { derived, get, writable } from 'svelte/store';
 import type { DtoChannel } from '$lib/api';
 import { channelsByGuild, selectedChannelId, selectedGuildId } from '$lib/stores/appState';
 import { guildChannelReadStateLookup, type GuildChannelReadStateLookup } from '$lib/stores/settings';
+import { unreadSnapshot } from '$lib/stores/unreadSeed';
 
 interface ChannelUnreadEntry {
         latestMessageId: string;
@@ -164,6 +165,198 @@ function markChannelsWithoutReadStates() {
         }
 }
 
+function buildUnreadStateFromSnapshot(snapshot: unknown): UnreadState {
+        const readLookup = get(guildChannelReadStateLookup);
+        const nextState: UnreadState = {};
+        const visited = new Set<any>();
+
+        const recordEntry = (guildId: string | null, channelId: string | null, messageId: string | null) => {
+                if (!guildId || !channelId || !messageId) return;
+                const lastRead = readLookup?.[guildId]?.[channelId]?.lastReadMessageId ?? null;
+                if (!isMessageNewer(messageId, lastRead)) return;
+                let guildState = nextState[guildId];
+                if (!guildState) {
+                        guildState = {};
+                        nextState[guildId] = guildState;
+                }
+                const current = guildState[channelId];
+                if (current && !isMessageNewer(messageId, current.latestMessageId)) return;
+                guildState[channelId] = { latestMessageId: messageId };
+        };
+
+        const processChannelContainer = (guildId: string | null, payload: unknown) => {
+                if (!guildId || payload == null) return;
+
+                if (typeof payload === 'object') {
+                        if (visited.has(payload)) return;
+                        visited.add(payload);
+                }
+
+                if (Array.isArray(payload)) {
+                        for (const entry of payload) {
+                                if (Array.isArray(entry)) {
+                                        const [channelKey, messageValue] = entry;
+                                        recordEntry(guildId, normalizeId(channelKey), normalizeId(messageValue));
+                                        continue;
+                                }
+                                if (entry && typeof entry === 'object') {
+                                        const obj = entry as Record<string, unknown>;
+                                        const channelId =
+                                                normalizeId(
+                                                        obj['channel_id'] ??
+                                                                obj['channelId'] ??
+                                                                (obj['channel'] as any)?.id ??
+                                                                obj['id']
+                                                ) ?? normalizeId(obj['channel']);
+                                        const lastMessageId =
+                                                normalizeId(
+                                                        obj['last_message_id'] ??
+                                                                obj['lastMessageId'] ??
+                                                                obj['message_id'] ??
+                                                                obj['last_message'] ??
+                                                                obj['latest_message_id'] ??
+                                                                obj['latestMessageId'] ??
+                                                                obj['messageId'] ??
+                                                                (Array.isArray(obj['value'])
+                                                                        ? obj['value'][1]
+                                                                        : (obj['value'] as unknown)) ??
+                                                                obj['value'] ??
+                                                                obj['last']
+                                                );
+                                        if (channelId && lastMessageId) {
+                                                recordEntry(guildId, channelId, lastMessageId);
+                                                continue;
+                                        }
+                                        processChannelContainer(guildId, entry);
+                                        continue;
+                                }
+                                // entry might be an object map or primitive; ignore unsupported shapes
+                        }
+                        return;
+                }
+
+                if (typeof payload !== 'object' || payload == null) return;
+                const obj = payload as Record<string, unknown>;
+
+                const nestedArrays: Array<unknown> = [];
+                const nestedObjects: Array<Record<string, unknown>> = [];
+
+                for (const key of ['channels', 'channel_last_messages', 'channelLastMessages', 'channel_messages', 'items']) {
+                        const value = obj[key];
+                        if (!value) continue;
+                        if (Array.isArray(value)) nestedArrays.push(value);
+                        else if (typeof value === 'object') nestedObjects.push(value as Record<string, unknown>);
+                }
+
+                for (const arr of nestedArrays) {
+                        processChannelContainer(guildId, arr);
+                }
+                for (const nested of nestedObjects) {
+                        processChannelContainer(guildId, nested);
+                }
+
+                for (const [key, value] of Object.entries(obj)) {
+                        if (
+                                key === 'guild_id' ||
+                                key === 'guildId' ||
+                                key === 'channels' ||
+                                key === 'channel_last_messages' ||
+                                key === 'channelLastMessages' ||
+                                key === 'channel_messages' ||
+                                key === 'items'
+                        ) {
+                                continue;
+                        }
+
+                        const channelId =
+                                normalizeId(
+                                        (value as any)?.channel_id ??
+                                                (value as any)?.channelId ??
+                                                (value as any)?.channel?.id ??
+                                                (Array.isArray(value) ? value[0] : undefined)
+                                ) ?? normalizeId(key);
+                        const lastMessageId =
+                                normalizeId(
+                                        (value as any)?.last_message_id ??
+                                                (value as any)?.lastMessageId ??
+                                                (value as any)?.message_id ??
+                                                (value as any)?.last_message ??
+                                                (value as any)?.latest_message_id ??
+                                                (value as any)?.latestMessageId ??
+                                                (Array.isArray(value) ? value[1] : value)
+                                );
+                        recordEntry(guildId, channelId, lastMessageId);
+                }
+        };
+
+        const processSnapshot = (value: unknown) => {
+                if (!value) return;
+                if (Array.isArray(value)) {
+                        for (const entry of value) {
+                                if (entry == null) continue;
+                                if (Array.isArray(entry)) {
+                                        if (entry.length >= 3) {
+                                                const [guildKey, channelKey, messageValue] = entry;
+                                                recordEntry(
+                                                        normalizeId(guildKey),
+                                                        normalizeId(channelKey),
+                                                        normalizeId(messageValue)
+                                                );
+                                        }
+                                        continue;
+                                }
+                                if (typeof entry === 'object') {
+                                        const obj = entry as Record<string, unknown>;
+                                        const guildId =
+                                                normalizeId(
+                                                        obj['guild_id'] ??
+                                                                obj['guildId'] ??
+                                                                (obj['guild'] as any)?.id ??
+                                                                (typeof obj['guild'] === 'string' ? obj['guild'] : undefined)
+                                                );
+                                        if (guildId) {
+                                                processChannelContainer(guildId, obj);
+                                        }
+                                }
+                        }
+                        return;
+                }
+
+                if (typeof value !== 'object') return;
+                const obj = value as Record<string, unknown>;
+                if (Array.isArray(obj.guilds)) {
+                        processSnapshot(obj.guilds);
+                }
+                for (const [key, payload] of Object.entries(obj)) {
+                        const guildId = normalizeId(key);
+                        if (guildId) {
+                                processChannelContainer(guildId, payload);
+                                continue;
+                        }
+                        if (key === 'guilds' || key === 'read_states') continue;
+                        const derivedGuildId = normalizeId((payload as any)?.guild_id ?? (payload as any)?.guildId);
+                        if (derivedGuildId) {
+                                processChannelContainer(derivedGuildId, payload);
+                        }
+                }
+        };
+
+        processSnapshot(snapshot);
+
+        return nextState;
+}
+
+function applyLastMessageSnapshot(snapshot: unknown) {
+        if (snapshot == null) {
+                unreadChannelsInternal.set({});
+                markChannelsWithoutReadStates();
+                return;
+        }
+        const nextState = buildUnreadStateFromSnapshot(snapshot);
+        unreadChannelsInternal.set(nextState);
+        markChannelsWithoutReadStates();
+}
+
 guildChannelReadStateLookup.subscribe((lookup) => {
         latestReadStateLookup = lookup;
         updateState((state) => {
@@ -189,6 +382,10 @@ guildChannelReadStateLookup.subscribe((lookup) => {
                 return { next: changed ? nextState : state, changed };
         });
         markChannelsWithoutReadStates();
+});
+
+unreadSnapshot.subscribe((snapshot) => {
+        applyLastMessageSnapshot(snapshot);
 });
 
 selectedChannelId.subscribe((cid) => {

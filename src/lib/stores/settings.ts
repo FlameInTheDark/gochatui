@@ -9,6 +9,7 @@ import {
 import { setLocale } from '$lib/paraglide/runtime';
 import { auth } from '$lib/stores/auth';
 import { selectedGuildId } from '$lib/stores/appState';
+import { updateUnreadSnapshot } from '$lib/stores/unreadSeed';
 import { derived, get, writable } from 'svelte/store';
 
 export type Theme = 'light' | 'dark' | 'system';
@@ -875,17 +876,38 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                 suppressSave = false;
                 settingsReady.set(false);
                 loadedSettingsToken = null;
+                auth.ingestGuilds([]);
+                updateUnreadSnapshot(null);
                 return;
         }
         try {
                 const previousSettings = get(appSettings);
                 const response = await auth.api.user.userMeSettingsGet();
+                const responseData = response.data ?? {};
+                const guildListRaw =
+                        (responseData as any)?.guilds ??
+                        (responseData as any)?.user_guilds ??
+                        (responseData as any)?.guild_list ??
+                        (responseData as any)?.guildList ??
+                        (responseData as any)?.guilds_list ??
+                        null;
+                auth.ingestGuilds(guildListRaw);
+                const lastMessageSnapshot =
+                        (responseData as any)?.guild_channel_last_messages ??
+                        (responseData as any)?.guild_channels_last_messages ??
+                        (responseData as any)?.guild_channel_last_message_ids ??
+                        (responseData as any)?.guild_channels_last_message_ids ??
+                        (responseData as any)?.channel_last_message_ids ??
+                        (responseData as any)?.channels_last_message_ids ??
+                        (responseData as any)?.channel_last_messages ??
+                        (responseData as any)?.last_messages ??
+                        null;
                 if (response.status === 204 || !response.data?.settings) {
                         suppressSave = true;
                         const next = { ...defaultSettings, language: get(locale), theme: get(theme) };
                         applyReadStatesMapToLayout(
                                 next.guildLayout,
-                                response.data?.read_states,
+                                responseData?.read_states,
                                 previousSettings.guildLayout
                         );
                         appSettings.set(next);
@@ -895,7 +917,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         const parsed = convertFromApi(response.data.settings);
                         applyReadStatesMapToLayout(
                                 parsed.guildLayout,
-                                response.data.read_states,
+                                responseData.read_states,
                                 previousSettings.guildLayout
                         );
                         suppressSave = true;
@@ -905,10 +927,11 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
 			applySelectedGuildFromSettings(false);
 			theme.set(parsed.theme);
 			locale.set(parsed.language);
-			suppressThemePropagation = false;
+                        suppressThemePropagation = false;
                         suppressLocalePropagation = false;
                         suppressSave = false;
                 }
+                updateUnreadSnapshot(lastMessageSnapshot);
                 if (currentToken) {
                         loadedSettingsToken = currentToken;
                 }
@@ -919,6 +942,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                 applySelectedGuildFromSettings(false);
                 suppressSave = false;
                 loadedSettingsToken = null;
+                updateUnreadSnapshot(null);
         }
         settingsReady.set(true);
         applySelectedGuildFromSettings(true);
