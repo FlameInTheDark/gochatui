@@ -181,10 +181,6 @@ export const settingsSaving = writable(false);
 let suppressThemePropagation = false;
 let suppressLocalePropagation = false;
 let suppressSave = false;
-
-const SETTINGS_SAVE_DEBOUNCE_MS = 30_000;
-
-let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 let saveDirty = false;
 let saveInFlight = false;
 
@@ -583,43 +579,37 @@ function applySelectedGuildFromSettings(clearInvalid: boolean) {
 }
 
 function scheduleSave() {
-	if (suppressSave) return;
-	if (!get(settingsReady)) return;
-	if (!get(auth.isAuthenticated)) return;
-	saveDirty = true;
-	if (saveTimeout) clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => {
-                saveTimeout = null;
-                void persistSettings();
-        }, SETTINGS_SAVE_DEBOUNCE_MS);
+        if (suppressSave) return;
+        if (!get(settingsReady)) return;
+        if (!get(auth.isAuthenticated)) return;
+        saveDirty = true;
+        if (saveInFlight) return;
+        void persistSettings();
 }
 
 async function persistSettings() {
-	if (!saveDirty) return;
-	if (!get(auth.isAuthenticated)) {
-		saveDirty = false;
-		return;
-	}
-	if (saveInFlight) return;
-	saveInFlight = true;
-	saveDirty = false;
-	settingsSaving.set(true);
-	try {
-		const payload = convertToApi(get(appSettings));
-		await auth.api.user.userMeSettingsPost({
-			modelUserSettingsData: payload
-		});
-	} catch (error) {
-		console.error('Failed to save settings', error);
-		saveDirty = true;
-	} finally {
-		saveInFlight = false;
-		settingsSaving.set(false);
-                if (saveDirty && !saveTimeout) {
-                        saveTimeout = setTimeout(() => {
-                                saveTimeout = null;
-                                void persistSettings();
-                        }, SETTINGS_SAVE_DEBOUNCE_MS);
+        if (!saveDirty) return;
+        if (!get(auth.isAuthenticated)) {
+                saveDirty = false;
+                return;
+        }
+        if (saveInFlight) return;
+        saveInFlight = true;
+        saveDirty = false;
+        settingsSaving.set(true);
+        try {
+                const payload = convertToApi(get(appSettings));
+                await auth.api.user.userMeSettingsPost({
+                        modelUserSettingsData: payload
+                });
+        } catch (error) {
+                console.error('Failed to save settings', error);
+                saveDirty = true;
+        } finally {
+                saveInFlight = false;
+                settingsSaving.set(false);
+                if (saveDirty) {
+                        void persistSettings();
                 }
         }
 }
@@ -634,6 +624,21 @@ export function mutateAppSettings(mutator: SettingsMutator) {
                 scheduleSave();
                 return cloned;
         });
+}
+
+export function mutateAppSettingsWithoutSaving(mutator: SettingsMutator) {
+        const previousSuppressSave = suppressSave;
+        suppressSave = true;
+        try {
+                appSettings.update((current) => {
+                        const cloned = cloneSettings(current);
+                        const changed = mutator(cloned);
+                        if (!changed) return current;
+                        return cloned;
+                });
+        } finally {
+                suppressSave = previousSuppressSave;
+        }
 }
 
 function findGuildLayoutGuild(layout: GuildLayoutItem[], guildId: string): GuildLayoutGuild | null {
