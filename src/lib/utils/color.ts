@@ -2,9 +2,14 @@ const HEX_COLOR_PATTERN = /^[0-9a-f]{1,8}$/i;
 
 function clampColorInt(value: number): number {
         if (!Number.isFinite(value)) return 0;
-        if (value < 0) return 0;
-        if (value > 0xffffff) return 0xffffff;
-        return Math.round(value);
+        if (value <= 0) return 0;
+
+        const rounded = Math.round(value);
+        if (rounded <= 0) {
+                return 0;
+        }
+
+        return rounded % 0x1000000;
 }
 
 export function parseColorValue(color?: number | string | bigint | null): number | null {
