@@ -644,18 +644,21 @@
 		</button>
 	</div>
 
-	{#if creating}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creating = false)}
+        {#if creating}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creating = false;
+                        }}
 			onkeydown={(event) => {
 				if (event.key === 'Escape') creating = false;
 				if (event.key === 'Enter') createGuild();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
 			<div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
 				<div class="relative">
 					<div
@@ -694,18 +697,21 @@
 		</div>
 	{/if}
 
-	{#if leavingGuild}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (leavingGuild = null)}
+        {#if leavingGuild}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                leavingGuild = null;
+                        }}
 			onkeydown={(event) => {
 				if (event.key === 'Escape') leavingGuild = null;
 				if (event.key === 'Enter') confirmLeaveGuild();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
 			<div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
 				<div class="relative">
 					<div

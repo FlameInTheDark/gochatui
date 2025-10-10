@@ -451,7 +451,8 @@
                 class="fixed inset-0 z-[1000]"
                 role="button"
                 tabindex="0"
-                onpointerdown={() => {
+                onclick={(event) => {
+                        if (event.target !== event.currentTarget) return;
                         if (pendingFilter) {
                                 closeFilterPrompt();
                         } else if (showKeywordHelp) {
@@ -472,7 +473,7 @@
                         }
                 }}
         >
-                <div class="absolute inset-0 bg-black/40"></div>
+                <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                 <div
                         class="absolute z-10"
                         style={`left:${posX}px; top:${posY}px`}

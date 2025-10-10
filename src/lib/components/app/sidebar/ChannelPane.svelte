@@ -1558,18 +1558,21 @@
 		</SettingsPanel>
 	{/if}
 
-	{#if editingCategory}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (editingCategory = null)}
+        {#if editingCategory}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                editingCategory = null;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') editingCategory = null;
 				if (e.key === 'Enter') saveEditCategory();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                         <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
                                 <div class="relative">
                                         <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
@@ -1604,18 +1607,21 @@
                 </div>
         {/if}
 
-	{#if creatingChannel}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creatingChannel = false)}
+        {#if creatingChannel}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creatingChannel = false;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingChannel = false;
 				if (e.key === 'Enter') createChannel();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                         <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
                                 <div class="relative">
                                         <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
@@ -1657,18 +1663,21 @@
                 </div>
         {/if}
 
-	{#if creatingCategory}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creatingCategory = false)}
+        {#if creatingCategory}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creatingCategory = false;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingCategory = false;
 				if (e.key === 'Enter') createCategory();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                         <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
                                 <div class="relative">
                                         <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
