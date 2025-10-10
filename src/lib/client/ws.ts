@@ -89,6 +89,83 @@ function normalizeSnowflake(value: unknown): string | null {
   }
 }
 
+function updateChannelLastMessageMetadata(
+  guildId: string | null,
+  channelId: string | null,
+  messageId: string | null,
+  message: AnyRecord | null
+): void {
+  if (!guildId || !channelId || !messageId) return;
+
+  channelsByGuild.update((map) => {
+    const list = map[guildId];
+    if (!Array.isArray(list) || !list.length) return map;
+
+    const idx = list.findIndex((channel) => normalizeSnowflake((channel as AnyRecord)?.id) === channelId);
+    if (idx === -1) return map;
+
+    const nextChannel: AnyRecord = { ...(list[idx] as AnyRecord) };
+    let changed = false;
+
+    const existingLastId = normalizeSnowflake(
+      nextChannel.last_message_id ??
+        nextChannel.lastMessageId ??
+        nextChannel.last_message?.id ??
+        nextChannel.lastMessage?.id
+    );
+    const numericMessageId = Number(messageId);
+    const canStoreNumeric = Number.isSafeInteger(numericMessageId);
+    const desiredLastMessageId = canStoreNumeric ? numericMessageId : messageId;
+
+    if (existingLastId !== messageId) {
+      nextChannel.last_message_id = desiredLastMessageId;
+      nextChannel.lastMessageId = messageId;
+      changed = true;
+    } else {
+      if (nextChannel.lastMessageId !== messageId) {
+        nextChannel.lastMessageId = messageId;
+        changed = true;
+      }
+      if (nextChannel.last_message_id !== desiredLastMessageId) {
+        nextChannel.last_message_id = desiredLastMessageId;
+        changed = true;
+      }
+    }
+
+    if (message && typeof message === 'object') {
+      const nextLastMessage = { ...(message as AnyRecord) };
+      const previous = nextChannel.last_message;
+      const previousId = normalizeSnowflake((previous as AnyRecord | undefined)?.id);
+      let shouldUpdateMessage = false;
+
+      if (!previous || typeof previous !== 'object') {
+        shouldUpdateMessage = true;
+      } else if (previousId !== messageId) {
+        shouldUpdateMessage = true;
+      } else {
+        for (const [key, value] of Object.entries(nextLastMessage)) {
+          if ((previous as AnyRecord)[key] !== value) {
+            shouldUpdateMessage = true;
+            break;
+          }
+        }
+      }
+
+      if (shouldUpdateMessage) {
+        nextChannel.last_message = nextLastMessage;
+        nextChannel.lastMessage = nextLastMessage;
+        changed = true;
+      }
+    }
+
+    if (!changed) return map;
+
+    const nextList = [...list];
+    nextList[idx] = nextChannel;
+    return { ...map, [guildId]: nextList };
+  });
+}
+
 function snapshotGuildIds(list: unknown): string[] {
   if (!Array.isArray(list)) return [];
   const ids: string[] = [];
@@ -434,6 +511,8 @@ export function connectWS() {
           if (shouldMarkUnread) {
             markChannelUnread(guildId, channelId, messageId);
           }
+
+          updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
         }
       }
 

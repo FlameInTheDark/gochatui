@@ -11,7 +11,7 @@
         import MessageItem from './MessageItem.svelte';
         import { applyMessageEventToList } from './messageEventHandlers';
         import { wsEvent } from '$lib/client/ws';
-        import { m } from '$lib/paraglide/messages.js';
+        import { m as i18n } from '$lib/paraglide/messages.js';
         import { fly } from 'svelte/transition';
         import { onDestroy, onMount, tick, untrack } from 'svelte';
         import { Sparkles } from 'lucide-svelte';
@@ -59,8 +59,11 @@
         let activeGuildId: string | null = null;
         let activeChannelId: string | null = null;
         let previousChannelKey: string | null = null;
+        let initializedChannelKey: string | null = null;
+        let initializingChannelKey: string | null = null;
         let lastVisibleMessageId = $state<string | null>(null);
         let activeChannelReadMarker = $state<string | null>(null);
+        let unreadSeparatorMarker = $state<string | null>(null);
 
         const ACK_DEBOUNCE_MS = 2_000;
         let ackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -249,6 +252,7 @@
                 dirtyGuilds.add(guildId);
                 if (guildId === (activeGuildId ?? '') && channelId === (activeChannelId ?? '')) {
                         activeChannelReadMarker = messageId;
+                        unreadSeparatorMarker = null;
                 }
         }
 
@@ -337,6 +341,7 @@
                         lastAckedKey = null;
                         lastVisibleMessageId = null;
                         activeChannelReadMarker = null;
+                        unreadSeparatorMarker = null;
                 }
                 previousChannelKey = key;
         });
@@ -347,6 +352,7 @@
                 const lookup = $guildChannelReadStateLookup;
                 if (!gid || !cid) {
                         activeChannelReadMarker = null;
+                        unreadSeparatorMarker = null;
                         return;
                 }
                 const key = `${gid}:${cid}`;
@@ -453,36 +459,76 @@
         $effect(() => {
                 const channelId = $selectedChannelId;
                 const ready = $channelReady;
-                if (channelId && ready) {
-                        const gid = $selectedGuildId ?? '';
-                        const list = $channelsByGuild[gid] ?? [];
-                        const chan = list.find((c: any) => String(c?.id) === channelId);
-                        if (!chan) return;
-                        if ((chan as any)?.type === 2) return;
-                        messages = [];
-                        endReached = false;
-                        latestReached = false;
-                        initialLoaded = false;
-                        const token = ++channelSwitchToken;
-                        const pendingJump = untrack(() => $messageJumpRequest);
-                        if (pendingJump && pendingJump.channelId === channelId) {
-                                return;
-                        }
-                        (async () => {
-                                await loadLatest();
-                                if (token === channelSwitchToken) {
-                                        initialLoaded = true;
-                                        await tick();
-                                        recordReadState();
-                                }
-                        })();
-                } else {
+                const gid = $selectedGuildId ?? '';
+                if (!channelId) {
                         error = null;
                         messages = [];
                         endReached = false;
                         latestReached = false;
                         initialLoaded = false;
+                        initializedChannelKey = null;
+                        initializingChannelKey = null;
+                        unreadSeparatorMarker = null;
+                        return;
                 }
+                if (!ready) {
+                        loading = false;
+                        error = null;
+                        initializingChannelKey = null;
+                        unreadSeparatorMarker = null;
+                        return;
+                }
+                const key = `${gid}:${channelId}`;
+                if (
+                        initializedChannelKey === key &&
+                        (initialLoaded || initializingChannelKey === key)
+                ) {
+                        return;
+                }
+                const list = $channelsByGuild[gid] ?? [];
+                const chan = list.find((c: any) => String(c?.id) === channelId);
+                if (!chan) return;
+                if ((chan as any)?.type === 2) return;
+                initializedChannelKey = key;
+                messages = [];
+                endReached = false;
+                latestReached = false;
+                initialLoaded = false;
+                unreadSeparatorMarker = null;
+                const token = ++channelSwitchToken;
+                const pendingJump = untrack(() => $messageJumpRequest);
+                if (pendingJump && pendingJump.channelId === channelId) {
+                        return;
+                }
+                initializingChannelKey = key;
+                const lookup = untrack(() => $guildChannelReadStateLookup);
+                const lastReadMessageId = lookup?.[gid]?.[channelId]?.lastReadMessageId ?? null;
+                const lastKnownMessageId = getChannelLastMessageId(chan);
+                const shouldLoadAround =
+                        Boolean(lastReadMessageId && lastKnownMessageId) &&
+                        isMessageNewer(lastKnownMessageId, lastReadMessageId);
+                unreadSeparatorMarker = shouldLoadAround ? lastReadMessageId : null;
+                (async () => {
+                        try {
+                                if (shouldLoadAround) {
+                                        const jumped = await jumpToMessage(lastReadMessageId);
+                                        if (!jumped && messages.length === 0) {
+                                                await loadLatest();
+                                        }
+                                } else {
+                                        await loadLatest();
+                                }
+                                if (token === channelSwitchToken && !initialLoaded) {
+                                        initialLoaded = true;
+                                        await tick();
+                                        recordReadState();
+                                }
+                        } finally {
+                                if (token === channelSwitchToken) {
+                                        initializingChannelKey = null;
+                                }
+                        }
+                })();
         });
 
 	const PAGE_SIZE = 50;
@@ -719,10 +765,38 @@
                 }
         }
 
-        async function jumpToMessage(targetRaw: any) {
-                if (!$selectedChannelId) return;
+        function shouldShowNewSeparator(current: DtoMessage, previous: DtoMessage | undefined): boolean {
+                const marker = unreadSeparatorMarker;
+                if (!marker) return false;
+                const currentId = extractId(current);
+                if (!currentId) return false;
+                if (!isMessageNewer(currentId, marker)) return false;
+                const prevId = previous ? extractId(previous) : null;
+                if (!prevId) return true;
+                return !isMessageNewer(prevId, marker);
+        }
+
+        function getChannelLastMessageId(channel: any): string | null {
+                if (!channel) return null;
+                const candidates = [
+                        (channel as any)?.last_message_id,
+                        (channel as any)?.lastMessageId,
+                        (channel as any)?.lastMessage?.id,
+                        (channel as any)?.last_message?.id,
+                        (channel as any)?.lastMessage,
+                        (channel as any)?.last_message
+                ];
+                for (const value of candidates) {
+                        const id = extractId(value);
+                        if (id) return id;
+                }
+                return null;
+        }
+
+        async function jumpToMessage(targetRaw: any): Promise<boolean> {
+                if (!$selectedChannelId) return false;
                 const targetId = extractId(targetRaw);
-                if (!targetId) return;
+                if (!targetId) return false;
                 let fetched = false;
                 const hadFutureMessages = messages.some((msg) => {
                         const key = extractId(msg);
@@ -747,6 +821,7 @@
                                 fetched = true;
                         } catch (e: any) {
                                 error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
+                                return false;
                         } finally {
                                 loading = false;
                         }
@@ -762,6 +837,7 @@
                         error = error ?? 'Failed to load messages';
                 }
                 void tick().then(() => recordReadState());
+                return scrolled;
         }
 
         $effect(() => {
@@ -910,11 +986,21 @@
 				return toDate(prev?.updated_at);
 			}
 		})()}
-		{@const withinMinute =
-			pd && d ? Math.abs((d as Date).getTime() - (pd as Date).getTime()) <= 60000 : false}
-		{@const compact = pk != null && ck != null && pk === ck && withinMinute}
-		<MessageItem message={m} {compact} on:deleted={loadLatest} />
-	{/each}
+                {@const withinMinute =
+                        pd && d ? Math.abs((d as Date).getTime() - (pd as Date).getTime()) <= 60000 : false}
+                {@const compact = pk != null && ck != null && pk === ck && withinMinute}
+                {@const showNewSeparator = shouldShowNewSeparator(m, prev)}
+                {#if showNewSeparator}
+                        <div class="my-4 flex items-center gap-3 pl-3" data-new-message-separator>
+                                <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
+                                <span class="text-xs font-semibold uppercase tracking-wide text-red-500">
+                                        {i18n.new_messages_divider()}
+                                </span>
+                                <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
+                        </div>
+                {/if}
+                <MessageItem message={m} {compact} on:deleted={loadLatest} />
+        {/each}
 </div>
 
 {#if !wasAtBottom && initialLoaded}
@@ -942,9 +1028,9 @@
 					wasAtBottom = true;
 				}}
 			>
-				{newCount > 0
-					? `${m.new_count({ count: newCount })} · ${m.jump_to_present()}`
-					: m.jump_to_present()}
+                                {newCount > 0
+                                        ? `${i18n.new_count({ count: newCount })} · ${i18n.jump_to_present()}`
+                                        : i18n.jump_to_present()}
 			</button>
 		</div>
 	</div>
