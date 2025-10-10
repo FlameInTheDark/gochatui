@@ -60,6 +60,7 @@
         let activeChannelId: string | null = null;
         let previousChannelKey: string | null = null;
         let initializedChannelKey: string | null = null;
+        let initializingChannelKey: string | null = null;
         let lastVisibleMessageId = $state<string | null>(null);
         let activeChannelReadMarker = $state<string | null>(null);
 
@@ -462,10 +463,14 @@
                         latestReached = false;
                         initialLoaded = false;
                         initializedChannelKey = null;
+                        initializingChannelKey = null;
                         return;
                 }
                 const key = `${gid}:${channelId}`;
-                if (initializedChannelKey === key && initialLoaded) {
+                if (
+                        initializedChannelKey === key &&
+                        (initialLoaded || initializingChannelKey === key)
+                ) {
                         return;
                 }
                 const list = $channelsByGuild[gid] ?? [];
@@ -482,6 +487,7 @@
                 if (pendingJump && pendingJump.channelId === channelId) {
                         return;
                 }
+                initializingChannelKey = key;
                 const lookup = untrack(() => $guildChannelReadStateLookup);
                 const lastReadMessageId = lookup?.[gid]?.[channelId]?.lastReadMessageId ?? null;
                 const lastKnownMessageId = getChannelLastMessageId(chan);
@@ -489,18 +495,24 @@
                         Boolean(lastReadMessageId && lastKnownMessageId) &&
                         isMessageNewer(lastKnownMessageId, lastReadMessageId);
                 (async () => {
-                        if (shouldLoadAround) {
-                                const jumped = await jumpToMessage(lastReadMessageId);
-                                if (!jumped && messages.length === 0) {
+                        try {
+                                if (shouldLoadAround) {
+                                        const jumped = await jumpToMessage(lastReadMessageId);
+                                        if (!jumped && messages.length === 0) {
+                                                await loadLatest();
+                                        }
+                                } else {
                                         await loadLatest();
                                 }
-                        } else {
-                                await loadLatest();
-                        }
-                        if (token === channelSwitchToken && !initialLoaded) {
-                                initialLoaded = true;
-                                await tick();
-                                recordReadState();
+                                if (token === channelSwitchToken && !initialLoaded) {
+                                        initialLoaded = true;
+                                        await tick();
+                                        recordReadState();
+                                }
+                        } finally {
+                                if (token === channelSwitchToken) {
+                                        initializingChannelKey = null;
+                                }
                         }
                 })();
         });
