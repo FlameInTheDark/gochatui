@@ -59,6 +59,7 @@
         let activeGuildId: string | null = null;
         let activeChannelId: string | null = null;
         let previousChannelKey: string | null = null;
+        let initializedChannelKey: string | null = null;
         let lastVisibleMessageId = $state<string | null>(null);
         let activeChannelReadMarker = $state<string | null>(null);
 
@@ -453,36 +454,55 @@
         $effect(() => {
                 const channelId = $selectedChannelId;
                 const ready = $channelReady;
-                if (channelId && ready) {
-                        const gid = $selectedGuildId ?? '';
-                        const list = $channelsByGuild[gid] ?? [];
-                        const chan = list.find((c: any) => String(c?.id) === channelId);
-                        if (!chan) return;
-                        if ((chan as any)?.type === 2) return;
-                        messages = [];
-                        endReached = false;
-                        latestReached = false;
-                        initialLoaded = false;
-                        const token = ++channelSwitchToken;
-                        const pendingJump = untrack(() => $messageJumpRequest);
-                        if (pendingJump && pendingJump.channelId === channelId) {
-                                return;
-                        }
-                        (async () => {
-                                await loadLatest();
-                                if (token === channelSwitchToken) {
-                                        initialLoaded = true;
-                                        await tick();
-                                        recordReadState();
-                                }
-                        })();
-                } else {
+                const gid = $selectedGuildId ?? '';
+                if (!channelId || !ready) {
                         error = null;
                         messages = [];
                         endReached = false;
                         latestReached = false;
                         initialLoaded = false;
+                        initializedChannelKey = null;
+                        return;
                 }
+                const key = `${gid}:${channelId}`;
+                if (initializedChannelKey === key && initialLoaded) {
+                        return;
+                }
+                const list = $channelsByGuild[gid] ?? [];
+                const chan = list.find((c: any) => String(c?.id) === channelId);
+                if (!chan) return;
+                if ((chan as any)?.type === 2) return;
+                initializedChannelKey = key;
+                messages = [];
+                endReached = false;
+                latestReached = false;
+                initialLoaded = false;
+                const token = ++channelSwitchToken;
+                const pendingJump = untrack(() => $messageJumpRequest);
+                if (pendingJump && pendingJump.channelId === channelId) {
+                        return;
+                }
+                const lookup = untrack(() => $guildChannelReadStateLookup);
+                const lastReadMessageId = lookup?.[gid]?.[channelId]?.lastReadMessageId ?? null;
+                const lastKnownMessageId = getChannelLastMessageId(chan);
+                const shouldLoadAround =
+                        Boolean(lastReadMessageId && lastKnownMessageId) &&
+                        isMessageNewer(lastKnownMessageId, lastReadMessageId);
+                (async () => {
+                        if (shouldLoadAround) {
+                                const jumped = await jumpToMessage(lastReadMessageId);
+                                if (!jumped && messages.length === 0) {
+                                        await loadLatest();
+                                }
+                        } else {
+                                await loadLatest();
+                        }
+                        if (token === channelSwitchToken && !initialLoaded) {
+                                initialLoaded = true;
+                                await tick();
+                                recordReadState();
+                        }
+                })();
         });
 
 	const PAGE_SIZE = 50;
@@ -719,10 +739,27 @@
                 }
         }
 
-        async function jumpToMessage(targetRaw: any) {
-                if (!$selectedChannelId) return;
+        function getChannelLastMessageId(channel: any): string | null {
+                if (!channel) return null;
+                const candidates = [
+                        (channel as any)?.last_message_id,
+                        (channel as any)?.lastMessageId,
+                        (channel as any)?.lastMessage?.id,
+                        (channel as any)?.last_message?.id,
+                        (channel as any)?.lastMessage,
+                        (channel as any)?.last_message
+                ];
+                for (const value of candidates) {
+                        const id = extractId(value);
+                        if (id) return id;
+                }
+                return null;
+        }
+
+        async function jumpToMessage(targetRaw: any): Promise<boolean> {
+                if (!$selectedChannelId) return false;
                 const targetId = extractId(targetRaw);
-                if (!targetId) return;
+                if (!targetId) return false;
                 let fetched = false;
                 const hadFutureMessages = messages.some((msg) => {
                         const key = extractId(msg);
@@ -747,6 +784,7 @@
                                 fetched = true;
                         } catch (e: any) {
                                 error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
+                                return false;
                         } finally {
                                 loading = false;
                         }
@@ -762,6 +800,7 @@
                         error = error ?? 'Failed to load messages';
                 }
                 void tick().then(() => recordReadState());
+                return scrolled;
         }
 
         $effect(() => {
