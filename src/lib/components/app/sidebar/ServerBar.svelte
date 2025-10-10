@@ -25,7 +25,7 @@
                 hasAnyGuildPermission
         } from '$lib/utils/permissions';
         import { guildUnreadSummary } from '$lib/stores/unread';
-        import { colorIntToHex } from '$lib/utils/color';
+        import { colorIntToHex, parseColorValue } from '$lib/utils/color';
 
         const guilds = auth.guilds;
         const me = auth.user;
@@ -397,22 +397,12 @@
         }
 
         function resolveFolderColor(color: GuildFolderItem['color']): string | null {
-                if (color == null) return null;
-
-                const numeric =
-                        typeof color === 'bigint'
-                                ? Number(color)
-                                : typeof color === 'string'
-                                        ? Number(color)
-                                        : typeof color === 'number'
-                                                ? color
-                                                : Number.NaN;
-
-                if (!Number.isFinite(numeric) || numeric <= 0) {
+                const numeric = parseColorValue(color);
+                if (numeric == null || numeric <= 0) {
                         return null;
                 }
 
-                return colorIntToHex(color);
+                return colorIntToHex(numeric);
         }
 
         function computeFolderColorTokens(color: GuildFolderItem['color']) {

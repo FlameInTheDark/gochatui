@@ -11,6 +11,7 @@ import { auth } from '$lib/stores/auth';
 import { selectedGuildId } from '$lib/stores/appState';
 import { updateUnreadSnapshot } from '$lib/stores/unreadSeed';
 import { derived, get, writable } from 'svelte/store';
+import { parseColorValue } from '$lib/utils/color';
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -484,14 +485,16 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
 					.map((gid) => toSnowflakeString(gid))
 					.filter((gid): gid is string => Boolean(gid))
 			: [];
-		return {
-			folder: {
-				kind: 'folder' as const,
-				id,
-				name: folder.name ?? null,
-				color: typeof folder.color === 'number' ? folder.color : null,
-				guilds: [] as GuildLayoutGuild[]
-			},
+                const parsedColor = parseColorValue(folder.color);
+
+                return {
+                        folder: {
+                                kind: 'folder' as const,
+                                id,
+                                name: folder.name ?? null,
+                                color: parsedColor,
+                                guilds: [] as GuildLayoutGuild[]
+                        },
 			guildIds,
 			position: typeof folder.position === 'number' ? folder.position : idx
 		};
@@ -699,13 +702,19 @@ async function persistSettings() {
 type SettingsMutator = (settings: AppSettings) => boolean;
 
 export function mutateAppSettings(mutator: SettingsMutator) {
+        let didChange = false;
         appSettings.update((current) => {
                 const cloned = cloneSettings(current);
                 const changed = mutator(cloned);
-                if (!changed) return current;
-                scheduleSave();
+                if (!changed) {
+                        return current;
+                }
+                didChange = true;
                 return cloned;
         });
+        if (didChange) {
+                scheduleSave();
+        }
 }
 
 export function mutateAppSettingsWithoutSaving(mutator: SettingsMutator) {
