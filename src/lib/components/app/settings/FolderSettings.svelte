@@ -223,7 +223,7 @@
                                                                         >
                                                                                 <Palette class="h-6 w-6 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)]" />
                                                                         </button>
-                                                                        <div class="grid grid-cols-3 gap-2">
+                                                                        <div class="grid grid-cols-6 gap-2">
                                                                                 {#each PRESET_COLORS as preset}
                                                                                         <button
                                                                                                 type="button"
