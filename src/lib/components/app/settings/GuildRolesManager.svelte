@@ -11,7 +11,7 @@
                 type PermissionCategory,
                 type PermissionDefinition
         } from '$lib/utils/permissionDefinitions';
-        import { colorIntToHex } from '$lib/utils/color';
+        import { colorIntToHex, parseColorValue } from '$lib/utils/color';
         import { Palette } from 'lucide-svelte';
 
         type RoleDraft = {
@@ -105,9 +105,7 @@
         }
 
         function colorIntFromHex(hex: string): number {
-                const cleaned = hex.startsWith('#') ? hex.slice(1) : hex;
-                const parsed = parseInt(cleaned, 16);
-                return Number.isFinite(parsed) ? parsed : 0;
+                return parseColorValue(hex) ?? 0;
         }
 
         function roleDisplayName(role: DtoRole | null): string {
@@ -116,6 +114,11 @@
         }
 
         function roleColor(role: DtoRole): string {
+                const id = getRoleId(role);
+                if (id && editingRoleId && editingRoleId !== 'new' && draft && editingRoleId === id) {
+                        return normalizeHex(draft.color);
+                }
+
                 return normalizeHex(colorIntToHex(role?.color));
         }
 
@@ -231,6 +234,16 @@
                 draft = { ...draft, permissions: next };
         }
 
+        function applyLocalRoleUpdate(id: string, update: Partial<DtoRole>) {
+                roles = roles.map((role) => {
+                        const roleId = getRoleId(role);
+                        if (roleId && roleId === id) {
+                                return { ...role, ...update };
+                        }
+                        return role;
+                });
+        }
+
         async function saveRole() {
                 if (!draft || !$selectedGuildId || saving || !hasChanges) return;
                 const trimmedName = draft.name.trim();
@@ -275,6 +288,11 @@
                                 cancelEditing();
                         }
                 } else if (editingRoleId) {
+                        applyLocalRoleUpdate(editingRoleId, {
+                                color: payload.color,
+                                name: trimmedName,
+                                permissions: payload.permissions
+                        });
                         await auth.api.guildRoles.guildGuildIdRolesRoleIdPatch({
                                 guildId: BigInt($selectedGuildId) as any,
                                 roleId: BigInt(editingRoleId) as any,

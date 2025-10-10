@@ -1,7 +1,7 @@
 <script lang="ts">
         import { m } from '$lib/paraglide/messages.js';
         import { appSettings, mutateAppSettings, type GuildFolderItem } from '$lib/stores/settings';
-        import { colorIntToHex } from '$lib/utils/color';
+        import { colorIntToHex, parseColorValue } from '$lib/utils/color';
         import { PRESET_COLORS } from '$lib/constants/colorPresets';
         import { tick, untrack } from 'svelte';
         import { Palette } from 'lucide-svelte';
@@ -28,11 +28,7 @@
 		return `#${sanitized.padEnd(6, '0').toUpperCase()}`;
 	};
 
-	const hexToColorInt = (hex: string): number => {
-		const sanitized = hex.startsWith('#') ? hex.slice(1) : hex;
-		const parsed = Number.parseInt(sanitized, 16);
-		return Number.isFinite(parsed) ? parsed : 0;
-	};
+        const hexToColorInt = (hex: string): number => parseColorValue(hex) ?? 0;
 
         const validateName = (_value: string) => null;
 
