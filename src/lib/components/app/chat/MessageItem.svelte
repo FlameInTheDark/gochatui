@@ -18,7 +18,7 @@
 	import { extractInvite } from './extractInvite';
 	import { Pencil, Trash2 } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
-	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
 	import { openUserContextMenu } from '$lib/utils/userContextMenu';
 	import {
 		collectMemberRoleIds,
@@ -480,9 +480,11 @@
 		canDeleteMessage = own || manage;
 	});
 
-	$effect(() => {
-		const guildId = $selectedGuildId;
-		const initialRoleIds = extractAuthorRoleIds(message);
+        $effect(() => {
+                const guildRoleCacheTick = $guildRoleCacheState;
+                void guildRoleCacheTick;
+                const guildId = $selectedGuildId;
+                const initialRoleIds = extractAuthorRoleIds(message);
                 const authorId = toSnowflake((message as any)?.author?.id);
                 const guildMemberList = guildId ? ($membersByGuild[guildId] ?? undefined) : undefined;
                 const memberIndex = new Map<string, DtoMember>();

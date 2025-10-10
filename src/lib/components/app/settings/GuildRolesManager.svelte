@@ -3,7 +3,11 @@
         import { auth } from '$lib/stores/auth';
         import { m } from '$lib/paraglide/messages.js';
         import type { DtoRole } from '$lib/api';
-        import { invalidateGuildRolesCache } from '$lib/utils/guildRoles';
+        import {
+                invalidateGuildRolesCache,
+                mergeGuildRoleCache,
+                writeGuildRoleCache
+        } from '$lib/utils/guildRoles';
         import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
         import { PRESET_COLORS } from '$lib/constants/colorPresets';
         import {
@@ -158,6 +162,7 @@
                         const list = (res.data ?? []) as DtoRole[];
                         if (currentGuild === $selectedGuildId) {
                                 roles = list;
+                                writeGuildRoleCache(currentGuild, list);
                                 if (editingRoleId && editingRoleId !== 'new') {
                                         const active = list.find((r) => getRoleId(r) === editingRoleId);
                                         if (!active) {
@@ -242,6 +247,10 @@
                         }
                         return role;
                 });
+                const guildId = $selectedGuildId;
+                if (guildId) {
+                        mergeGuildRoleCache(guildId, id, update);
+                }
         }
 
         async function saveRole() {

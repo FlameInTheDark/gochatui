@@ -1,4 +1,4 @@
-import { get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import type { DtoChannel, DtoRole, GuildChannelRolePermission } from '$lib/api';
 import { auth } from '$lib/stores/auth';
 import { channelRolesByGuild } from '$lib/stores/appState';
@@ -10,6 +10,16 @@ const roleIdToGuildId = new Map<string, string>();
 const guildIdToRoleIds = new Map<string, Set<string>>();
 const channelRoleCache = new Map<string, Map<string, string[]>>();
 const channelRoleInflight = new Map<string, Map<string, Promise<string[]>>>();
+
+const guildRoleCacheRevision = writable(0);
+
+export const guildRoleCacheState = {
+        subscribe: guildRoleCacheRevision.subscribe
+};
+
+function bumpGuildRoleCacheRevision() {
+        guildRoleCacheRevision.update((value) => value + 1);
+}
 
 function toSnowflakeString(value: unknown): string | null {
 	if (value == null) return null;
@@ -125,6 +135,7 @@ export function invalidateGuildRolesCache(guildId?: string) {
                 guildIdToRoleIds.clear();
                 channelRoleCache.clear();
                 channelRoleInflight.clear();
+                bumpGuildRoleCacheRevision();
                 return;
         }
         const key = String(guildId);
@@ -133,6 +144,45 @@ export function invalidateGuildRolesCache(guildId?: string) {
         forgetGuildRoleMapping(key);
         channelRoleCache.delete(key);
         channelRoleInflight.delete(key);
+        bumpGuildRoleCacheRevision();
+}
+
+export function writeGuildRoleCache(
+        guildId: string | number | bigint | null | undefined,
+        roles: DtoRole[]
+) {
+        const gid = toSnowflakeString(guildId);
+        if (!gid) return;
+        const snapshot = roles.map((role) => ({ ...role }));
+        guildRolesResolved.set(gid, snapshot);
+        guildRolesInFlight.delete(gid);
+        trackRoleMapping(gid, snapshot);
+        bumpGuildRoleCacheRevision();
+}
+
+export function mergeGuildRoleCache(
+        guildId: string | number | bigint | null | undefined,
+        roleId: string | number | bigint | null | undefined,
+        update: Partial<DtoRole>
+) {
+        const gid = toSnowflakeString(guildId);
+        const rid = toSnowflakeString(roleId);
+        if (!gid || !rid) return;
+        const existing = guildRolesResolved.get(gid);
+        if (!existing || existing.length === 0) return;
+        let changed = false;
+        const next = existing.map((role) => {
+                const currentId = toSnowflakeString((role as any)?.id);
+                if (currentId && currentId === rid) {
+                        changed = true;
+                        return { ...role, ...update };
+                }
+                return role;
+        });
+        if (!changed) return;
+        guildRolesResolved.set(gid, next);
+        trackRoleMapping(gid, next);
+        bumpGuildRoleCacheRevision();
 }
 
 function setChannelRoleCacheEntry(guildId: string, channelId: string, roleIds: string[]) {
