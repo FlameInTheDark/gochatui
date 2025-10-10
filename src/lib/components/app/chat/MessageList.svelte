@@ -610,7 +610,7 @@
         }
 
         async function loadMore() {
-                if (!$selectedChannelId || loading || endReached) return;
+                if (!$selectedChannelId || loading || endReached || messages.length === 0) return;
                 loading = true;
                 const prevHeight = scroller?.scrollHeight ?? 0;
                 const prevTop = scroller?.scrollTop ?? 0;
