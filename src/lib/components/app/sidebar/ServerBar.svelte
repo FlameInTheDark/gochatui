@@ -658,7 +658,7 @@
 				if (event.key === 'Enter') createGuild();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
 			<div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
 				<div class="relative">
 					<div
@@ -711,7 +711,7 @@
 				if (event.key === 'Enter') confirmLeaveGuild();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
 			<div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
 				<div class="relative">
 					<div

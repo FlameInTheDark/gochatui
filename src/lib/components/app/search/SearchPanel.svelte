@@ -473,7 +473,7 @@
                         }
                 }}
         >
-                <div class="absolute inset-0 bg-black/40"></div>
+                <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                 <div
                         class="absolute z-10"
                         style={`left:${posX}px; top:${posY}px`}
