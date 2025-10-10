@@ -11,7 +11,7 @@
         import MessageItem from './MessageItem.svelte';
         import { applyMessageEventToList } from './messageEventHandlers';
         import { wsEvent } from '$lib/client/ws';
-        import { m } from '$lib/paraglide/messages.js';
+        import { m as i18n } from '$lib/paraglide/messages.js';
         import { fly } from 'svelte/transition';
         import { onDestroy, onMount, tick, untrack } from 'svelte';
         import { Sparkles } from 'lucide-svelte';
@@ -63,6 +63,7 @@
         let initializingChannelKey: string | null = null;
         let lastVisibleMessageId = $state<string | null>(null);
         let activeChannelReadMarker = $state<string | null>(null);
+        let unreadSeparatorMarker = $state<string | null>(null);
 
         const ACK_DEBOUNCE_MS = 2_000;
         let ackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -251,6 +252,7 @@
                 dirtyGuilds.add(guildId);
                 if (guildId === (activeGuildId ?? '') && channelId === (activeChannelId ?? '')) {
                         activeChannelReadMarker = messageId;
+                        unreadSeparatorMarker = null;
                 }
         }
 
@@ -339,6 +341,7 @@
                         lastAckedKey = null;
                         lastVisibleMessageId = null;
                         activeChannelReadMarker = null;
+                        unreadSeparatorMarker = null;
                 }
                 previousChannelKey = key;
         });
@@ -349,6 +352,7 @@
                 const lookup = $guildChannelReadStateLookup;
                 if (!gid || !cid) {
                         activeChannelReadMarker = null;
+                        unreadSeparatorMarker = null;
                         return;
                 }
                 const key = `${gid}:${cid}`;
@@ -464,12 +468,14 @@
                         initialLoaded = false;
                         initializedChannelKey = null;
                         initializingChannelKey = null;
+                        unreadSeparatorMarker = null;
                         return;
                 }
                 if (!ready) {
                         loading = false;
                         error = null;
                         initializingChannelKey = null;
+                        unreadSeparatorMarker = null;
                         return;
                 }
                 const key = `${gid}:${channelId}`;
@@ -488,6 +494,7 @@
                 endReached = false;
                 latestReached = false;
                 initialLoaded = false;
+                unreadSeparatorMarker = null;
                 const token = ++channelSwitchToken;
                 const pendingJump = untrack(() => $messageJumpRequest);
                 if (pendingJump && pendingJump.channelId === channelId) {
@@ -500,6 +507,7 @@
                 const shouldLoadAround =
                         Boolean(lastReadMessageId && lastKnownMessageId) &&
                         isMessageNewer(lastKnownMessageId, lastReadMessageId);
+                unreadSeparatorMarker = shouldLoadAround ? lastReadMessageId : null;
                 (async () => {
                         try {
                                 if (shouldLoadAround) {
@@ -758,7 +766,7 @@
         }
 
         function shouldShowNewSeparator(current: DtoMessage, previous: DtoMessage | undefined): boolean {
-                const marker = activeChannelReadMarker;
+                const marker = unreadSeparatorMarker;
                 if (!marker) return false;
                 const currentId = extractId(current);
                 if (!currentId) return false;
@@ -983,10 +991,10 @@
                 {@const compact = pk != null && ck != null && pk === ck && withinMinute}
                 {@const showNewSeparator = shouldShowNewSeparator(m, prev)}
                 {#if showNewSeparator}
-                        <div class="my-4 flex items-center gap-3" data-new-message-separator>
+                        <div class="my-4 flex items-center gap-3 pl-3" data-new-message-separator>
                                 <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
                                 <span class="text-xs font-semibold uppercase tracking-wide text-red-500">
-                                        New messages
+                                        {i18n.new_messages_divider()}
                                 </span>
                                 <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
                         </div>
@@ -1020,9 +1028,9 @@
 					wasAtBottom = true;
 				}}
 			>
-				{newCount > 0
-					? `${m.new_count({ count: newCount })} · ${m.jump_to_present()}`
-					: m.jump_to_present()}
+                                {newCount > 0
+                                        ? `${i18n.new_count({ count: newCount })} · ${i18n.jump_to_present()}`
+                                        : i18n.jump_to_present()}
 			</button>
 		</div>
 	</div>
