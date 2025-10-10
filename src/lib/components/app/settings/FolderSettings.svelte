@@ -2,6 +2,7 @@
         import { m } from '$lib/paraglide/messages.js';
         import { appSettings, mutateAppSettings, type GuildFolderItem } from '$lib/stores/settings';
         import { colorIntToHex } from '$lib/utils/color';
+        import { PRESET_COLORS } from '$lib/constants/colorPresets';
         import { tick, untrack } from 'svelte';
         import { Palette } from 'lucide-svelte';
 
@@ -10,15 +11,6 @@
                 color: string;
                 error: string | null;
         };
-
-        const presetColors = [
-                '#5865F2',
-                '#E873F6',
-                '#3BC6B6',
-                '#F97316',
-                '#F43F5E',
-                '#FACC15'
-        ] as const;
 
         const { focusRequest } = $props<{
                 focusRequest: {
@@ -220,19 +212,19 @@
                                                                         <button
                                                                                 type="button"
                                                                                 class={`relative flex h-16 w-16 items-center justify-center rounded-full border border-[var(--stroke)] transition-transform duration-150 hover:-translate-y-0.5 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--panel)] ${
-                                                                                        presetColors.some((color) => colorsEqual(color, drafts[folder.id].color))
+                                                                                PRESET_COLORS.some((color) => colorsEqual(color, drafts[folder.id].color))
                                                                                                 ? ''
                                                                                                 : 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--panel)]'
                                                                                 }`}
                                                                                 style={`background-color: ${normalizeHex(drafts[folder.id].color)};`}
-                                                                                title={m.folder_color_custom()}
-                                                                                aria-label={m.folder_color_custom()}
+                                                                                title={m.color_picker_custom()}
+                                                                                aria-label={m.color_picker_custom()}
                                                                                 onclick={() => openColorPicker(folder.id)}
                                                                         >
                                                                                 <Palette class="h-6 w-6 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)]" />
                                                                         </button>
                                                                         <div class="grid grid-cols-3 gap-2">
-                                                                                {#each presetColors as preset}
+                                                                                {#each PRESET_COLORS as preset}
                                                                                         <button
                                                                                                 type="button"
                                                                                                 class={`h-10 w-10 rounded-full border border-[var(--stroke)] transition-transform duration-150 hover:-translate-y-0.5 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--panel)] ${

@@ -62,7 +62,7 @@
         "folder_name_placeholder": "Enter a folder name",
         "folder_name_required": "Folder name can't be empty.",
         "folder_color": "Color",
-        "folder_color_custom": "Custom color",
+        "color_picker_custom": "Custom color",
         "other": "Other",
 	"server_profile": "Server Profile",
 	"roles": "Roles",
