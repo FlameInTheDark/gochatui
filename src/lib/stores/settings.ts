@@ -11,6 +11,7 @@ import { auth } from '$lib/stores/auth';
 import { selectedGuildId } from '$lib/stores/appState';
 import { updateUnreadSnapshot } from '$lib/stores/unreadSeed';
 import { derived, get, writable } from 'svelte/store';
+import { parseColorValue } from '$lib/utils/color';
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -484,14 +485,16 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
 					.map((gid) => toSnowflakeString(gid))
 					.filter((gid): gid is string => Boolean(gid))
 			: [];
-		return {
-			folder: {
-				kind: 'folder' as const,
-				id,
-				name: folder.name ?? null,
-				color: typeof folder.color === 'number' ? folder.color : null,
-				guilds: [] as GuildLayoutGuild[]
-			},
+                const parsedColor = parseColorValue(folder.color);
+
+                return {
+                        folder: {
+                                kind: 'folder' as const,
+                                id,
+                                name: folder.name ?? null,
+                                color: parsedColor,
+                                guilds: [] as GuildLayoutGuild[]
+                        },
 			guildIds,
 			position: typeof folder.position === 'number' ? folder.position : idx
 		};

@@ -1,14 +1,16 @@
 <script lang="ts">
         import { m } from '$lib/paraglide/messages.js';
         import { appSettings, mutateAppSettings, type GuildFolderItem } from '$lib/stores/settings';
-        import { colorIntToHex } from '$lib/utils/color';
+        import { colorIntToHex, parseColorValue } from '$lib/utils/color';
+        import { PRESET_COLORS } from '$lib/constants/colorPresets';
         import { tick, untrack } from 'svelte';
+        import { Palette } from 'lucide-svelte';
 
-	type FolderDraft = {
-		name: string;
-		color: string;
-		error: string | null;
-	};
+        type FolderDraft = {
+                name: string;
+                color: string;
+                error: string | null;
+        };
 
         const { focusRequest } = $props<{
                 focusRequest: {
@@ -26,18 +28,27 @@
 		return `#${sanitized.padEnd(6, '0').toUpperCase()}`;
 	};
 
-	const hexToColorInt = (hex: string): number => {
-		const sanitized = hex.startsWith('#') ? hex.slice(1) : hex;
-		const parsed = Number.parseInt(sanitized, 16);
-		return Number.isFinite(parsed) ? parsed : 0;
-	};
+        const hexToColorInt = (hex: string): number => parseColorValue(hex) ?? 0;
 
-	const validateName = (value: string): string | null => {
-		if (!value.trim()) {
-			return m.folder_name_required();
-		}
-		return null;
-	};
+        const validateName = (_value: string) => null;
+
+        const openColorPicker = (folderId: string) => {
+                if (typeof document === 'undefined') return;
+                const input = document.getElementById(`folder-color-${folderId}`) as HTMLInputElement | null;
+                if (!input) return;
+                if (typeof input.showPicker === 'function') {
+                        input.showPicker();
+                        return;
+                }
+                input.click();
+        };
+
+        const applyPresetColor = (folder: GuildFolderItem, color: string) => {
+                drafts[folder.id].color = normalizeHex(color);
+                saveFolder(folder);
+        };
+
+        const colorsEqual = (a: string, b: string) => normalizeHex(a) === normalizeHex(b);
 
         const ensureDraftsForFolders = (folders: GuildFolderItem[]) => {
                 const currentDrafts = untrack(() => drafts);
@@ -83,30 +94,30 @@
 		if (!draft) return;
 
 		const trimmedName = draft.name.trim();
-		const error = validateName(trimmedName);
-		drafts[folder.id] = { ...draft, name: trimmedName, error };
-		if (error) return;
+                const error = validateName(trimmedName);
+                drafts[folder.id] = { ...draft, name: trimmedName, error };
+                if (error) return;
 
-		const normalizedColor = normalizeHex(draft.color);
-		drafts[folder.id] = { ...drafts[folder.id], color: normalizedColor };
+                const normalizedColor = normalizeHex(draft.color);
+                drafts[folder.id] = { ...drafts[folder.id], color: normalizedColor };
 
-		mutateAppSettings((settings) => {
-			const target = settings.guildLayout.find(
-				(item): item is GuildFolderItem => item.kind === 'folder' && item.id === folder.id
-			);
-			if (!target) return false;
+                mutateAppSettings((settings) => {
+                        const target = settings.guildLayout.find(
+                                (item): item is GuildFolderItem => item.kind === 'folder' && item.id === folder.id
+                        );
+                        if (!target) return false;
 
-			const nextName = trimmedName;
-			const nextColor = hexToColorInt(normalizedColor);
-			const currentName = target.name ?? '';
-			const currentColor =
-				typeof target.color === 'number' && Number.isFinite(target.color) ? target.color : 0;
+                        const nextName = trimmedName === '' ? null : trimmedName;
+                        const nextColor = hexToColorInt(normalizedColor);
+                        const currentName = target.name ?? null;
+                        const currentColor =
+                                typeof target.color === 'number' && Number.isFinite(target.color) ? target.color : 0;
 
-			if (currentName === nextName && currentColor === nextColor) {
-				return false;
-			}
+                        if (currentName === nextName && currentColor === nextColor) {
+                                return false;
+                        }
 
-			target.name = nextName;
+                        target.name = nextName;
 			target.color = nextColor;
 			return true;
 		});
@@ -188,38 +199,73 @@
 							{/if}
 						</div>
 
-						<div>
-							<label class="mb-1 block text-sm font-medium" for={`folder-color-${folder.id}`}>
-								{m.folder_color()}
-							</label>
-							<div class="flex items-center gap-3">
-								<input
-									id={`folder-color-${folder.id}`}
-									type="color"
-									class="h-10 w-16 cursor-pointer rounded border border-[var(--stroke)] bg-[var(--panel-strong)]"
-									value={drafts[folder.id].color}
-									oninput={(event) => {
-										drafts[folder.id].color = event.currentTarget.value.toUpperCase();
-									}}
-									onchange={() => {
-										drafts[folder.id].color = normalizeHex(drafts[folder.id].color);
-										saveFolder(folder);
-									}}
-								/>
-								<input
-									type="text"
-									class="w-28 rounded border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 font-mono text-sm focus:border-[var(--brand)] focus:outline-none"
-									value={drafts[folder.id].color}
-									oninput={(event) => {
-										drafts[folder.id].color = event.currentTarget.value.toUpperCase();
-									}}
-									onblur={() => {
-										drafts[folder.id].color = normalizeHex(drafts[folder.id].color);
-										saveFolder(folder);
-									}}
-								/>
-							</div>
-						</div>
+                                                <div>
+                                                        <label class="mb-1 block text-sm font-medium" for={`folder-color-text-${folder.id}`}>
+                                                                {m.folder_color()}
+                                                        </label>
+                                                        <div class="flex flex-col gap-3">
+                                                                <div class="flex items-center gap-4">
+                                                                        <button
+                                                                                type="button"
+                                                                                class={`relative flex h-16 w-16 items-center justify-center rounded-full border border-[var(--stroke)] transition-transform duration-150 hover:-translate-y-0.5 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--panel)] ${
+                                                                                PRESET_COLORS.some((color) => colorsEqual(color, drafts[folder.id].color))
+                                                                                                ? ''
+                                                                                                : 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--panel)]'
+                                                                                }`}
+                                                                                style={`background-color: ${normalizeHex(drafts[folder.id].color)};`}
+                                                                                title={m.color_picker_custom()}
+                                                                                aria-label={m.color_picker_custom()}
+                                                                                onclick={() => openColorPicker(folder.id)}
+                                                                        >
+                                                                                <Palette class="h-6 w-6 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)]" />
+                                                                        </button>
+                                                                        <div class="grid grid-cols-6 gap-2">
+                                                                                {#each PRESET_COLORS as preset}
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class={`h-10 w-10 rounded-full border border-[var(--stroke)] transition-transform duration-150 hover:-translate-y-0.5 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--panel)] ${
+                                                                                                        colorsEqual(drafts[folder.id].color, preset)
+                                                                                                                ? 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--panel)]'
+                                                                                                                : ''
+                                                                                                }`}
+                                                                                                style={`background-color: ${preset};`}
+                                                                                                title={`${m.folder_color()} ${preset}`}
+                                                                                                aria-label={`${m.folder_color()} ${preset}`}
+                                                                                                onclick={() => applyPresetColor(folder, preset)}
+                                                                                        ></button>
+                                                                                {/each}
+                                                                        </div>
+                                                                </div>
+                                                                <div class="flex items-center gap-3">
+                                                                        <input
+                                                                                id={`folder-color-text-${folder.id}`}
+                                                                                type="text"
+                                                                                class="w-32 rounded border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 font-mono text-sm focus:border-[var(--brand)] focus:outline-none"
+                                                                                value={drafts[folder.id].color}
+                                                                                oninput={(event) => {
+                                                                                        drafts[folder.id].color = event.currentTarget.value.toUpperCase();
+                                                                                }}
+                                                                                onblur={() => {
+                                                                                        drafts[folder.id].color = normalizeHex(drafts[folder.id].color);
+                                                                                        saveFolder(folder);
+                                                                                }}
+                                                                        />
+                                                                </div>
+                                                                <input
+                                                                        id={`folder-color-${folder.id}`}
+                                                                        type="color"
+                                                                        class="sr-only"
+                                                                        value={drafts[folder.id].color}
+                                                                        oninput={(event) => {
+                                                                                drafts[folder.id].color = event.currentTarget.value.toUpperCase();
+                                                                        }}
+                                                                        onchange={() => {
+                                                                                drafts[folder.id].color = normalizeHex(drafts[folder.id].color);
+                                                                                saveFolder(folder);
+                                                                        }}
+                                                                />
+                                                        </div>
+                                                </div>
 
 						<div class="flex justify-end">
 							{#if drafts[folder.id]}
