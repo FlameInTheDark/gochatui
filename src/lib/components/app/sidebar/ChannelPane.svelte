@@ -1558,12 +1558,15 @@
 		</SettingsPanel>
 	{/if}
 
-	{#if editingCategory}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (editingCategory = null)}
+        {#if editingCategory}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                editingCategory = null;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') editingCategory = null;
 				if (e.key === 'Enter') saveEditCategory();
@@ -1604,12 +1607,15 @@
                 </div>
         {/if}
 
-	{#if creatingChannel}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creatingChannel = false)}
+        {#if creatingChannel}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creatingChannel = false;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingChannel = false;
 				if (e.key === 'Enter') createChannel();
@@ -1657,12 +1663,15 @@
                 </div>
         {/if}
 
-	{#if creatingCategory}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creatingCategory = false)}
+        {#if creatingCategory}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creatingCategory = false;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingCategory = false;
 				if (e.key === 'Enter') createCategory();
