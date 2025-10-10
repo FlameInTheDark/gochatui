@@ -9,7 +9,7 @@
                 selectedGuildId
         } from '$lib/stores/appState';
         import { colorIntToHex } from '$lib/utils/color';
-        import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
         import { m } from '$lib/paraglide/messages.js';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -332,10 +332,12 @@
 			});
 	});
 
-	$effect(() => {
-		const gid = $selectedGuildId ?? '';
-		if (!gid) {
-			roleMap = {};
+        $effect(() => {
+                const guildRoleCacheTick = $guildRoleCacheState;
+                void guildRoleCacheTick;
+                const gid = $selectedGuildId ?? '';
+                if (!gid) {
+                        roleMap = {};
 			return;
 		}
 		let cancelled = false;
