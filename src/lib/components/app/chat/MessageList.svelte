@@ -9,6 +9,7 @@
                 messageJumpRequest
         } from '$lib/stores/appState';
         import MessageItem from './MessageItem.svelte';
+        import MessagePlaceholder from './MessagePlaceholder.svelte';
         import { applyMessageEventToList } from './messageEventHandlers';
         import { wsEvent } from '$lib/client/ws';
         import { m as i18n } from '$lib/paraglide/messages.js';
@@ -26,7 +27,8 @@
         import { isMessageNewer } from './readStateUtils';
 
 	let messages = $state<DtoMessage[]>([]);
-	let loading = $state(false);
+        let loading = $state(false);
+        let loadingDirection = $state<'none' | 'older' | 'newer'>('none');
 	let error = $state<string | null>(null);
         let endReached = $state(false);
         let latestReached = $state(true);
@@ -531,7 +533,9 @@
                 })();
         });
 
-	const PAGE_SIZE = 50;
+        const PAGE_SIZE = 50;
+        const PLACEHOLDER_COUNT = 3;
+        const placeholders = Array.from({ length: PLACEHOLDER_COUNT }, (_, i) => i);
 
         function extractId(value: any): string | null {
                 if (value == null) return null;
@@ -611,6 +615,7 @@
 
         async function loadMore() {
                 if (!$selectedChannelId || loading || endReached || messages.length === 0) return;
+                loadingDirection = 'older';
                 loading = true;
                 const prevHeight = scroller?.scrollHeight ?? 0;
                 const prevTop = scroller?.scrollTop ?? 0;
@@ -666,6 +671,7 @@
 			error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
                 } finally {
                         loading = false;
+                        loadingDirection = 'none';
                         if (inserted > 0 && scroller) {
                                 await tick();
                                 const diff = scroller.scrollHeight - prevHeight;
@@ -690,6 +696,7 @@
                         await loadLatest();
                         return;
                 }
+                loadingDirection = 'newer';
                 loading = true;
                 let mutatedExisting = false;
                 try {
@@ -743,6 +750,7 @@
                         error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
                 } finally {
                         loading = false;
+                        loadingDirection = 'none';
                         void tick().then(() => recordReadState());
                 }
         }
@@ -913,10 +921,17 @@
                         {error}
                 </div>
         {/if}
-	{#if endReached && initialLoaded}
-		{@const name = channelDisplayName()}
-		{@const topic = channelTopic()}
-		<div class="px-4 py-6">
+        {#if loading && loadingDirection === 'older'}
+                <div class="space-y-2 pb-2" aria-hidden="true">
+                        {#each placeholders as key (key)}
+                                <MessagePlaceholder />
+                        {/each}
+                </div>
+        {/if}
+        {#if endReached && initialLoaded}
+                {@const name = channelDisplayName()}
+                {@const topic = channelTopic()}
+                <div class="px-4 py-6">
 			<div
 				class="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
 			>
@@ -1008,6 +1023,13 @@
                 {/if}
                 <MessageItem message={m} {compact} on:deleted={loadLatest} />
         {/each}
+        {#if loading && loadingDirection === 'newer'}
+                <div class="space-y-2 pt-2" aria-hidden="true">
+                        {#each placeholders as key (key)}
+                                <MessagePlaceholder />
+                        {/each}
+                </div>
+        {/if}
 </div>
 
 {#if !wasAtBottom && initialLoaded}
