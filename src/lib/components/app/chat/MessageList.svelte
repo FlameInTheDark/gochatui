@@ -468,9 +468,22 @@
                         if (pendingJump && pendingJump.channelId === channelId) {
                                 return;
                         }
+                        const lookup = untrack(() => $guildChannelReadStateLookup);
+                        const lastReadMessageId = lookup?.[gid]?.[channelId]?.lastReadMessageId ?? null;
+                        const lastKnownMessageId = getChannelLastMessageId(chan);
+                        const shouldLoadAround =
+                                Boolean(lastReadMessageId && lastKnownMessageId) &&
+                                isMessageNewer(lastKnownMessageId, lastReadMessageId);
                         (async () => {
-                                await loadLatest();
-                                if (token === channelSwitchToken) {
+                                if (shouldLoadAround) {
+                                        const jumped = await jumpToMessage(lastReadMessageId);
+                                        if (!jumped && messages.length === 0) {
+                                                await loadLatest();
+                                        }
+                                } else {
+                                        await loadLatest();
+                                }
+                                if (token === channelSwitchToken && !initialLoaded) {
                                         initialLoaded = true;
                                         await tick();
                                         recordReadState();
@@ -719,10 +732,27 @@
                 }
         }
 
-        async function jumpToMessage(targetRaw: any) {
-                if (!$selectedChannelId) return;
+        function getChannelLastMessageId(channel: any): string | null {
+                if (!channel) return null;
+                const candidates = [
+                        (channel as any)?.last_message_id,
+                        (channel as any)?.lastMessageId,
+                        (channel as any)?.lastMessage?.id,
+                        (channel as any)?.last_message?.id,
+                        (channel as any)?.lastMessage,
+                        (channel as any)?.last_message
+                ];
+                for (const value of candidates) {
+                        const id = extractId(value);
+                        if (id) return id;
+                }
+                return null;
+        }
+
+        async function jumpToMessage(targetRaw: any): Promise<boolean> {
+                if (!$selectedChannelId) return false;
                 const targetId = extractId(targetRaw);
-                if (!targetId) return;
+                if (!targetId) return false;
                 let fetched = false;
                 const hadFutureMessages = messages.some((msg) => {
                         const key = extractId(msg);
@@ -747,6 +777,7 @@
                                 fetched = true;
                         } catch (e: any) {
                                 error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
+                                return false;
                         } finally {
                                 loading = false;
                         }
@@ -762,6 +793,7 @@
                         error = error ?? 'Failed to load messages';
                 }
                 void tick().then(() => recordReadState());
+                return scrolled;
         }
 
         $effect(() => {
