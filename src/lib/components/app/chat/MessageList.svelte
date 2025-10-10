@@ -456,13 +456,19 @@
                 const channelId = $selectedChannelId;
                 const ready = $channelReady;
                 const gid = $selectedGuildId ?? '';
-                if (!channelId || !ready) {
+                if (!channelId) {
                         error = null;
                         messages = [];
                         endReached = false;
                         latestReached = false;
                         initialLoaded = false;
                         initializedChannelKey = null;
+                        initializingChannelKey = null;
+                        return;
+                }
+                if (!ready) {
+                        loading = false;
+                        error = null;
                         initializingChannelKey = null;
                         return;
                 }
@@ -751,6 +757,17 @@
                 }
         }
 
+        function shouldShowNewSeparator(current: DtoMessage, previous: DtoMessage | undefined): boolean {
+                const marker = activeChannelReadMarker;
+                if (!marker) return false;
+                const currentId = extractId(current);
+                if (!currentId) return false;
+                if (!isMessageNewer(currentId, marker)) return false;
+                const prevId = previous ? extractId(previous) : null;
+                if (!prevId) return true;
+                return !isMessageNewer(prevId, marker);
+        }
+
         function getChannelLastMessageId(channel: any): string | null {
                 if (!channel) return null;
                 const candidates = [
@@ -961,11 +978,21 @@
 				return toDate(prev?.updated_at);
 			}
 		})()}
-		{@const withinMinute =
-			pd && d ? Math.abs((d as Date).getTime() - (pd as Date).getTime()) <= 60000 : false}
-		{@const compact = pk != null && ck != null && pk === ck && withinMinute}
-		<MessageItem message={m} {compact} on:deleted={loadLatest} />
-	{/each}
+                {@const withinMinute =
+                        pd && d ? Math.abs((d as Date).getTime() - (pd as Date).getTime()) <= 60000 : false}
+                {@const compact = pk != null && ck != null && pk === ck && withinMinute}
+                {@const showNewSeparator = shouldShowNewSeparator(m, prev)}
+                {#if showNewSeparator}
+                        <div class="my-4 flex items-center gap-3" data-new-message-separator>
+                                <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
+                                <span class="text-xs font-semibold uppercase tracking-wide text-red-500">
+                                        New messages
+                                </span>
+                                <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
+                        </div>
+                {/if}
+                <MessageItem message={m} {compact} on:deleted={loadLatest} />
+        {/each}
 </div>
 
 {#if !wasAtBottom && initialLoaded}
