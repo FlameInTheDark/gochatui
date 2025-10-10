@@ -29,6 +29,7 @@
         "folder_name_placeholder": "Ordnernamen eingeben",
         "folder_name_required": "Der Ordnername darf nicht leer sein.",
         "folder_color": "Farbe",
+        "color_picker_custom": "Benutzerdefinierte Farbe",
         "other": "Sonstiges",
 	"server_profile": "Serverprofil",
 	"roles": "Rollen",
