@@ -678,7 +678,14 @@
         }
 
         async function loadNewer() {
-                if (!$selectedChannelId || loading || latestReached) return;
+                if (
+                        !$selectedChannelId ||
+                        loading ||
+                        latestReached ||
+                        (!initialLoaded && messages.length === 0)
+                ) {
+                        return;
+                }
                 if (!messages.length) {
                         await loadLatest();
                         return;
