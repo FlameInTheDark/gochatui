@@ -702,13 +702,19 @@ async function persistSettings() {
 type SettingsMutator = (settings: AppSettings) => boolean;
 
 export function mutateAppSettings(mutator: SettingsMutator) {
+        let didChange = false;
         appSettings.update((current) => {
                 const cloned = cloneSettings(current);
                 const changed = mutator(cloned);
-                if (!changed) return current;
-                scheduleSave();
+                if (!changed) {
+                        return current;
+                }
+                didChange = true;
                 return cloned;
         });
+        if (didChange) {
+                scheduleSave();
+        }
 }
 
 export function mutateAppSettingsWithoutSaving(mutator: SettingsMutator) {
