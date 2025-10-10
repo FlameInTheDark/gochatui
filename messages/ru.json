@@ -62,6 +62,7 @@
         "folder_name_placeholder": "Введите название папки",
         "folder_name_required": "Название папки не может быть пустым.",
         "folder_color": "Цвет",
+        "color_picker_custom": "Пользовательский цвет",
         "other": "Другое",
 	"server_profile": "Профиль сервера",
 	"roles": "Роли",

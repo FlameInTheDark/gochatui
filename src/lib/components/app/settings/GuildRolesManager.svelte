@@ -5,12 +5,14 @@
         import type { DtoRole } from '$lib/api';
         import { invalidateGuildRolesCache } from '$lib/utils/guildRoles';
         import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
+        import { PRESET_COLORS } from '$lib/constants/colorPresets';
         import {
                 PERMISSION_CATEGORIES,
                 type PermissionCategory,
                 type PermissionDefinition
         } from '$lib/utils/permissionDefinitions';
         import { colorIntToHex } from '$lib/utils/color';
+        import { Palette } from 'lucide-svelte';
 
         type RoleDraft = {
                 name: string;
@@ -32,7 +34,7 @@
                 (1 << 21) |
                 (1 << 22);
 
-        const DEFAULT_ROLE_COLOR = '#5865F2';
+        const DEFAULT_ROLE_COLOR = PRESET_COLORS[0];
 
         let roles = $state<DtoRole[]>([]);
         let loading = $state(false);
@@ -75,15 +77,31 @@
 
         function normalizeHex(hex: string | null | undefined): string {
                 if (typeof hex !== 'string') return DEFAULT_ROLE_COLOR;
-                const trimmed = hex.trim();
-                if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
-                        return trimmed.toUpperCase();
+                const raw = hex.trim();
+                if (raw.length === 0) return DEFAULT_ROLE_COLOR;
+                const withoutHash = raw.startsWith('#') ? raw.slice(1) : raw;
+                const sanitized = withoutHash.replace(/[^0-9a-f]/gi, '').slice(0, 6);
+                if (!sanitized) return DEFAULT_ROLE_COLOR;
+                return `#${sanitized.padEnd(6, '0').toUpperCase()}`;
+        }
+
+        function colorsEqual(a: string, b: string): boolean {
+                return normalizeHex(a) === normalizeHex(b);
+        }
+
+        function openColorPicker() {
+                if (typeof document === 'undefined') return;
+                const input = document.getElementById('role-color-picker') as HTMLInputElement | null;
+                if (!input) return;
+                if (typeof input.showPicker === 'function') {
+                        input.showPicker();
+                        return;
                 }
-                const noHash = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
-                if (/^[0-9a-fA-F]{6}$/.test(noHash)) {
-                        return `#${noHash.toUpperCase()}`;
-                }
-                return DEFAULT_ROLE_COLOR;
+                input.click();
+        }
+
+        function applyPresetColor(color: string) {
+                updateDraft({ color: normalizeHex(color) });
         }
 
         function colorIntFromHex(hex: string): number {
@@ -222,9 +240,13 @@
                 }
                 saving = true;
                 formError = null;
+                const normalizedColor = normalizeHex(draft.color);
+                if (normalizedColor !== draft.color) {
+                        draft = { ...draft, color: normalizedColor };
+                }
                 const payload = {
                         name: trimmedName,
-                        color: colorIntFromHex(draft.color),
+                        color: colorIntFromHex(normalizedColor),
                         permissions: draft.permissions
                 };
         try {
@@ -387,6 +409,7 @@
                 </div>
                 <div class="rounded border border-[var(--stroke)] bg-[var(--panel-strong)] p-4">
                         {#if draft}
+                                {@const roleDraft = draft!}
                                 <form class="space-y-5" onsubmit={handleSubmit}>
                                         <div class="space-y-1">
                                                 <label class="text-sm font-medium" for="role-name">{m.role_form_name_label()}</label>
@@ -394,7 +417,7 @@
                                                         id="role-name"
                                                         name="name"
                                                         class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
-                                                        value={draft.name}
+                                                        value={roleDraft.name}
                                                         placeholder={m.role_form_name_placeholder()}
                                                         oninput={(event) =>
                                                                 updateDraft({ name: (event.currentTarget as HTMLInputElement).value })
@@ -402,22 +425,74 @@
                                                 />
                                         </div>
                                         <div class="space-y-2">
-                                                <label class="text-sm font-medium" for="role-color">{m.role_form_color_label()}</label>
-                                                <div class="flex items-center gap-3">
+                                                <label class="text-sm font-medium" for="role-color-text">{m.role_form_color_label()}</label>
+                                                <div class="flex flex-col gap-3">
+                                                        <div class="flex items-center gap-4">
+                                                                <button
+                                                                        type="button"
+                                                                        class={`relative flex h-16 w-16 items-center justify-center rounded-full border border-[var(--stroke)] transition-transform duration-150 hover:-translate-y-0.5 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--panel-strong)] ${
+                                                                        PRESET_COLORS.some((color) => colorsEqual(color, roleDraft.color))
+                                                                                        ? ''
+                                                                                        : 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--panel-strong)]'
+                                                                        }`}
+                                                                        style={`background-color: ${normalizeHex(roleDraft.color)};`}
+                                                                        title={m.color_picker_custom()}
+                                                                        aria-label={m.color_picker_custom()}
+                                                                        onclick={openColorPicker}
+                                                                >
+                                                                        <Palette class="h-6 w-6 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)]" />
+                                                                </button>
+                                                                <div class="grid grid-cols-6 gap-2">
+                                                                        {#each PRESET_COLORS as preset}
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class={`h-10 w-10 rounded-full border border-[var(--stroke)] transition-transform duration-150 hover:-translate-y-0.5 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--panel-strong)] ${
+                                                                                                colorsEqual(roleDraft.color, preset)
+                                                                                                        ? 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--panel-strong)]'
+                                                                                                        : ''
+                                                                                        }`}
+                                                                                        style={`background-color: ${preset};`}
+                                                                                        title={`${m.role_form_color_label()} ${preset}`}
+                                                                                        aria-label={`${m.role_form_color_label()} ${preset}`}
+                                                                                        onclick={() => applyPresetColor(preset)}
+                                                                                ></button>
+                                                                        {/each}
+                                                                </div>
+                                                        </div>
+                                                        <div class="flex items-center gap-3">
+                                                                <input
+                                                                        id="role-color-text"
+                                                                        type="text"
+                                                                        class="w-32 rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 font-mono text-sm focus:border-[var(--brand)] focus:outline-none"
+                                                                        value={roleDraft.color}
+                                                                        oninput={(event) =>
+                                                                                updateDraft({
+                                                                                        color: (event.currentTarget as HTMLInputElement).value.toUpperCase()
+                                                                                })
+                                                                        }
+                                                                        onblur={(event) =>
+                                                                                updateDraft({
+                                                                                        color: normalizeHex((event.currentTarget as HTMLInputElement).value)
+                                                                                })
+                                                                        }
+                                                                />
+                                                        </div>
                                                         <input
-                                                                id="role-color"
+                                                                id="role-color-picker"
                                                                 type="color"
-                                                                class="h-10 w-16 cursor-pointer rounded border border-[var(--stroke)] bg-[var(--panel)]"
-                                                                value={draft.color}
+                                                                class="sr-only"
+                                                                value={normalizeHex(roleDraft.color)}
                                                                 oninput={(event) =>
                                                                         updateDraft({
-                                                                                color: normalizeHex(
-                                                                                        (event.currentTarget as HTMLInputElement).value
-                                                                                )
+                                                                                color: (event.currentTarget as HTMLInputElement).value.toUpperCase()
+                                                                        })
+                                                                }
+                                                                onchange={(event) =>
+                                                                        updateDraft({
+                                                                                color: normalizeHex((event.currentTarget as HTMLInputElement).value)
                                                                         })
                                                                 }
                                                         />
-                                                        <span class="text-sm font-mono text-[var(--fg-muted)]">{draft.color}</span>
                                                 </div>
                                                 <p class="text-xs text-[var(--fg-muted)]">{m.role_form_color_hint()}</p>
                                         </div>
