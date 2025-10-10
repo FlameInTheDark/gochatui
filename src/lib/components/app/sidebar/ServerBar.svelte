@@ -644,12 +644,15 @@
 		</button>
 	</div>
 
-	{#if creating}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creating = false)}
+        {#if creating}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creating = false;
+                        }}
 			onkeydown={(event) => {
 				if (event.key === 'Escape') creating = false;
 				if (event.key === 'Enter') createGuild();
@@ -694,12 +697,15 @@
 		</div>
 	{/if}
 
-	{#if leavingGuild}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (leavingGuild = null)}
+        {#if leavingGuild}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                leavingGuild = null;
+                        }}
 			onkeydown={(event) => {
 				if (event.key === 'Escape') leavingGuild = null;
 				if (event.key === 'Enter') confirmLeaveGuild();

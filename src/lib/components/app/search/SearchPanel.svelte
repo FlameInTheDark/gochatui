@@ -451,7 +451,8 @@
                 class="fixed inset-0 z-[1000]"
                 role="button"
                 tabindex="0"
-                onpointerdown={() => {
+                onclick={(event) => {
+                        if (event.target !== event.currentTarget) return;
                         if (pendingFilter) {
                                 closeFilterPrompt();
                         } else if (showKeywordHelp) {
