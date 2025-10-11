@@ -31,6 +31,18 @@
 	const guilds = auth.guilds;
 	const presenceMap = presenceByUser;
 	const presenceSubscription = createPresenceSubscription();
+	let lastTrackedUserIds: string[] = [];
+
+	function applyTrackedUserIds(next: string[]) {
+		if (
+			next.length === lastTrackedUserIds.length &&
+			next.every((id, index) => id === lastTrackedUserIds[index])
+		) {
+			return;
+		}
+		lastTrackedUserIds = next.slice();
+		presenceSubscription.update(next);
+	}
 
 	onDestroy(() => {
 		presenceSubscription.destroy();
@@ -389,7 +401,7 @@
 		const guild = currentGuild;
 		const list = currentMembers ?? [];
 		if (!channel) {
-			presenceSubscription.update([]);
+			applyTrackedUserIds([]);
 			return [] as DecoratedMember[];
 		}
 		const lookup = $presenceMap;
@@ -414,7 +426,7 @@
 		const hideWithoutAccess = Boolean((channel as any)?.private);
 		const filtered = hideWithoutAccess ? entries.filter((entry) => entry.hasAccess) : entries;
 		const tracked = filtered.map((entry) => entry.userId).filter((id): id is string => Boolean(id));
-		presenceSubscription.update(tracked);
+		applyTrackedUserIds(tracked);
 		filtered.sort((a, b) => {
 			if (a.hasAccess !== b.hasAccess) return a.hasAccess ? -1 : 1;
 			return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
