@@ -19,7 +19,8 @@
 	import { Pencil, Trash2 } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
-	import { openUserContextMenu } from '$lib/utils/userContextMenu';
+        import { openUserContextMenu } from '$lib/utils/userContextMenu';
+        import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
 	import {
 		collectMemberRoleIds,
 		extractAuthorRoleIds,
@@ -451,7 +452,8 @@
 	let canDeleteMessage = $state(false);
 	let canEditMessage = $state(false);
 	let primaryRoleColor = $state<string | null>(null);
-	let roleColorRequest = 0;
+        let roleColorRequest = 0;
+        let resolvedAuthorMember = $state<DtoMember | null>(null);
 
 	function resolveChannelPermissions(): number {
 		const gid = $selectedGuildId ?? '';
@@ -496,7 +498,9 @@
                                 }
                         }
                 }
-                const cachedMember = authorId ? memberIndex.get(authorId) ?? null : null;
+                const directMember = ((message as any)?.member ?? null) as DtoMember | null;
+                const cachedMember = directMember ?? (authorId ? memberIndex.get(authorId) ?? null : null);
+                resolvedAuthorMember = cachedMember;
                 const requestId = ++roleColorRequest;
                 primaryRoleColor = null;
 
@@ -814,11 +818,11 @@
                 contextMenu.openFromEvent(e, items);
         }
 
-	function openUserMenu(event: MouseEvent) {
-		openUserContextMenu(
-			event,
-			{
-				userId: (message as any)?.author?.id,
+        function openUserMenu(event: MouseEvent) {
+                openUserContextMenu(
+                        event,
+                        {
+                                userId: (message as any)?.author?.id,
 				user: (message as any)?.author,
 				member: (message as any)?.member
 			},
@@ -842,8 +846,32 @@
 		) {
 			return;
 		}
-		openMessageMenu(event as unknown as MouseEvent);
-	}
+                openMessageMenu(event as unknown as MouseEvent);
+        }
+
+        function openAuthorProfile(event: MouseEvent) {
+                const member = resolvedAuthorMember;
+                if (!member) {
+                        return;
+                }
+                const target = event.currentTarget as HTMLElement | null;
+                let anchor: { x: number; y: number; width: number; height: number } | null = null;
+                if (target && typeof window !== 'undefined') {
+                        const rect = target.getBoundingClientRect();
+                        anchor = {
+                                x: rect.left,
+                                y: rect.top,
+                                width: rect.width,
+                                height: rect.height
+                        };
+                }
+
+                memberProfilePanel.open({
+                        member,
+                        guildId: $selectedGuildId,
+                        anchor
+                });
+        }
 </script>
 
 <div
@@ -861,16 +889,17 @@
 			{fmtMsgTime(message)}
 		</div>
 	{:else}
-		<button
-			type="button"
-			class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
-			data-user-menu="true"
-			aria-label={message.author?.name ?? 'User'}
-			oncontextmenu={openUserMenu}
-		>
-			{(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
-		</button>
-	{/if}
+                <button
+                        type="button"
+                        class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
+                        data-user-menu="true"
+                        aria-label={message.author?.name ?? 'User'}
+                        oncontextmenu={openUserMenu}
+                        onclick={openAuthorProfile}
+                >
+                        {(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
+                </button>
+        {/if}
 	<div class="relative min-w-0 flex-1">
 		{#if !isEditing && (canEditMessage || canDeleteMessage)}
 			<div
@@ -902,18 +931,19 @@
 		{/if}
 		{#if !compact}
 			<div class="flex items-baseline gap-2 pr-20">
-				<div
-					role="contentinfo"
-					class="truncate font-semibold text-[var(--muted)]"
-					style:color={primaryRoleColor ?? null}
-					data-user-menu="true"
-					oncontextmenu={openUserMenu}
-				>
-					{message.author?.name ?? 'User'}
-				</div>
-				<div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>
-					{fmtMsgTime(message)}
-				</div>
+                                <button
+                                        type="button"
+                                        class="truncate font-semibold text-[var(--muted)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                        style:color={primaryRoleColor ?? null}
+                                        data-user-menu="true"
+                                        oncontextmenu={openUserMenu}
+                                        onclick={openAuthorProfile}
+                                >
+                                        {message.author?.name ?? 'User'}
+                                </button>
+                                <div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>
+                                        {fmtMsgTime(message)}
+                                </div>
 			</div>
 		{/if}
 		{#if isEditing}
