@@ -19,7 +19,6 @@
         import { tick } from 'svelte';
 
         let panelEl: HTMLDivElement | null = $state(null);
-        let backdropEl: HTMLDivElement | null = $state(null);
         let posX = $state(0);
         let posY = $state(0);
         let roleMap = $state<Record<string, DtoRole>>({});
@@ -28,21 +27,8 @@
 
         const presenceMap = presenceByUser;
 
-        let backdropPointerId = $state<number | null>(null);
-        let backdropPointerActive = $state(false);
-
         function closePanel() {
                 memberProfilePanel.close();
-        }
-
-        function releaseBackdropPointerCapture() {
-                if (backdropPointerId == null) return;
-                try {
-                        backdropEl?.releasePointerCapture(backdropPointerId);
-                } catch {
-                        // Ignore environments without pointer capture support
-                }
-                backdropPointerId = null;
         }
 
         function resolveMember(): DtoMember | null {
@@ -116,13 +102,6 @@
 
         const selectedMember = $derived(resolveMember());
 
-        $effect(() => {
-                if (!$memberProfilePanel.open) {
-                        backdropPointerActive = false;
-                        releaseBackdropPointerCapture();
-                }
-        });
-
         const userId = $derived.by(() =>
                 toSnowflakeString((selectedMember as any)?.user?.id) ??
                 toSnowflakeString((selectedMember as any)?.id)
@@ -180,80 +159,48 @@
 
         const avatarInitial = $derived.by(() => memberInitial(selectedMember));
 
-        function handleBackdropPointerDown(event: PointerEvent) {
-                event.preventDefault();
-                event.stopPropagation();
-                backdropPointerActive = true;
-                backdropPointerId = event.pointerId;
-                try {
-                        backdropEl?.setPointerCapture(event.pointerId);
-                } catch {
-                        // Ignore environments without pointer capture support
-                }
-                if (event.pointerType === 'mouse' && event.button !== 0) {
-                        return;
-                }
-        }
-
-        function finishBackdropInteraction() {
-                backdropPointerActive = false;
-                releaseBackdropPointerCapture();
-                closePanel();
-        }
-
-        function handleBackdropPointerUp(event: PointerEvent) {
-                if (!backdropPointerActive) return;
-                if (backdropPointerId != null && event.pointerId !== backdropPointerId) {
-                        return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                finishBackdropInteraction();
-        }
-
-        function handleBackdropPointerCancel(event: PointerEvent) {
-                if (!backdropPointerActive) return;
-                if (backdropPointerId != null && event.pointerId !== backdropPointerId) {
-                        return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                backdropPointerActive = false;
-                releaseBackdropPointerCapture();
-        }
-
-        function handleBackdropContextMenu(event: MouseEvent) {
-                event.preventDefault();
-                event.stopPropagation();
-                if (backdropPointerActive) {
-                        finishBackdropInteraction();
-                        return;
-                }
-                closePanel();
-        }
-
         function handleKeydown(event: KeyboardEvent) {
                 if (event.key === 'Escape') {
                         event.preventDefault();
                         closePanel();
                 }
         }
+
+        function isEventInsidePanel(target: EventTarget | null) {
+                if (!panelEl) return false;
+                if (!(target instanceof Node)) return false;
+                return panelEl.contains(target);
+        }
+
+        function handleWindowPointerDown(event: PointerEvent) {
+                if (!$memberProfilePanel.open) return;
+                if (event.button !== 0 && event.pointerType === 'mouse') {
+                        return;
+                }
+                if (!isEventInsidePanel(event.target)) {
+                        closePanel();
+                }
+        }
+
+        function handleWindowContextMenu(event: MouseEvent) {
+                if (!$memberProfilePanel.open) return;
+                if (isEventInsidePanel(event.target)) {
+                        return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                closePanel();
+        }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window
+        on:keydown={handleKeydown}
+        on:pointerdown={handleWindowPointerDown}
+        on:contextmenu={handleWindowContextMenu}
+/>
 
 {#if $memberProfilePanel.open && selectedMember}
-        <div class="fixed inset-0 z-40 flex" aria-hidden={false}>
-                <div
-                        bind:this={backdropEl}
-                        class="pointer-events-auto absolute inset-0"
-                        style:background={'var(--scrim)'}
-                        aria-hidden={true}
-                        onpointerdown={handleBackdropPointerDown}
-                        onpointerup={handleBackdropPointerUp}
-                        onpointercancel={handleBackdropPointerCancel}
-                        oncontextmenu={handleBackdropContextMenu}
-                />
+        <div class="pointer-events-none fixed inset-0 z-40" aria-hidden={false}>
                 <div
                         bind:this={panelEl}
                         class="pointer-events-auto absolute w-80 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-4 text-sm text-[var(--text)] shadow-[var(--shadow-2)] backdrop-blur-md"
