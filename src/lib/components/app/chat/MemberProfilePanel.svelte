@@ -190,8 +190,8 @@
                         class="pointer-events-auto absolute inset-0 backdrop-blur-md"
                         style:background={'var(--scrim)'}
                         aria-hidden={true}
-                        on:pointerdown={handleBackdropPointerDown}
-                        on:contextmenu={handleBackdropContextMenu}
+                        onpointerdown={handleBackdropPointerDown}
+                        oncontextmenu={handleBackdropContextMenu}
                 />
                 <div
                         bind:this={panelEl}
