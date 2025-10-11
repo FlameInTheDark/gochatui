@@ -212,8 +212,8 @@
                                         <button
                                                 type="button"
                                                 class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
-                                                on:pointerdown={(event) => handleStatusPointer(event, option)}
-                                                on:keydown={(event) => handleStatusKey(event, option)}
+                                                onpointerdown={(event) => handleStatusPointer(event, option)}
+                                                onkeydown={(event) => handleStatusKey(event, option)}
                                                 role="menuitemradio"
                                                 aria-checked={isOptionActive(option, $presenceMode)}
                                         >
