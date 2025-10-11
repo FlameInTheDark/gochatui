@@ -68,9 +68,9 @@ html {
 }
 
 body {
-	height: 100%;
-	margin: 0;
-	font-family:
+        height: 100%;
+        margin: 0;
+        font-family:
 		Inter,
 		system-ui,
 		-apple-system,
@@ -83,8 +83,18 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	color: var(--text);
-	background: var(--bg);
-	overflow: auto;
+        background: var(--bg);
+        overflow: auto;
+}
+
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']) {
+        cursor: pointer;
+}
+
+button:disabled,
+[role='button'][aria-disabled='true'] {
+        cursor: not-allowed;
 }
 
 .panel {

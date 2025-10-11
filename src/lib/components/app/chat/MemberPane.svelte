@@ -321,15 +321,7 @@
                 return filtered;
         });
 
-        function openMemberPanel(event: MouseEvent | KeyboardEvent, entry: DecoratedMember) {
-                if (event instanceof KeyboardEvent) {
-                        const key = event.key.toLowerCase();
-                        if (key !== 'enter' && key !== ' ') {
-                                return;
-                        }
-                        event.preventDefault();
-                }
-
+        function openMemberPanel(event: MouseEvent, entry: DecoratedMember) {
                 const target = event.currentTarget as HTMLElement | null;
                 let anchor: { x: number; y: number; width: number; height: number } | null = null;
                 if (target && typeof window !== 'undefined') {
@@ -381,34 +373,32 @@
 		{:else}
 			<div class="space-y-1 py-2">
 				{#each decoratedMembers as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
-                                        <div
-                                                role="button"
-                                                tabindex="0"
-                                                class="flex items-center gap-3 px-3 py-2 text-sm"
+                                        <button
+                                                type="button"
+                                                class="group/member flex w-full select-none items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
                                                 onclick={(event) => openMemberPanel(event, entry)}
-                                                onkeydown={(event) => openMemberPanel(event, entry)}
                                                 oncontextmenu={(event) =>
                                                         openUserContextMenu(
                                                                 event,
                                                                 { member: entry.member },
                                                                 {
-									guildId: $selectedGuildId,
+                                                                        guildId: $selectedGuildId,
 									channelId: $selectedChannelId
 								}
 							)}
 					>
-						<div class="relative h-8 w-8 flex-shrink-0">
-							<div
-								class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
-							>
-								{memberInitial(entry.member)}
-							</div>
-							<span
-								class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
+                                                <div class="relative h-8 w-8 flex-shrink-0">
+                                                        <div
+                                                                class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
+                                                        >
+                                                                {memberInitial(entry.member)}
+                                                        </div>
+                                                        <span
+                                                                class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
 								class:opacity-0={!entry.hasPresence}
 							/>
 						</div>
-						<div class="min-w-0 flex-1">
+                                                <div class="min-w-0 flex-1">
                                                         <div class="truncate font-medium" style:color={entry.color ?? null}>
                                                                 {entry.name}
                                                         </div>
@@ -419,9 +409,9 @@
                                                                 <div class="text-xs text-[var(--muted)]">{m.channel_members_no_access()}</div>
                                                         {/if}
                                                 </div>
-                                        </div>
+                                        </button>
                                 {/each}
-			</div>
-		{/if}
-	</div>
+                        </div>
+                {/if}
+        </div>
 </div>

@@ -214,10 +214,10 @@
                                                         {#if secondaryName}
                                                                 <span>{secondaryName}</span>
                                                         {/if}
-                                                        {#if secondaryName && discriminator}
-                                                                <span class="mx-1">&bull;</span>
-                                                        {/if}
-                                                        {#if discriminator}
+                                                        {#if discriminator && (!secondaryName || secondaryName !== discriminator)}
+                                                                {#if secondaryName}
+                                                                        <span class="mx-1">&bull;</span>
+                                                                {/if}
                                                                 <span>#{discriminator}</span>
                                                         {/if}
                                                 </div>
