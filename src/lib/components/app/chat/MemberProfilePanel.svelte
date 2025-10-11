@@ -160,9 +160,17 @@
         const avatarInitial = $derived.by(() => memberInitial(selectedMember));
 
         function handleBackdropPointerDown(event: PointerEvent) {
-                const target = event.target as HTMLElement | null;
-                if (!target) return;
-                if (panelEl && panelEl.contains(target)) return;
+                if (event.button !== 0 && event.pointerType !== 'touch') {
+                        return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                closePanel();
+        }
+
+        function handleBackdropContextMenu(event: MouseEvent) {
+                event.preventDefault();
+                event.stopPropagation();
                 closePanel();
         }
 
@@ -174,14 +182,16 @@
         }
 </script>
 
-<svelte:window on:keydown={handleKeydown} on:pointerdown={handleBackdropPointerDown} />
+<svelte:window on:keydown={handleKeydown} />
 
 {#if $memberProfilePanel.open && selectedMember}
         <div class="fixed inset-0 z-40 flex" aria-hidden={false}>
                 <div
-                        class="pointer-events-none fixed inset-0"
-                        style="background: transparent"
+                        class="pointer-events-auto absolute inset-0 backdrop-blur-md"
+                        style:background={'var(--scrim)'}
                         aria-hidden={true}
+                        on:pointerdown={handleBackdropPointerDown}
+                        on:contextmenu={handleBackdropContextMenu}
                 />
                 <div
                         bind:this={panelEl}
