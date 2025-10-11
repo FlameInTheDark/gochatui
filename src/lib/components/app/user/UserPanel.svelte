@@ -119,14 +119,14 @@
 
 <div class="relative border-t border-[var(--stroke)] p-3">
 	<div class="flex h-11 items-center justify-between gap-2">
-		<button
-			type="button"
-			class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-1 py-1 text-left hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-			onclick={toggleStatusMenu}
-			aria-haspopup="menu"
-			aria-expanded={statusMenuOpen}
-			bind:this={statusTriggerEl}
-		>
+                <button
+                        type="button"
+                        class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-1 py-1 text-left hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
+                        onclick={toggleStatusMenu}
+                        aria-haspopup="menu"
+                        aria-expanded={statusMenuOpen}
+                        bind:this={statusTriggerEl}
+                >
 			<div class="relative h-8 w-8 flex-shrink-0">
 				<div
 					class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-sm font-medium"
@@ -196,13 +196,13 @@
 			</div>
 			<div class="space-y-1">
 				{#each statusOptions as option (option.mode)}
-					<button
-						type="button"
-						class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-						onclick={() => selectStatus(option)}
-						role="menuitemradio"
-						aria-checked={isOptionActive(option, $presenceMode)}
-					>
+                                        <button
+                                                type="button"
+                                                class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
+                                                onclick={() => selectStatus(option)}
+                                                role="menuitemradio"
+                                                aria-checked={isOptionActive(option, $presenceMode)}
+                                        >
 						<span
 							class={`mt-1 h-3 w-3 flex-shrink-0 rounded-full border border-[var(--panel)] ${presenceIndicatorClass(option.indicator)}`}
 						/>
