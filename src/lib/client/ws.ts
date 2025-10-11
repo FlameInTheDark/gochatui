@@ -434,12 +434,11 @@ function startHeartbeat() {
 	if (heartbeatMs > 0) {
 		hbTimer = setInterval(() => {
 			// Heartbeat op=2 with last event id in d.e
-			const t = nextT();
 			const e = lastEventId || lastT || 0;
 			const msg = JSON.stringify({
 				op: 2,
 				d: { e },
-				t
+				t: 0
 			});
 			sendRaw(msg);
 		}, heartbeatMs);
