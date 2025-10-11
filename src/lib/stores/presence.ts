@@ -87,6 +87,7 @@ function parseSince(value: unknown): number | null {
 }
 
 let currentMode: PresenceMode = 'auto';
+let manualOverride: Exclude<PresenceMode, 'auto'> | null = null;
 let desiredStatus: PresenceStatus = 'online';
 let currentStatus: PresenceStatus = 'online';
 let lastSentStatus: PresenceStatus | null = null;
@@ -264,9 +265,10 @@ function scheduleIdleTimer() {
 }
 
 function recordActivity(force: boolean) {
-	if (currentMode !== 'auto') return;
-	const now = Date.now();
-	if (!force && now - lastDomActivityAt < ACTIVITY_THROTTLE_MS) return;
+        if (currentMode !== 'auto') return;
+        if (manualOverride) return;
+        const now = Date.now();
+        if (!force && now - lastDomActivityAt < ACTIVITY_THROTTLE_MS) return;
 	lastDomActivityAt = now;
 	lastActivityAt = now;
 	if (currentStatus !== 'online') {
@@ -279,15 +281,17 @@ function recordActivity(force: boolean) {
 }
 
 export function setSelfPresenceMode(mode: PresenceMode) {
-	currentMode = mode;
-	selfModeStore.set(mode);
-	if (mode === 'auto') {
-		lastActivityAt = Date.now();
-		recordActivity(true);
-	} else {
-		clearIdleTimer();
-		setSelfPresence(mode);
-	}
+        currentMode = mode;
+        selfModeStore.set(mode);
+        if (mode === 'auto') {
+                manualOverride = null;
+                lastActivityAt = Date.now();
+                recordActivity(true);
+        } else {
+                manualOverride = mode;
+                clearIdleTimer();
+                setSelfPresence(mode);
+        }
 }
 
 function applyPresencePayload(payload: AnyRecord | null | undefined) {
@@ -380,18 +384,19 @@ auth.user.subscribe((user) => {
 });
 
 auth.isAuthenticated.subscribe((ok) => {
-	if (!ok) {
-		presenceSources.clear();
-		combinedTrackedUserIds = new Set();
-		desiredSubscriptionIds = [];
-		desiredSubscriptionSignature = '';
-		lastSentSubscriptionSignature = '';
-		presenceStore.set({});
-		currentUserId = null;
-		currentMode = 'auto';
-		desiredStatus = 'online';
-		currentStatus = 'online';
-		lastSentStatus = null;
-		clearIdleTimer();
-	}
+        if (!ok) {
+                presenceSources.clear();
+                combinedTrackedUserIds = new Set();
+                desiredSubscriptionIds = [];
+                desiredSubscriptionSignature = '';
+                lastSentSubscriptionSignature = '';
+                presenceStore.set({});
+                currentUserId = null;
+                currentMode = 'auto';
+                manualOverride = null;
+                desiredStatus = 'online';
+                currentStatus = 'online';
+                lastSentStatus = null;
+                clearIdleTimer();
+        }
 });

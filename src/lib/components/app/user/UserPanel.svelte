@@ -68,10 +68,23 @@
 		statusMenuOpen = !statusMenuOpen;
 	}
 
-	function selectStatus(option: StatusOption) {
-		setSelfPresenceMode(option.mode);
-		statusMenuOpen = false;
-	}
+        function selectStatus(option: StatusOption) {
+                setSelfPresenceMode(option.mode);
+                statusMenuOpen = false;
+        }
+
+        function handleStatusPointer(event: PointerEvent, option: StatusOption) {
+                if (event.button !== 0) return;
+                event.stopPropagation();
+                selectStatus(option);
+        }
+
+        function handleStatusKey(event: KeyboardEvent, option: StatusOption) {
+                if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Space') return;
+                event.preventDefault();
+                event.stopPropagation();
+                selectStatus(option);
+        }
 
 	function isOptionActive(option: StatusOption, mode: PresenceMode): boolean {
 		if (option.mode === 'auto') return mode === 'auto';
@@ -199,7 +212,8 @@
                                         <button
                                                 type="button"
                                                 class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
-                                                onclick={() => selectStatus(option)}
+                                                onpointerdown={(event) => handleStatusPointer(event, option)}
+                                                onkeydown={(event) => handleStatusKey(event, option)}
                                                 role="menuitemradio"
                                                 aria-checked={isOptionActive(option, $presenceMode)}
                                         >
