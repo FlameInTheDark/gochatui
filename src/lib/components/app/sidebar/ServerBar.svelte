@@ -415,6 +415,7 @@
                         resolved,
                         collapsedBorder: `color-mix(in srgb, ${resolved} 65%, transparent)`,
                         collapsedBackground: `color-mix(in srgb, var(--panel-strong) 75%, ${resolved} 25%)`,
+                        hoverBackground: `color-mix(in srgb, var(--panel-strong) 65%, ${resolved} 35%)`,
                         expandedBorder: `color-mix(in srgb, ${resolved} 45%, transparent)`,
                         expandedBackground: `color-mix(in srgb, var(--panel-strong) 85%, ${resolved} 15%)`
                 } as const;
@@ -499,6 +500,9 @@
                                         style:--folder-collapsed-bg={
                                                 folderColorTokens?.collapsedBackground ?? 'var(--panel-strong)'
                                         }
+                                        style:--folder-hover-bg={
+                                                folderColorTokens?.hoverBackground ?? 'var(--panel)'
+                                        }
                                         style:--folder-expanded-border={
                                                 folderColorTokens?.expandedBorder ?? 'var(--stroke)'
                                         }
@@ -509,7 +513,7 @@
                                 >
                                         <div class="relative">
                                                 <button
-                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                 folderIsDropTarget
                                                                         ? 'ring-2 ring-[var(--brand)]'
                                                                         : folderHasSelection
