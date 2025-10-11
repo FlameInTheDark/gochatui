@@ -19,6 +19,7 @@
         import { tick } from 'svelte';
 
         let panelEl: HTMLDivElement | null = $state(null);
+        let backdropEl: HTMLDivElement | null = $state(null);
         let posX = $state(0);
         let posY = $state(0);
         let roleMap = $state<Record<string, DtoRole>>({});
@@ -27,8 +28,21 @@
 
         const presenceMap = presenceByUser;
 
+        let backdropPointerId = $state<number | null>(null);
+        let backdropPointerActive = $state(false);
+
         function closePanel() {
                 memberProfilePanel.close();
+        }
+
+        function releaseBackdropPointerCapture() {
+                if (backdropPointerId == null) return;
+                try {
+                        backdropEl?.releasePointerCapture(backdropPointerId);
+                } catch {
+                        // Ignore environments without pointer capture support
+                }
+                backdropPointerId = null;
         }
 
         function resolveMember(): DtoMember | null {
@@ -102,6 +116,13 @@
 
         const selectedMember = $derived(resolveMember());
 
+        $effect(() => {
+                if (!$memberProfilePanel.open) {
+                        backdropPointerActive = false;
+                        releaseBackdropPointerCapture();
+                }
+        });
+
         const userId = $derived.by(() =>
                 toSnowflakeString((selectedMember as any)?.user?.id) ??
                 toSnowflakeString((selectedMember as any)?.id)
@@ -160,17 +181,54 @@
         const avatarInitial = $derived.by(() => memberInitial(selectedMember));
 
         function handleBackdropPointerDown(event: PointerEvent) {
-                if (event.button !== 0 && event.pointerType !== 'touch') {
+                event.preventDefault();
+                event.stopPropagation();
+                backdropPointerActive = true;
+                backdropPointerId = event.pointerId;
+                try {
+                        backdropEl?.setPointerCapture(event.pointerId);
+                } catch {
+                        // Ignore environments without pointer capture support
+                }
+                if (event.pointerType === 'mouse' && event.button !== 0) {
+                        return;
+                }
+        }
+
+        function finishBackdropInteraction() {
+                backdropPointerActive = false;
+                releaseBackdropPointerCapture();
+                closePanel();
+        }
+
+        function handleBackdropPointerUp(event: PointerEvent) {
+                if (!backdropPointerActive) return;
+                if (backdropPointerId != null && event.pointerId !== backdropPointerId) {
                         return;
                 }
                 event.preventDefault();
                 event.stopPropagation();
-                closePanel();
+                finishBackdropInteraction();
+        }
+
+        function handleBackdropPointerCancel(event: PointerEvent) {
+                if (!backdropPointerActive) return;
+                if (backdropPointerId != null && event.pointerId !== backdropPointerId) {
+                        return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                backdropPointerActive = false;
+                releaseBackdropPointerCapture();
         }
 
         function handleBackdropContextMenu(event: MouseEvent) {
                 event.preventDefault();
                 event.stopPropagation();
+                if (backdropPointerActive) {
+                        finishBackdropInteraction();
+                        return;
+                }
                 closePanel();
         }
 
@@ -187,17 +245,21 @@
 {#if $memberProfilePanel.open && selectedMember}
         <div class="fixed inset-0 z-40 flex" aria-hidden={false}>
                 <div
-                        class="pointer-events-auto absolute inset-0 backdrop-blur-md"
+                        bind:this={backdropEl}
+                        class="pointer-events-auto absolute inset-0"
                         style:background={'var(--scrim)'}
                         aria-hidden={true}
                         onpointerdown={handleBackdropPointerDown}
+                        onpointerup={handleBackdropPointerUp}
+                        onpointercancel={handleBackdropPointerCancel}
                         oncontextmenu={handleBackdropContextMenu}
                 />
                 <div
                         bind:this={panelEl}
-                        class="pointer-events-auto absolute w-80 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-4 text-sm text-[var(--text)] shadow-[var(--shadow-2)]"
+                        class="pointer-events-auto absolute w-80 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-4 text-sm text-[var(--text)] shadow-[var(--shadow-2)] backdrop-blur-md"
                         style:left={`${posX}px`}
                         style:top={`${posY}px`}
+                        style:background={'color-mix(in srgb, var(--panel-strong) 92%, transparent)'}
                         role="dialog"
                         aria-modal="false"
                 >
