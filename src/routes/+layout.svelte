@@ -5,6 +5,7 @@
         import FolderSettingsOverlay from '$lib/components/app/settings/FolderSettingsOverlay.svelte';
         import GuildSettingsOverlay from '$lib/components/app/settings/GuildSettingsOverlay.svelte';
 	import ConnectionStatusBar from '$lib/components/app/ConnectionStatusBar.svelte';
+	import TooltipLayer from '$lib/components/ui/TooltipLayer.svelte';
 
 	let { children } = $props();
 </script>
@@ -19,3 +20,4 @@
 <FolderSettingsOverlay />
 <GuildSettingsOverlay />
 <ConnectionStatusBar />
+<TooltipLayer />
