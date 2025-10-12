@@ -32,7 +32,6 @@
                 presenceIndicatorClass,
                 type PresenceStatus
         } from '$lib/stores/presence';
-        import { presenceStatusLabel } from '$lib/utils/presenceLabels';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
         import { onDestroy } from 'svelte';
 
@@ -283,7 +282,6 @@
                 presenceSince: number | null;
                 hasPresence: boolean;
                 customStatusText: string | null;
-                statusLabel: string;
                 presenceBucket: PresenceBucket;
         };
 
@@ -304,6 +302,11 @@
                         const info = userId ? (lookup[userId] ?? null) : null;
                         const presenceStatus = info?.status ?? null;
                         const hasPresence = Boolean(info);
+                        const rawCustomStatus = info?.customStatusText;
+                        const customStatusText =
+                                typeof rawCustomStatus === 'string' && rawCustomStatus.trim().length > 0
+                                        ? rawCustomStatus
+                                        : null;
                         const presenceBucket: PresenceBucket =
                                 hasPresence && presenceStatus && presenceStatus !== 'offline' ? 'online' : 'offline';
                         return {
@@ -315,11 +318,7 @@
                                 presenceStatus,
                                 presenceSince: info?.since ?? null,
                                 hasPresence,
-                                customStatusText: info?.customStatusText ?? null,
-                                statusLabel: presenceStatusLabel(
-                                        info?.status ?? null,
-                                        info?.customStatusText ?? null
-                                ),
+                                customStatusText,
                                 presenceBucket
                         };
                 });
@@ -442,14 +441,14 @@
                                                                                 <span
                                                                                         class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
                                                                                         class:opacity-0={!entry.hasPresence}
-                                                                                />
+                                                                                ></span>
                                                                         </div>
                                                                         <div class="min-w-0 flex-1">
                                                                                 <div class="truncate font-medium" style:color={entry.color ?? null}>
                                                                                         {entry.name}
                                                                                 </div>
-                                                                                {#if entry.statusLabel}
-                                                                                        <div class="truncate text-xs text-[var(--muted)]">{entry.statusLabel}</div>
+                                                                                {#if entry.customStatusText}
+                                                                                        <div class="truncate text-xs text-[var(--muted)]">{entry.customStatusText}</div>
                                                                                 {/if}
                                                                                 {#if !entry.hasAccess}
                                                                                         <div class="text-xs text-[var(--muted)]">{m.channel_members_no_access()}</div>
