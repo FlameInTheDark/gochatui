@@ -1043,39 +1043,36 @@
 		</div>
 		{#if $selectedGuildId}
 			<div class="flex items-center gap-2">
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => {
-						creatingChannel = true;
-						channelError = null;
-						creatingChannelParent = null;
-					}}
-					title={m.new_channel()}
-					aria-label={m.new_channel()}
-				>
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                        onclick={() => {
+                                                creatingChannel = true;
+                                                channelError = null;
+                                                creatingChannelParent = null;
+                                        }}
+                                        aria-label={m.new_channel()}
+                                >
 					<Plus class="h-4 w-4" stroke-width={2} />
 				</button>
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => {
-						creatingCategory = true;
-						categoryError = null;
-					}}
-					title={m.new_category()}
-					aria-label={m.new_category()}
-				>
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                        onclick={() => {
+                                                creatingCategory = true;
+                                                categoryError = null;
+                                        }}
+                                        aria-label={m.new_category()}
+                                >
 					<FolderPlus class="h-4 w-4" stroke-width={2} />
 				</button>
 				{#if canAccessSelectedGuildSettings}
-					<button
-						class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-						onclick={() => {
-							if (!canAccessSelectedGuildSettings) return;
-							guildSettingsOpen.set(true);
-						}}
-						title={m.server_settings()}
-						aria-label={m.server_settings()}
-					>
+                                        <button
+                                                class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                                onclick={() => {
+                                                        if (!canAccessSelectedGuildSettings) return;
+                                                        guildSettingsOpen.set(true);
+                                                }}
+                                                aria-label={m.server_settings()}
+                                        >
 						<Settings class="h-4 w-4" stroke-width={2} />
 					</button>
 				{/if}
@@ -1477,8 +1474,7 @@
 																		}`}
 																		onclick={() =>
 																			setChannelPermission(selectedOverrideId, perm.value, 'deny')}
-																		aria-label={m.permission_deny()}
-																		title={m.permission_deny()}
+                                                                                                                                aria-label={m.permission_deny()}
 																	>
 																		<X class="h-4 w-4" stroke-width={2} />
 																	</button>
@@ -1494,8 +1490,7 @@
 																				perm.value,
 																				'inherit'
 																			)}
-																		aria-label={m.permission_default()}
-																		title={m.permission_default()}
+                                                                                                                                aria-label={m.permission_default()}
 																	>
 																		<Slash class="h-4 w-4" stroke-width={2} />
 																	</button>
@@ -1507,8 +1502,7 @@
 																		}`}
 																		onclick={() =>
 																			setChannelPermission(selectedOverrideId, perm.value, 'allow')}
-																		aria-label={m.permission_allow()}
-																		title={m.permission_allow()}
+                                                                                                                                aria-label={m.permission_allow()}
 																	>
 																		<Check class="h-4 w-4" stroke-width={2} />
 																	</button>

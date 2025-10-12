@@ -14,6 +14,7 @@
         import { tick } from 'svelte';
         import { m } from '$lib/paraglide/messages.js';
         import { Search } from 'lucide-svelte';
+        import { tooltip } from '$lib/actions/tooltip';
 
         type FilterType = 'from' | 'mentions' | 'has';
         interface TextFilterToken {
@@ -761,7 +762,7 @@
                                                                                                 </span>
                                                                                         {/if}
                                                                                 </div>
-                                                                                <div class="text-xs text-[var(--muted)]" title={formatMsgFull(message)}>
+                                                                                <div class="text-xs text-[var(--muted)]" use:tooltip={() => formatMsgFull(message)}>
                                                                                         {formatMsgTime(message)}
                                                                                 </div>
                                                                                 {#if resolveChannelName(message.channel_id)}

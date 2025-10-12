@@ -179,6 +179,7 @@
                         aria-haspopup="menu"
                         aria-expanded={statusMenuOpen}
                         bind:this={statusTriggerEl}
+                        data-tooltip-disabled
                 >
 			<div class="relative h-8 w-8 flex-shrink-0">
 				<div
@@ -198,14 +199,13 @@
                         </div>
                 </button>
 		<div class="flex items-center gap-1">
-			<button
-				type="button"
-				class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {muted
-					? 'text-red-400'
-					: ''}"
-				onclick={toggleMute}
-				title={muted ? m.unmute() : m.mute()}
-				aria-label={muted ? m.unmute() : m.mute()}
+                        <button
+                                type="button"
+                                class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {muted
+                                        ? 'text-red-400'
+                                        : ''}"
+                                onclick={toggleMute}
+                                aria-label={muted ? m.unmute() : m.mute()}
 			>
 				{#if muted}
 					<MicOff class="h-4 w-4" stroke-width={2} />
@@ -213,14 +213,13 @@
 					<Mic class="h-4 w-4" stroke-width={2} />
 				{/if}
 			</button>
-			<button
-				type="button"
-				class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {deafened
-					? 'text-red-400'
-					: ''}"
-				onclick={toggleDeafen}
-				title={deafened ? m.undeafen() : m.deafen()}
-				aria-label={deafened ? m.undeafen() : m.deafen()}
+                        <button
+                                type="button"
+                                class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {deafened
+                                        ? 'text-red-400'
+                                        : ''}"
+                                onclick={toggleDeafen}
+                                aria-label={deafened ? m.undeafen() : m.deafen()}
 			>
 				{#if deafened}
 					<HeadphoneOff class="h-4 w-4" stroke-width={2} />
@@ -228,13 +227,12 @@
 					<Headphones class="h-4 w-4" stroke-width={2} />
 				{/if}
 			</button>
-			<button
-				type="button"
-				class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)]"
-				onclick={() => settingsOpen.set(true)}
-				title={m.settings()}
-				aria-label={m.settings()}
-			>
+                        <button
+                                type="button"
+                                class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)]"
+                                onclick={() => settingsOpen.set(true)}
+                                aria-label={m.settings()}
+                        >
 				<Settings class="h-4 w-4" stroke-width={2} />
 			</button>
 		</div>

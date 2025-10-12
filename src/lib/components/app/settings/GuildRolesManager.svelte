@@ -463,7 +463,6 @@
                                                                                         : 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--panel-strong)]'
                                                                         }`}
                                                                         style={`background-color: ${normalizeHex(roleDraft.color)};`}
-                                                                        title={m.color_picker_custom()}
                                                                         aria-label={m.color_picker_custom()}
                                                                         onclick={openColorPicker}
                                                                 >
@@ -479,7 +478,6 @@
                                                                                                         : ''
                                                                                         }`}
                                                                                         style={`background-color: ${preset};`}
-                                                                                        title={`${m.role_form_color_label()} ${preset}`}
                                                                                         aria-label={`${m.role_form_color_label()} ${preset}`}
                                                                                         onclick={() => applyPresetColor(preset)}
                                                                                 ></button>
