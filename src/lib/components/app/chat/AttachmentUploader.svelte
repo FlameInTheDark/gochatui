@@ -3,6 +3,7 @@
         import { selectedChannelId } from '$lib/stores/appState';
         import { createEventDispatcher } from 'svelte';
         import { LoaderCircle, Paperclip } from 'lucide-svelte';
+        import { tooltip } from '$lib/actions/tooltip';
 
 	let { attachments, inline = false } = $props<{
 		attachments: (number | string)[];
@@ -88,12 +89,12 @@
 		}
 	}}
 >
-	<label
-		class={inline
-			? 'grid h-8 w-8 cursor-pointer place-items-center rounded-md hover:bg-[var(--panel)]'
-			: 'cursor-pointer rounded-md border border-[var(--stroke)] px-2 py-1'}
-		title={loading ? 'Uploading…' : 'Attach files'}
-	>
+        <label
+                class={inline
+                        ? 'grid h-8 w-8 cursor-pointer place-items-center rounded-md hover:bg-[var(--panel)]'
+                        : 'cursor-pointer rounded-md border border-[var(--stroke)] px-2 py-1'}
+                use:tooltip={() => (loading ? 'Uploading…' : 'Attach files')}
+        >
 		<input type="file" class="hidden" multiple onchange={pickFiles} />
 		{#if inline}
                         {#if loading}

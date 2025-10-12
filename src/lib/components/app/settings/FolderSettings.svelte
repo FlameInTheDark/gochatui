@@ -213,7 +213,6 @@
                                                                                                 : 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--panel)]'
                                                                                 }`}
                                                                                 style={`background-color: ${normalizeHex(drafts[folder.id].color)};`}
-                                                                                title={m.color_picker_custom()}
                                                                                 aria-label={m.color_picker_custom()}
                                                                                 onclick={() => openColorPicker(folder.id)}
                                                                         >
@@ -229,7 +228,6 @@
                                                                                                                 : ''
                                                                                                 }`}
                                                                                                 style={`background-color: ${preset};`}
-                                                                                                title={`${m.folder_color()} ${preset}`}
                                                                                                 aria-label={`${m.folder_color()} ${preset}`}
                                                                                                 onclick={() => applyPresetColor(folder, preset)}
                                                                                         ></button>

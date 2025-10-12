@@ -57,11 +57,10 @@
 				{/if}
 			</div>
 			<div class="flex items-center gap-2">
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					title="Search"
-					aria-label="Search"
-					on:click={(e) => {
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                        aria-label="Search"
+                                        on:click={(e) => {
 						e.stopPropagation();
 						const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
 						searchAnchor.set({ x: r.right, y: r.bottom });

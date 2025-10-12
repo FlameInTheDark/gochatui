@@ -908,10 +908,9 @@
 				class="absolute top-1 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
 			>
 				{#if canEditMessage}
-					<button
-						class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
-						title="Edit"
-						aria-label="Edit"
+                                        <button
+                                                class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
+                                                aria-label="Edit"
 						onclick={() => {
 							void startEditing();
 						}}
@@ -920,10 +919,9 @@
 					</button>
 				{/if}
 				{#if canDeleteMessage}
-					<button
-						class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
-						title="Delete"
-						aria-label="Delete"
+                                        <button
+                                                class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
+                                                aria-label="Delete"
 						onclick={deleteMsg}
 					>
 						<Trash2 class="h-3.5 w-3.5" stroke-width={2} />
@@ -1038,10 +1036,10 @@
 					{/each}
 				{/if}
 				{#if message.updated_at}
-					<span
-						class="ml-1 align-baseline text-xs text-[var(--muted)] italic"
-						title={fmtEditFull(message)}
-					>
+                                        <span
+                                                class="ml-1 align-baseline text-xs text-[var(--muted)] italic"
+                                                use:tooltip={() => fmtEditFull(message)}
+                                        >
 						edited
 					</span>
 				{/if}
