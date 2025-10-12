@@ -465,10 +465,8 @@
                                                 class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                                 } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
-                                                use:tooltip={{
-                                                        content: item.guild.name ?? 'Server',
-                                                        placement: 'right'
-                                                }}
+                                                data-tooltip={item.guild.name ?? 'Server'}
+                                                data-tooltip-placement="right"
                                                 aria-current={isGuildSelected(item.guildId) ? 'true' : 'false'}
                                                 aria-label={item.guild.name ?? 'Server'}
                                                 draggable="true"
@@ -527,7 +525,8 @@
                                                         }`}
                                                         type="button"
                                                         draggable="true"
-                                                        use:tooltip={{ content: folderLabel, placement: 'right' }}
+                                                        data-tooltip={folderLabel}
+                                                        data-tooltip-placement="right"
                                                         aria-label={folderLabel}
                                                         ondragstart={(event) => startFolderDrag(event, item.folder.id)}
                                                         ondragend={endDrag}
@@ -601,14 +600,12 @@
                                                                                                 : ''
                                                                                 } ${
                                                                                         folderDropTarget?.folderId === item.folder.id &&
-											folderDropTarget.index === nestedIndex + 1
-												? 'ring-2 ring-[var(--brand)]'
-												: ''
-										}`}
-                                                                                use:tooltip={{
-                                                                                        content: nestedGuild.guild.name ?? 'Server',
-                                                                                        placement: 'right'
-                                                                                }}
+                                                                                        folderDropTarget.index === nestedIndex + 1
+                                                                                                ? 'ring-2 ring-[var(--brand)]'
+                                                                                                : ''
+                                                                                }`}
+                                                                                data-tooltip={nestedGuild.guild.name ?? 'Server'}
+                                                                                data-tooltip-placement="right"
                                                                                 aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
                                                                                 aria-label={nestedGuild.guild.name ?? 'Server'}
 										draggable="true"
@@ -647,12 +644,13 @@
 		{/each}
 	</div>
 	<div>
-		<button
-			class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
-			onclick={() => (creating = !creating)}
-			title={m.new_server()}
-			aria-label={m.new_server()}
-		>
+                <button
+                        class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                        onclick={() => (creating = !creating)}
+                        data-tooltip={m.new_server()}
+                        data-tooltip-placement="right"
+                        aria-label={m.new_server()}
+                >
 			<Plus class="h-[18px] w-[18px]" stroke-width={2} />
 		</button>
 	</div>
