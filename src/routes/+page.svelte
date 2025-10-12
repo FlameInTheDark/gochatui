@@ -1,16 +1,89 @@
 <script lang="ts">
+        import { onMount } from 'svelte';
         import { m } from '$lib/paraglide/messages.js';
         import { locale, type Locale } from '$lib/stores/settings';
         import { localeOptions } from '$lib/i18n/locales';
 
         const currentYear = new Date().getFullYear();
         const languageOptions = localeOptions;
+        const languageMenuId = 'landing-language-menu';
+        const languageButtonId = 'landing-language-button';
 
-        function handleLocaleChange(event: Event) {
-                const target = event.currentTarget as HTMLSelectElement;
-                const next = target.value as Locale;
-                locale.set(next);
+        function getLanguageLabel(code: Locale) {
+                const option = languageOptions.find((candidate) => candidate.code === code);
+                return option ? option.label() : code;
         }
+
+        let languageMenuOpen = false;
+        let languageMenuContainer: HTMLDivElement | null = null;
+        let languageMenuButton: HTMLButtonElement | null = null;
+
+        function toggleLanguageMenu() {
+                languageMenuOpen = !languageMenuOpen;
+        }
+
+        function closeLanguageMenu() {
+                if (!languageMenuOpen) return;
+                languageMenuOpen = false;
+        }
+
+        function selectLocale(next: Locale) {
+                locale.set(next);
+                closeLanguageMenu();
+                languageMenuButton?.focus();
+        }
+
+        function handleLanguageMenuFocusOut(event: FocusEvent) {
+                if (!languageMenuOpen) return;
+                const nextFocus = event.relatedTarget as Node | null;
+                if (!nextFocus) {
+                        closeLanguageMenu();
+                        return;
+                }
+                if (!languageMenuContainer) return;
+                if (languageMenuContainer.contains(nextFocus)) return;
+                closeLanguageMenu();
+        }
+
+        function handleLanguageButtonKeydown(event: KeyboardEvent) {
+                if (event.key === ' ' || event.key === 'Enter') {
+                        event.preventDefault();
+                        toggleLanguageMenu();
+                        return;
+                }
+
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        languageMenuOpen = true;
+                }
+        }
+
+        onMount(() => {
+                function handlePointerDown(event: PointerEvent) {
+                        if (!languageMenuOpen) return;
+                        if (!languageMenuContainer) return;
+                        if (!event.target) return;
+                        if (languageMenuContainer.contains(event.target as Node)) return;
+                        closeLanguageMenu();
+                }
+
+                function handleKeydown(event: KeyboardEvent) {
+                        if (!languageMenuOpen) return;
+                        if (event.key === 'Escape') {
+                                event.stopPropagation();
+                                closeLanguageMenu();
+                                languageMenuButton?.focus();
+                        }
+                }
+
+                document.addEventListener('pointerdown', handlePointerDown);
+                document.addEventListener('keydown', handleKeydown);
+
+                return () => {
+                        document.removeEventListener('pointerdown', handlePointerDown);
+                        document.removeEventListener('keydown', handleKeydown);
+                };
+        });
 </script>
 
 <svelte:head>
@@ -45,25 +118,87 @@
                                 <a class="hover:text-white" href="#cta">{m.landing_link_get_started()}</a>
                         </nav>
                         <div class="flex items-center gap-2">
-                                <div class="relative">
-                                        <label class="sr-only" for="landing-language-select">{m.language()}</label>
-                                        <select
-                                                id="landing-language-select"
-                                                class="h-9 min-w-[120px] appearance-none rounded-lg border border-white/10 bg-white/5 px-3 pr-8 text-sm text-zinc-200 outline-none transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50"
-                                                value={$locale}
-                                                on:change={handleLocaleChange}
+                                <div class="relative" bind:this={languageMenuContainer} on:focusout={handleLanguageMenuFocusOut}>
+                                        <button
+                                                type="button"
+                                                class="group inline-flex h-12 min-w-[160px] items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 text-left text-sm text-zinc-200 outline-none transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50"
+                                                aria-haspopup="listbox"
+                                                aria-expanded={languageMenuOpen}
+                                                aria-controls={languageMenuId}
+                                                on:click={toggleLanguageMenu}
+                                                on:keydown={handleLanguageButtonKeydown}
+                                                bind:this={languageMenuButton}
+                                                id={languageButtonId}
                                         >
-                                                {#each languageOptions as option (option.code)}
-                                                        <option value={option.code}>{option.label()}</option>
-                                                {/each}
-                                        </select>
-                                        <svg
-                                                class="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-300"
-                                                viewBox="0 0 12 8"
-                                                aria-hidden="true"
-                                        >
-                                                <path d="M2 2l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                                        </svg>
+                                                <span class="flex flex-1 flex-col">
+                                                        <span class="text-[10px] uppercase tracking-[0.2em] text-zinc-400/80 transition-colors group-hover:text-zinc-300">
+                                                                {m.language()}
+                                                        </span>
+                                                        <span class="text-sm font-medium text-zinc-100">{getLanguageLabel($locale)}</span>
+                                                </span>
+                                                <svg
+                                                        class={`h-3 w-3 transition-transform duration-150 ${
+                                                                languageMenuOpen
+                                                                        ? 'rotate-180 text-violet-300'
+                                                                        : 'text-zinc-400 group-hover:text-zinc-200'
+                                                        }`}
+                                                        viewBox="0 0 12 8"
+                                                        aria-hidden="true"
+                                                >
+                                                        <path
+                                                                d="M2 2l4 4 4-4"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                stroke-width="1.5"
+                                                                stroke-linecap="round"
+                                                                stroke-linejoin="round"
+                                                        />
+                                                </svg>
+                                        </button>
+
+                                        {#if languageMenuOpen}
+                                                <div
+                                                        class="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-lg border border-white/10 bg-ink-900/95 p-1 shadow-xl backdrop-blur"
+                                                        role="listbox"
+                                                        id={languageMenuId}
+                                                        aria-labelledby={languageButtonId}
+                                                        aria-activedescendant={`landing-language-${$locale}`}
+                                                        tabindex="-1"
+                                                >
+                                                        {#each languageOptions as option (option.code)}
+                                                                <button
+                                                                        type="button"
+                                                                        id={`landing-language-${option.code}`}
+                                                                        role="option"
+                                                                        aria-selected={option.code === $locale}
+                                                                        class={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 ${
+                                                                                option.code === $locale
+                                                                                        ? 'bg-violet-500/20 text-white'
+                                                                                        : 'text-zinc-200'
+                                                                        }`}
+                                                                        on:click={() => selectLocale(option.code)}
+                                                                >
+                                                                        <span>{option.label()}</span>
+                                                                        {#if option.code === $locale}
+                                                                                <svg
+                                                                                        class="h-3 w-3 text-violet-300"
+                                                                                        viewBox="0 0 12 10"
+                                                                                        aria-hidden="true"
+                                                                                >
+                                                                                        <path
+                                                                                                d="M1.5 5.5 4.5 8.5 10.5 1.5"
+                                                                                                fill="none"
+                                                                                                stroke="currentColor"
+                                                                                                stroke-width="1.5"
+                                                                                                stroke-linecap="round"
+                                                                                                stroke-linejoin="round"
+                                                                                        />
+                                                                                </svg>
+                                                                        {/if}
+                                                                </button>
+                                                        {/each}
+                                                </div>
+                                        {/if}
                                 </div>
                                 <a
                                         href="https://github.com/FlameInTheDark/gochat"
