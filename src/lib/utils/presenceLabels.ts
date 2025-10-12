@@ -1,7 +1,14 @@
 import type { PresenceStatus } from '$lib/stores/presence';
 import { m } from '$lib/paraglide/messages.js';
 
-export function presenceStatusLabel(status: PresenceStatus | null | undefined): string {
+export function presenceStatusLabel(
+        status: PresenceStatus | null | undefined,
+        customStatusText?: string | null | undefined
+): string {
+        if (typeof customStatusText === 'string') {
+                const trimmed = customStatusText.trim();
+                if (trimmed.length) return trimmed;
+        }
         switch (status) {
                 case 'online':
                         return m.status_online();
