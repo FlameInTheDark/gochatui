@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { DtoGuild } from '$lib/api';
 	import { m } from '$lib/paraglide/messages.js';
+	import { tooltip } from '$lib/actions/tooltip';
         import {
                 appSettings,
                 createFolderWithGuilds,
@@ -464,8 +465,9 @@
                                                 class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                                 } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
-                                                title={item.guild.name}
+                                                use:tooltip={item.guild.name ?? 'Server'}
                                                 aria-current={isGuildSelected(item.guildId) ? 'true' : 'false'}
+                                                aria-label={item.guild.name ?? 'Server'}
                                                 draggable="true"
                                                 ondragstart={(event) => startGuildDrag(event, item.guildId, item.folderId)}
                                                 ondragend={endDrag}
@@ -522,7 +524,7 @@
                                                         }`}
                                                         type="button"
                                                         draggable="true"
-                                                        title={folderLabel}
+                                                        use:tooltip={folderLabel}
                                                         aria-label={folderLabel}
                                                         ondragstart={(event) => startFolderDrag(event, item.folder.id)}
                                                         ondragend={endDrag}
@@ -600,8 +602,9 @@
 												? 'ring-2 ring-[var(--brand)]'
 												: ''
 										}`}
-										title={nestedGuild.guild.name}
-										aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
+                                                                                use:tooltip={nestedGuild.guild.name ?? 'Server'}
+                                                                                aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
+                                                                                aria-label={nestedGuild.guild.name ?? 'Server'}
 										draggable="true"
 										ondragstart={(event) =>
 											startGuildDrag(event, nestedGuild.guildId, nestedGuild.folderId)}
