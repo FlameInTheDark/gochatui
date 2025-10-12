@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-export type TooltipPlacement = 'top' | 'bottom';
+export type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
 export type TooltipAlign = 'center' | 'start' | 'end';
 
 export interface TooltipAnchorRect {
