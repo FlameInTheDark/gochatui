@@ -29,7 +29,6 @@ let hbTimer: any = null;
 let heartbeatMs = 15000;
 let lastT = 0;
 let authed = false;
-let lastEventId = 0; // track last received/sent event id
 let lastHeartbeatE = 0; // monotonically increasing heartbeat ack
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let shouldReconnect = true;
@@ -44,8 +43,7 @@ function nextT() {
 }
 
 function updateLastT(t?: number) {
-	if (typeof t === 'number' && t > lastT) lastT = t;
-	if (typeof t === 'number' && t > lastEventId) lastEventId = t;
+        if (typeof t === 'number' && t > lastT) lastT = t;
 }
 
 function wsUrl(): string {
@@ -439,7 +437,7 @@ function startHeartbeat() {
         stopHeartbeat();
         if (heartbeatMs > 0) {
                 hbTimer = setInterval(() => {
-                        // Heartbeat op=2 with last event id in d.e
+                        // Heartbeat op=2 with monotonically increasing sequence in d.e
                         const e = nextHeartbeatE();
                         const msg = JSON.stringify({
                                 op: 2,
