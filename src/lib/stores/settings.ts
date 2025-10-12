@@ -13,7 +13,6 @@ import { selectedGuildId } from '$lib/stores/appState';
 import { updateUnreadSnapshot } from '$lib/stores/unreadSeed';
 import { derived, get, writable } from 'svelte/store';
 import { parseColorValue } from '$lib/utils/color';
-import { wsEvent } from '$lib/client/ws';
 import type { PresenceMode, PresenceStatus } from '$lib/types/presence';
 
 type AnyRecord = Record<string, unknown>;
@@ -1155,37 +1154,33 @@ auth.guilds.subscribe((guilds) => {
         }
 });
 
-if (browser) {
-        wsEvent.subscribe((event) => {
-                if (!event) return;
-                if (event.op !== 0) return;
-                if (typeof event.t !== 'number' || event.t !== 401) return;
-                const payload = ((event as AnyRecord)?.d as AnyRecord) ?? {};
-                const settingsPayload = payload?.settings as ModelUserSettingsData | undefined;
-                if (!settingsPayload) return;
-                const nextMode = normalizePresenceModeValue((settingsPayload as AnyRecord)?.forced_presence);
-                const statusPayload = ((settingsPayload as AnyRecord)?.status ?? {}) as AnyRecord;
-                const nextStatus = normalizePresenceStatusValue(statusPayload?.status);
-                const nextCustom =
-                        normalizeCustomStatusTextValue(
-                                statusPayload?.custom_status_text ?? statusPayload?.customStatusText
-                        ) ?? null;
-                mutateAppSettingsWithoutSaving((settings) => {
-                        let changed = false;
-                        if (settings.presenceMode !== nextMode) {
-                                settings.presenceMode = nextMode;
-                                changed = true;
-                        }
-                        if (settings.status.status !== nextStatus) {
-                                settings.status.status = nextStatus;
-                                changed = true;
-                        }
-                        if (settings.status.customStatusText !== nextCustom) {
-                                settings.status.customStatusText = nextCustom;
-                                changed = true;
-                        }
-                        return changed;
-                });
+export function ingestPresenceSettingsUpdate(
+        settingsPayload: ModelUserSettingsData | null | undefined
+): void {
+        if (!settingsPayload) return;
+        const nextMode = normalizePresenceModeValue((settingsPayload as AnyRecord)?.forced_presence);
+        const statusPayload = ((settingsPayload as AnyRecord)?.status ?? {}) as AnyRecord;
+        const nextStatus = normalizePresenceStatusValue(statusPayload?.status);
+        const nextCustom =
+                normalizeCustomStatusTextValue(
+                        statusPayload?.custom_status_text ?? statusPayload?.customStatusText
+                ) ?? null;
+
+        mutateAppSettingsWithoutSaving((settings) => {
+                let changed = false;
+                if (settings.presenceMode !== nextMode) {
+                        settings.presenceMode = nextMode;
+                        changed = true;
+                }
+                if (settings.status.status !== nextStatus) {
+                        settings.status.status = nextStatus;
+                        changed = true;
+                }
+                if ((settings.status.customStatusText ?? null) !== nextCustom) {
+                        settings.status.customStatusText = nextCustom;
+                        changed = true;
+                }
+                return changed;
         });
 }
 
