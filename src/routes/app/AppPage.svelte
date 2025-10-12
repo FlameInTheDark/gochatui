@@ -8,7 +8,8 @@
         import SearchPanel from '$lib/components/app/search/SearchPanel.svelte';
         import MemberProfilePanel from '$lib/components/app/chat/MemberProfilePanel.svelte';
 	import DmCreate from '$lib/components/app/dm/DmCreate.svelte';
-	import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+        import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+        import ConnectionStatusBar from '$lib/components/app/ConnectionStatusBar.svelte';
 	import { appHasFocus, searchOpen } from '$lib/stores/appState';
         import '$lib/client/ws';
         import '$lib/stores/presence';
@@ -48,7 +49,8 @@
                 <SearchPanel />
                 <MemberProfilePanel />
 	</div>
-	<ContextMenu />
+        <ContextMenu />
+        <ConnectionStatusBar />
 </AuthGate>
 
 <svelte:window
