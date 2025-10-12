@@ -602,13 +602,16 @@ export function connectWS() {
                                 heartbeatSessionId = sessionId;
                         }
                         startHeartbeat();
-			// Mark authed and subscribe to current selections
-			authed = true;
-			wsAuthenticated.set(true);
-			// After auth, (re)subscribe to current selections
-			resubscribe();
-			return;
-		}
+                        // Mark authed and subscribe to current selections
+                        const alreadyAuthed = authed;
+                        authed = true;
+                        if (!alreadyAuthed) {
+                                wsAuthenticated.set(true);
+                                // After auth, (re)subscribe to current selections
+                                resubscribe();
+                        }
+                        return;
+                }
 
 		updateLastT(data?.t);
 		wsEvent.set(data);
