@@ -11,12 +11,12 @@
 		return Math.min(Math.max(value, min), max);
 	}
 
-	async function updatePosition(current: TooltipData) {
-		if (!current.visible || !tooltipEl || !current.anchor) {
-			return;
-		}
-		await tick();
-		if (!tooltipEl) return;
+        async function updatePosition(current: TooltipData) {
+                if (!current.visible || !current.anchor) {
+                        return;
+                }
+                await tick();
+                if (!tooltipEl) return;
 
 		const tooltipRect = tooltipEl.getBoundingClientRect();
 		let placement = current.placement;
