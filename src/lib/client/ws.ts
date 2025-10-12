@@ -35,6 +35,7 @@ let lastHeartbeatE = 0; // monotonically increasing heartbeat ack
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let shouldReconnect = true;
 let latestToken: string | null = get(auth.token);
+let heartbeatSessionId: string | null = null;
 
 const WS_EVENT_MEMBER_JOIN = 200;
 const WS_EVENT_MEMBER_LEAVE = 202;
@@ -527,23 +528,24 @@ function stopHeartbeat() {
 }
 
 export function disconnectWS() {
-	shouldReconnect = false;
-	stopHeartbeat();
-	if (reconnectTimer) {
-		clearTimeout(reconnectTimer);
-		reconnectTimer = null;
-	}
-	if (socket) {
-		try {
-			socket.close();
-		} catch {}
-	}
-	socket = null;
-	authed = false;
-	lastHeartbeatE = 0;
-	wsConnected.set(false);
-	wsConnectionLost.set(false);
-	wsAuthenticated.set(false);
+        shouldReconnect = false;
+        stopHeartbeat();
+        if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+        }
+        if (socket) {
+                try {
+                        socket.close();
+                } catch {}
+        }
+        socket = null;
+        authed = false;
+        lastHeartbeatE = 0;
+        wsConnected.set(false);
+        wsConnectionLost.set(false);
+        wsAuthenticated.set(false);
+        heartbeatSessionId = null;
 }
 
 export function connectWS() {
@@ -563,17 +565,21 @@ export function connectWS() {
 	authed = false;
 	wsAuthenticated.set(false);
 
-	socket.onopen = () => {
-		wsConnected.set(true);
-		wsConnectionLost.set(false);
-		// Send auth (hello) immediately: op=1 with token and t
-		const token = latestToken ?? get(auth.token);
-		if (token) {
-			const t = nextT();
-			const tok = JSON.stringify(token);
-			sendRaw(`{"op":1,"d":{"token":${tok}},"t":${t}}`);
-		}
-	};
+        socket.onopen = () => {
+                wsConnected.set(true);
+                wsConnectionLost.set(false);
+                // Send auth (hello) immediately: op=1 with token and t
+                const token = latestToken ?? get(auth.token);
+                if (token) {
+                        const t = nextT();
+                        const tok = JSON.stringify(token);
+                        const resumeFragment =
+                                heartbeatSessionId && heartbeatSessionId.length
+                                        ? `,"heartbeat_session_id":${JSON.stringify(heartbeatSessionId)}`
+                                        : '';
+                        sendRaw(`{"op":1,"d":{"token":${tok}${resumeFragment}},"t":${t}}`);
+                }
+        };
 
 	socket.onmessage = (ev) => {
 		let data: any;
@@ -584,13 +590,18 @@ export function connectWS() {
 		}
 
 		// Handshake: server sends op=1 with d.heartbeat_interval (some servers may send root-level heartbeat_interval)
-		if (
-			(data?.op === 1 && typeof data?.d?.heartbeat_interval === 'number') ||
-			typeof data?.heartbeat_interval === 'number'
-		) {
-			const interval = (data?.d?.heartbeat_interval ?? data?.heartbeat_interval) as number;
-			heartbeatMs = interval;
-			startHeartbeat();
+                if (
+                        (data?.op === 1 && typeof data?.d?.heartbeat_interval === 'number') ||
+                        typeof data?.heartbeat_interval === 'number'
+                ) {
+                        const interval = (data?.d?.heartbeat_interval ?? data?.heartbeat_interval) as number;
+                        heartbeatMs = interval;
+                        const sessionId =
+                                (data?.d?.session_id ?? data?.session_id ?? null) as string | null;
+                        if (typeof sessionId === 'string' && sessionId) {
+                                heartbeatSessionId = sessionId;
+                        }
+                        startHeartbeat();
 			// Mark authed and subscribe to current selections
 			authed = true;
 			wsAuthenticated.set(true);

@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import {
         type DtoGuild,
+        type ModelStatus,
         type ModelUserSettingsData,
         type ModelUserSettingsGuildFolders,
         type ModelUserSettingsGuilds,
@@ -12,6 +13,9 @@ import { selectedGuildId } from '$lib/stores/appState';
 import { updateUnreadSnapshot } from '$lib/stores/unreadSeed';
 import { derived, get, writable } from 'svelte/store';
 import { parseColorValue } from '$lib/utils/color';
+import type { PresenceMode, PresenceStatus } from '$lib/types/presence';
+
+type AnyRecord = Record<string, unknown>;
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -19,7 +23,50 @@ const supportedLocales = ['en', 'ru', 'de', 'fr'] as const;
 export type Locale = (typeof supportedLocales)[number];
 
 function isLocale(value: unknown): value is Locale {
-	return typeof value === 'string' && supportedLocales.includes(value as Locale);
+        return typeof value === 'string' && supportedLocales.includes(value as Locale);
+}
+
+function normalizePresenceStatusValue(value: unknown): PresenceStatus {
+        if (typeof value !== 'string') return 'online';
+        switch (value.toLowerCase()) {
+                case 'idle':
+                        return 'idle';
+                case 'dnd':
+                case 'do_not_disturb':
+                        return 'dnd';
+                case 'offline':
+                case 'invisible':
+                        return 'offline';
+                case 'online':
+                default:
+                        return 'online';
+        }
+}
+
+function normalizePresenceModeValue(value: unknown): PresenceMode {
+        if (typeof value !== 'string') return 'auto';
+        switch (value.toLowerCase()) {
+                case 'idle':
+                        return 'idle';
+                case 'dnd':
+                case 'do_not_disturb':
+                        return 'dnd';
+                case 'offline':
+                case 'invisible':
+                        return 'offline';
+                case 'auto':
+                        return 'auto';
+                case 'online':
+                default:
+                        return 'auto';
+        }
+}
+
+function normalizeCustomStatusTextValue(value: unknown): string | null {
+        if (typeof value !== 'string') return null;
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        return trimmed.slice(0, 256);
 }
 
 const initialTheme: Theme = browser
@@ -105,21 +152,31 @@ export interface GuildFolderItem {
 export type GuildLayoutItem = GuildTopLevelItem | GuildFolderItem;
 
 export interface AppSettings {
-	language: Locale;
-	theme: Theme;
-	chatFontScale: number;
-	chatSpacing: number;
-	guildLayout: GuildLayoutItem[];
-	selectedGuildId: string | null;
+        language: Locale;
+        theme: Theme;
+        chatFontScale: number;
+        chatSpacing: number;
+        guildLayout: GuildLayoutItem[];
+        selectedGuildId: string | null;
+        presenceMode: PresenceMode;
+        status: {
+                status: PresenceStatus;
+                customStatusText: string | null;
+        };
 }
 
 const defaultSettings: AppSettings = {
-	language: initialLocale,
-	theme: initialTheme,
-	chatFontScale: 1,
-	chatSpacing: 1,
-	guildLayout: [],
-	selectedGuildId: initialSelectedGuildId
+        language: initialLocale,
+        theme: initialTheme,
+        chatFontScale: 1,
+        chatSpacing: 1,
+        guildLayout: [],
+        selectedGuildId: initialSelectedGuildId,
+        presenceMode: 'auto',
+        status: {
+                status: 'online',
+                customStatusText: null
+        }
 };
 
 export const appSettings = writable<AppSettings>(defaultSettings);
@@ -199,13 +256,18 @@ function structuredCloneSafe<T>(value: T): T {
 }
 
 function cloneSettings(settings: AppSettings): AppSettings {
-	return {
-		language: settings.language,
-		theme: settings.theme,
-		chatFontScale: settings.chatFontScale,
-		chatSpacing: settings.chatSpacing,
-		selectedGuildId: settings.selectedGuildId,
-		guildLayout: settings.guildLayout.map((item) => {
+        return {
+                language: settings.language,
+                theme: settings.theme,
+                chatFontScale: settings.chatFontScale,
+                chatSpacing: settings.chatSpacing,
+                selectedGuildId: settings.selectedGuildId,
+                presenceMode: settings.presenceMode,
+                status: {
+                        status: settings.status.status,
+                        customStatusText: settings.status.customStatusText ?? null
+                },
+                guildLayout: settings.guildLayout.map((item) => {
                         if (item.kind === 'guild') {
                                 return {
                                         kind: 'guild',
@@ -462,23 +524,29 @@ export function applyReadStatesMapToLayout(
 }
 
 function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
-	if (!data) return cloneSettings(defaultSettings);
+        if (!data) return cloneSettings(defaultSettings);
 
-	const appearance = data.appearance ?? {};
-	const themeValue = (appearance.color_scheme as Theme | undefined) ?? defaultSettings.theme;
-	const languageValue = isLocale(data.language)
-		? (data.language as Locale)
-		: defaultSettings.language;
-	const chatFontScale =
-		typeof appearance.chat_font_scale === 'number'
-			? appearance.chat_font_scale
-			: defaultSettings.chatFontScale;
-	const chatSpacing =
-		typeof appearance.chat_spacing === 'number'
-			? appearance.chat_spacing
-			: defaultSettings.chatSpacing;
+        const appearance = data.appearance ?? {};
+        const themeValue = (appearance.color_scheme as Theme | undefined) ?? defaultSettings.theme;
+        const languageValue = isLocale(data.language)
+                ? (data.language as Locale)
+                : defaultSettings.language;
+        const chatFontScale =
+                typeof appearance.chat_font_scale === 'number'
+                        ? appearance.chat_font_scale
+                        : defaultSettings.chatFontScale;
+        const chatSpacing =
+                typeof appearance.chat_spacing === 'number'
+                        ? appearance.chat_spacing
+                        : defaultSettings.chatSpacing;
+        const modeValue = normalizePresenceModeValue((data as AnyRecord)?.forced_presence);
+        const statusPayload = ((data as AnyRecord)?.status ?? {}) as AnyRecord;
+        const statusValue = normalizePresenceStatusValue(statusPayload?.status);
+        const customStatusText = normalizeCustomStatusTextValue(
+                statusPayload?.custom_status_text ?? statusPayload?.customStatusText
+        );
 
-	const folderEntries = normalizeFolderArray(data.guild_folders).map((folder, idx) => {
+        const folderEntries = normalizeFolderArray(data.guild_folders).map((folder, idx) => {
 		const id = generateFolderId();
 		const guildIds = Array.isArray(folder.guilds)
 			? folder.guilds
@@ -560,14 +628,19 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
 
 	layoutWithPositions.sort((a, b) => a.position - b.position);
 
-	return {
-		language: languageValue,
-		theme: themeValue,
-		chatFontScale,
-		chatSpacing,
-		guildLayout: layoutWithPositions.map((entry) => entry.item),
-		selectedGuildId: toSnowflakeString(data.selected_guild)
-	};
+        return {
+                language: languageValue,
+                theme: themeValue,
+                chatFontScale,
+                chatSpacing,
+                guildLayout: layoutWithPositions.map((entry) => entry.item),
+                selectedGuildId: toSnowflakeString(data.selected_guild),
+                presenceMode: modeValue,
+                status: {
+                        status: statusValue,
+                        customStatusText: customStatusText ?? null
+                }
+        };
 }
 
 function convertToApi(settings: AppSettings): ModelUserSettingsData {
@@ -613,17 +686,25 @@ function convertToApi(settings: AppSettings): ModelUserSettingsData {
 		}
 	}
 
-	return {
-		language: settings.language,
-		appearance: {
-			color_scheme: settings.theme,
-			chat_font_scale: settings.chatFontScale,
-			chat_spacing: settings.chatSpacing
-		},
-		guilds: payloadGuilds,
+        return {
+                language: settings.language,
+                appearance: {
+                        color_scheme: settings.theme,
+                        chat_font_scale: settings.chatFontScale,
+                        chat_spacing: settings.chatSpacing
+                },
+                guilds: payloadGuilds,
                 guild_folders: payloadFolders as unknown as ModelUserSettingsGuildFolders[],
-		selected_guild: settings.selectedGuildId ? toApiSnowflake(settings.selectedGuildId) : undefined
-	};
+                selected_guild: settings.selectedGuildId ? toApiSnowflake(settings.selectedGuildId) : undefined,
+                forced_presence: settings.presenceMode === 'auto' ? '' : settings.presenceMode,
+                status: {
+                        status: settings.status.status,
+                        custom_status_text:
+                                settings.status.customStatusText != null
+                                        ? settings.status.customStatusText
+                                        : ''
+                }
+        };
 }
 
 function persistSelectedGuildFallback(value: string | null) {
@@ -1063,20 +1144,50 @@ auth.token.subscribe((token) => {
 });
 
 auth.guilds.subscribe((guilds) => {
-	latestGuilds = Array.isArray(guilds) ? guilds : [];
-	if (get(settingsReady)) {
-		guildsHydrated = true;
-	}
-	applySelectedGuildFromSettings(get(settingsReady));
-	if (get(settingsReady)) {
-		syncLayoutWithGuilds();
-	}
+        latestGuilds = Array.isArray(guilds) ? guilds : [];
+        if (get(settingsReady)) {
+                guildsHydrated = true;
+        }
+        applySelectedGuildFromSettings(get(settingsReady));
+        if (get(settingsReady)) {
+                syncLayoutWithGuilds();
+        }
 });
 
+export function ingestPresenceSettingsUpdate(
+        settingsPayload: ModelUserSettingsData | null | undefined
+): void {
+        if (!settingsPayload) return;
+        const nextMode = normalizePresenceModeValue((settingsPayload as AnyRecord)?.forced_presence);
+        const statusPayload = ((settingsPayload as AnyRecord)?.status ?? {}) as AnyRecord;
+        const nextStatus = normalizePresenceStatusValue(statusPayload?.status);
+        const nextCustom =
+                normalizeCustomStatusTextValue(
+                        statusPayload?.custom_status_text ?? statusPayload?.customStatusText
+                ) ?? null;
+
+        mutateAppSettingsWithoutSaving((settings) => {
+                let changed = false;
+                if (settings.presenceMode !== nextMode) {
+                        settings.presenceMode = nextMode;
+                        changed = true;
+                }
+                if (settings.status.status !== nextStatus) {
+                        settings.status.status = nextStatus;
+                        changed = true;
+                }
+                if ((settings.status.customStatusText ?? null) !== nextCustom) {
+                        settings.status.customStatusText = nextCustom;
+                        changed = true;
+                }
+                return changed;
+        });
+}
+
 theme.subscribe((value) => {
-	if (suppressThemePropagation) return;
-	mutateAppSettings((settings) => {
-		if (settings.theme === value) return false;
+        if (suppressThemePropagation) return;
+        mutateAppSettings((settings) => {
+                if (settings.theme === value) return false;
 		settings.theme = value;
 		return true;
 	});

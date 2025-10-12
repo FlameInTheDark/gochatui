@@ -109,7 +109,8 @@
 
         const presenceInfo = $derived.by(() => (userId ? $presenceMap[userId] ?? null : null));
         const presenceStatus = $derived.by(() => presenceInfo?.status ?? null);
-        const statusLabel = $derived.by(() => presenceStatusLabel(presenceStatus));
+        const customStatusText = $derived.by(() => presenceInfo?.customStatusText ?? null);
+        const statusLabel = $derived.by(() => presenceStatusLabel(presenceStatus, customStatusText));
         const hasPresence = $derived.by(() => Boolean(presenceInfo));
 
         const primaryName = $derived.by(() => memberPrimaryName(selectedMember));

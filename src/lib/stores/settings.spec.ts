@@ -54,7 +54,12 @@ describe('applyReadStatesMapToLayout', () => {
                         chatFontScale: 1,
                         chatSpacing: 1,
                         guildLayout: layout,
-                        selectedGuildId: null
+                        selectedGuildId: null,
+                        presenceMode: 'auto',
+                        status: {
+                                status: 'online',
+                                customStatusText: null
+                        }
                 });
 
                 const lookup = get(guildChannelReadStateLookup);

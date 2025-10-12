@@ -4,23 +4,29 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
 	import { HeadphoneOff, Headphones, Mic, MicOff, Settings, Check } from 'lucide-svelte';
-	import {
-		presenceIndicatorClass,
-		selfPresenceMode,
-		selfPresenceStatus,
-		setSelfPresenceMode,
-		type PresenceMode,
-		type PresenceStatus
-	} from '$lib/stores/presence';
+        import {
+                presenceIndicatorClass,
+                selfCustomStatusText,
+                selfPresenceMode,
+                selfPresenceStatus,
+                setSelfCustomStatusText,
+                setSelfPresenceMode,
+                type PresenceMode,
+                type PresenceStatus
+        } from '$lib/stores/presence';
+        import { presenceStatusLabel } from '$lib/utils/presenceLabels';
 
-	const user = auth.user;
-	const presenceMode = selfPresenceMode;
-	const presenceStatus = selfPresenceStatus;
-	let muted = $state(false);
-	let deafened = $state(false);
-	let statusMenuOpen = $state(false);
-	let statusMenuEl: HTMLDivElement | null = null;
-	let statusTriggerEl: HTMLButtonElement | null = null;
+        const user = auth.user;
+        const presenceMode = selfPresenceMode;
+        const presenceStatus = selfPresenceStatus;
+        const customStatusText = selfCustomStatusText;
+        let muted = $state(false);
+        let deafened = $state(false);
+        let statusMenuOpen = $state(false);
+        let statusMenuEl: HTMLDivElement | null = null;
+        let statusTriggerEl: HTMLButtonElement | null = null;
+        let customStatusDraft = $state('');
+        let customStatusDirty = $state(false);
 
 	type StatusOption = {
 		mode: PresenceMode;
@@ -64,9 +70,16 @@
 		deafened = !deafened;
 	}
 
-	function toggleStatusMenu() {
-		statusMenuOpen = !statusMenuOpen;
-	}
+        function toggleStatusMenu() {
+                statusMenuOpen = !statusMenuOpen;
+                if (statusMenuOpen) {
+                        customStatusDraft = $customStatusText ?? '';
+                        customStatusDirty = false;
+                } else {
+                        customStatusDraft = $customStatusText ?? '';
+                        customStatusDirty = false;
+                }
+        }
 
         function selectStatus(option: StatusOption) {
                 setSelfPresenceMode(option.mode);
@@ -91,21 +104,48 @@
 		return mode === option.mode;
 	}
 
-	function statusLabel(status: PresenceStatus): string {
-		switch (status) {
-			case 'online':
-				return m.status_online();
-			case 'idle':
-				return m.status_idle();
-			case 'dnd':
-				return m.status_dnd();
-			case 'offline':
-			default:
-				return m.status_offline();
-		}
-	}
+        function applyCustomStatus() {
+                const trimmed = customStatusDraft.trim().slice(0, 256);
+                const nextValue = trimmed.length ? trimmed : '';
+                customStatusDraft = nextValue;
+                customStatusDirty = false;
+                setSelfCustomStatusText(nextValue.length ? nextValue : null);
+        }
 
-	onMount(() => {
+        function clearCustomStatus() {
+                customStatusDraft = '';
+                customStatusDirty = false;
+                setSelfCustomStatusText(null);
+        }
+
+        function handleCustomStatusInput(event: Event) {
+                const target = event.currentTarget as HTMLInputElement | null;
+                if (!target) return;
+                customStatusDraft = target.value;
+                customStatusDirty = true;
+        }
+
+        function handleCustomStatusKey(event: KeyboardEvent) {
+                if (event.key === 'Enter') {
+                        event.preventDefault();
+                        applyCustomStatus();
+                }
+        }
+
+        function handleCustomStatusBlur() {
+                if (customStatusDirty) {
+                        applyCustomStatus();
+                }
+        }
+
+        $effect(() => {
+                if (!statusMenuOpen) {
+                        customStatusDraft = $customStatusText ?? '';
+                        customStatusDirty = false;
+                }
+        });
+
+        onMount(() => {
 		const handlePointer = (event: MouseEvent | TouchEvent) => {
 			if (!statusMenuOpen) return;
 			const target = event.target as Node | null;
@@ -152,9 +192,11 @@
 			</div>
 			<div class="min-w-0">
 				<div class="truncate text-sm font-medium">{$user?.name ?? m.user_default_name()}</div>
-				<div class="truncate text-xs text-[var(--muted)]">{statusLabel($presenceStatus)}</div>
-			</div>
-		</button>
+                                <div class="truncate text-xs text-[var(--muted)]">
+                                        {presenceStatusLabel($presenceStatus, $customStatusText)}
+                                </div>
+                        </div>
+                </button>
 		<div class="flex items-center gap-1">
 			<button
 				type="button"
@@ -198,11 +240,11 @@
 		</div>
 	</div>
 	{#if statusMenuOpen}
-		<div
-			class="absolute bottom-[calc(100%+0.5rem)] left-3 z-40 w-64 rounded-md border border-[var(--stroke)] bg-[var(--panel)] p-2 shadow-lg"
-			bind:this={statusMenuEl}
-			role="menu"
-			aria-label={m.status_menu_title()}
+                <div
+                        class="absolute bottom-[calc(100%+0.5rem)] left-3 z-40 w-64 rounded-md border border-[var(--stroke)] bg-[var(--panel)] p-2 shadow-lg"
+                        bind:this={statusMenuEl}
+                        role="menu"
+                        aria-label={m.status_menu_title()}
 		>
 			<div class="px-2 pb-2 text-xs font-semibold text-[var(--muted)] uppercase">
 				{m.status_menu_title()}
@@ -230,8 +272,35 @@
 							<div class="truncate text-xs text-[var(--muted)]">{option.description}</div>
 						</div>
 					</button>
-				{/each}
-			</div>
-		</div>
-	{/if}
+                                {/each}
+                        </div>
+                        <div class="mt-3 border-t border-[var(--stroke)] pt-3">
+                                <label class="text-xs font-semibold text-[var(--muted)] uppercase" for="custom-status-input">
+                                        {m.status_custom_label()}
+                                </label>
+                                <div class="mt-1 flex items-center gap-2">
+                                        <input
+                                                id="custom-status-input"
+                                                class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+                                                type="text"
+                                                value={customStatusDraft}
+                                                oninput={handleCustomStatusInput}
+                                                onkeydown={handleCustomStatusKey}
+                                                onblur={handleCustomStatusBlur}
+                                                placeholder={m.status_custom_placeholder()}
+                                        />
+                                        {#if $customStatusText}
+                                                <button
+                                                        type="button"
+                                                        class="rounded-md px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+                                                        onclick={clearCustomStatus}
+                                                >
+                                                        {m.status_custom_clear()}
+                                                </button>
+                                        {/if}
+                                </div>
+                                <p class="mt-1 text-xs text-[var(--muted)]">{m.status_custom_help()}</p>
+                        </div>
+                </div>
+        {/if}
 </div>

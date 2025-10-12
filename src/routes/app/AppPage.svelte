@@ -12,6 +12,7 @@
 	import { appHasFocus, searchOpen } from '$lib/stores/appState';
         import '$lib/client/ws';
         import '$lib/stores/presence';
+        import '$lib/stores/settingsSync';
 
 	const updateAppFocus = () => {
 		if (!browser) return;

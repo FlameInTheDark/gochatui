@@ -280,6 +280,7 @@
                 presenceStatus: PresenceStatus | null;
                 presenceSince: number | null;
                 hasPresence: boolean;
+                customStatusText: string | null;
                 statusLabel: string;
         };
 
@@ -307,7 +308,11 @@
                                 presenceStatus: info?.status ?? null,
                                 presenceSince: info?.since ?? null,
                                 hasPresence: Boolean(info),
-                                statusLabel: presenceStatusLabel(info?.status ?? null)
+                                customStatusText: info?.customStatusText ?? null,
+                                statusLabel: presenceStatusLabel(
+                                        info?.status ?? null,
+                                        info?.customStatusText ?? null
+                                )
                         };
                 });
 		const hideWithoutAccess = Boolean((channel as any)?.private);
