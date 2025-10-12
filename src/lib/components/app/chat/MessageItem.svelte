@@ -894,6 +894,7 @@
                         type="button"
                         class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
                         data-user-menu="true"
+                        data-tooltip-disabled
                         aria-label={message.author?.name ?? 'User'}
                         oncontextmenu={openUserMenu}
                         onclick={openAuthorProfile}
@@ -937,6 +938,7 @@
                                         class="truncate font-semibold text-[var(--muted)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                                         style:color={primaryRoleColor ?? null}
                                         data-user-menu="true"
+                                        data-tooltip-disabled
                                         oncontextmenu={openUserMenu}
                                         onclick={openAuthorProfile}
                                 >
