@@ -239,67 +239,71 @@
 			</button>
 		</div>
 	</div>
-	{#if statusMenuOpen}
+        {#if statusMenuOpen}
                 <div
-                        class="absolute bottom-[calc(100%+0.5rem)] left-3 z-40 w-64 rounded-md border border-[var(--stroke)] bg-[var(--panel)] p-2 shadow-lg"
+                        class="absolute bottom-[calc(100%+0.5rem)] left-3 z-40"
                         bind:this={statusMenuEl}
                         role="menu"
                         aria-label={m.status_menu_title()}
-		>
-			<div class="px-2 pb-2 text-xs font-semibold text-[var(--muted)] uppercase">
-				{m.status_menu_title()}
-			</div>
-			<div class="space-y-1">
-				{#each statusOptions as option (option.mode)}
-                                        <button
-                                                type="button"
-                                                class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
-                                                onpointerdown={(event) => handleStatusPointer(event, option)}
-                                                onkeydown={(event) => handleStatusKey(event, option)}
-                                                role="menuitemradio"
-                                                aria-checked={isOptionActive(option, $presenceMode)}
-                                        >
-						<span
-							class={`mt-1 h-3 w-3 flex-shrink-0 rounded-full border border-[var(--panel)] ${presenceIndicatorClass(option.indicator)}`}
-						/>
-						<div class="min-w-0 flex-1">
-							<div class="flex items-center gap-2">
-								<span class="truncate text-sm font-medium">{option.label}</span>
-								{#if isOptionActive(option, $presenceMode)}
-									<Check class="h-4 w-4 text-[var(--accent)]" stroke-width={2} />
-								{/if}
-							</div>
-							<div class="truncate text-xs text-[var(--muted)]">{option.description}</div>
-						</div>
-					</button>
-                                {/each}
-                        </div>
-                        <div class="mt-3 border-t border-[var(--stroke)] pt-3">
-                                <label class="text-xs font-semibold text-[var(--muted)] uppercase" for="custom-status-input">
-                                        {m.status_custom_label()}
-                                </label>
-                                <div class="mt-1 flex items-center gap-2">
-                                        <input
-                                                id="custom-status-input"
-                                                class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-                                                type="text"
-                                                value={customStatusDraft}
-                                                oninput={handleCustomStatusInput}
-                                                onkeydown={handleCustomStatusKey}
-                                                onblur={handleCustomStatusBlur}
-                                                placeholder={m.status_custom_placeholder()}
-                                        />
-                                        {#if $customStatusText}
-                                                <button
-                                                        type="button"
-                                                        class="rounded-md px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-                                                        onclick={clearCustomStatus}
-                                                >
-                                                        {m.status_custom_clear()}
-                                                </button>
-                                        {/if}
+                >
+                        <div class="w-64 rounded-lg backdrop-blur-md">
+                                <div class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel)] p-2 shadow-lg">
+                                        <div class="px-2 pb-2 text-xs font-semibold text-[var(--muted)] uppercase">
+                                                {m.status_menu_title()}
+                                        </div>
+                                        <div class="space-y-1">
+                                                {#each statusOptions as option (option.mode)}
+                                                        <button
+                                                                type="button"
+                                                                class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
+                                                                onpointerdown={(event) => handleStatusPointer(event, option)}
+                                                                onkeydown={(event) => handleStatusKey(event, option)}
+                                                                role="menuitemradio"
+                                                                aria-checked={isOptionActive(option, $presenceMode)}
+                                                        >
+                                                                <span
+                                                                        class={`mt-1 h-3 w-3 flex-shrink-0 rounded-full border border-[var(--panel)] ${presenceIndicatorClass(option.indicator)}`}
+                                                                />
+                                                                <div class="min-w-0 flex-1">
+                                                                        <div class="flex items-center gap-2">
+                                                                                <span class="truncate text-sm font-medium">{option.label}</span>
+                                                                                {#if isOptionActive(option, $presenceMode)}
+                                                                                        <Check class="h-4 w-4 text-[var(--accent)]" stroke-width={2} />
+                                                                                {/if}
+                                                                        </div>
+                                                                        <div class="truncate text-xs text-[var(--muted)]">{option.description}</div>
+                                                                </div>
+                                                        </button>
+                                                {/each}
+                                        </div>
+                                        <div class="mt-3 border-t border-[var(--stroke)] pt-3">
+                                                <label class="text-xs font-semibold text-[var(--muted)] uppercase" for="custom-status-input">
+                                                        {m.status_custom_label()}
+                                                </label>
+                                                <div class="mt-1 flex items-center gap-2">
+                                                        <input
+                                                                id="custom-status-input"
+                                                                class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+                                                                type="text"
+                                                                value={customStatusDraft}
+                                                                oninput={handleCustomStatusInput}
+                                                                onkeydown={handleCustomStatusKey}
+                                                                onblur={handleCustomStatusBlur}
+                                                                placeholder={m.status_custom_placeholder()}
+                                                        />
+                                                        {#if $customStatusText}
+                                                                <button
+                                                                        type="button"
+                                                                        class="rounded-md px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+                                                                        onclick={clearCustomStatus}
+                                                                >
+                                                                        {m.status_custom_clear()}
+                                                                </button>
+                                                        {/if}
+                                                </div>
+                                                <p class="mt-1 text-xs text-[var(--muted)]">{m.status_custom_help()}</p>
+                                        </div>
                                 </div>
-                                <p class="mt-1 text-xs text-[var(--muted)]">{m.status_custom_help()}</p>
                         </div>
                 </div>
         {/if}
