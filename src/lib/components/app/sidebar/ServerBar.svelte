@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { DtoGuild } from '$lib/api';
 	import { m } from '$lib/paraglide/messages.js';
+	import { tooltip } from '$lib/actions/tooltip';
         import {
                 appSettings,
                 createFolderWithGuilds,
