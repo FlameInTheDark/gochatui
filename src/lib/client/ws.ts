@@ -30,6 +30,7 @@ let heartbeatMs = 15000;
 let lastT = 0;
 let authed = false;
 let lastEventId = 0; // track last received/sent event id
+let lastHeartbeatE = 0; // monotonically increasing heartbeat ack
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let shouldReconnect = true;
 let latestToken: string | null = get(auth.token);
@@ -429,16 +430,26 @@ function parseJSONPreserveLargeInts(data: string) {
 	return JSON.parse(out);
 }
 
+function nextHeartbeatE(): number {
+        const baseline = Math.max(lastEventId, lastT);
+        if (baseline > lastHeartbeatE) {
+                lastHeartbeatE = baseline;
+        } else {
+                lastHeartbeatE += 1;
+        }
+        return lastHeartbeatE;
+}
+
 function startHeartbeat() {
-	stopHeartbeat();
-	if (heartbeatMs > 0) {
-		hbTimer = setInterval(() => {
-			// Heartbeat op=2 with last event id in d.e
-			const e = lastEventId || lastT || 0;
-			const msg = JSON.stringify({
-				op: 2,
-				d: { e },
-				t: 0
+        stopHeartbeat();
+        if (heartbeatMs > 0) {
+                hbTimer = setInterval(() => {
+                        // Heartbeat op=2 with last event id in d.e
+                        const e = nextHeartbeatE();
+                        const msg = JSON.stringify({
+                                op: 2,
+                                d: { e },
+                                t: 0
 			});
 			sendRaw(msg);
 		}, heartbeatMs);
@@ -446,8 +457,8 @@ function startHeartbeat() {
 }
 
 function stopHeartbeat() {
-	if (hbTimer) clearInterval(hbTimer);
-	hbTimer = null;
+        if (hbTimer) clearInterval(hbTimer);
+        hbTimer = null;
 }
 
 export function disconnectWS() {
@@ -457,14 +468,15 @@ export function disconnectWS() {
 		clearTimeout(reconnectTimer);
 		reconnectTimer = null;
 	}
-	if (socket) {
-		try {
-			socket.close();
-		} catch {}
-	}
-	socket = null;
-	authed = false;
-	wsConnected.set(false);
+        if (socket) {
+                try {
+                        socket.close();
+                } catch {}
+        }
+        socket = null;
+        authed = false;
+        lastHeartbeatE = 0;
+        wsConnected.set(false);
 	wsConnectionLost.set(false);
 	wsAuthenticated.set(false);
 }
