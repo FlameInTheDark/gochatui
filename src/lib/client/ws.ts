@@ -26,6 +26,8 @@ export const wsAuthenticated = writable(false);
 
 let socket: WebSocket | null = null;
 let hbTimer: any = null;
+let hbWorker: Worker | null = null;
+let hbWorkerActive = false;
 let heartbeatMs = 15000;
 let lastT = 0;
 let authed = false;
@@ -43,7 +45,7 @@ function nextT() {
 }
 
 function updateLastT(t?: number) {
-        if (typeof t === 'number' && t > lastT) lastT = t;
+	if (typeof t === 'number' && t > lastT) lastT = t;
 }
 
 function wsUrl(): string {
@@ -429,29 +431,99 @@ function parseJSONPreserveLargeInts(data: string) {
 }
 
 function nextHeartbeatE(): number {
-        lastHeartbeatE += 1;
-        return lastHeartbeatE;
+	lastHeartbeatE += 1;
+	return lastHeartbeatE;
 }
 
-function startHeartbeat() {
-        stopHeartbeat();
-        if (heartbeatMs > 0) {
-                hbTimer = setInterval(() => {
-                        // Heartbeat op=2 with monotonically increasing sequence in d.e
-                        const e = nextHeartbeatE();
-                        const msg = JSON.stringify({
-                                op: 2,
-                                d: { e },
-                                t: 0
+function sendHeartbeatFrame() {
+	const e = nextHeartbeatE();
+	const msg = JSON.stringify({
+		op: 2,
+		d: { e },
+		t: 0
+	});
+	sendRaw(msg);
+}
+
+function ensureHeartbeatWorker(): Worker | null {
+	if (!browser) return null;
+	if (typeof Worker === 'undefined') return null;
+	if (!hbWorker) {
+		try {
+			hbWorker = new Worker(new URL('./heartbeatWorker.ts', import.meta.url), {
+				type: 'module'
 			});
-			sendRaw(msg);
-		}, heartbeatMs);
+			hbWorker.onmessage = (event: MessageEvent<any>) => {
+				const payload = event?.data;
+				if (!payload || typeof payload !== 'object') return;
+				if (payload.type === 'beat') {
+					sendHeartbeatFrame();
+				} else if (payload.type === 'dispose') {
+					try {
+						hbWorker?.terminate();
+					} catch {}
+					hbWorker = null;
+					hbWorkerActive = false;
+				}
+			};
+			hbWorker.onerror = () => {
+				try {
+					hbWorker?.terminate();
+				} catch {}
+				hbWorker = null;
+				hbWorkerActive = false;
+			};
+		} catch {
+			hbWorker = null;
+			hbWorkerActive = false;
+			return null;
+		}
+	}
+	return hbWorker;
+}
+
+function startHeartbeatWorker(interval: number): boolean {
+	const worker = ensureHeartbeatWorker();
+	if (!worker) return false;
+	try {
+		worker.postMessage({ type: 'start', interval });
+		hbWorkerActive = true;
+		return true;
+	} catch {
+		try {
+			worker.terminate();
+		} catch {}
+		if (hbWorker === worker) hbWorker = null;
+		hbWorkerActive = false;
+		return false;
 	}
 }
 
+function stopHeartbeatWorker() {
+	if (!hbWorker || !hbWorkerActive) return;
+	try {
+		hbWorker.postMessage({ type: 'stop' });
+	} catch {}
+	hbWorkerActive = false;
+}
+
+function startHeartbeat() {
+	stopHeartbeat();
+	if (heartbeatMs <= 0) return;
+	const started = startHeartbeatWorker(heartbeatMs);
+	if (!started) {
+		hbTimer = setInterval(() => {
+			sendHeartbeatFrame();
+		}, heartbeatMs);
+	}
+	// Send an initial heartbeat immediately so the server does not need to wait
+	sendHeartbeatFrame();
+}
+
 function stopHeartbeat() {
-        if (hbTimer) clearInterval(hbTimer);
-        hbTimer = null;
+	if (hbTimer) clearInterval(hbTimer);
+	hbTimer = null;
+	stopHeartbeatWorker();
 }
 
 export function disconnectWS() {
@@ -461,15 +533,15 @@ export function disconnectWS() {
 		clearTimeout(reconnectTimer);
 		reconnectTimer = null;
 	}
-        if (socket) {
-                try {
-                        socket.close();
-                } catch {}
-        }
-        socket = null;
-        authed = false;
-        lastHeartbeatE = 0;
-        wsConnected.set(false);
+	if (socket) {
+		try {
+			socket.close();
+		} catch {}
+	}
+	socket = null;
+	authed = false;
+	lastHeartbeatE = 0;
+	wsConnected.set(false);
 	wsConnectionLost.set(false);
 	wsAuthenticated.set(false);
 }
