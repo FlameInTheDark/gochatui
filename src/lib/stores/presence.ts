@@ -421,7 +421,7 @@ function applyPresencePayload(payload: AnyRecord | null | undefined) {
                 const prev = map[userId];
                 const customStatusText = customStatusPayload.found
                         ? normalizeCustomStatusText(customStatusPayload.value)
-                        : prev?.customStatusText ?? null;
+                        : null;
                 nextCustomStatusText = customStatusText;
                 if (
                         prev?.status === status &&
