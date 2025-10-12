@@ -131,7 +131,7 @@ let manualOverride: Exclude<PresenceMode, 'auto'> | null = null;
 let desiredStatus: PresenceStatus = 'online';
 let currentStatus: PresenceStatus = 'online';
 let currentCustomStatusText: string | null = null;
-let lastSentStatus: PresenceStatus | null = null;
+let lastSentPresence: { status: PresenceStatus; customStatusText: string | null } | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let lastActivityAt = browser ? Date.now() : 0;
 let lastDomActivityAt = 0;
@@ -274,8 +274,8 @@ function updateSelfCustomStatus(text: string | null) {
 }
 
 function transmitSelfPresence(status: PresenceStatus, forceSend: boolean) {
-	selfStatusStore.set(status);
-	currentStatus = status;
+        selfStatusStore.set(status);
+        currentStatus = status;
         if (currentUserId) {
                 presenceStore.update((map) => {
                         const prev = map[currentUserId!];
@@ -295,15 +295,23 @@ function transmitSelfPresence(status: PresenceStatus, forceSend: boolean) {
                         };
                 });
         }
-	if (!browser) return;
-	const ready = get(wsAuthenticated);
-	if (!ready) {
-		if (forceSend) lastSentStatus = null;
-		return;
-	}
-	if (!forceSend && lastSentStatus === status) return;
-	sendWSMessage({ op: 3, d: { status } });
-	lastSentStatus = status;
+        if (!browser) return;
+        const ready = get(wsAuthenticated);
+        if (!ready) {
+                if (forceSend) lastSentPresence = null;
+                return;
+        }
+        const customStatusText = currentCustomStatusText ?? null;
+        if (
+                !forceSend &&
+                lastSentPresence &&
+                lastSentPresence.status === status &&
+                lastSentPresence.customStatusText === customStatusText
+        ) {
+                return;
+        }
+        sendWSMessage({ op: 3, d: { status, custom_status_text: customStatusText } });
+        lastSentPresence = { status, customStatusText };
 }
 
 function setSelfPresence(status: PresenceStatus) {
@@ -381,6 +389,7 @@ export function setSelfCustomStatusText(value: string | null) {
                 settings.status.customStatusText = normalized;
                 return true;
         });
+        transmitSelfPresence(currentStatus, false);
 }
 
 function applyModeFromUser(mode: PresenceMode) {
@@ -527,17 +536,17 @@ if (browser) {
 		}
 	});
 
-	wsAuthenticated.subscribe((ready) => {
-		if (ready) {
-			lastSentSubscriptionSignature = '';
-			lastSentStatus = null;
-			flushPresenceSubscription(true);
-			syncSelfPresence(true);
-		} else {
-			lastSentSubscriptionSignature = '';
-			lastSentStatus = null;
-		}
-	});
+        wsAuthenticated.subscribe((ready) => {
+                if (ready) {
+                        lastSentSubscriptionSignature = '';
+                        lastSentPresence = null;
+                        flushPresenceSubscription(true);
+                        syncSelfPresence(true);
+                } else {
+                        lastSentSubscriptionSignature = '';
+                        lastSentPresence = null;
+                }
+        });
 }
 
 auth.user.subscribe((user) => {
@@ -584,7 +593,7 @@ auth.isAuthenticated.subscribe((ok) => {
                 currentStatus = 'online';
                 currentCustomStatusText = null;
                 selfCustomStatusStore.set(null);
-                lastSentStatus = null;
+                lastSentPresence = null;
                 clearIdleTimer();
         }
 });
