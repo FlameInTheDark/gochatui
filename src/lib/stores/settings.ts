@@ -19,7 +19,7 @@ type AnyRecord = Record<string, unknown>;
 
 export type Theme = 'light' | 'dark' | 'system';
 
-const supportedLocales = ['en', 'ru', 'de', 'fr'] as const;
+export const supportedLocales = ['en', 'ru', 'de', 'fr'] as const;
 export type Locale = (typeof supportedLocales)[number];
 
 function isLocale(value: unknown): value is Locale {
@@ -74,7 +74,28 @@ const initialTheme: Theme = browser
 	: 'system';
 
 const storedLocale = browser ? localStorage.getItem('locale') : null;
-const initialLocale: Locale = storedLocale && isLocale(storedLocale) ? storedLocale : 'en';
+
+function resolveLocale(candidate: string | null | undefined): Locale | null {
+        if (!candidate) return null;
+        const normalized = candidate.toLowerCase().split('-')[0];
+        return isLocale(normalized) ? normalized : null;
+}
+
+function detectBrowserLocale(): Locale {
+        if (!browser) return 'en';
+        const candidates = Array.isArray(navigator.languages)
+                ? navigator.languages
+                : navigator.language
+                  ? [navigator.language]
+                  : [];
+        for (const candidate of candidates) {
+                const match = resolveLocale(candidate);
+                if (match) return match;
+        }
+        return 'en';
+}
+
+const initialLocale: Locale = storedLocale && isLocale(storedLocale) ? storedLocale : detectBrowserLocale();
 
 const initialSelectedGuildId = browser
 	? (() => {
