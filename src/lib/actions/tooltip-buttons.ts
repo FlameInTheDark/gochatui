@@ -82,9 +82,6 @@ function computeOptions(button: HTMLButtonElement): TooltipOptions | null {
                 return title;
         }
 
-        const text = makeOptions(button.textContent);
-        if (text) return text;
-
         return null;
 }
 
