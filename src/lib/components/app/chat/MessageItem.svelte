@@ -11,6 +11,7 @@
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import type { ContextMenuItem } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
+	import { tooltip } from '$lib/actions/tooltip';
 	import CodeBlock from './CodeBlock.svelte';
 	import InlineTokens from './InlineTokens.svelte';
 	import InvitePreview from './InvitePreview.svelte';
@@ -884,7 +885,7 @@
 	{#if compact}
 		<div
 			class="w-10 shrink-0 pt-0.5 pr-1 text-right text-[10px] leading-tight text-[var(--muted)] opacity-0 transition-opacity group-hover/message:opacity-100"
-			title={fmtMsgFull(message)}
+			use:tooltip={() => fmtMsgFull(message)}
 		>
 			{fmtMsgTime(message)}
 		</div>
@@ -893,6 +894,7 @@
                         type="button"
                         class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
                         data-user-menu="true"
+                        data-tooltip-disabled
                         aria-label={message.author?.name ?? 'User'}
                         oncontextmenu={openUserMenu}
                         onclick={openAuthorProfile}
@@ -936,12 +938,13 @@
                                         class="truncate font-semibold text-[var(--muted)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                                         style:color={primaryRoleColor ?? null}
                                         data-user-menu="true"
+                                        data-tooltip-disabled
                                         oncontextmenu={openUserMenu}
                                         onclick={openAuthorProfile}
                                 >
                                         {message.author?.name ?? 'User'}
                                 </button>
-                                <div class="text-xs text-[var(--muted)]" title={fmtMsgFull(message)}>
+                                <div class="text-xs text-[var(--muted)]" use:tooltip={() => fmtMsgFull(message)}>
                                         {fmtMsgTime(message)}
                                 </div>
 			</div>

@@ -377,7 +377,7 @@
 			<div class="px-4 py-6 text-sm text-[var(--muted)]">{m.channel_members_empty()}</div>
 		{:else}
 			<div class="space-y-1 py-2">
-				{#each decoratedMembers as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
+                                {#each decoratedMembers as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
                                         <button
                                                 type="button"
                                                 class="group/member flex w-full select-none items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
@@ -388,10 +388,11 @@
                                                                 { member: entry.member },
                                                                 {
                                                                         guildId: $selectedGuildId,
-									channelId: $selectedChannelId
-								}
-							)}
-					>
+                                                                        channelId: $selectedChannelId
+                                                                }
+                                                        )}
+                                                data-tooltip-disabled
+                                        >
                                                 <div class="relative h-8 w-8 flex-shrink-0">
                                                         <div
                                                                 class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
