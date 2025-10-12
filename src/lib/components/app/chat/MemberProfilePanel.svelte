@@ -249,6 +249,7 @@
                                         type="button"
                                         aria-label={m.close()}
                                         onclick={closePanel}
+                                        data-tooltip-disabled
                                 >
                                         &times;
                                 </button>

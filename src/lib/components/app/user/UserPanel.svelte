@@ -179,6 +179,7 @@
                         aria-haspopup="menu"
                         aria-expanded={statusMenuOpen}
                         bind:this={statusTriggerEl}
+                        data-tooltip-disabled
                 >
 			<div class="relative h-8 w-8 flex-shrink-0">
 				<div
