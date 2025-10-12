@@ -44,10 +44,12 @@
 
         let mode = $state<AuthMode>(initialMode);
         let registerEmail = $state<string | null>(null);
+        let isHydrated = $state(false);
 
         const isAuthenticated = auth.isAuthenticated;
 
         onMount(() => {
+                isHydrated = true;
                 // try to preload guilds if already authenticated
                 auth.loadGuilds().catch(() => {});
         });
@@ -58,7 +60,11 @@
         });
 </script>
 
-{#if $isAuthenticated && !forceAuthFlow}
+{#if !isHydrated && !forceAuthFlow}
+        <div class="auth-preloader__container">
+                <div class="auth-preloader" role="status" aria-label="Loading"></div>
+        </div>
+{:else if $isAuthenticated && !forceAuthFlow}
         {@render children?.()}
 {:else}
         <div class="grid h-screen w-screen place-items-center p-4">
@@ -188,3 +194,28 @@
                 </div>
         </div>
 {/if}
+
+<style>
+        .auth-preloader__container {
+                display: grid;
+                place-items: center;
+                height: 100vh;
+                width: 100vw;
+                background: var(--bg);
+        }
+
+        .auth-preloader {
+                width: 3rem;
+                height: 3rem;
+                border-radius: 9999px;
+                border: 3px solid var(--muted);
+                border-top-color: var(--brand);
+                animation: auth-preloader-spin 0.8s linear infinite;
+        }
+
+        @keyframes auth-preloader-spin {
+                to {
+                        transform: rotate(360deg);
+                }
+        }
+</style>
