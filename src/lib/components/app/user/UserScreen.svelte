@@ -26,6 +26,7 @@
                 presenceByUser,
                 presenceIndicatorClass
         } from '$lib/stores/presence';
+        import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
         import { X } from 'lucide-svelte';
 
         type FriendEntry = {
@@ -244,6 +245,53 @@
                                 ...base
                         }
                 };
+        }
+
+        function friendEntryToDtoUser(friend: FriendEntry | null): (DtoUser & Record<string, unknown>) | null {
+                if (!friend) return null;
+                const user: DtoUser & Record<string, unknown> = {
+                        name: friend.name
+                } as DtoUser & Record<string, unknown>;
+                try {
+                        user.id = BigInt(friend.id) as any;
+                } catch {
+                        user.id = friend.id as any;
+                }
+                if (friend.discriminator) {
+                        user.discriminator = friend.discriminator;
+                }
+                user.username = friend.name;
+                user.display_name = friend.name;
+                user.global_name = friend.name;
+                if (friend.avatarUrl) {
+                        user.avatarUrl = friend.avatarUrl;
+                }
+                return user;
+        }
+
+        function openActiveDmProfile(event: MouseEvent) {
+                const friend = activeDmRecipient ?? activeDmChannel?.recipients?.[0] ?? null;
+                const user = friendEntryToDtoUser(friend);
+                if (!user) {
+                        return;
+                }
+                const target = event.currentTarget as HTMLElement | null;
+                let anchor: { x: number; y: number; width: number; height: number } | null = null;
+                if (target && typeof window !== 'undefined') {
+                        const rect = target.getBoundingClientRect();
+                        anchor = {
+                                x: rect.left,
+                                y: rect.top,
+                                width: rect.width,
+                                height: rect.height
+                        };
+                }
+                memberProfilePanel.open({
+                        member: null,
+                        user,
+                        guildId: null,
+                        anchor
+                });
         }
 
         function enrichDirectChannel(channel: DtoChannel, friend: FriendEntry | null): DtoChannel {
@@ -1144,9 +1192,7 @@
                                 const recipient = current.recipients[0] ?? null;
                                 activeDmRecipient = recipient;
                                 activeDmTitle = recipient?.name ?? current.label;
-                                if (recipient?.discriminator) {
-                                        activeDmSubtext = `#${recipient.discriminator}`;
-                                } else if (current.label && current.label !== activeDmTitle) {
+                                if (current.label && current.label !== activeDmTitle) {
                                         activeDmSubtext = current.label;
                                 } else {
                                         activeDmSubtext = null;
@@ -1509,18 +1555,29 @@
                         {#if activeDmChannel}
                                 <div class="flex h-[var(--header-h)] flex-shrink-0 items-center gap-4 border-b border-[var(--stroke)] px-6">
                                         <div class="flex min-w-0 items-center gap-3">
-                                                <div class="grid h-12 w-12 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-base font-semibold">
+                                                <button
+                                                        type="button"
+                                                        class="grid h-12 w-12 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-base font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                                        onclick={openActiveDmProfile}
+                                                        aria-label={activeDmTitle || m.user_home_header()}
+                                                >
                                                         {#if activeDmAvatarUrl}
                                                                 <img alt={activeDmTitle} class="h-full w-full object-cover" src={activeDmAvatarUrl} />
                                                         {:else}
                                                                 <span>{initialsFor(activeDmTitle)}</span>
                                                         {/if}
-                                                </div>
+                                                </button>
                                                 <div class="min-w-0">
-                                                        <div class="truncate text-base font-semibold">{activeDmTitle || m.user_home_header()}</div>
-                                                        {#if activeDmSubtext}
-                                                                <div class="truncate text-sm text-[var(--muted)]">{activeDmSubtext}</div>
-                                                        {/if}
+                                                        <button
+                                                                type="button"
+                                                                class="min-w-0 rounded-md px-1 py-0.5 text-left transition hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                                                onclick={openActiveDmProfile}
+                                                        >
+                                                                <div class="truncate text-base font-semibold">{activeDmTitle || m.user_home_header()}</div>
+                                                                {#if activeDmSubtext}
+                                                                        <div class="truncate text-sm text-[var(--muted)]">{activeDmSubtext}</div>
+                                                                {/if}
+                                                        </button>
                                                 </div>
                                         </div>
                                 </div>
