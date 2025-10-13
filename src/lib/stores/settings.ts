@@ -257,6 +257,9 @@ let latestGuilds: DtoGuild[] = [];
 let guildsHydrated = false;
 let hasSyncedGuildLayout = false;
 let loadedSettingsToken: string | null = null;
+let settingsLoadInFlight = false;
+let settingsLoadToken: string | null = null;
+let queuedSettingsToken: string | null = null;
 
 function structuredCloneSafe<T>(value: T): T {
 	if (typeof structuredClone === 'function') {
@@ -1013,85 +1016,107 @@ function syncLayoutWithGuilds() {
 }
 
 async function loadSettingsFromApi(currentToken: string | null = get(auth.token)) {
-        hasSyncedGuildLayout = false;
-        if (!get(auth.isAuthenticated)) {
-                suppressSave = true;
-                appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
-                suppressSave = false;
-                settingsReady.set(false);
-                loadedSettingsToken = null;
-                auth.ingestGuilds([]);
-                updateUnreadSnapshot(null);
+        const tokenToLoad = currentToken ?? null;
+        if (settingsLoadInFlight) {
+                if (tokenToLoad === settingsLoadToken) {
+                        return;
+                }
+                queuedSettingsToken = tokenToLoad;
                 return;
         }
+        settingsLoadInFlight = true;
+        settingsLoadToken = tokenToLoad;
+        hasSyncedGuildLayout = false;
         try {
-                const previousSettings = get(appSettings);
-                const response = await auth.api.user.userMeSettingsGet();
-                const responseData = response.data ?? {};
-                const guildListRaw =
-                        (responseData as any)?.guilds ??
-                        (responseData as any)?.user_guilds ??
-                        (responseData as any)?.guild_list ??
-                        (responseData as any)?.guildList ??
-                        (responseData as any)?.guilds_list ??
-                        null;
-                auth.ingestGuilds(guildListRaw);
-                const lastMessageSnapshot =
-                        (responseData as any)?.guilds_last_messages ??
-                        (responseData as any)?.guilds_last_message_ids ??
-                        (responseData as any)?.guild_channel_last_messages ??
-                        (responseData as any)?.guild_channels_last_messages ??
-                        (responseData as any)?.guild_channel_last_message_ids ??
-                        (responseData as any)?.guild_channels_last_message_ids ??
-                        (responseData as any)?.channel_last_message_ids ??
-                        (responseData as any)?.channels_last_message_ids ??
-                        (responseData as any)?.channel_last_messages ??
-                        (responseData as any)?.last_messages ??
-                        null;
-                const channelGuildLookup = buildChannelGuildLookupFromSnapshot(lastMessageSnapshot);
-                if (response.status === 204 || !response.data?.settings) {
+                if (!tokenToLoad) {
                         suppressSave = true;
-                        const next = { ...defaultSettings, language: get(locale), theme: get(theme) };
-                        applyReadStatesMapToLayout(
-                                next.guildLayout,
-                                responseData?.read_states,
-                                previousSettings.guildLayout,
-                                channelGuildLookup
-                        );
-                        appSettings.set(next);
+                        appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
                         suppressSave = false;
-                } else {
-                        const parsed = convertFromApi(response.data.settings);
-                        applyReadStatesMapToLayout(
-                                parsed.guildLayout,
-                                responseData.read_states,
-                                previousSettings.guildLayout,
-                                channelGuildLookup
-                        );
+                        settingsReady.set(false);
+                        loadedSettingsToken = null;
+                        auth.ingestGuilds([]);
+                        updateUnreadSnapshot(null);
+                        return;
+                }
+
+                try {
+                        const previousSettings = get(appSettings);
+                        const response = await auth.api.user.userMeSettingsGet();
+                        const responseData = response.data ?? {};
+                        const guildListRaw =
+                                (responseData as any)?.guilds ??
+                                (responseData as any)?.user_guilds ??
+                                (responseData as any)?.guild_list ??
+                                (responseData as any)?.guildList ??
+                                (responseData as any)?.guilds_list ??
+                                null;
+                        auth.ingestGuilds(guildListRaw);
+                        const lastMessageSnapshot =
+                                (responseData as any)?.guilds_last_messages ??
+                                (responseData as any)?.guilds_last_message_ids ??
+                                (responseData as any)?.guild_channel_last_messages ??
+                                (responseData as any)?.guild_channels_last_messages ??
+                                (responseData as any)?.guild_channel_last_message_ids ??
+                                (responseData as any)?.guild_channels_last_message_ids ??
+                                (responseData as any)?.channel_last_message_ids ??
+                                (responseData as any)?.channels_last_message_ids ??
+                                (responseData as any)?.channel_last_messages ??
+                                (responseData as any)?.last_messages ??
+                                null;
+                        const channelGuildLookup = buildChannelGuildLookupFromSnapshot(lastMessageSnapshot);
+                        if (response.status === 204 || !response.data?.settings) {
+                                suppressSave = true;
+                                const next = { ...defaultSettings, language: get(locale), theme: get(theme) };
+                                applyReadStatesMapToLayout(
+                                        next.guildLayout,
+                                        responseData?.read_states,
+                                        previousSettings.guildLayout,
+                                        channelGuildLookup
+                                );
+                                appSettings.set(next);
+                                suppressSave = false;
+                        } else {
+                                const parsed = convertFromApi(response.data.settings);
+                                applyReadStatesMapToLayout(
+                                        parsed.guildLayout,
+                                        responseData.read_states,
+                                        previousSettings.guildLayout,
+                                        channelGuildLookup
+                                );
+                                suppressSave = true;
+                                suppressThemePropagation = true;
+                                suppressLocalePropagation = true;
+                                appSettings.set(parsed);
+                                theme.set(parsed.theme);
+                                locale.set(parsed.language);
+                                suppressThemePropagation = false;
+                                suppressLocalePropagation = false;
+                                suppressSave = false;
+                        }
+                        updateUnreadSnapshot(lastMessageSnapshot);
+                        if (tokenToLoad) {
+                                loadedSettingsToken = tokenToLoad;
+                        }
+                } catch (error) {
+                        console.error('Failed to load settings', error);
                         suppressSave = true;
-                        suppressThemePropagation = true;
-                        suppressLocalePropagation = true;
-                        appSettings.set(parsed);
-			theme.set(parsed.theme);
-			locale.set(parsed.language);
-                        suppressThemePropagation = false;
-                        suppressLocalePropagation = false;
+                        appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
                         suppressSave = false;
+                        loadedSettingsToken = null;
+                        updateUnreadSnapshot(null);
                 }
-                updateUnreadSnapshot(lastMessageSnapshot);
-                if (currentToken) {
-                        loadedSettingsToken = currentToken;
+
+                settingsReady.set(true);
+                syncLayoutWithGuilds();
+        } finally {
+                settingsLoadInFlight = false;
+                settingsLoadToken = null;
+                const queued = queuedSettingsToken;
+                queuedSettingsToken = null;
+                if (queued !== null && queued !== tokenToLoad) {
+                        void loadSettingsFromApi(queued);
                 }
-        } catch (error) {
-                console.error('Failed to load settings', error);
-                suppressSave = true;
-                appSettings.set({ ...defaultSettings, language: get(locale), theme: get(theme) });
-                suppressSave = false;
-                loadedSettingsToken = null;
-                updateUnreadSnapshot(null);
         }
-        settingsReady.set(true);
-        syncLayoutWithGuilds();
 }
 
 auth.token.subscribe((token) => {
