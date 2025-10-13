@@ -248,7 +248,7 @@
                                         class="ml-2 rounded-md p-1 text-lg leading-none text-[var(--muted)] hover:bg-[var(--panel)]"
                                         type="button"
                                         aria-label={m.close()}
-                                        onclick={closePanel}
+                                        on:click={closePanel}
                                         data-tooltip-disabled
                                 >
                                         &times;

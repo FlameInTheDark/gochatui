@@ -1045,7 +1045,7 @@
 			<div class="flex items-center gap-2">
                                 <button
                                         class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                                        onclick={() => {
+                                        on:click={() => {
                                                 creatingChannel = true;
                                                 channelError = null;
                                                 creatingChannelParent = null;
@@ -1056,7 +1056,7 @@
 				</button>
                                 <button
                                         class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                                        onclick={() => {
+                                        on:click={() => {
                                                 creatingCategory = true;
                                                 categoryError = null;
                                         }}
@@ -1067,7 +1067,7 @@
 				{#if canAccessSelectedGuildSettings}
                                         <button
                                                 class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                                                onclick={() => {
+                                                on:click={() => {
                                                         if (!canAccessSelectedGuildSettings) return;
                                                         guildSettingsOpen.set(true);
                                                 }}
@@ -1089,7 +1089,7 @@
         <div
                 class="scroll-area channel-scroll flex-1 space-y-2 overflow-y-auto p-2"
 		role="region"
-		oncontextmenu={(e: MouseEvent) => {
+		on:contextmenu={(e: MouseEvent) => {
 			e.preventDefault();
 			openPaneMenu(e);
 		}}
@@ -1097,11 +1097,11 @@
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
 			<div
-				ondragover={(e) => {
+				on:dragover={(e) => {
 					e.preventDefault();
 					dragOverContainer(null);
 				}}
-				ondrop={() => dropOnContainer(null)}
+				on:drop={() => dropOnContainer(null)}
 				role="list"
 			>
 				{#each sections as sec (String(sec.type === 'category' ? (sec.cat as any)?.id : (sec.ch as any)?.id))}
@@ -1112,12 +1112,12 @@
                                                         <div
                                                                 role="listitem"
                                                                 class="relative"
-                                                                ondragover={(e) => {
+                                                                on:dragover={(e) => {
                                                                         e.preventDefault();
                                                                         e.stopPropagation();
                                                                         dragOverChannel(channelId, null);
                                                                 }}
-                                                                ondrop={(e) => {
+                                                                on:drop={(e) => {
                                                                         e.stopPropagation();
                                                                         dropOnChannel(channelId, null);
                                                                 }}
@@ -1135,12 +1135,12 @@
                                                                         role="button"
                                                                         tabindex="0"
                                                                         draggable="true"
-                                                                        ondragstart={() => startDrag(sec.ch, null)}
-                                                                        onclick={() => selectChannel(channelId)}
-                                                                        onkeydown={(e) =>
+                                                                        on:dragstart={() => startDrag(sec.ch, null)}
+                                                                        on:click={() => selectChannel(channelId)}
+                                                                        on:keydown={(e) =>
                                                                                 (e.key === 'Enter' || e.key === ' ') &&
                                                                                 selectChannel(channelId)}
-                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                        on:contextmenu={(e: MouseEvent) => {
                                                                                 e.preventDefault();
                                                                                 e.stopPropagation();
                                                                                 openChannelMenu(e, sec.ch);
@@ -1163,11 +1163,11 @@
                                         {:else}
 						<div
 							class="mt-2"
-							ondragover={(e) => {
+							on:dragover={(e) => {
 								e.preventDefault();
 								dragOverContainer(String((sec.cat as any)?.id));
 							}}
-							ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
+							on:drop={() => dropOnContainer(String((sec.cat as any)?.id))}
 							role="list"
 						>
 							<div class="relative">
@@ -1184,8 +1184,8 @@
 									role="button"
 									tabindex="0"
 									draggable="true"
-									ondragstart={() => startDrag(sec.cat, null)}
-									ondragover={(e) => {
+									on:dragstart={() => startDrag(sec.cat, null)}
+									on:dragover={(e) => {
 										e.preventDefault();
 										e.stopPropagation();
 										const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1196,13 +1196,13 @@
 											dragOverContainer(String((sec.cat as any)?.id));
 										}
 									}}
-									ondrop={(e) => {
+									on:drop={(e) => {
 										e.stopPropagation();
 										const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 										const before = e.clientY < rect.top + rect.height / 2;
 										dropOnCategoryHeader(String((sec.cat as any)?.id), before);
 									}}
-									oncontextmenu={(e: MouseEvent) => {
+									on:contextmenu={(e: MouseEvent) => {
 										e.preventDefault();
 										e.stopPropagation();
 										openCategoryMenu(e, sec.cat);
@@ -1210,7 +1210,7 @@
 								>
 									<button
 										class="flex items-center gap-2"
-										onclick={() => toggleCollapse(String((sec.cat as any)?.id))}
+										on:click={() => toggleCollapse(String((sec.cat as any)?.id))}
 									>
 										<span class="inline-block"
 											>{collapsed[String((sec.cat as any)?.id)] ? '▸' : '▾'}</span
@@ -1228,12 +1228,12 @@
                                                                         <div
                                                                                 role="listitem"
                                                                                 class="relative"
-                                                                                ondragover={(e) => {
+                                                                                on:dragover={(e) => {
                                                                                         e.preventDefault();
                                                                                         e.stopPropagation();
                                                                                         dragOverChannel(nestedChannelId, String((sec.cat as any)?.id));
                                                                                 }}
-                                                                                ondrop={(e) => {
+                                                                                on:drop={(e) => {
                                                                                         e.stopPropagation();
                                                                                         dropOnChannel(nestedChannelId, String((sec.cat as any)?.id));
                                                                                 }}
@@ -1251,12 +1251,12 @@
                                                                                         role="button"
                                                                                         tabindex="0"
                                                                                         draggable="true"
-                                                                                        ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
-                                                                                        onclick={() => selectChannel(nestedChannelId)}
-                                                                                        onkeydown={(e) =>
+                                                                                        on:dragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+                                                                                        on:click={() => selectChannel(nestedChannelId)}
+                                                                                        on:keydown={(e) =>
                                                                                                 (e.key === 'Enter' || e.key === ' ') &&
                                                                                                 selectChannel(nestedChannelId)}
-                                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                        on:contextmenu={(e: MouseEvent) => {
                                                                                                 e.preventDefault();
                                                                                                 e.stopPropagation();
                                                                                                 openChannelMenu(e, ch);
@@ -1280,11 +1280,11 @@
 							<div
 								class="h-4"
 								role="listitem"
-								ondragover={(e) => {
+								on:dragover={(e) => {
 									e.preventDefault();
 									dragOverContainer(String((sec.cat as any)?.id));
 								}}
-								ondrop={() => dropOnContainer(String((sec.cat as any)?.id))}
+								on:drop={() => dropOnContainer(String((sec.cat as any)?.id))}
 							></div>
 						</div>
 					{/if}
@@ -1292,11 +1292,11 @@
 				<div
 					class="h-4"
 					role="listitem"
-					ondragover={(e) => {
+					on:dragover={(e) => {
 						e.preventDefault();
 						dragOverContainer(null);
 					}}
-					ondrop={() => dropOnContainer(null)}
+					on:drop={() => dropOnContainer(null)}
 				></div>
 			</div>
 		{:else}
@@ -1316,7 +1316,7 @@
 					class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
 						editChannelTab === 'overview' ? 'bg-[var(--panel)] font-semibold' : ''
 					}`}
-					onclick={() => (editChannelTab = 'overview')}
+					on:click={() => (editChannelTab = 'overview')}
 				>
 					{m.channel_tab_overview()}
 				</button>
@@ -1324,7 +1324,7 @@
 					class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
 						editChannelTab === 'permissions' ? 'bg-[var(--panel)] font-semibold' : ''
 					}`}
-					onclick={() => (editChannelTab = 'permissions')}
+					on:click={() => (editChannelTab = 'permissions')}
 				>
 					{m.channel_tab_permissions()}
 				</button>
@@ -1394,7 +1394,7 @@
 							</select>
 							<button
 								class="rounded bg-[var(--brand)] px-3 py-2 text-[var(--bg)] disabled:opacity-50"
-								onclick={addRoleOverride}
+								on:click={addRoleOverride}
 								disabled={!editChannelRoleToAdd}
 							>
 								{m.channel_permissions_add_role()}
@@ -1419,7 +1419,7 @@
 														? 'bg-[var(--brand)] text-[var(--bg)]'
 														: 'bg-[var(--bg)] hover:bg-[var(--panel-strong)]'
 												}`}
-												onclick={() => (editChannelSelectedOverride = roleId)}
+												on:click={() => (editChannelSelectedOverride = roleId)}
 												aria-pressed={editChannelSelectedOverride === roleId}
 											>
 												{roleDisplayName(role, roleId)}
@@ -1440,7 +1440,7 @@
 											<button
 												type="button"
 												class="text-xs text-red-500 hover:underline"
-												onclick={() => removeRoleOverride(selectedOverrideId)}
+												on:click={() => removeRoleOverride(selectedOverrideId)}
 											>
 												{m.channel_permissions_remove_role()}
 											</button>
@@ -1472,7 +1472,7 @@
 																				? 'bg-red-500 text-white'
 																				: 'bg-transparent hover:bg-red-500/10'
 																		}`}
-																		onclick={() =>
+																		on:click={() =>
 																			setChannelPermission(selectedOverrideId, perm.value, 'deny')}
                                                                                                                                 aria-label={m.permission_deny()}
 																	>
@@ -1484,7 +1484,7 @@
 																				? 'bg-[var(--panel)]'
 																				: 'bg-transparent hover:bg-[var(--panel)]/60'
 																		}`}
-																		onclick={() =>
+																		on:click={() =>
 																			setChannelPermission(
 																				selectedOverrideId,
 																				perm.value,
@@ -1500,7 +1500,7 @@
 																				? 'bg-green-500 text-white'
 																				: 'bg-transparent hover:bg-green-500/10'
 																		}`}
-																		onclick={() =>
+																		on:click={() =>
 																			setChannelPermission(selectedOverrideId, perm.value, 'allow')}
                                                                                                                                 aria-label={m.permission_allow()}
 																	>
@@ -1533,7 +1533,7 @@
 				<div class="flex justify-end gap-2">
                                         <button
                                                 class="rounded-md border border-[var(--stroke)] px-3 py-1"
-                                                onclick={() => {
+                                                on:click={() => {
                                                         dismissPanel?.();
                                                         closeEditChannel();
                                                 }}
@@ -1542,7 +1542,7 @@
                                         </button>
 					<button
 						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:cursor-not-allowed disabled:opacity-50"
-						onclick={saveEditChannel}
+						on:click={saveEditChannel}
 						disabled={!editChannelHasChanges || editChannelSaving}
 					>
 						{m.save()}
@@ -1557,11 +1557,11 @@
                         class="fixed inset-0 z-50"
                         role="dialog"
                         tabindex="0"
-                        onclick={(event) => {
+                        on:click={(event) => {
                                 if (event.target !== event.currentTarget) return;
                                 editingCategory = null;
                         }}
-			onkeydown={(e) => {
+			on:keydown={(e) => {
 				if (e.key === 'Escape') editingCategory = null;
 				if (e.key === 'Enter') saveEditCategory();
 			}}
@@ -1574,7 +1574,7 @@
                                                 class="panel relative z-10 w-72 p-3"
                                                 role="document"
                                                 tabindex="-1"
-                                                onpointerdown={(e) => e.stopPropagation()}
+                                                on:pointerdown={(e) => e.stopPropagation()}
                                         >
                                                 <div class="mb-2 text-sm font-medium">{m.edit_category()}</div>
                                                 {#if editCategoryError}
@@ -1588,11 +1588,11 @@
                                                 <div class="flex justify-end gap-2">
                                                         <button
                                                                 class="rounded-md border border-[var(--stroke)] px-3 py-1"
-                                                                onclick={() => (editingCategory = null)}>{m.cancel()}</button
+                                                                on:click={() => (editingCategory = null)}>{m.cancel()}</button
                                                         >
                                                         <button
                                                                 class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-                                                                onclick={saveEditCategory}>{m.save()}</button
+                                                                on:click={saveEditCategory}>{m.save()}</button
                                                         >
                                                 </div>
                                         </div>
@@ -1606,11 +1606,11 @@
                         class="fixed inset-0 z-50"
                         role="dialog"
                         tabindex="0"
-                        onclick={(event) => {
+                        on:click={(event) => {
                                 if (event.target !== event.currentTarget) return;
                                 creatingChannel = false;
                         }}
-			onkeydown={(e) => {
+			on:keydown={(e) => {
 				if (e.key === 'Escape') creatingChannel = false;
 				if (e.key === 'Enter') createChannel();
 			}}
@@ -1623,7 +1623,7 @@
                                                 class="panel relative z-10 w-72 p-3"
                                                 role="document"
                                                 tabindex="-1"
-                                                onpointerdown={(e) => e.stopPropagation()}
+                                                on:pointerdown={(e) => e.stopPropagation()}
                                         >
                                                 <div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
                                                 {#if channelError}
@@ -1644,11 +1644,11 @@
                                                 <div class="flex justify-end gap-2">
                                                         <button
                                                                 class="rounded-md border border-[var(--stroke)] px-3 py-1"
-                                                                onclick={() => (creatingChannel = false)}>{m.cancel()}</button
+                                                                on:click={() => (creatingChannel = false)}>{m.cancel()}</button
                                                         >
                                                         <button
                                                                 class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-                                                                onclick={createChannel}>{m.create()}</button
+                                                                on:click={createChannel}>{m.create()}</button
                                                         >
                                                 </div>
                                         </div>
@@ -1662,11 +1662,11 @@
                         class="fixed inset-0 z-50"
                         role="dialog"
                         tabindex="0"
-                        onclick={(event) => {
+                        on:click={(event) => {
                                 if (event.target !== event.currentTarget) return;
                                 creatingCategory = false;
                         }}
-			onkeydown={(e) => {
+			on:keydown={(e) => {
 				if (e.key === 'Escape') creatingCategory = false;
 				if (e.key === 'Enter') createCategory();
 			}}
@@ -1679,7 +1679,7 @@
                                                 class="panel relative z-10 w-72 p-3"
                                                 role="document"
                                                 tabindex="-1"
-                                                onpointerdown={(e) => e.stopPropagation()}
+                                                on:pointerdown={(e) => e.stopPropagation()}
                                         >
                                                 <div class="mb-2 text-sm font-medium">{m.new_category()}</div>
                                                 {#if categoryError}
@@ -1693,11 +1693,11 @@
                                                 <div class="flex justify-end gap-2">
                                                         <button
                                                                 class="rounded-md border border-[var(--stroke)] px-3 py-1"
-                                                                onclick={() => (creatingCategory = false)}>{m.cancel()}</button
+                                                                on:click={() => (creatingCategory = false)}>{m.cancel()}</button
                                                         >
                                                         <button
                                                                 class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-                                                                onclick={createCategory}>{m.create()}</button
+                                                                on:click={createCategory}>{m.create()}</button
                                                         >
                                                 </div>
                                         </div>

@@ -477,17 +477,19 @@
 <div
 	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-hidden border-r border-[var(--stroke)] p-2"
 >
-	<div class="group relative flex justify-center">
-		<button
-			class={`grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-				$view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
-			}`}
-			data-tooltip={m.user_home_open_label()}
-			data-tooltip-placement="right"
-			aria-current={$view === 'user' ? 'true' : 'false'}
-			aria-label={m.user_home_open_label()}
-			onclick={openUserHome}
-		>
+        <div class="group relative flex justify-center">
+                <button
+                        class={`grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                $view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
+                        }`}
+                        use:tooltip={{
+                                content: () => m.user_home_open_label(),
+                                placement: 'right'
+                        }}
+                        aria-current={$view === 'user' ? 'true' : 'false'}
+                        aria-label={m.user_home_open_label()}
+                        on:click={openUserHome}
+                >
 			<User class="h-5 w-5" stroke-width={2} />
 		</button>
 	</div>
@@ -496,31 +498,33 @@
 			class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 				topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
 			}`}
-			ondragover={(event) => onTopDragOver(event, 0)}
-			ondrop={(event) => onTopDrop(event, 0)}
+			on:dragover={(event) => onTopDragOver(event, 0)}
+			on:drop={(event) => onTopDrop(event, 0)}
 			role="presentation"
 		></div>
 		{#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
 			{#if item.type === 'guild'}
 				{@const guildUnread = guildHasUnread(item.guildId)}
 				<div class="group relative flex justify-center">
-					<button
-						class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-							isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
-						} ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
-						data-tooltip={item.guild.name ?? 'Server'}
-						data-tooltip-placement="right"
-						aria-current={isGuildSelected(item.guildId) ? 'true' : 'false'}
-						aria-label={item.guild.name ?? 'Server'}
-						draggable="true"
-						ondragstart={(event) => startGuildDrag(event, item.guildId, item.folderId)}
-						ondragend={endDrag}
-						ondragover={(event) =>
-							onGuildMergeOver(event, item.guildId, item.topIndex, item.folderId)}
-						ondrop={(event) => onGuildMergeDrop(event, item.guildId, item.topIndex)}
-                                                onclick={() => selectGuildFromSidebar(item.guildId)}
-						oncontextmenu={(event) => openGuildMenu(event, item.guild)}
-					>
+                                        <button
+                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                        isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
+                                                } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
+                                                use:tooltip={{
+                                                        content: () => item.guild.name ?? 'Server',
+                                                        placement: 'right'
+                                                }}
+                                                aria-current={isGuildSelected(item.guildId) ? 'true' : 'false'}
+                                                aria-label={item.guild.name ?? 'Server'}
+                                                draggable="true"
+                                                on:dragstart={(event) => startGuildDrag(event, item.guildId, item.folderId)}
+                                                on:dragend={endDrag}
+                                                on:dragover={(event) =>
+                                                        onGuildMergeOver(event, item.guildId, item.topIndex, item.folderId)}
+                                                on:drop={(event) => onGuildMergeDrop(event, item.guildId, item.topIndex)}
+                                                on:click={() => selectGuildFromSidebar(item.guildId)}
+                                                on:contextmenu={(event) => openGuildMenu(event, item.guild)}
+                                        >
 						<span class="font-bold">{guildInitials(item.guild)}</span>
 						{#if guildUnread}
 							<span class="sr-only">{m.unread_indicator()}</span>
@@ -549,26 +553,28 @@
 						'color-mix(in srgb, var(--panel-strong) 70%, transparent)'}
 				>
 					<div class="relative">
-						<button
-							class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-								folderIsDropTarget
-									? 'ring-2 ring-[var(--brand)]'
-									: folderHasSelection
-										? 'shadow ring-2 ring-[var(--brand)] ring-inset'
-										: ''
-							}`}
-							type="button"
-							draggable="true"
-							data-tooltip={folderLabel}
-							data-tooltip-placement="right"
-							aria-label={folderLabel}
-							ondragstart={(event) => startFolderDrag(event, item.folder.id)}
-							ondragend={endDrag}
-							oncontextmenu={(event) => openFolderMenu(event, item)}
-							ondragover={(event) =>
+                                                <button
+                                                        class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                folderIsDropTarget
+                                                                        ? 'ring-2 ring-[var(--brand)]'
+                                                                        : folderHasSelection
+                                                                                ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                                : ''
+                                                        }`}
+                                                        type="button"
+                                                        draggable="true"
+                                                        use:tooltip={{
+                                                                content: () => folderLabel,
+                                                                placement: 'right'
+                                                        }}
+                                                        aria-label={folderLabel}
+							on:dragstart={(event) => startFolderDrag(event, item.folder.id)}
+							on:dragend={endDrag}
+							on:contextmenu={(event) => openFolderMenu(event, item)}
+							on:dragover={(event) =>
 								onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
-							ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
-							onclick={() =>
+							on:drop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
+							on:click={() =>
 								(expandedFolders = {
 									...expandedFolders,
 									[item.folder.id]: !expandedFolders[item.folder.id]
@@ -620,37 +626,39 @@
 										? 'opacity-80'
 										: 'opacity-0'
 								}`}
-								ondragover={(event) => onFolderDropZoneOver(event, item.folder.id, 0)}
-								ondrop={(event) => onFolderDrop(event, item.folder.id, 0)}
+								on:dragover={(event) => onFolderDropZoneOver(event, item.folder.id, 0)}
+								on:drop={(event) => onFolderDrop(event, item.folder.id, 0)}
 								role="presentation"
 							></div>
 							{#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
 								{@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
 								<div class="group relative flex justify-center">
-									<button
-										class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-											isGuildSelected(nestedGuild.guildId)
-												? 'shadow ring-2 ring-[var(--brand)] ring-inset'
-												: ''
-										} ${
-											folderDropTarget?.folderId === item.folder.id &&
-											folderDropTarget.index === nestedIndex + 1
-												? 'ring-2 ring-[var(--brand)]'
-												: ''
-										}`}
-										data-tooltip={nestedGuild.guild.name ?? 'Server'}
-										data-tooltip-placement="right"
-										aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
-										aria-label={nestedGuild.guild.name ?? 'Server'}
-										draggable="true"
-										ondragstart={(event) =>
+                                                                        <button
+                                                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                                        isGuildSelected(nestedGuild.guildId)
+                                                                                                ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                                                : ''
+                                                                                } ${
+                                                                                        folderDropTarget?.folderId === item.folder.id &&
+                                                                                        folderDropTarget.index === nestedIndex + 1
+                                                                                                ? 'ring-2 ring-[var(--brand)]'
+                                                                                                : ''
+                                                                                }`}
+                                                                                use:tooltip={{
+                                                                                        content: () => nestedGuild.guild.name ?? 'Server',
+                                                                                        placement: 'right'
+                                                                                }}
+                                                                                aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
+                                                                                aria-label={nestedGuild.guild.name ?? 'Server'}
+                                                                                draggable="true"
+										on:dragstart={(event) =>
 											startGuildDrag(event, nestedGuild.guildId, nestedGuild.folderId)}
-										ondragend={endDrag}
-										ondragover={(event) =>
+										on:dragend={endDrag}
+										on:dragover={(event) =>
 											onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
-										ondrop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
-                                                                onclick={() => selectGuildFromSidebar(nestedGuild.guildId)}
-										oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
+										on:drop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
+                                                                on:click={() => selectGuildFromSidebar(nestedGuild.guildId)}
+										on:contextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
 									>
 										<span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
 										{#if nestedGuildUnread}
@@ -671,34 +679,36 @@
 				class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 					topDropIndex === displayIndex + 1 ? 'opacity-80' : 'opacity-0'
 				}`}
-				ondragover={(event) => onTopDragOver(event, displayIndex + 1)}
-				ondrop={(event) => onTopDrop(event, displayIndex + 1)}
+				on:dragover={(event) => onTopDragOver(event, displayIndex + 1)}
+				on:drop={(event) => onTopDrop(event, displayIndex + 1)}
 				role="presentation"
 			></div>
 		{/each}
 	</div>
-	<div>
-		<button
-			class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
-			onclick={() => (creating = !creating)}
-			data-tooltip={m.new_server()}
-			data-tooltip-placement="right"
-			aria-label={m.new_server()}
-		>
-			<Plus class="h-[18px] w-[18px]" stroke-width={2} />
-		</button>
-	</div>
+        <div>
+                <button
+                        class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                        on:click={() => (creating = !creating)}
+                        use:tooltip={{
+                                content: () => m.new_server(),
+                                placement: 'right'
+                        }}
+                        aria-label={m.new_server()}
+                >
+                        <Plus class="h-[18px] w-[18px]" stroke-width={2} />
+                </button>
+        </div>
 
 	{#if creating}
 		<div
 			class="fixed inset-0 z-50"
 			role="dialog"
 			tabindex="0"
-			onclick={(event) => {
+			on:click={(event) => {
 				if (event.target !== event.currentTarget) return;
 				creating = false;
 			}}
-			onkeydown={(event) => {
+			on:keydown={(event) => {
 				if (event.key === 'Escape') creating = false;
 				if (event.key === 'Enter') createGuild();
 			}}
@@ -713,7 +723,7 @@
 						class="panel relative z-10 w-64 p-3"
 						role="document"
 						tabindex="-1"
-						onpointerdown={(event) => event.stopPropagation()}
+						on:pointerdown={(event) => event.stopPropagation()}
 					>
 						<div class="mb-2 text-sm font-medium">{m.new_server()}</div>
 						{#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}
@@ -725,13 +735,13 @@
 						<div class="flex justify-end gap-2">
 							<button
 								class="rounded-md border border-[var(--stroke)] px-3 py-1"
-								onclick={() => (creating = false)}
+								on:click={() => (creating = false)}
 							>
 								{m.cancel()}
 							</button>
 							<button
 								class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-								onclick={createGuild}
+								on:click={createGuild}
 							>
 								{m.create()}
 							</button>
@@ -747,11 +757,11 @@
 			class="fixed inset-0 z-50"
 			role="dialog"
 			tabindex="0"
-			onclick={(event) => {
+			on:click={(event) => {
 				if (event.target !== event.currentTarget) return;
 				leavingGuild = null;
 			}}
-			onkeydown={(event) => {
+			on:keydown={(event) => {
 				if (event.key === 'Escape') leavingGuild = null;
 				if (event.key === 'Enter') confirmLeaveGuild();
 			}}
@@ -766,7 +776,7 @@
 						class="panel relative z-10 w-72 p-4"
 						role="document"
 						tabindex="-1"
-						onpointerdown={(event) => event.stopPropagation()}
+						on:pointerdown={(event) => event.stopPropagation()}
 					>
 						<div class="mb-2 text-base font-semibold">
 							{m.leave_server_confirm_title({ server: leavingGuild.name })}
@@ -777,13 +787,13 @@
 						<div class="flex justify-end gap-2">
 							<button
 								class="rounded-md border border-[var(--stroke)] px-3 py-1"
-								onclick={() => (leavingGuild = null)}
+								on:click={() => (leavingGuild = null)}
 							>
 								{m.cancel()}
 							</button>
 							<button
 								class="rounded-md bg-[var(--danger)] px-3 py-1 text-[var(--bg)]"
-								onclick={confirmLeaveGuild}
+								on:click={confirmLeaveGuild}
 							>
 								{m.leave_server()}
 							</button>

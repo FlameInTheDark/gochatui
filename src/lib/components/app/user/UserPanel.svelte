@@ -175,7 +175,7 @@
                 <button
                         type="button"
                         class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-1 py-1 text-left hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
-                        onclick={toggleStatusMenu}
+                        on:click={toggleStatusMenu}
                         aria-haspopup="menu"
                         aria-expanded={statusMenuOpen}
                         bind:this={statusTriggerEl}
@@ -204,7 +204,7 @@
                                 class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {muted
                                         ? 'text-red-400'
                                         : ''}"
-                                onclick={toggleMute}
+                                on:click={toggleMute}
                                 aria-label={muted ? m.unmute() : m.mute()}
 			>
 				{#if muted}
@@ -218,7 +218,7 @@
                                 class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {deafened
                                         ? 'text-red-400'
                                         : ''}"
-                                onclick={toggleDeafen}
+                                on:click={toggleDeafen}
                                 aria-label={deafened ? m.undeafen() : m.deafen()}
 			>
 				{#if deafened}
@@ -230,7 +230,7 @@
                         <button
                                 type="button"
                                 class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)]"
-                                onclick={() => settingsOpen.set(true)}
+                                on:click={() => settingsOpen.set(true)}
                                 aria-label={m.settings()}
                         >
 				<Settings class="h-4 w-4" stroke-width={2} />
@@ -254,8 +254,8 @@
                                                         <button
                                                                 type="button"
                                                                 class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
-                                                                onpointerdown={(event) => handleStatusPointer(event, option)}
-                                                                onkeydown={(event) => handleStatusKey(event, option)}
+                                                                on:pointerdown={(event) => handleStatusPointer(event, option)}
+                                                                on:keydown={(event) => handleStatusKey(event, option)}
                                                                 role="menuitemradio"
                                                                 aria-checked={isOptionActive(option, $presenceMode)}
                                                         >
@@ -284,16 +284,16 @@
                                                                 class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
                                                                 type="text"
                                                                 value={customStatusDraft}
-                                                                oninput={handleCustomStatusInput}
-                                                                onkeydown={handleCustomStatusKey}
-                                                                onblur={handleCustomStatusBlur}
+                                                                on:input={handleCustomStatusInput}
+                                                                on:keydown={handleCustomStatusKey}
+                                                                on:blur={handleCustomStatusBlur}
                                                                 placeholder={m.status_custom_placeholder()}
                                                         />
                                                         {#if $customStatusText}
                                                                 <button
                                                                         type="button"
                                                                         class="rounded-md px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-                                                                        onclick={clearCustomStatus}
+                                                                        on:click={clearCustomStatus}
                                                                 >
                                                                         {m.status_custom_clear()}
                                                                 </button>

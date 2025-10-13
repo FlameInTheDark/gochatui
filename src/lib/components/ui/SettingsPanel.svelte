@@ -34,19 +34,19 @@
         <div
                 class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
                 role="presentation"
-                onclick={handleBackdropClick}
+                on:click={handleBackdropClick}
         >
                 <div
                         class={`relative flex h-[80vh] w-full flex-col overflow-hidden rounded-lg bg-[var(--bg)] shadow-xl ${maxWidthClass}`}
                         role="dialog"
                         aria-modal="true"
-                        onpointerdown={(event) => event.stopPropagation()}
+                        on:pointerdown={(event) => event.stopPropagation()}
                 >
                         <header class="relative z-20 flex items-center justify-end border-b border-[var(--stroke)] bg-[var(--panel)] px-4 py-3">
                                 <button
                                         aria-label={m.close()}
                                         class="relative z-20 rounded p-1 text-xl leading-none hover:bg-[var(--panel-strong)]"
-                                        onclick={close}
+                                        on:click={close}
                                 >
                                         &times;
                                 </button>

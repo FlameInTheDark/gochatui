@@ -383,7 +383,7 @@
                                 <button
                                         type="button"
                                         class="rounded bg-[var(--brand)] px-3 py-1 text-sm font-medium text-white transition hover:bg-[var(--brand-strong)] disabled:opacity-60"
-                                        onclick={startCreating}
+                                        on:click={startCreating}
                                         disabled={loading}
                                 >
                                         {m.role_add_button()}
@@ -410,7 +410,7 @@
                                                                 <button
                                                                         type="button"
                                                                         class="flex flex-1 items-center gap-3 rounded px-2 py-1 text-left hover:bg-[var(--panel)] focus:outline-none"
-                                                                        onclick={() => startEditingRole(role)}
+                                                                        on:click={() => startEditingRole(role)}
                                                                 >
                                                                         <span
                                                                                 class="h-4 w-4 shrink-0 rounded-full border border-[var(--stroke)]"
@@ -423,7 +423,7 @@
                                                                 <button
                                                                         type="button"
                                                                         class="rounded px-2 py-1 text-sm font-medium text-red-500 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-                                                                        onclick={() => deleteRole(role)}
+                                                                        on:click={() => deleteRole(role)}
                                                                         disabled={deletingId === id || isDefaultRole(role)}
                                                                 >
                                                                         {deletingId === id ? m.role_deleting() : m.delete()}
@@ -437,7 +437,7 @@
                 <div class="rounded border border-[var(--stroke)] bg-[var(--panel-strong)] p-4">
                         {#if draft}
                                 {@const roleDraft = draft!}
-                                <form class="space-y-5" onsubmit={handleSubmit}>
+                                <form class="space-y-5" on:submit={handleSubmit}>
                                         <div class="space-y-1">
                                                 <label class="text-sm font-medium" for="role-name">{m.role_form_name_label()}</label>
                                                 <input
@@ -446,7 +446,7 @@
                                                         class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
                                                         value={roleDraft.name}
                                                         placeholder={m.role_form_name_placeholder()}
-                                                        oninput={(event) =>
+                                                        on:input={(event) =>
                                                                 updateDraft({ name: (event.currentTarget as HTMLInputElement).value })
                                                         }
                                                 />
@@ -464,7 +464,7 @@
                                                                         }`}
                                                                         style={`background-color: ${normalizeHex(roleDraft.color)};`}
                                                                         aria-label={m.color_picker_custom()}
-                                                                        onclick={openColorPicker}
+                                                                        on:click={openColorPicker}
                                                                 >
                                                                         <Palette class="h-6 w-6 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)]" />
                                                                 </button>
@@ -479,7 +479,7 @@
                                                                                         }`}
                                                                                         style={`background-color: ${preset};`}
                                                                                         aria-label={`${m.role_form_color_label()} ${preset}`}
-                                                                                        onclick={() => applyPresetColor(preset)}
+                                                                                        on:click={() => applyPresetColor(preset)}
                                                                                 ></button>
                                                                         {/each}
                                                                 </div>
@@ -490,12 +490,12 @@
                                                                         type="text"
                                                                         class="w-32 rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 font-mono text-sm focus:border-[var(--brand)] focus:outline-none"
                                                                         value={roleDraft.color}
-                                                                        oninput={(event) =>
+                                                                        on:input={(event) =>
                                                                                 updateDraft({
                                                                                         color: (event.currentTarget as HTMLInputElement).value.toUpperCase()
                                                                                 })
                                                                         }
-                                                                        onblur={(event) =>
+                                                                        on:blur={(event) =>
                                                                                 updateDraft({
                                                                                         color: normalizeHex((event.currentTarget as HTMLInputElement).value)
                                                                                 })
@@ -507,12 +507,12 @@
                                                                 type="color"
                                                                 class="sr-only"
                                                                 value={normalizeHex(roleDraft.color)}
-                                                                oninput={(event) =>
+                                                                on:input={(event) =>
                                                                         updateDraft({
                                                                                 color: (event.currentTarget as HTMLInputElement).value.toUpperCase()
                                                                         })
                                                                 }
-                                                                onchange={(event) =>
+                                                                on:change={(event) =>
                                                                         updateDraft({
                                                                                 color: normalizeHex((event.currentTarget as HTMLInputElement).value)
                                                                         })
@@ -547,7 +547,7 @@
                                                                                                                         ? 'border-[var(--brand)] bg-[var(--brand)]'
                                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)]'
                                                                                                         }`}
-                                                                                                        onclick={() => togglePermission(perm.value)}
+                                                                                                        on:click={() => togglePermission(perm.value)}
                                                                                                 >
                                                                                                         <span class="sr-only">{perm.label()}</span>
                                                                                                         <span
@@ -580,7 +580,7 @@
                                                 <button
                                                         type="button"
                                                         class="rounded border border-[var(--stroke)] px-4 py-2 text-sm font-semibold hover:bg-[var(--panel)] disabled:cursor-not-allowed disabled:opacity-60"
-                                                        onclick={resetDraft}
+                                                        on:click={resetDraft}
                                                         disabled={!hasChanges || saving}
                                                 >
                                                         {m.role_reset_changes()}
@@ -588,7 +588,7 @@
                                                 <button
                                                         type="button"
                                                         class="rounded border border-transparent px-4 py-2 text-sm font-semibold text-[var(--fg-muted)] hover:bg-[var(--panel)]"
-                                                        onclick={cancelEditing}
+                                                        on:click={cancelEditing}
                                                         disabled={saving}
                                                 >
                                                         {m.cancel()}

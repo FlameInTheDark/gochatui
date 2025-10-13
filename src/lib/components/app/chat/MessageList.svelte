@@ -903,7 +903,7 @@
 <div
     class="scroll-area chat-scroll relative flex-1 overflow-y-auto"
 	bind:this={scroller}
-        onscroll={() => {
+        on:scroll={() => {
                 const nearBottom = isNearBottom();
                 wasAtBottom = nearBottom;
                 if (nearBottom) newCount = 0;
@@ -1051,7 +1051,7 @@
 		>
 			<button
 				class="rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm shadow"
-				onclick={() => {
+				on:click={() => {
 					scrollToBottom(true);
 					newCount = 0;
 					wasAtBottom = true;
