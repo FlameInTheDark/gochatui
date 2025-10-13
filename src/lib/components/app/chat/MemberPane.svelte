@@ -1,15 +1,14 @@
 <script lang="ts">
-        import type { DtoMember, DtoRole } from '$lib/api';
-        import { auth } from '$lib/stores/auth';
-        import {
-                channelsByGuild,
-                channelRolesByGuild,
-                membersByGuild,
-                selectedChannelId,
-                selectedGuildId
-        } from '$lib/stores/appState';
-        import { colorIntToHex } from '$lib/utils/color';
-        import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+	import type { DtoMember, DtoRole } from '$lib/api';
+	import { auth } from '$lib/stores/auth';
+	import {
+		channelsByGuild,
+		channelRolesByGuild,
+		membersByGuild,
+		selectedChannelId,
+		selectedGuildId
+	} from '$lib/stores/appState';
+        import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
         import { m } from '$lib/paraglide/messages.js';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -19,268 +18,181 @@
                 describeMemberChannelAccess as describeMemberChannelAccessDev,
                 type MemberChannelAccessDescription
         } from '$lib/utils/memberChannelAccess';
-        import { collectMemberRoleIds as baseCollectMemberRoleIds } from '$lib/utils/currentUserRoleIds';
+        import {
+                buildRoleMap,
+                collectMemberRoleIds,
+                memberInitial,
+                memberPrimaryName,
+                resolveMemberRoleColor,
+                toSnowflakeString
+        } from '$lib/utils/members';
+        import {
+                createPresenceSubscription,
+                presenceByUser,
+                presenceIndicatorClass,
+                type PresenceStatus
+        } from '$lib/stores/presence';
+        import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
+        import { onDestroy } from 'svelte';
 
 	const guilds = auth.guilds;
+	const presenceMap = presenceByUser;
+	const presenceSubscription = createPresenceSubscription();
+	let lastTrackedUserIds: string[] = [];
 
-        let loadingMembers = $state(false);
-        let membersError = $state<string | null>(null);
-        let roleMap = $state<Record<string, DtoRole>>({});
+	function applyTrackedUserIds(next: string[]) {
+		if (
+			next.length === lastTrackedUserIds.length &&
+			next.every((id, index) => id === lastTrackedUserIds[index])
+		) {
+			return;
+		}
+		lastTrackedUserIds = next.slice();
+		presenceSubscription.update(next);
+	}
+
+	onDestroy(() => {
+		presenceSubscription.destroy();
+	});
+
+	let loadingMembers = $state(false);
+	let membersError = $state<string | null>(null);
+	let roleMap = $state<Record<string, DtoRole>>({});
 
         let membersLoadToken = 0;
 
-	function toSnowflakeString(value: unknown): string | null {
-		if (value == null) return null;
-		try {
-			if (typeof value === 'string') return value;
-			if (typeof value === 'bigint') return value.toString();
-			if (typeof value === 'number') return BigInt(value).toString();
-			return String(value);
-		} catch {
-			try {
-				return String(value);
-			} catch {
-				return null;
-			}
-		}
-	}
+	const describeMemberChannelAccess = import.meta.env.DEV
+		? describeMemberChannelAccessDev
+		: undefined;
 
-	function memberPrimaryName(member: DtoMember | null | undefined): string {
-		if (!member) return m.user_default_name();
-		const nickname = (member as any)?.username;
-		if (typeof nickname === 'string' && nickname.trim()) return nickname.trim();
-		const userName = (member as any)?.user?.name;
-		if (typeof userName === 'string' && userName.trim()) return userName.trim();
-		const id = toSnowflakeString((member as any)?.user?.id);
-		if (id) return `${m.user_default_name()} ${id}`;
-		return m.user_default_name();
-	}
-
-	function memberSecondaryName(member: DtoMember | null | undefined): string {
-		if (!member) return '';
-		const primary = memberPrimaryName(member);
-		const userName = (member as any)?.user?.name;
-		if (typeof userName === 'string') {
-			const trimmed = userName.trim();
-			if (trimmed && trimmed !== primary) {
-				return trimmed;
-			}
-		}
-		const discriminator = (member as any)?.user?.discriminator;
-		if (typeof discriminator === 'string' && discriminator.trim()) {
-			return discriminator.trim();
-		}
-		return '';
-	}
-
-	function memberInitial(member: DtoMember | null | undefined): string {
-		const primary = memberPrimaryName(member);
-		return primary.trim().charAt(0).toUpperCase() || '?';
-	}
-
-	function buildRoleMap(list: DtoRole[]): Record<string, DtoRole> {
-		const map: Record<string, DtoRole> = {};
-		for (const role of list) {
-			const id = toSnowflakeString((role as any)?.id);
-			if (!id) continue;
-			map[id] = role;
-		}
-		return map;
-	}
-
-        function collectMemberRoleIds(
-                member: DtoMember | null | undefined,
-                guildId: string | null
-        ): string[] {
-                const seen = new Set<string>();
-                const result: string[] = [];
-
-                const rawRoles = Array.isArray((member as any)?.roles) ? (member as any).roles : [];
-                for (const entry of rawRoles) {
-                        const nestedId = toSnowflakeString((entry as any)?.role?.id);
-                        if (!nestedId || seen.has(nestedId)) continue;
-                        seen.add(nestedId);
-                        result.push(nestedId);
-                }
-
-                for (const roleId of baseCollectMemberRoleIds(member ?? undefined)) {
-                        if (seen.has(roleId)) continue;
-                        seen.add(roleId);
-                        result.push(roleId);
-                }
-
-                if (guildId && !seen.has(guildId)) {
-                        seen.add(guildId);
-                        result.push(guildId);
-                }
-
-                return result;
-        }
-
-	function resolveMemberRoleColor(
+	function describeMemberAccess(
 		member: DtoMember | null | undefined,
-		guildId: string | null
-	): string | null {
-		const roleIds = collectMemberRoleIds(member, guildId);
-		if (!roleIds.length) return null;
+		channel: any,
+		guild: any
+	): MemberChannelAccessDescription | null {
+		if (!describeMemberChannelAccess || !member || !channel) return null;
+		const guildId =
+			toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
+		const memberRoleIds = collectMemberRoleIds(member, guildId);
+		const channelRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
 
-		const orderedRoleIds: string[] = [];
-		const seen = new Set<string>();
-		const appendUnique = (value: string | null | undefined) => {
-			if (value == null) return;
-			const normalized = String(value);
-			if (!normalized || seen.has(normalized)) return;
-			seen.add(normalized);
-			orderedRoleIds.push(normalized);
+		return describeMemberChannelAccess({
+			member,
+			channel,
+			guild,
+			guildId,
+			memberRoleIds,
+			channelRoleIds
+		});
+	}
+
+	function memberHasChannelAccess(
+		member: DtoMember | null | undefined,
+		channel: any,
+		guild: any
+	): boolean {
+		if (!member || !channel) return false;
+		const guildId =
+			toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
+		const memberRoleIds = collectMemberRoleIds(member, guildId);
+		const channelRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
+
+		return resolveMemberChannelAccess({
+			member,
+			channel,
+			guild,
+			guildId,
+			memberRoleIds,
+			channelRoleIds
+		});
+	}
+
+	if (import.meta.env.DEV) {
+		let debugLogEnabled = $state(false);
+
+		const ensureDebugBridge = () => {
+			if (!describeMemberChannelAccess || typeof window === 'undefined') return null;
+			const w = window as any;
+			const root = (w.__gochatuiDebug = w.__gochatuiDebug ?? {});
+			const memberDebug = (root.memberAccess = root.memberAccess ?? {});
+
+			let internalLog = Boolean(memberDebug.log);
+			if (!memberDebug.__configured) {
+				Object.defineProperty(memberDebug, 'log', {
+					configurable: true,
+					enumerable: true,
+					get() {
+						return internalLog;
+					},
+					set(value: any) {
+						const next = Boolean(value);
+						if (internalLog !== next) {
+							internalLog = next;
+							debugLogEnabled = next;
+						}
+					}
+				});
+				memberDebug.__configured = true;
+				memberDebug.log = internalLog;
+			} else {
+				debugLogEnabled = internalLog;
+			}
+
+			memberDebug.describe = (rawMember: unknown) => {
+				const normalizedId =
+					typeof rawMember === 'object' && rawMember
+						? toSnowflakeString((rawMember as any)?.user?.id ?? (rawMember as any)?.id)
+						: toSnowflakeString(rawMember);
+				const channel = currentChannel;
+				const guild = currentGuild;
+				const members = currentMembers ?? [];
+				const memberEntry =
+					members.find(
+						(candidate) => toSnowflakeString((candidate as any)?.user?.id) === normalizedId
+					) ?? null;
+				const description =
+					memberEntry && channel ? describeMemberAccess(memberEntry, channel, guild) : null;
+
+				console.groupCollapsed('[memberAccess.describe]', {
+					channelId: channel ? toSnowflakeString((channel as any)?.id) : null,
+					memberId: normalizedId
+				});
+				if (description) {
+					console.log(description);
+				} else {
+					console.warn('No member/channel found for inspection');
+				}
+				console.groupEnd();
+				return description;
+			};
+
+			return memberDebug;
 		};
 
-		for (const id of roleIds) {
-			appendUnique(id);
-		}
-		appendUnique(guildId);
-
-		for (const id of orderedRoleIds) {
-			const role = roleMap[id];
-			if (!role) continue;
-			const rawColor = (role as any)?.color;
-			if (rawColor == null) continue;
-			return colorIntToHex(rawColor as number | string | bigint | null);
-		}
-
-		return null;
+		$effect(() => {
+			const debug = ensureDebugBridge();
+			if (!debug || !debugLogEnabled) {
+				return;
+			}
+			const channel = currentChannel;
+			if (!channel) return;
+			const guild = currentGuild;
+			const channelId = toSnowflakeString((channel as any)?.id);
+			const members = currentMembers ?? [];
+			for (const member of members) {
+				const description = describeMemberAccess(member, channel, guild);
+				if (!description) continue;
+				console.debug('[memberAccess.log]', {
+					channelId,
+					memberId: description.memberId,
+					finalAllowed: description.finalAllowed,
+					privateGateAllows: description.privateGateAllows,
+					channelRoleIds: description.channelRoleIds,
+					intersectingRoleIds: description.intersectingRoleIds
+				});
+			}
+		});
 	}
-
-        const describeMemberChannelAccess = import.meta.env.DEV ? describeMemberChannelAccessDev : undefined;
-
-        function describeMemberAccess(
-                member: DtoMember | null | undefined,
-                channel: any,
-                guild: any
-        ): MemberChannelAccessDescription | null {
-                if (!describeMemberChannelAccess || !member || !channel) return null;
-                const guildId =
-                        toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
-                const memberRoleIds = collectMemberRoleIds(member, guildId);
-                const channelRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
-
-                return describeMemberChannelAccess({
-                        member,
-                        channel,
-                        guild,
-                        guildId,
-                        memberRoleIds,
-                        channelRoleIds
-                });
-        }
-
-        function memberHasChannelAccess(
-                member: DtoMember | null | undefined,
-                channel: any,
-                guild: any
-        ): boolean {
-                if (!member || !channel) return false;
-                const guildId =
-                        toSnowflakeString((channel as any)?.guild_id) ?? toSnowflakeString((guild as any)?.id);
-                const memberRoleIds = collectMemberRoleIds(member, guildId);
-                const channelRoleIds = channelAllowListedRoleIds(guildId, channel, $channelRolesByGuild);
-
-                return resolveMemberChannelAccess({
-                        member,
-                        channel,
-                        guild,
-                        guildId,
-                        memberRoleIds,
-                        channelRoleIds
-                });
-        }
-
-        if (import.meta.env.DEV) {
-                let debugLogEnabled = $state(false);
-
-                const ensureDebugBridge = () => {
-                        if (!describeMemberChannelAccess || typeof window === 'undefined') return null;
-                        const w = window as any;
-                        const root = (w.__gochatuiDebug = w.__gochatuiDebug ?? {});
-                        const memberDebug = (root.memberAccess = root.memberAccess ?? {});
-
-                        let internalLog = Boolean(memberDebug.log);
-                        if (!memberDebug.__configured) {
-                                Object.defineProperty(memberDebug, 'log', {
-                                        configurable: true,
-                                        enumerable: true,
-                                        get() {
-                                                return internalLog;
-                                        },
-                                        set(value: any) {
-                                                const next = Boolean(value);
-                                                if (internalLog !== next) {
-                                                        internalLog = next;
-                                                        debugLogEnabled = next;
-                                                }
-                                        }
-                                });
-                                memberDebug.__configured = true;
-                                memberDebug.log = internalLog;
-                        } else {
-                                debugLogEnabled = internalLog;
-                        }
-
-                        memberDebug.describe = (rawMember: unknown) => {
-                                const normalizedId =
-                                        typeof rawMember === 'object' && rawMember
-                                                ? toSnowflakeString((rawMember as any)?.user?.id ?? (rawMember as any)?.id)
-                                                : toSnowflakeString(rawMember);
-                                const channel = currentChannel;
-                                const guild = currentGuild;
-                                const members = currentMembers ?? [];
-                                const memberEntry =
-                                        members.find((candidate) =>
-                                                toSnowflakeString((candidate as any)?.user?.id) === normalizedId
-                                        ) ?? null;
-                                const description = memberEntry && channel
-                                        ? describeMemberAccess(memberEntry, channel, guild)
-                                        : null;
-
-                                console.groupCollapsed('[memberAccess.describe]', {
-                                        channelId: channel ? toSnowflakeString((channel as any)?.id) : null,
-                                        memberId: normalizedId
-                                });
-                                if (description) {
-                                        console.log(description);
-                                } else {
-                                        console.warn('No member/channel found for inspection');
-                                }
-                                console.groupEnd();
-                                return description;
-                        };
-
-                        return memberDebug;
-                };
-
-                $effect(() => {
-                        const debug = ensureDebugBridge();
-                        if (!debug || !debugLogEnabled) {
-                                return;
-                        }
-                        const channel = currentChannel;
-                        if (!channel) return;
-                        const guild = currentGuild;
-                        const channelId = toSnowflakeString((channel as any)?.id);
-                        const members = currentMembers ?? [];
-                        for (const member of members) {
-                                const description = describeMemberAccess(member, channel, guild);
-                                if (!description) continue;
-                                console.debug('[memberAccess.log]', {
-                                        channelId,
-                                        memberId: description.memberId,
-                                        finalAllowed: description.finalAllowed,
-                                        privateGateAllows: description.privateGateAllows,
-                                        channelRoleIds: description.channelRoleIds,
-                                        intersectingRoleIds: description.intersectingRoleIds
-                                });
-                        }
-                });
-        }
 
 	const currentGuild = $derived.by(() => {
 		const gid = $selectedGuildId;
@@ -333,6 +245,8 @@
 	});
 
 	$effect(() => {
+		const guildRoleCacheTick = $guildRoleCacheState;
+		void guildRoleCacheTick;
 		const gid = $selectedGuildId ?? '';
 		if (!gid) {
 			roleMap = {};
@@ -356,40 +270,122 @@
 		};
 	});
 
-	type DecoratedMember = {
-		member: DtoMember;
-		hasAccess: boolean;
-		name: string;
-		secondary: string;
-		color: string | null;
-	};
+        type PresenceBucket = 'online' | 'offline';
 
-	const decoratedMembers = $derived.by(() => {
-		const channel = currentChannel;
-		const guild = currentGuild;
+        type DecoratedMember = {
+                member: DtoMember;
+                hasAccess: boolean;
+                name: string;
+                color: string | null;
+                userId: string | null;
+                presenceStatus: PresenceStatus | null;
+                presenceSince: number | null;
+                hasPresence: boolean;
+                customStatusText: string | null;
+                presenceBucket: PresenceBucket;
+        };
+
+        const decoratedMembers = $derived.by(() => {
+                const channel = currentChannel;
+                const guild = currentGuild;
 		const list = currentMembers ?? [];
-		if (!channel) return [] as DecoratedMember[];
-		const entries = list.map<DecoratedMember>((member) => {
-			const hasAccess = memberHasChannelAccess(member, channel, guild);
-			const guildId = toSnowflakeString((guild as any)?.id) ?? null;
-			return {
-				member,
-				hasAccess,
-				name: memberPrimaryName(member),
-				secondary: memberSecondaryName(member),
-				color: resolveMemberRoleColor(member, guildId)
-			};
-		});
-		const hideWithoutAccess = Boolean((channel as any)?.private);
-		const filtered = hideWithoutAccess ? entries.filter((entry) => entry.hasAccess) : entries;
-		filtered.sort((a, b) => {
-			if (a.hasAccess !== b.hasAccess) return a.hasAccess ? -1 : 1;
-			return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-		});
-		return filtered;
-	});
+		if (!channel) {
+			applyTrackedUserIds([]);
+			return [] as DecoratedMember[];
+		}
+		const lookup = $presenceMap;
+                const entries = list.map<DecoratedMember>((member) => {
+                        const hasAccess = memberHasChannelAccess(member, channel, guild);
+                        const guildId = toSnowflakeString((guild as any)?.id) ?? null;
+                        const userId =
+                                toSnowflakeString((member as any)?.user?.id) ?? toSnowflakeString((member as any)?.id);
+                        const info = userId ? (lookup[userId] ?? null) : null;
+                        const presenceStatus = info?.status ?? null;
+                        const hasPresence = Boolean(info);
+                        const rawCustomStatus = info?.customStatusText;
+                        const customStatusText =
+                                typeof rawCustomStatus === 'string' && rawCustomStatus.trim().length > 0
+                                        ? rawCustomStatus
+                                        : null;
+                        const presenceBucket: PresenceBucket =
+                                hasPresence && presenceStatus && presenceStatus !== 'offline' ? 'online' : 'offline';
+                        return {
+                                member,
+                                hasAccess,
+                                name: memberPrimaryName(member),
+                                color: resolveMemberRoleColor(member, guildId, roleMap),
+                                userId,
+                                presenceStatus,
+                                presenceSince: info?.since ?? null,
+                                hasPresence,
+                                customStatusText,
+                                presenceBucket
+                        };
+                });
+                const hideWithoutAccess = Boolean((channel as any)?.private);
+                const filtered = hideWithoutAccess ? entries.filter((entry) => entry.hasAccess) : entries;
+                const tracked = filtered.map((entry) => entry.userId).filter((id): id is string => Boolean(id));
+                applyTrackedUserIds(tracked);
+                return filtered;
+        });
 
-	const displayCount = $derived.by(() => decoratedMembers.length);
+        type MemberGroup = {
+                id: PresenceBucket;
+                members: DecoratedMember[];
+        };
+
+        function compareMemberEntries(a: DecoratedMember, b: DecoratedMember): number {
+                if (a.hasAccess !== b.hasAccess) return a.hasAccess ? -1 : 1;
+                return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        }
+
+        const memberGroups = $derived.by(() => {
+                const online: DecoratedMember[] = [];
+                const offline: DecoratedMember[] = [];
+                for (const entry of decoratedMembers) {
+                        if (entry.presenceBucket === 'online') {
+                                online.push(entry);
+                        } else {
+                                offline.push(entry);
+                        }
+                }
+                online.sort(compareMemberEntries);
+                offline.sort(compareMemberEntries);
+                return [
+                        { id: 'online', members: online },
+                        { id: 'offline', members: offline }
+                ] satisfies MemberGroup[];
+        });
+
+        function openMemberPanel(event: MouseEvent, entry: DecoratedMember) {
+                const target = event.currentTarget as HTMLElement | null;
+                let anchor: { x: number; y: number; width: number; height: number } | null = null;
+                if (target && typeof window !== 'undefined') {
+                        const rect = target.getBoundingClientRect();
+                        anchor = {
+                                x: rect.left,
+                                y: rect.top,
+                                width: rect.width,
+                                height: rect.height
+                        };
+                }
+
+                memberProfilePanel.open({
+                        member: entry.member,
+                        guildId: $selectedGuildId,
+                        anchor
+                });
+        }
+
+        $effect(() => {
+                const panelState = $memberProfilePanel;
+                const gid = $selectedGuildId;
+                if (panelState.open && panelState.guildId && panelState.guildId !== gid) {
+                        memberProfilePanel.close();
+                }
+        });
+
+        const displayCount = $derived.by(() => decoratedMembers.length);
 </script>
 
 <div
@@ -410,41 +406,60 @@
 			<div class="px-4 py-6 text-sm text-red-400">{membersError}</div>
 		{:else if decoratedMembers.length === 0}
 			<div class="px-4 py-6 text-sm text-[var(--muted)]">{m.channel_members_empty()}</div>
-		{:else}
-			<div class="space-y-1 py-2">
-				{#each decoratedMembers as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
-					<div
-						role="button"
-						tabindex="0"
-						class="flex items-center gap-3 px-3 py-2 text-sm"
-						oncontextmenu={(event) =>
-							openUserContextMenu(
-								event,
-								{ member: entry.member },
-								{
-									guildId: $selectedGuildId,
-									channelId: $selectedChannelId
-								}
-							)}
-					>
-						<div
-							class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
-						>
-							{memberInitial(entry.member)}
-						</div>
-						<div class="min-w-0 flex-1">
-							<div class="truncate font-medium" style:color={entry.color ?? null}>
-								{entry.name}
-							</div>
-							{#if entry.secondary}
-								<div class="truncate text-xs text-[var(--muted)]">{entry.secondary}</div>
-							{:else if !entry.hasAccess}
-								<div class="text-xs text-[var(--muted)]">{m.channel_members_no_access()}</div>
-							{/if}
-						</div>
-					</div>
-				{/each}
-			</div>
-		{/if}
-	</div>
+                {:else}
+                        <div class="space-y-4 py-2">
+                                {#each memberGroups as group (group.id)}
+                                        {#if group.members.length}
+                                                <div class="space-y-1">
+                                                        <div class="px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                                                {group.id === 'online'
+                                                                        ? m.channel_members_group_online({ count: group.members.length })
+                                                                        : m.channel_members_group_offline({ count: group.members.length })}
+                                                        </div>
+                                                        {#each group.members as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
+                                                                <button
+                                                                        type="button"
+                                                                        class="group/member flex w-full select-none items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+                                                                        onclick={(event) => openMemberPanel(event, entry)}
+                                                                        oncontextmenu={(event) =>
+                                                                                openUserContextMenu(
+                                                                                        event,
+                                                                                        { member: entry.member },
+                                                                                        {
+                                                                                                guildId: $selectedGuildId,
+                                                                                                channelId: $selectedChannelId
+                                                                                        }
+                                                                                )}
+                                                                        data-tooltip-disabled
+                                                                >
+                                                                        <div class="relative h-8 w-8 flex-shrink-0">
+                                                                                <div
+                                                                                        class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
+                                                                                >
+                                                                                        {memberInitial(entry.member)}
+                                                                                </div>
+                                                                                <span
+                                                                                        class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
+                                                                                        class:opacity-0={!entry.hasPresence}
+                                                                                ></span>
+                                                                        </div>
+                                                                        <div class="min-w-0 flex-1">
+                                                                                <div class="truncate font-medium" style:color={entry.color ?? null}>
+                                                                                        {entry.name}
+                                                                                </div>
+                                                                                {#if entry.customStatusText}
+                                                                                        <div class="truncate text-xs text-[var(--muted)]">{entry.customStatusText}</div>
+                                                                                {/if}
+                                                                                {#if !entry.hasAccess}
+                                                                                        <div class="text-xs text-[var(--muted)]">{m.channel_members_no_access()}</div>
+                                                                                {/if}
+                                                                        </div>
+                                                                </button>
+                                                        {/each}
+                                                </div>
+                                        {/if}
+                                {/each}
+                        </div>
+                {/if}
+        </div>
 </div>

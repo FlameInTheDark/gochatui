@@ -9,20 +9,26 @@
                 messageJumpRequest
         } from '$lib/stores/appState';
         import MessageItem from './MessageItem.svelte';
+        import MessagePlaceholder from './MessagePlaceholder.svelte';
+        import { applyMessageEventToList } from './messageEventHandlers';
         import { wsEvent } from '$lib/client/ws';
-        import { m } from '$lib/paraglide/messages.js';
+        import { m as i18n } from '$lib/paraglide/messages.js';
         import { fly } from 'svelte/transition';
         import { onDestroy, onMount, tick, untrack } from 'svelte';
         import { Sparkles } from 'lucide-svelte';
         import {
-                mutateAppSettings,
+                guildChannelReadStateLookup,
+                mutateAppSettingsWithoutSaving,
                 type GuildChannelReadState,
                 type GuildLayoutGuild,
                 type GuildLayoutItem
         } from '$lib/stores/settings';
+        import { acknowledgeChannelRead } from '$lib/stores/unread';
+        import { isMessageNewer } from './readStateUtils';
 
 	let messages = $state<DtoMessage[]>([]);
-	let loading = $state(false);
+        let loading = $state(false);
+        let loadingDirection = $state<'none' | 'older' | 'newer'>('none');
 	let error = $state<string | null>(null);
         let endReached = $state(false);
         let latestReached = $state(true);
@@ -55,6 +61,17 @@
         let activeGuildId: string | null = null;
         let activeChannelId: string | null = null;
         let previousChannelKey: string | null = null;
+        let initializedChannelKey: string | null = null;
+        let initializingChannelKey: string | null = null;
+        let lastVisibleMessageId = $state<string | null>(null);
+        let activeChannelReadMarker = $state<string | null>(null);
+        let unreadSeparatorMarker = $state<string | null>(null);
+
+        const ACK_DEBOUNCE_MS = 2_000;
+        let ackTimer: ReturnType<typeof setTimeout> | null = null;
+        let scheduledAckKey: string | null = null;
+        let lastAckedKey: string | null = null;
+        let ackInFlightKey: string | null = null;
 
         function findGuildLayoutEntry(layout: GuildLayoutItem[], guildId: string): GuildLayoutGuild | null {
                 for (const item of layout) {
@@ -93,6 +110,7 @@
                 if (!gid || !cid) return;
                 if (!scroller) return;
                 const lastVisibleId = computeLastVisibleMessageId();
+                lastVisibleMessageId = lastVisibleId ?? null;
                 const scrollPosition = Math.max(0, Math.round(scroller.scrollTop));
                 const key = `${gid}:${cid}`;
                 const nextState: PendingReadState = {
@@ -136,7 +154,7 @@
                         dirtyGuilds.clear();
                         return;
                 }
-                mutateAppSettings((settings) => {
+                mutateAppSettingsWithoutSaving((settings) => {
                         let changed = false;
                         for (const [guildId, states] of updatesByGuild) {
                                 const entry = findGuildLayoutEntry(settings.guildLayout, guildId);
@@ -178,8 +196,104 @@
                                         lastReadMessageId: state.lastReadMessageId,
                                         scrollPosition: state.scrollPosition
                                 });
+                                if (
+                                        state.guildId === (activeGuildId ?? '') &&
+                                        state.channelId === (activeChannelId ?? '')
+                                ) {
+                                        activeChannelReadMarker = state.lastReadMessageId ?? null;
+                                }
+                                acknowledgeChannelRead(state.guildId, state.channelId);
                         }
                         dirtyGuilds.delete(guildId);
+                }
+        }
+
+        function buildAckKey(guildId: string, channelId: string, messageId: string | null): string | null {
+                if (!guildId || !channelId || !messageId) return null;
+                return `${guildId}:${channelId}:${messageId}`;
+        }
+
+        function clearAckTimer() {
+                if (ackTimer) {
+                        clearTimeout(ackTimer);
+                        ackTimer = null;
+                }
+                scheduledAckKey = null;
+        }
+
+        function scheduleAck(guildId: string, channelId: string, messageId: string) {
+                const key = buildAckKey(guildId, channelId, messageId);
+                if (!key) return;
+                if (lastAckedKey === key || scheduledAckKey === key || ackInFlightKey === key) {
+                        return;
+                }
+                clearAckTimer();
+                ackTimer = setTimeout(() => {
+                        void runAck(guildId, channelId, messageId, key);
+                }, ACK_DEBOUNCE_MS);
+                scheduledAckKey = key;
+        }
+
+        function updateReadMarkersAfterAck(guildId: string, channelId: string, messageId: string) {
+                if (!guildId || !channelId || !messageId) return;
+                const key = `${guildId}:${channelId}`;
+                const pending = pendingReadStates.get(key);
+                const persisted = lastPersistedReadStates.get(key);
+                const scrollPosition = pending?.scrollPosition ?? persisted?.scrollPosition ?? 0;
+                const nextPending: PendingReadState = {
+                        guildId,
+                        channelId,
+                        lastReadMessageId: messageId,
+                        scrollPosition
+                };
+                pendingReadStates.set(key, nextPending);
+                lastPersistedReadStates.set(key, {
+                        lastReadMessageId: messageId,
+                        scrollPosition
+                });
+                dirtyGuilds.add(guildId);
+                if (guildId === (activeGuildId ?? '') && channelId === (activeChannelId ?? '')) {
+                        activeChannelReadMarker = messageId;
+                        unreadSeparatorMarker = null;
+                }
+        }
+
+        async function runAck(
+                guildId: string,
+                channelId: string,
+                messageId: string,
+                key: string
+        ) {
+                ackTimer = null;
+                scheduledAckKey = null;
+                ackInFlightKey = key;
+                let success = false;
+                try {
+                        await auth.api.message.messageChannelChannelIdMessageIdAckPost({
+                                channelId: channelId as any,
+                                messageId: messageId as any
+                        });
+                        success = true;
+                } catch (error) {
+                        console.error('Failed to acknowledge channel read', error);
+                } finally {
+                        if (ackInFlightKey === key) {
+                                ackInFlightKey = null;
+                        }
+                        if (success) {
+                                lastAckedKey = key;
+                                updateReadMarkersAfterAck(guildId, channelId, messageId);
+                                if (guildId) {
+                                        acknowledgeChannelRead(guildId, channelId);
+                                }
+                        } else if (
+                                wasAtBottom &&
+                                guildId === (activeGuildId ?? '') &&
+                                channelId === (activeChannelId ?? '') &&
+                                lastVisibleMessageId === messageId
+                        ) {
+                                scheduleAck(guildId, channelId, messageId);
+                        }
                 }
         }
 
@@ -195,6 +309,7 @@
                         clearInterval(readStateFlushTimer);
                         readStateFlushTimer = null;
                 }
+                clearAckTimer();
                 flushPendingReadStates();
         });
 
@@ -222,7 +337,52 @@
                 if (previousChannelKey && previousChannelKey !== key) {
                         flushPendingReadStates();
                 }
+                if (previousChannelKey !== key) {
+                        clearAckTimer();
+                        ackInFlightKey = null;
+                        lastAckedKey = null;
+                        lastVisibleMessageId = null;
+                        activeChannelReadMarker = null;
+                        unreadSeparatorMarker = null;
+                }
                 previousChannelKey = key;
+        });
+
+        $effect(() => {
+                const gid = activeGuildId ?? '';
+                const cid = activeChannelId ?? '';
+                const lookup = $guildChannelReadStateLookup;
+                if (!gid || !cid) {
+                        activeChannelReadMarker = null;
+                        unreadSeparatorMarker = null;
+                        return;
+                }
+                const key = `${gid}:${cid}`;
+                const persisted = lastPersistedReadStates.get(key);
+                const nextMarker =
+                        persisted?.lastReadMessageId ?? lookup?.[gid]?.[cid]?.lastReadMessageId ?? null;
+                activeChannelReadMarker = nextMarker;
+        });
+
+        $effect(() => {
+                const atBottom = wasAtBottom;
+                const messageId = lastVisibleMessageId;
+                const gid = $selectedGuildId ?? '';
+                const cid = $selectedChannelId ?? '';
+                const lookup = $guildChannelReadStateLookup;
+                if (!atBottom || !gid || !cid || !messageId) {
+                        clearAckTimer();
+                        return;
+                }
+                const key = `${gid}:${cid}`;
+                const persisted = lastPersistedReadStates.get(key);
+                const lastReadMarker =
+                        persisted?.lastReadMessageId ?? lookup?.[gid]?.[cid]?.lastReadMessageId ?? activeChannelReadMarker;
+                if (!isMessageNewer(messageId, lastReadMarker)) {
+                        clearAckTimer();
+                        return;
+                }
+                scheduleAck(gid, cid, messageId);
         });
 
 	function isNearBottom() {
@@ -301,39 +461,81 @@
         $effect(() => {
                 const channelId = $selectedChannelId;
                 const ready = $channelReady;
-                if (channelId && ready) {
-                        const gid = $selectedGuildId ?? '';
-                        const list = $channelsByGuild[gid] ?? [];
-                        const chan = list.find((c: any) => String(c?.id) === channelId);
-                        if (!chan) return;
-                        if ((chan as any)?.type === 2) return;
-                        messages = [];
-                        endReached = false;
-                        latestReached = false;
-                        initialLoaded = false;
-                        const token = ++channelSwitchToken;
-                        const pendingJump = untrack(() => $messageJumpRequest);
-                        if (pendingJump && pendingJump.channelId === channelId) {
-                                return;
-                        }
-                        (async () => {
-                                await loadLatest();
-                                if (token === channelSwitchToken) {
-                                        initialLoaded = true;
-                                        await tick();
-                                        recordReadState();
-                                }
-                        })();
-                } else {
+                const gid = $selectedGuildId ?? '';
+                if (!channelId) {
                         error = null;
                         messages = [];
                         endReached = false;
                         latestReached = false;
                         initialLoaded = false;
+                        initializedChannelKey = null;
+                        initializingChannelKey = null;
+                        unreadSeparatorMarker = null;
+                        return;
                 }
+                if (!ready) {
+                        loading = false;
+                        error = null;
+                        initializingChannelKey = null;
+                        unreadSeparatorMarker = null;
+                        return;
+                }
+                const key = `${gid}:${channelId}`;
+                if (
+                        initializedChannelKey === key &&
+                        (initialLoaded || initializingChannelKey === key)
+                ) {
+                        return;
+                }
+                const list = $channelsByGuild[gid] ?? [];
+                const chan = list.find((c: any) => String(c?.id) === channelId);
+                if (!chan) return;
+                if ((chan as any)?.type === 2) return;
+                initializedChannelKey = key;
+                messages = [];
+                endReached = false;
+                latestReached = false;
+                initialLoaded = false;
+                unreadSeparatorMarker = null;
+                const token = ++channelSwitchToken;
+                const pendingJump = untrack(() => $messageJumpRequest);
+                if (pendingJump && pendingJump.channelId === channelId) {
+                        return;
+                }
+                initializingChannelKey = key;
+                const lookup = untrack(() => $guildChannelReadStateLookup);
+                const lastReadMessageId = lookup?.[gid]?.[channelId]?.lastReadMessageId ?? null;
+                const lastKnownMessageId = getChannelLastMessageId(chan);
+                const shouldLoadAround =
+                        Boolean(lastReadMessageId && lastKnownMessageId) &&
+                        isMessageNewer(lastKnownMessageId, lastReadMessageId);
+                unreadSeparatorMarker = shouldLoadAround ? lastReadMessageId : null;
+                (async () => {
+                        try {
+                                if (shouldLoadAround) {
+                                        const jumped = await jumpToMessage(lastReadMessageId);
+                                        if (!jumped && messages.length === 0) {
+                                                await loadLatest();
+                                        }
+                                } else {
+                                        await loadLatest();
+                                }
+                                if (token === channelSwitchToken && !initialLoaded) {
+                                        initialLoaded = true;
+                                        await tick();
+                                        recordReadState();
+                                }
+                        } finally {
+                                if (token === channelSwitchToken) {
+                                        initializingChannelKey = null;
+                                }
+                        }
+                })();
         });
 
-	const PAGE_SIZE = 50;
+        const PAGE_SIZE = 50;
+        const PLACEHOLDER_COUNT = 3;
+        const placeholders = Array.from({ length: PLACEHOLDER_COUNT }, (_, i) => i);
 
         function extractId(value: any): string | null {
                 if (value == null) return null;
@@ -412,7 +614,8 @@
         }
 
         async function loadMore() {
-                if (!$selectedChannelId || loading || endReached) return;
+                if (!$selectedChannelId || loading || endReached || messages.length === 0) return;
+                loadingDirection = 'older';
                 loading = true;
                 const prevHeight = scroller?.scrollHeight ?? 0;
                 const prevTop = scroller?.scrollTop ?? 0;
@@ -468,6 +671,7 @@
 			error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
                 } finally {
                         loading = false;
+                        loadingDirection = 'none';
                         if (inserted > 0 && scroller) {
                                 await tick();
                                 const diff = scroller.scrollHeight - prevHeight;
@@ -480,11 +684,19 @@
         }
 
         async function loadNewer() {
-                if (!$selectedChannelId || loading || latestReached) return;
+                if (
+                        !$selectedChannelId ||
+                        loading ||
+                        latestReached ||
+                        (!initialLoaded && messages.length === 0)
+                ) {
+                        return;
+                }
                 if (!messages.length) {
                         await loadLatest();
                         return;
                 }
+                loadingDirection = 'newer';
                 loading = true;
                 let mutatedExisting = false;
                 try {
@@ -538,6 +750,7 @@
                         error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
                 } finally {
                         loading = false;
+                        loadingDirection = 'none';
                         void tick().then(() => recordReadState());
                 }
         }
@@ -567,10 +780,38 @@
                 }
         }
 
-        async function jumpToMessage(targetRaw: any) {
-                if (!$selectedChannelId) return;
+        function shouldShowNewSeparator(current: DtoMessage, previous: DtoMessage | undefined): boolean {
+                const marker = unreadSeparatorMarker;
+                if (!marker) return false;
+                const currentId = extractId(current);
+                if (!currentId) return false;
+                if (!isMessageNewer(currentId, marker)) return false;
+                const prevId = previous ? extractId(previous) : null;
+                if (!prevId) return true;
+                return !isMessageNewer(prevId, marker);
+        }
+
+        function getChannelLastMessageId(channel: any): string | null {
+                if (!channel) return null;
+                const candidates = [
+                        (channel as any)?.last_message_id,
+                        (channel as any)?.lastMessageId,
+                        (channel as any)?.lastMessage?.id,
+                        (channel as any)?.last_message?.id,
+                        (channel as any)?.lastMessage,
+                        (channel as any)?.last_message
+                ];
+                for (const value of candidates) {
+                        const id = extractId(value);
+                        if (id) return id;
+                }
+                return null;
+        }
+
+        async function jumpToMessage(targetRaw: any): Promise<boolean> {
+                if (!$selectedChannelId) return false;
                 const targetId = extractId(targetRaw);
-                if (!targetId) return;
+                if (!targetId) return false;
                 let fetched = false;
                 const hadFutureMessages = messages.some((msg) => {
                         const key = extractId(msg);
@@ -595,6 +836,7 @@
                                 fetched = true;
                         } catch (e: any) {
                                 error = e?.response?.data?.message ?? e?.message ?? 'Failed to load messages';
+                                return false;
                         } finally {
                                 loading = false;
                         }
@@ -610,6 +852,7 @@
                         error = error ?? 'Failed to load messages';
                 }
                 void tick().then(() => recordReadState());
+                return scrolled;
         }
 
         $effect(() => {
@@ -635,36 +878,26 @@
                 loadLatest();
         }
 
-	$effect(() => {
-		const ev: any = $wsEvent;
-		if (!ev || ev.op !== 0) return;
-		untrack(() => {
-			const d = ev.d || {};
-			if (d.message) {
-				const incoming = d.message as DtoMessage & { author_id?: any };
-				if (!incoming.channel_id || String((incoming as any).channel_id) !== $selectedChannelId)
-					return;
-				if (!incoming.author && (incoming as any).author_id) {
-					(incoming as any).author = (incoming as any).author_id;
-				}
-				const stick = wasAtBottom;
-				const idx = messages.findIndex(
-					(m) => String((m as any).id) === String((incoming as any).id)
-				);
-				if (idx >= 0) {
-					messages[idx] = { ...messages[idx], ...incoming };
-					messages = [...messages];
-				} else {
-					messages = [...messages, incoming];
-					if (stick) scrollToBottom(true);
-					else newCount += 1;
-				}
-			} else if (d.message_id) {
-				if (String(d.channel_id ?? '') !== $selectedChannelId) return;
-				messages = messages.filter((m) => String((m as any).id) !== String(d.message_id));
-			}
-		});
-	});
+        $effect(() => {
+                const ev: any = $wsEvent;
+                if (!ev || ev.op !== 0) return;
+                untrack(() => {
+                        const result = applyMessageEventToList({
+                                event: ev,
+                                currentMessages: messages,
+                                selectedChannelId: $selectedChannelId,
+                                wasAtBottom
+                        });
+                        if (!result) return;
+                        messages = result.messages;
+                        if (result.newCountDelta !== 0) {
+                                newCount = Math.max(0, newCount + result.newCountDelta);
+                        }
+                        if (result.shouldScrollToBottom) {
+                                scrollToBottom(true);
+                        }
+                });
+        });
 </script>
 
 <div
@@ -683,29 +916,22 @@
                 recordReadState();
         }}
 >
-	<div
-		class="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--stroke)] bg-[var(--bg)]/70 px-3 py-2 backdrop-blur"
-	>
-		<div class="text-xs text-[var(--muted)]">
-			{endReached ? m.start_of_history() : m.load_older_messages()}
-		</div>
-		<button
-			class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 text-sm disabled:opacity-50"
-			disabled={loading || endReached}
-			onclick={loadMore}
-		>
-			{loading ? m.loading() : m.load_older()}
-		</button>
-	</div>
-	{#if error}
-		<div class="border-b border-[var(--stroke)] bg-[var(--panel)] px-4 py-2 text-sm text-red-500">
-			{error}
-		</div>
-	{/if}
-	{#if endReached && initialLoaded}
-		{@const name = channelDisplayName()}
-		{@const topic = channelTopic()}
-		<div class="px-4 py-6">
+        {#if error}
+                <div class="border-b border-[var(--stroke)] bg-[var(--panel)] px-4 py-2 text-sm text-red-500">
+                        {error}
+                </div>
+        {/if}
+        {#if loading && loadingDirection === 'older'}
+                <div class="space-y-2 pb-2" aria-hidden="true">
+                        {#each placeholders as key (key)}
+                                <MessagePlaceholder />
+                        {/each}
+                </div>
+        {/if}
+        {#if endReached && initialLoaded}
+                {@const name = channelDisplayName()}
+                {@const topic = channelTopic()}
+                <div class="px-4 py-6">
 			<div
 				class="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
 			>
@@ -782,11 +1008,28 @@
 				return toDate(prev?.updated_at);
 			}
 		})()}
-		{@const withinMinute =
-			pd && d ? Math.abs((d as Date).getTime() - (pd as Date).getTime()) <= 60000 : false}
-		{@const compact = pk != null && ck != null && pk === ck && withinMinute}
-		<MessageItem message={m} {compact} on:deleted={loadLatest} />
-	{/each}
+                {@const withinMinute =
+                        pd && d ? Math.abs((d as Date).getTime() - (pd as Date).getTime()) <= 60000 : false}
+                {@const compact = pk != null && ck != null && pk === ck && withinMinute}
+                {@const showNewSeparator = shouldShowNewSeparator(m, prev)}
+                {#if showNewSeparator}
+                        <div class="my-4 flex items-center gap-3 pl-3" data-new-message-separator>
+                                <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
+                                <span class="text-xs font-semibold uppercase tracking-wide text-red-500">
+                                        {i18n.new_messages_divider()}
+                                </span>
+                                <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
+                        </div>
+                {/if}
+                <MessageItem message={m} {compact} on:deleted={loadLatest} />
+        {/each}
+        {#if loading && loadingDirection === 'newer'}
+                <div class="space-y-2 pt-2" aria-hidden="true">
+                        {#each placeholders as key (key)}
+                                <MessagePlaceholder />
+                        {/each}
+                </div>
+        {/if}
 </div>
 
 {#if !wasAtBottom && initialLoaded}
@@ -814,9 +1057,9 @@
 					wasAtBottom = true;
 				}}
 			>
-				{newCount > 0
-					? `${m.new_count({ count: newCount })} · ${m.jump_to_present()}`
-					: m.jump_to_present()}
+                                {newCount > 0
+                                        ? `${i18n.new_count({ count: newCount })} · ${i18n.jump_to_present()}`
+                                        : i18n.jump_to_present()}
 			</button>
 		</div>
 	</div>

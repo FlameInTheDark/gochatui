@@ -14,6 +14,7 @@
         import { tick } from 'svelte';
         import { m } from '$lib/paraglide/messages.js';
         import { Search } from 'lucide-svelte';
+        import { tooltip } from '$lib/actions/tooltip';
 
         type FilterType = 'from' | 'mentions' | 'has';
         interface TextFilterToken {
@@ -451,7 +452,8 @@
                 class="fixed inset-0 z-[1000]"
                 role="button"
                 tabindex="0"
-                onpointerdown={() => {
+                onclick={(event) => {
+                        if (event.target !== event.currentTarget) return;
                         if (pendingFilter) {
                                 closeFilterPrompt();
                         } else if (showKeywordHelp) {
@@ -472,7 +474,7 @@
                         }
                 }}
         >
-                <div class="absolute inset-0 bg-black/40"></div>
+                <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                 <div
                         class="absolute z-10"
                         style={`left:${posX}px; top:${posY}px`}
@@ -760,7 +762,7 @@
                                                                                                 </span>
                                                                                         {/if}
                                                                                 </div>
-                                                                                <div class="text-xs text-[var(--muted)]" title={formatMsgFull(message)}>
+                                                                                <div class="text-xs text-[var(--muted)]" use:tooltip={() => formatMsgFull(message)}>
                                                                                         {formatMsgTime(message)}
                                                                                 </div>
                                                                                 {#if resolveChannelName(message.channel_id)}

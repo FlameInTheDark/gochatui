@@ -22,20 +22,20 @@
 		}
 	};
 
-	const handleBackdropPointerDown = (event: PointerEvent) => {
-		if (event.target !== event.currentTarget) return;
-		close();
-	};
+        const handleBackdropClick = (event: MouseEvent) => {
+                if (event.target !== event.currentTarget) return;
+                close();
+        };
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
 
 {#if open}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-		role="presentation"
-		onpointerdown={handleBackdropPointerDown}
-	>
+        <div
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                role="presentation"
+                onclick={handleBackdropClick}
+        >
                 <div
                         class={`relative flex h-[80vh] w-full flex-col overflow-hidden rounded-lg bg-[var(--bg)] shadow-xl ${maxWidthClass}`}
                         role="dialog"

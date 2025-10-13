@@ -23,6 +23,7 @@
         import { subscribeWS, wsEvent } from '$lib/client/ws';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
         import { updateGuildSelectedChannel } from '$lib/stores/settings';
+        import { unreadChannelsByGuild } from '$lib/stores/unread';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
@@ -47,8 +48,9 @@
 		hasAnyGuildPermission,
 		normalizePermissionValue
 	} from '$lib/utils/permissions';
-	const guilds = auth.guilds;
-	const me = auth.user;
+        const guilds = auth.guilds;
+        const me = auth.user;
+        const unreadChannels = unreadChannelsByGuild;
 
 	const canAccessSelectedGuildSettings = $derived.by(() => {
 		const gid = $selectedGuildId;
@@ -194,12 +196,12 @@
 		return channelAllowListedRoleIds(gid, channel, $channelRolesByGuild);
 	}
 
-	function canAccessChannel(guildId: string, channel: DtoChannel): boolean {
-		const type = (channel as any)?.type ?? 0;
-		if (type === 2) return true;
-		if (!Boolean((channel as any)?.private)) return true;
-		const gid = String(guildId ?? '');
-		if (!gid) return false;
+        function canAccessChannel(guildId: string, channel: DtoChannel): boolean {
+                const type = (channel as any)?.type ?? 0;
+                if (type === 2) return true;
+                if (!Boolean((channel as any)?.private)) return true;
+                const gid = String(guildId ?? '');
+                if (!gid) return false;
 		const guild = $guilds.find((g) => toSnowflakeString((g as any)?.id) === gid) ?? null;
 		if (guild && hasAnyGuildPermission(guild, $me?.id, PERMISSION_ADMINISTRATOR)) {
 			return true;
@@ -213,9 +215,16 @@
 			if (myRoles.has(rid)) {
 				return true;
 			}
-		}
-		return false;
-	}
+                }
+                return false;
+        }
+
+        function isChannelUnread(guildId: unknown, channelId: unknown): boolean {
+                const gid = toSnowflakeString(guildId);
+                const cid = toSnowflakeString(channelId);
+                if (!gid || !cid) return false;
+                return Boolean($unreadChannels?.[gid]?.[cid]);
+        }
 
 	function currentGuildChannels(): DtoChannel[] {
 		const gid = $selectedGuildId ?? '';
@@ -1034,39 +1043,36 @@
 		</div>
 		{#if $selectedGuildId}
 			<div class="flex items-center gap-2">
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => {
-						creatingChannel = true;
-						channelError = null;
-						creatingChannelParent = null;
-					}}
-					title={m.new_channel()}
-					aria-label={m.new_channel()}
-				>
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                        onclick={() => {
+                                                creatingChannel = true;
+                                                channelError = null;
+                                                creatingChannelParent = null;
+                                        }}
+                                        aria-label={m.new_channel()}
+                                >
 					<Plus class="h-4 w-4" stroke-width={2} />
 				</button>
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => {
-						creatingCategory = true;
-						categoryError = null;
-					}}
-					title={m.new_category()}
-					aria-label={m.new_category()}
-				>
+                                <button
+                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                        onclick={() => {
+                                                creatingCategory = true;
+                                                categoryError = null;
+                                        }}
+                                        aria-label={m.new_category()}
+                                >
 					<FolderPlus class="h-4 w-4" stroke-width={2} />
 				</button>
 				{#if canAccessSelectedGuildSettings}
-					<button
-						class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-						onclick={() => {
-							if (!canAccessSelectedGuildSettings) return;
-							guildSettingsOpen.set(true);
-						}}
-						title={m.server_settings()}
-						aria-label={m.server_settings()}
-					>
+                                        <button
+                                                class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                                                onclick={() => {
+                                                        if (!canAccessSelectedGuildSettings) return;
+                                                        guildSettingsOpen.set(true);
+                                                }}
+                                                aria-label={m.server_settings()}
+                                        >
 						<Settings class="h-4 w-4" stroke-width={2} />
 					</button>
 				{/if}
@@ -1099,53 +1105,62 @@
 				role="list"
 			>
 				{#each sections as sec (String(sec.type === 'category' ? (sec.cat as any)?.id : (sec.ch as any)?.id))}
-					{#if sec.type === 'channel'}
-						{#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
-							<div
-								role="listitem"
-								class="relative"
-								ondragover={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									dragOverChannel(String((sec.ch as any).id), null);
-								}}
-								ondrop={(e) => {
-									e.stopPropagation();
-									dropOnChannel(String((sec.ch as any).id), null);
-								}}
-							>
-								{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.ch as any).id) && dragIndicator.parent === null}
-									<div
-										class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-									></div>
-								{/if}
-								<div
-									class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-									String((sec.ch as any).id)
-										? 'bg-[var(--panel)]'
-										: ''}"
-									role="button"
-									tabindex="0"
-									draggable="true"
-									ondragstart={() => startDrag(sec.ch, null)}
-									onclick={() => selectChannel(String((sec.ch as any).id))}
-									onkeydown={(e) =>
-										(e.key === 'Enter' || e.key === ' ') &&
-										selectChannel(String((sec.ch as any).id))}
-									oncontextmenu={(e: MouseEvent) => {
-										e.preventDefault();
-										e.stopPropagation();
-										openChannelMenu(e, sec.ch);
-									}}
-								>
-									<div class="flex items-center gap-2 truncate">
-										<span class="opacity-70">#</span>
-										{sec.ch.name}
-									</div>
-								</div>
-							</div>
-						{/if}
-					{:else}
+                                        {#if sec.type === 'channel'}
+                                                {@const channelId = String((sec.ch as any).id)}
+                                                {@const channelUnread = isChannelUnread($selectedGuildId, channelId)}
+                                                {#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
+                                                        <div
+                                                                role="listitem"
+                                                                class="relative"
+                                                                ondragover={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        dragOverChannel(channelId, null);
+                                                                }}
+                                                                ondrop={(e) => {
+                                                                        e.stopPropagation();
+                                                                        dropOnChannel(channelId, null);
+                                                                }}
+                                                        >
+                                                                {#if dragIndicator?.mode === 'before' && dragIndicator.target === channelId && dragIndicator.parent === null}
+                                                                        <div
+                                                                                class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                        ></div>
+                                                                {/if}
+                                                                <div
+                                                                        class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                        channelId
+                                                                                ? 'bg-[var(--panel)]'
+                                                                                : ''}"
+                                                                        role="button"
+                                                                        tabindex="0"
+                                                                        draggable="true"
+                                                                        ondragstart={() => startDrag(sec.ch, null)}
+                                                                        onclick={() => selectChannel(channelId)}
+                                                                        onkeydown={(e) =>
+                                                                                (e.key === 'Enter' || e.key === ' ') &&
+                                                                                selectChannel(channelId)}
+                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                openChannelMenu(e, sec.ch);
+                                                                        }}
+                                                                >
+                                                                        <div class="relative flex w-full items-center gap-2 truncate pl-3">
+                                                                                {#if channelUnread}
+                                                                                        <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                        <span
+                                                                                                aria-hidden="true"
+                                                                                                class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                                        ></span>
+                                                                                {/if}
+                                                                                <span class="opacity-70">#</span>
+                                                                                {sec.ch.name}
+                                                                        </div>
+                                                                </div>
+                                                        </div>
+                                                {/if}
+                                        {:else}
 						<div
 							class="mt-2"
 							ondragover={(e) => {
@@ -1204,55 +1219,64 @@
 									</button>
 								</div>
 							</div>
-							{#if !collapsed[String((sec.cat as any)?.id)]}
-								{#each sec.items.filter((c) => (c.name || '')
-										.toLowerCase()
-										.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
-									<div
-										role="listitem"
-										class="relative"
-										ondragover={(e) => {
-											e.preventDefault();
-											e.stopPropagation();
-											dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
-										}}
-										ondrop={(e) => {
-											e.stopPropagation();
-											dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
-										}}
-									>
-										{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((ch as any).id) && dragIndicator.parent === String((sec.cat as any)?.id)}
-											<div
-												class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-											></div>
-										{/if}
-										<div
-											class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-											String((ch as any).id)
-												? 'bg-[var(--panel)]'
-												: ''}"
-											role="button"
-											tabindex="0"
-											draggable="true"
-											ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
-											onclick={() => selectChannel(String((ch as any).id))}
-											onkeydown={(e) =>
-												(e.key === 'Enter' || e.key === ' ') &&
-												selectChannel(String((ch as any).id))}
-											oncontextmenu={(e: MouseEvent) => {
-												e.preventDefault();
-												e.stopPropagation();
-												openChannelMenu(e, ch);
-											}}
-										>
-											<div class="flex items-center gap-2 truncate">
-												<span class="opacity-70">#</span>
-												{ch.name}
-											</div>
-										</div>
-									</div>
-								{/each}
-							{/if}
+                                                        {#if !collapsed[String((sec.cat as any)?.id)]}
+                                                                {#each sec.items.filter((c) => (c.name || '')
+                                                                                .toLowerCase()
+                                                                                .includes(filter.toLowerCase())) as ch (String((ch as any).id))}
+                                                                        {@const nestedChannelId = String((ch as any).id)}
+                                                                        {@const nestedChannelUnread = isChannelUnread($selectedGuildId, nestedChannelId)}
+                                                                        <div
+                                                                                role="listitem"
+                                                                                class="relative"
+                                                                                ondragover={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        dragOverChannel(nestedChannelId, String((sec.cat as any)?.id));
+                                                                                }}
+                                                                                ondrop={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        dropOnChannel(nestedChannelId, String((sec.cat as any)?.id));
+                                                                                }}
+                                                                        >
+                                                                                {#if dragIndicator?.mode === 'before' && dragIndicator.target === nestedChannelId && dragIndicator.parent === String((sec.cat as any)?.id)}
+                                                                                        <div
+                                                                                                class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                                        ></div>
+                                                                                {/if}
+                                                                                <div
+                                                                                        class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                                        nestedChannelId
+                                                                                                ? 'bg-[var(--panel)]'
+                                                                                                : ''}"
+                                                                                        role="button"
+                                                                                        tabindex="0"
+                                                                                        draggable="true"
+                                                                                        ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+                                                                                        onclick={() => selectChannel(nestedChannelId)}
+                                                                                        onkeydown={(e) =>
+                                                                                                (e.key === 'Enter' || e.key === ' ') &&
+                                                                                                selectChannel(nestedChannelId)}
+                                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                                e.preventDefault();
+                                                                                                e.stopPropagation();
+                                                                                                openChannelMenu(e, ch);
+                                                                                        }}
+                                                                                >
+                                                                                        <div class="relative flex w-full items-center gap-2 truncate pl-3">
+                                                                                                {#if nestedChannelUnread}
+                                                                                                        <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                                        <span
+                                                                                                                aria-hidden="true"
+                                                                                                                class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                                                        ></span>
+                                                                                                {/if}
+                                                                                                <span class="opacity-70">#</span>
+                                                                                                {ch.name}
+                                                                                        </div>
+                                                                                </div>
+                                                                        </div>
+                                                                {/each}
+                                                        {/if}
 							<div
 								class="h-4"
 								role="listitem"
@@ -1450,8 +1474,7 @@
 																		}`}
 																		onclick={() =>
 																			setChannelPermission(selectedOverrideId, perm.value, 'deny')}
-																		aria-label={m.permission_deny()}
-																		title={m.permission_deny()}
+                                                                                                                                aria-label={m.permission_deny()}
 																	>
 																		<X class="h-4 w-4" stroke-width={2} />
 																	</button>
@@ -1467,8 +1490,7 @@
 																				perm.value,
 																				'inherit'
 																			)}
-																		aria-label={m.permission_default()}
-																		title={m.permission_default()}
+                                                                                                                                aria-label={m.permission_default()}
 																	>
 																		<Slash class="h-4 w-4" stroke-width={2} />
 																	</button>
@@ -1480,8 +1502,7 @@
 																		}`}
 																		onclick={() =>
 																			setChannelPermission(selectedOverrideId, perm.value, 'allow')}
-																		aria-label={m.permission_allow()}
-																		title={m.permission_allow()}
+                                                                                                                                aria-label={m.permission_allow()}
 																	>
 																		<Check class="h-4 w-4" stroke-width={2} />
 																	</button>
@@ -1531,18 +1552,21 @@
 		</SettingsPanel>
 	{/if}
 
-	{#if editingCategory}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (editingCategory = null)}
+        {#if editingCategory}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                editingCategory = null;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') editingCategory = null;
 				if (e.key === 'Enter') saveEditCategory();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                         <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
                                 <div class="relative">
                                         <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
@@ -1577,18 +1601,21 @@
                 </div>
         {/if}
 
-	{#if creatingChannel}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creatingChannel = false)}
+        {#if creatingChannel}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creatingChannel = false;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingChannel = false;
 				if (e.key === 'Enter') createChannel();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                         <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
                                 <div class="relative">
                                         <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
@@ -1630,18 +1657,21 @@
                 </div>
         {/if}
 
-	{#if creatingCategory}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creatingCategory = false)}
+        {#if creatingCategory}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creatingCategory = false;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingCategory = false;
 				if (e.key === 'Enter') createCategory();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40"></div>
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                         <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
                                 <div class="relative">
                                         <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
