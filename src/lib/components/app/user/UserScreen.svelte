@@ -1741,55 +1741,57 @@
                 }}
         >
                 <div aria-hidden="true" class="absolute inset-0 bg-black/50"></div>
-                <div
-                        class="relative z-10 w-full max-w-sm rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-6 shadow-xl"
-                        role="document"
-                >
-			<h2 id="user-screen-add-friend-title" class="text-lg font-semibold text-[var(--text-strong)]">
-				{m.user_home_add_friend_title()}
-			</h2>
-			<form
-				class="mt-4 space-y-4"
-                                aria-busy={isSubmittingAddFriend}
-                                onsubmit={(event) => {
-                                        event.preventDefault();
-                                        handleAddFriendSubmit();
-                                }}
-			>
-				<label class="flex flex-col gap-2 text-sm">
-					<span class="font-medium text-[var(--text-strong)]">
-						{m.user_home_add_friend_label()}
-					</span>
-					<input
-						class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none"
-						type="text"
-						bind:value={addFriendIdentifier}
-						placeholder={m.user_home_add_friend_placeholder()}
-					/>
-				</label>
-				{#if addFriendError}
-					<p class="text-sm text-[var(--danger)]" role="alert">{addFriendError}</p>
-				{/if}
-				<div class="flex justify-end gap-3">
-					<button
-						type="button"
-						class="rounded-md border border-[var(--stroke)] px-4 py-2 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-						onclick={closeAddFriendModal}
-						disabled={isSubmittingAddFriend}
-					>
-						{m.cancel()}
-					</button>
-					<button
-						type="submit"
-						class="rounded-md bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-						disabled={isSubmittingAddFriend || !addFriendIdentifier.trim()}
-					>
-						{m.user_home_add_friend_submit()}
-					</button>
-				</div>
-			</form>
-		</div>
-	</div>
+                <div class="relative z-10 w-full max-w-sm rounded-lg backdrop-blur-md">
+                        <div
+                                class="rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)]/90 p-6 shadow-xl"
+                                role="document"
+                        >
+                                <h2 id="user-screen-add-friend-title" class="text-lg font-semibold text-[var(--text-strong)]">
+                                        {m.user_home_add_friend_title()}
+                                </h2>
+                                <form
+                                        class="mt-4 space-y-4"
+                                        aria-busy={isSubmittingAddFriend}
+                                        onsubmit={(event) => {
+                                                event.preventDefault();
+                                                handleAddFriendSubmit();
+                                        }}
+                                >
+                                        <label class="flex flex-col gap-2 text-sm">
+                                                <span class="font-medium text-[var(--text-strong)]">
+                                                        {m.user_home_add_friend_label()}
+                                                </span>
+                                                <input
+                                                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none"
+                                                        type="text"
+                                                        bind:value={addFriendIdentifier}
+                                                        placeholder={m.user_home_add_friend_placeholder()}
+                                                />
+                                        </label>
+                                        {#if addFriendError}
+                                                <p class="text-sm text-[var(--danger)]" role="alert">{addFriendError}</p>
+                                        {/if}
+                                        <div class="flex justify-end gap-3">
+                                                <button
+                                                        type="button"
+                                                        class="rounded-md border border-[var(--stroke)] px-4 py-2 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                        onclick={closeAddFriendModal}
+                                                        disabled={isSubmittingAddFriend}
+                                                >
+                                                        {m.cancel()}
+                                                </button>
+                                                <button
+                                                        type="submit"
+                                                        class="rounded-md bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                        disabled={isSubmittingAddFriend || !addFriendIdentifier.trim()}
+                                                >
+                                                        {m.user_home_add_friend_submit()}
+                                                </button>
+                                        </div>
+                                </form>
+                        </div>
+                </div>
+        </div>
 {/if}
 
 <svelte:window onkeydown={handleWindowKeydown} />
