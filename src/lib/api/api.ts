@@ -285,6 +285,12 @@ export interface DtoChannel {
      */
     'parent_id'?: number;
     /**
+     * For DM channels: the other participant\'s user ID
+     * @type {number}
+     * @memberof DtoChannel
+     */
+    'participant_id'?: number;
+    /**
      * Permissions. Check the permissions documentation for more info.
      * @type {number}
      * @memberof DtoChannel
@@ -983,6 +989,25 @@ export interface ModelStatus {
 /**
  * 
  * @export
+ * @interface ModelUserDMChannels
+ */
+export interface ModelUserDMChannels {
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelUserDMChannels
+     */
+    'channel_id'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelUserDMChannels
+     */
+    'user_id'?: number;
+}
+/**
+ * 
+ * @export
  * @interface ModelUserSettingsAppearance
  */
 export interface ModelUserSettingsAppearance {
@@ -1019,6 +1044,12 @@ export interface ModelUserSettingsData {
     'appearance'?: ModelUserSettingsAppearance;
     /**
      * 
+     * @type {Array<ModelUserDMChannels>}
+     * @memberof ModelUserSettingsData
+     */
+    'dm_channels'?: Array<ModelUserDMChannels>;
+    /**
+     * 
      * @type {Array<string>}
      * @memberof ModelUserSettingsData
      */
@@ -1047,12 +1078,6 @@ export interface ModelUserSettingsData {
      * @memberof ModelUserSettingsData
      */
     'language'?: string;
-    /**
-     * 
-     * @type {number}
-     * @memberof ModelUserSettingsData
-     */
-    'selected_guild'?: number;
     /**
      * 
      * @type {ModelStatus}
@@ -6349,6 +6374,36 @@ export const UserApiAxiosParamCreator = function (configuration?: Configuration)
     return {
         /**
          * 
+         * @summary List all DM and Group DM channels for current user
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        userMeChannelsGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/user/me/channels`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary Create group DM channel
          * @param {UserCreateDMManyRequest} userCreateDMManyRequest Group DM data
          * @param {*} [options] Override http request option.
@@ -6908,6 +6963,18 @@ export const UserApiFp = function(configuration?: Configuration) {
     return {
         /**
          * 
+         * @summary List all DM and Group DM channels for current user
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async userMeChannelsGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<DtoChannel>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.userMeChannelsGet(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['UserApi.userMeChannelsGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary Create group DM channel
          * @param {UserCreateDMManyRequest} userCreateDMManyRequest Group DM data
          * @param {*} [options] Override http request option.
@@ -7123,6 +7190,15 @@ export const UserApiFactory = function (configuration?: Configuration, basePath?
     return {
         /**
          * 
+         * @summary List all DM and Group DM channels for current user
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        userMeChannelsGet(options?: RawAxiosRequestConfig): AxiosPromise<Array<DtoChannel>> {
+            return localVarFp.userMeChannelsGet(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary Create group DM channel
          * @param {UserApiUserMeChannelsGroupPostRequest} requestParameters Request parameters.
          * @param {*} [options] Override http request option.
@@ -7287,6 +7363,15 @@ export const UserApiFactory = function (configuration?: Configuration, basePath?
  * @interface UserApi
  */
 export interface UserApiInterface {
+    /**
+     * 
+     * @summary List all DM and Group DM channels for current user
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserApiInterface
+     */
+    userMeChannelsGet(options?: RawAxiosRequestConfig): AxiosPromise<Array<DtoChannel>>;
+
     /**
      * 
      * @summary Create group DM channel
@@ -7635,6 +7720,17 @@ export interface UserApiUserUserIdGetRequest {
  * @extends {BaseAPI}
  */
 export class UserApi extends BaseAPI implements UserApiInterface {
+    /**
+     * 
+     * @summary List all DM and Group DM channels for current user
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserApi
+     */
+    public userMeChannelsGet(options?: RawAxiosRequestConfig) {
+        return UserApiFp(this.configuration).userMeChannelsGet(options).then((request) => request(this.axios, this.basePath));
+    }
+
     /**
      * 
      * @summary Create group DM channel
