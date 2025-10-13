@@ -57,31 +57,31 @@
         const presenceSubscription = createPresenceSubscription();
         let lastPresenceSignature = '';
 
-        let directChannels: DirectChannelEntry[] = [];
-        let activeDmChannelId: string | null = null;
-        let activeDmTargetId: string | null = null;
-        let activeDmChannel: DirectChannelEntry | null = null;
-        let activeDmRecipient: FriendEntry | null = null;
-        let activeDmTitle = '';
-        let activeDmSubtext: string | null = null;
-        let activeDmAvatarUrl: string | null = null;
-        let apiFriendList: any[] = [];
-        let apiFriendRequests: any[] = [];
-        let friends: FriendEntry[] = [];
-        let friendRequests: FriendRequestEntry[] = [];
-        let dmChannelError: string | null = null;
-        let activeList: 'friends' | 'requests' = 'friends';
-        let showAddFriendModal = false;
-	let addFriendIdentifier = '';
-	let friendActionError: string | null = null;
-	let isSubmittingAddFriend = false;
-        let addFriendError: string | null = null;
-        let removingFriendIds = new Set<string>();
-        let processingRequestIds = new Set<string>();
-        let openingDmChannelIds = new Set<string>();
-        let friendDirectory: Map<string, FriendEntry> = new Map();
+        let directChannels = $state<DirectChannelEntry[]>([]);
+        let activeDmChannelId = $state<string | null>(null);
+        let activeDmTargetId = $state<string | null>(null);
+        let activeDmChannel = $state<DirectChannelEntry | null>(null);
+        let activeDmRecipient = $state<FriendEntry | null>(null);
+        let activeDmTitle = $state('');
+        let activeDmSubtext = $state<string | null>(null);
+        let activeDmAvatarUrl = $state<string | null>(null);
+        let apiFriendList = $state<any[]>([]);
+        let apiFriendRequests = $state<any[]>([]);
+        let friends = $state<FriendEntry[]>([]);
+        let friendRequests = $state<FriendRequestEntry[]>([]);
+        let dmChannelError = $state<string | null>(null);
+        let activeList = $state<'friends' | 'requests'>('friends');
+        let showAddFriendModal = $state(false);
+        let addFriendIdentifier = $state('');
+        let friendActionError = $state<string | null>(null);
+        let isSubmittingAddFriend = $state(false);
+        let addFriendError = $state<string | null>(null);
+        let removingFriendIds = $state(new Set<string>());
+        let processingRequestIds = $state(new Set<string>());
+        let openingDmChannelIds = $state(new Set<string>());
+        let friendDirectory = $state<Map<string, FriendEntry>>(new Map());
         const pendingDmRequests = new Map<string, Promise<string | null>>();
-        let dmChannelMetadataRequest: Promise<void> | null = null;
+        let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
 
 	function toSnowflakeString(value: unknown): string | null {
@@ -1029,7 +1029,9 @@
                 const settings = $settingsStore;
                 const map = $channelsByGuild;
                 const visible = Array.isArray(settings.dmChannels)
-                        ? settings.dmChannels.map((entry) => toSnowflakeString(entry.channelId)).filter(Boolean)
+                        ? settings.dmChannels
+                                        .map((entry) => toSnowflakeString(entry.channelId))
+                                        .filter((id): id is string => Boolean(id))
                         : [];
                 if (!visible.length) return;
                 const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
