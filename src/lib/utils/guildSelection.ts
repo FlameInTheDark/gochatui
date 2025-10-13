@@ -1,19 +1,14 @@
 import { get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import {
-	activeView,
-	channelReady,
-	channelsByGuild,
-	lastChannelByGuild,
-	selectedChannelId,
-	selectedGuildId
+        activeView,
+        channelReady,
+        channelsByGuild,
+        lastChannelByGuild,
+        selectedChannelId,
+        selectedGuildId
 } from '$lib/stores/appState';
-import {
-	appSettings,
-	mutateAppSettings,
-	updateGuildSelectedChannel,
-	type AppSettings
-} from '$lib/stores/settings';
+import { appSettings, updateGuildSelectedChannel, type AppSettings } from '$lib/stores/settings';
 import { subscribeWS } from '$lib/client/ws';
 import { refreshGuildEffectivePermissions } from '$lib/utils/guildPermissionSync';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
@@ -32,10 +27,10 @@ function toApiSnowflake(value: string): any {
 }
 
 function findGuildSelectedChannel(settings: AppSettings, guildId: string): string | null {
-	for (const item of settings.guildLayout) {
-		if (item.kind === 'guild') {
-			if (item.guildId === guildId) {
-				return item.selectedChannelId ?? null;
+        for (const item of settings.guildLayout) {
+                if (item.kind === 'guild') {
+                        if (item.guildId === guildId) {
+                                return item.selectedChannelId ?? null;
 			}
 			continue;
 		}
@@ -44,25 +39,7 @@ function findGuildSelectedChannel(settings: AppSettings, guildId: string): strin
 			return match.selectedChannelId ?? null;
 		}
 	}
-	return null;
-}
-
-export function persistSelectedGuildId(guildId: string | null) {
-	mutateAppSettings((settings) => {
-		if (settings.selectedGuildId === guildId) return false;
-		settings.selectedGuildId = guildId;
-		return true;
-	});
-	if (typeof localStorage === 'undefined') return;
-	try {
-		if (guildId) {
-			localStorage.setItem('lastGuild', guildId);
-		} else {
-			localStorage.removeItem('lastGuild');
-		}
-	} catch {
-		/* ignore */
-	}
+        return null;
 }
 
 let switchToken = 0;
@@ -75,12 +52,11 @@ export async function selectGuild(guildId: string | number | bigint | null | und
 	const myToken = ++switchToken;
 
 	activeView.set('guild');
-	channelReady.set(false);
-	selectedChannelId.set(null);
-	selectedGuildId.set(gid);
-	persistSelectedGuildId(gid);
+        channelReady.set(false);
+        selectedChannelId.set(null);
+        selectedGuildId.set(gid);
 
-	try {
+        try {
 		const channelRequest = auth.api.guild.guildGuildIdChannelGet({
 			guildId: toApiSnowflake(gid)
 		});
