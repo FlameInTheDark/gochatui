@@ -166,6 +166,7 @@ export interface VisibleDmChannel {
         channelId: string;
         userId: string | null;
         isDead: boolean;
+        lastReadMessageId: string | null;
 }
 
 export interface DmChannelMetadata extends VisibleDmChannel {}
@@ -246,6 +247,28 @@ export const guildChannelReadStateLookup = derived(appSettings, ($settings) => {
                         }
                 }
         }
+        if ($settings.dmChannels.length) {
+                const existingDm = { ...(lookup['@me'] ?? {}) };
+                let hasDmEntries = Object.keys(existingDm).length > 0;
+                for (const entry of $settings.dmChannels) {
+                        const channelId = entry.channelId;
+                        if (!channelId) continue;
+                        const lastRead = entry.lastReadMessageId ?? null;
+                        const current = existingDm[channelId];
+                        if (current && current.lastReadMessageId === lastRead) {
+                                continue;
+                        }
+                        existingDm[channelId] = {
+                                channelId,
+                                lastReadMessageId: lastRead,
+                                scrollPosition: current?.scrollPosition ?? null
+                        } satisfies GuildChannelReadState;
+                        hasDmEntries = true;
+                }
+                if (hasDmEntries) {
+                        lookup['@me'] = existingDm;
+                }
+        }
         return lookup;
 });
 
@@ -257,7 +280,8 @@ export const dmChannelMetadataLookup = derived(appSettings, ($settings) => {
                 lookup[channelId] = {
                         channelId,
                         userId: entry.userId ?? null,
-                        isDead: entry.isDead ?? false
+                        isDead: entry.isDead ?? false,
+                        lastReadMessageId: entry.lastReadMessageId ?? null
                 } satisfies DmChannelMetadata;
         }
         return lookup;
@@ -310,7 +334,8 @@ function cloneSettings(settings: AppSettings): AppSettings {
                 dmChannels: settings.dmChannels.map((entry) => ({
                         channelId: entry.channelId,
                         userId: entry.userId,
-                        isDead: entry.isDead ?? false
+                        isDead: entry.isDead ?? false,
+                        lastReadMessageId: entry.lastReadMessageId ?? null
                 })),
                 guildLayout: settings.guildLayout.map((item) => {
                         if (item.kind === 'guild') {
@@ -345,26 +370,82 @@ function cloneSettings(settings: AppSettings): AppSettings {
 }
 
 function toSnowflakeString(value: unknown): string | null {
-	if (value == null) return null;
-	try {
-		if (typeof value === 'string') return value;
-		if (typeof value === 'number' || typeof value === 'bigint') return BigInt(value).toString();
-	} catch {
-		/* ignore */
-	}
-	try {
-		return String(value);
-	} catch {
-		return null;
-	}
+        if (value == null) return null;
+        try {
+                if (typeof value === 'string') return value;
+                if (typeof value === 'number' || typeof value === 'bigint') return BigInt(value).toString();
+        } catch {
+                /* ignore */
+        }
+        try {
+                return String(value);
+        } catch {
+                return null;
+        }
 }
 
 function toApiSnowflake(value: string): any {
-	try {
-		return BigInt(value) as any;
-	} catch {
-		return value as any;
-	}
+        try {
+                return BigInt(value) as any;
+        } catch {
+                return value as any;
+        }
+}
+
+function extractLastReadMessageId(candidate: unknown, visited = new Set<any>()): string | null {
+        if (candidate == null) return null;
+        if (typeof candidate !== 'object') {
+                return toSnowflakeString(candidate);
+        }
+        if (visited.has(candidate)) {
+                return null;
+        }
+        visited.add(candidate);
+        const record = candidate as AnyRecord;
+        const directKeys = [
+                'last_read_message_id',
+                'lastReadMessageId',
+                'last_read_message',
+                'lastReadMessage',
+                'last_read',
+                'lastRead',
+                'read_state_last_message_id',
+                'readStateLastMessageId',
+                'read_state_lastMessageId',
+                'readStateLastMessageId'
+        ];
+        for (const key of directKeys) {
+                if (!(key in record)) continue;
+                const normalized = toSnowflakeString((record as AnyRecord)[key]);
+                if (normalized) return normalized;
+        }
+        const nestedKeys = ['read_state', 'readState', 'state', 'meta'];
+        for (const key of nestedKeys) {
+                if (!(key in record)) continue;
+                const nested = extractLastReadMessageId((record as AnyRecord)[key], visited);
+                if (nested) return nested;
+        }
+        return null;
+}
+
+function parseDmReadStateChannelId(key: string | null | undefined): string | null {
+        if (typeof key !== 'string') return null;
+        const trimmed = key.trim();
+        if (!trimmed) return null;
+        const direct = toSnowflakeString(trimmed);
+        if (direct && /^\d+$/.test(trimmed)) {
+                return direct;
+        }
+        const digits = trimmed.match(/\d+/g);
+        if (!digits || !digits.length) return null;
+        if (digits.length === 1) {
+                return toSnowflakeString(digits[0]);
+        }
+        const lower = trimmed.toLowerCase();
+        if (lower.includes('@me') || lower.startsWith('dm')) {
+                return toSnowflakeString(digits[digits.length - 1]);
+        }
+        return null;
 }
 
 function normalizeFolderArray(
@@ -604,6 +685,43 @@ export function applyReadStatesMapToLayout(
         }
 }
 
+function applyDmReadStatesToSettings(
+        settings: AppSettings,
+        readStateMap: Record<string, unknown> | undefined
+) {
+        if (!readStateMap || !settings.dmChannels.length) {
+                return;
+        }
+        const dmStates = new Map<string, string>();
+        for (const [key, value] of Object.entries(readStateMap)) {
+                const parsed = parseReadStateKey(key);
+                if (parsed?.guildId && parsed.guildId !== '@me') {
+                        continue;
+                }
+                const channelId =
+                        parsed?.guildId === '@me'
+                                ? parsed.channelId
+                                : parseDmReadStateChannelId(key);
+                if (!channelId) continue;
+                const lastRead = toSnowflakeString(value);
+                if (!lastRead) continue;
+                dmStates.set(channelId, lastRead);
+        }
+        if (!dmStates.size) return;
+        let changed = false;
+        const nextDmChannels = settings.dmChannels.map((entry) => {
+                const lastRead = dmStates.get(entry.channelId) ?? null;
+                if (lastRead == null || lastRead === (entry.lastReadMessageId ?? null)) {
+                        return entry;
+                }
+                changed = true;
+                return { ...entry, lastReadMessageId: lastRead } satisfies VisibleDmChannel;
+        });
+        if (changed) {
+                settings.dmChannels = nextDmChannels;
+        }
+}
+
 function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
         if (!data) return cloneSettings(defaultSettings);
 
@@ -640,7 +758,8 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
                                       return {
                                               channelId,
                                               userId: userId ?? null,
-                                              isDead
+                                              isDead,
+                                              lastReadMessageId: extractLastReadMessageId(record) ?? null
                                       } satisfies VisibleDmChannel;
                               })
                               .filter((entry): entry is VisibleDmChannel => Boolean(entry))
@@ -931,7 +1050,8 @@ export function addVisibleDmChannel(
                         settings.dmChannels[existingIndex] = {
                                 ...existing,
                                 userId: normalizedUserId,
-                                isDead: nextDead
+                                isDead: nextDead,
+                                lastReadMessageId: existing.lastReadMessageId ?? null
                         };
                         return true;
                 }
@@ -940,7 +1060,8 @@ export function addVisibleDmChannel(
                         {
                                 channelId: normalizedChannelId,
                                 userId: normalizedUserId,
-                                isDead: desiredDeadState != null ? desiredDeadState : false
+                                isDead: desiredDeadState != null ? desiredDeadState : false,
+                                lastReadMessageId: null
                         }
                 ];
                 return true;
@@ -975,10 +1096,13 @@ export function setVisibleDmChannels(
                                 explicitDead = true;
                         }
                         const previousEntry = previousById.get(channelId);
+                        const candidateLastRead = extractLastReadMessageId(record);
+                        const resolvedLastRead = candidateLastRead ?? previousEntry?.lastReadMessageId ?? null;
                         normalized.push({
                                 channelId,
                                 userId,
-                                isDead: explicitDead ?? (previousEntry?.isDead ?? false)
+                                isDead: explicitDead ?? (previousEntry?.isDead ?? false),
+                                lastReadMessageId: resolvedLastRead
                         });
                 }
 
@@ -990,7 +1114,8 @@ export function setVisibleDmChannels(
                                 return (
                                         item.channelId === candidate.channelId &&
                                         (item.userId ?? null) === (candidate.userId ?? null) &&
-                                        (item.isDead ?? false) === (candidate.isDead ?? false)
+                                        (item.isDead ?? false) === (candidate.isDead ?? false) &&
+                                        (item.lastReadMessageId ?? null) === (candidate.lastReadMessageId ?? null)
                                 );
                         })
                 ) {
@@ -1263,6 +1388,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                                         previousSettings.guildLayout,
                                         channelGuildLookup
                                 );
+                                applyDmReadStatesToSettings(next, responseData?.read_states);
                                 appSettings.set(next);
                                 suppressSave = false;
                         } else {
@@ -1273,6 +1399,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                                         previousSettings.guildLayout,
                                         channelGuildLookup
                                 );
+                                applyDmReadStatesToSettings(parsed, responseData.read_states);
                                 suppressSave = true;
                                 suppressThemePropagation = true;
                                 suppressLocalePropagation = true;

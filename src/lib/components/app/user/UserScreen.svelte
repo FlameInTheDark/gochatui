@@ -397,7 +397,8 @@
                 return {
                         channelId,
                         userId: toSnowflakeString(resolvedUserId),
-                        isDead: channel.isDead ?? false
+                        isDead: channel.isDead ?? false,
+                        lastReadMessageId: toSnowflakeString((channel as any)?.lastReadMessageId) ?? null
                 };
         }
 
