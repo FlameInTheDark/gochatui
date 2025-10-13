@@ -13,11 +13,12 @@
 		discriminator: string | null;
 	};
 
-	type DirectChannelEntry = {
-		id: string;
-		label: string;
-		recipients: FriendEntry[];
-	};
+        type DirectChannelEntry = {
+                id: string;
+                label: string;
+                recipients: FriendEntry[];
+                userId: string | null;
+        };
 
 	type FriendRequestDirection = 'incoming' | 'outgoing' | 'unknown';
 
@@ -301,11 +302,22 @@
 		if (!label && recipients.length) {
 			label = recipients.map((entry) => entry.name).join(', ');
 		}
-		if (!label) {
-			label = `Channel ${id}`;
-		}
-		return { id, label, recipients };
-	}
+                if (!label) {
+                        label = `Channel ${id}`;
+                }
+                const rawUserId =
+                        toSnowflakeString(raw?.user_id) ??
+                        toSnowflakeString(raw?.userId) ??
+                        toSnowflakeString(raw?.recipient_id) ??
+                        toSnowflakeString(raw?.recipientId);
+                const fallbackRecipientId = recipients.length === 1 ? recipients[0]?.id ?? null : null;
+                return {
+                        id,
+                        label,
+                        recipients,
+                        userId: rawUserId ?? fallbackRecipientId ?? null
+                };
+        }
 
 	function normalizeDtoChannel(raw: DtoChannel | any): any {
 		if (!raw) return raw;
@@ -520,6 +532,9 @@
                 const sources: any[] = [];
                 const userData = $user as any;
                 const dmVisibility = new Set($settingsStore.dmChannels.map((entry) => entry.channelId));
+                const dmUserHints = new Map(
+                        $settingsStore.dmChannels.map((entry) => [entry.channelId, entry.userId ?? null])
+                );
                 const restrictToVisible = dmVisibility.size > 0;
                 const candidateFields = ['dm_channels', 'direct_channels', 'directs', 'channels'];
                 for (const field of candidateFields) {
@@ -546,11 +561,17 @@
 		const seen = new Set<string>();
 		const result: DirectChannelEntry[] = [];
 		for (const source of sources) {
-			const normalized = normalizeDirectChannel(source, meId, fallbackName);
+                        const normalized = normalizeDirectChannel(source, meId, fallbackName);
                         if (!normalized) continue;
                         if (restrictToVisible && !dmVisibility.has(normalized.id)) continue;
                         if (seen.has(normalized.id)) continue;
                         seen.add(normalized.id);
+                        const storedUserId = dmUserHints.get(normalized.id) ?? null;
+                        if (storedUserId && normalized.userId !== storedUserId) {
+                                normalized.userId = storedUserId;
+                        } else if (!normalized.userId && normalized.recipients.length === 1) {
+                                normalized.userId = normalized.recipients[0]?.id ?? null;
+                        }
                         result.push(normalized);
                 }
                 result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
@@ -768,37 +789,45 @@
                                         {#if directChannels.length > 0}
                                                 <ul class="space-y-2">
                                                         {#each directChannels as channel (channel.id)}
-								<li>
-                                                        <div
-                                                                class={`flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 transition ${
-                                                                        openingDmChannelIds.has(friend.id)
-                                                                                ? 'cursor-wait opacity-70'
-                                                                                : 'cursor-pointer hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                }`}
-                                                                role="button"
-                                                                tabindex="0"
-                                                                aria-disabled={openingDmChannelIds.has(friend.id)}
-                                                                aria-busy={openingDmChannelIds.has(friend.id)}
-                                                                on:click={() => handleOpenDirectChannel(friend.id)}
-                                                                on:keydown={(event) => {
-                                                                        if (event.key === 'Enter' || event.key === ' ') {
-                                                                                event.preventDefault();
-                                                                                handleOpenDirectChannel(friend.id);
-                                                                        }
-                                                                }}
-                                                        >
-										<div class="min-w-0 flex-1">
-											<div class="truncate text-sm font-medium">{channel.label}</div>
-											{#if channel.recipients.length}
-												<div class="truncate text-xs text-[var(--muted)]">
-													{channel.recipients.map((entry) => entry.name).join(', ')}
-												</div>
-											{/if}
-										</div>
-									</div>
-								</li>
-							{/each}
-						</ul>
+                                                                <li>
+                                                                        {@const targetId = channel.userId ?? channel.recipients[0]?.id ?? null}
+                                                                        {@const isLoading = targetId ? openingDmChannelIds.has(targetId) : false}
+                                                                        <div
+                                                                                class={`flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 transition ${
+                                                                                        isLoading
+                                                                                                ? 'cursor-wait opacity-70'
+                                                                                                : 'cursor-pointer hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
+                                                                                }`}
+                                                                                role="button"
+                                                                                tabindex={targetId ? 0 : -1}
+                                                                                aria-disabled={isLoading || !targetId}
+                                                                                aria-busy={isLoading}
+                                                                                on:click={() => {
+                                                                                        if (!targetId) return;
+                                                                                        handleOpenDirectChannel(targetId);
+                                                                                }}
+                                                                                on:keydown={(event) => {
+                                                                                        if (event.defaultPrevented) return;
+                                                                                        if (event.target !== event.currentTarget) return;
+                                                                                        if (event.key === 'Enter' || event.key === ' ') {
+                                                                                                event.preventDefault();
+                                                                                                if (!targetId) return;
+                                                                                                handleOpenDirectChannel(targetId);
+                                                                                        }
+                                                                                }}
+                                                                        >
+                                                                                <div class="min-w-0 flex-1">
+                                                                                        <div class="truncate text-sm font-medium">{channel.label}</div>
+                                                                                        {#if channel.recipients.length}
+                                                                                                <div class="truncate text-xs text-[var(--muted)]">
+                                                                                                        {channel.recipients.map((entry) => entry.name).join(', ')}
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                </div>
+                                                                        </div>
+                                                                </li>
+                                                        {/each}
+                                                </ul>
 					{:else}
 						<p class="px-1 text-sm text-[var(--muted)]">{m.user_home_dms_empty()}</p>
 					{/if}
@@ -820,10 +849,27 @@
 			{#if activeList === 'friends'}
 				{#if friends.length > 0}
 					<div class="grid gap-3">
-						{#each friends as friend (friend.id)}
-							<div
-								class="flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-							>
+                                                {#each friends as friend (friend.id)}
+                                                        <div
+                                                                class={`flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 transition ${
+                                                                        openingDmChannelIds.has(friend.id)
+                                                                                ? 'cursor-wait opacity-70'
+                                                                                : 'cursor-pointer hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
+                                                                }`}
+                                                                role="button"
+                                                                tabindex="0"
+                                                                aria-disabled={openingDmChannelIds.has(friend.id)}
+                                                                aria-busy={openingDmChannelIds.has(friend.id)}
+                                                                on:click={() => handleOpenDirectChannel(friend.id)}
+                                                                on:keydown={(event) => {
+                                                                        if (event.defaultPrevented) return;
+                                                                        if (event.target !== event.currentTarget) return;
+                                                                        if (event.key === 'Enter' || event.key === ' ') {
+                                                                                event.preventDefault();
+                                                                                handleOpenDirectChannel(friend.id);
+                                                                        }
+                                                                }}
+                                                        >
 								<div
 									class="grid h-10 w-10 place-items-center rounded-full bg-[var(--panel)] text-sm font-semibold"
 								>
@@ -835,7 +881,7 @@
 										<div class="truncate text-xs text-[var(--muted)]">#{friend.discriminator}</div>
 									{/if}
 								</div>
-								<div class="ml-auto flex items-center gap-2">
+                                                                <div class="ml-auto flex items-center gap-2">
                                                                         <button
                                                                                 type="button"
                                                                                 class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
@@ -845,7 +891,7 @@
                                                                                 {m.user_home_friend_remove()}
                                                                         </button>
                                                                 </div>
-							</div>
+                                                        </div>
 						{/each}
 					</div>
 				{:else}
