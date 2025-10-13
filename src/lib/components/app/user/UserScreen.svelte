@@ -1302,6 +1302,8 @@
                                                                 {#each friends as friend (friend.id)}
                                                                         {@const isOpening = openingDmChannelIds.has(friend.id)}
                                                                         {@const isActiveFriend = activeDmTargetId === friend.id}
+                                                                        {@const friendPresence = $presenceMap[friend.id] ?? null}
+                                                                        {@const friendPresenceStatus = friendPresence?.status ?? null}
                                                                         <div class="flex items-center gap-2">
                                                                                 {@const friendPresence = $presenceMap[friend.id] ?? null}
                                                                                 {@const friendPresenceStatus = friendPresence?.status ?? null}
