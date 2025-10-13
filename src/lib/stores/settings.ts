@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import {
         type DtoGuild,
         type ModelStatus,
+        type ModelUserDMChannels,
         type ModelUserSettingsData,
         type ModelUserSettingsGuildFolders,
         type ModelUserSettingsGuilds,
@@ -161,6 +162,11 @@ export interface GuildFolderItem {
 
 export type GuildLayoutItem = GuildTopLevelItem | GuildFolderItem;
 
+export interface VisibleDmChannel {
+        channelId: string;
+        userId: string | null;
+}
+
 export interface AppSettings {
         language: Locale;
         theme: Theme;
@@ -173,6 +179,7 @@ export interface AppSettings {
                 status: PresenceStatus;
                 customStatusText: string | null;
         };
+        dmChannels: VisibleDmChannel[];
 }
 
 const defaultSettings: AppSettings = {
@@ -186,7 +193,8 @@ const defaultSettings: AppSettings = {
         status: {
                 status: 'online',
                 customStatusText: null
-        }
+        },
+        dmChannels: []
 };
 
 export const appSettings = writable<AppSettings>(defaultSettings);
@@ -280,6 +288,10 @@ function cloneSettings(settings: AppSettings): AppSettings {
                         status: settings.status.status,
                         customStatusText: settings.status.customStatusText ?? null
                 },
+                dmChannels: settings.dmChannels.map((entry) => ({
+                        channelId: entry.channelId,
+                        userId: entry.userId
+                })),
                 guildLayout: settings.guildLayout.map((item) => {
                         if (item.kind === 'guild') {
                                 return {
@@ -559,11 +571,26 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
                 statusPayload?.custom_status_text ?? statusPayload?.customStatusText
         );
 
+        const dmChannelEntries = Array.isArray(data.dm_channels)
+                ? data.dm_channels
+                              .map((entry) => {
+                                      const channelId = toSnowflakeString(
+                                              (entry as AnyRecord)?.channel_id ?? (entry as AnyRecord)?.channelId
+                                      );
+                                      if (!channelId) return null;
+                                      const userId = toSnowflakeString(
+                                              (entry as AnyRecord)?.user_id ?? (entry as AnyRecord)?.userId
+                                      );
+                                      return { channelId, userId: userId ?? null } satisfies VisibleDmChannel;
+                              })
+                              .filter((entry): entry is VisibleDmChannel => Boolean(entry))
+                : [];
+
         const folderEntries = normalizeFolderArray(data.guild_folders).map((folder, idx) => {
-		const id = generateFolderId();
-		const guildIds = Array.isArray(folder.guilds)
-			? folder.guilds
-					.map((gid) => toSnowflakeString(gid))
+                const id = generateFolderId();
+                const guildIds = Array.isArray(folder.guilds)
+                        ? folder.guilds
+                                        .map((gid) => toSnowflakeString(gid))
 					.filter((gid): gid is string => Boolean(gid))
 			: [];
                 const parsedColor = parseColorValue(folder.color);
@@ -652,13 +679,18 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
                 status: {
                         status: statusValue,
                         customStatusText: customStatusText ?? null
-                }
+                },
+                dmChannels: dmChannelEntries
         };
 }
 
 function convertToApi(settings: AppSettings): ModelUserSettingsData {
-	const payloadGuilds: ModelUserSettingsGuilds[] = [];
-	const payloadFolders: ModelUserSettingsGuildFolders[] = [];
+        const payloadGuilds: ModelUserSettingsGuilds[] = [];
+        const payloadFolders: ModelUserSettingsGuildFolders[] = [];
+        const payloadDmChannels: ModelUserDMChannels[] = settings.dmChannels.map((entry) => ({
+                channel_id: toApiSnowflake(entry.channelId),
+                user_id: entry.userId ? toApiSnowflake(entry.userId) : undefined
+        }));
 
         let topPosition = 0;
         for (const item of settings.guildLayout) {
@@ -708,6 +740,7 @@ function convertToApi(settings: AppSettings): ModelUserSettingsData {
                 },
                 guilds: payloadGuilds,
                 guild_folders: payloadFolders as unknown as ModelUserSettingsGuildFolders[],
+                dm_channels: payloadDmChannels,
                 forced_presence: settings.presenceMode === 'auto' ? '' : settings.presenceMode,
                 status: {
                         status: settings.status.status,
@@ -808,6 +841,36 @@ export function updateGuildSelectedChannel(guildId: string, channelId: string | 
                 const nextValue = channelId ?? null;
                 if ((entry.selectedChannelId ?? null) === nextValue) return false;
                 entry.selectedChannelId = nextValue;
+                return true;
+        });
+}
+
+export function addVisibleDmChannel(channelId: string | null | undefined, userId?: string | null | undefined) {
+        const normalizedChannelId = toSnowflakeString(channelId);
+        if (!normalizedChannelId) return;
+        const normalizedUserId = toSnowflakeString(userId) ?? null;
+        mutateAppSettings((settings) => {
+                const existingIndex = settings.dmChannels.findIndex(
+                        (entry) => entry.channelId === normalizedChannelId
+                );
+                if (existingIndex !== -1) {
+                        const existing = settings.dmChannels[existingIndex];
+                        if ((existing.userId ?? null) === normalizedUserId) {
+                                return false;
+                        }
+                        settings.dmChannels[existingIndex] = {
+                                ...existing,
+                                userId: normalizedUserId
+                        };
+                        return true;
+                }
+                settings.dmChannels = [
+                        ...settings.dmChannels,
+                        {
+                                channelId: normalizedChannelId,
+                                userId: normalizedUserId
+                        }
+                ];
                 return true;
         });
 }
