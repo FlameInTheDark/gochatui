@@ -2,8 +2,9 @@
 	import type { DtoChannel, DtoUser } from '$lib/api';
 	import { m } from '$lib/paraglide/messages.js';
 	import DmCreate from '$lib/components/app/dm/DmCreate.svelte';
-	import { auth } from '$lib/stores/auth';
-	import { channelsByGuild } from '$lib/stores/appState';
+        import { auth } from '$lib/stores/auth';
+        import { channelsByGuild } from '$lib/stores/appState';
+        import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 
 	type FriendEntry = {
 		id: string;
@@ -231,35 +232,38 @@
 		</div>
 	</div>
 	<div class="flex min-h-0 flex-1 overflow-hidden">
-		<section class="flex h-full w-80 flex-shrink-0 flex-col border-r border-[var(--stroke)]">
-			<div class="flex items-center justify-between border-b border-[var(--stroke)] px-4 py-3">
-				<h2 class="text-sm font-semibold">{m.user_home_dms_heading()}</h2>
-			</div>
-			<div class="flex-1 overflow-y-auto px-3 py-3">
-                                {#if directChannels.length > 0}
-                                        <ul class="space-y-2">
-                                                {#each directChannels as channel (channel.id)}
-							<li>
-								<div
-									class="flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-								>
-									<div class="min-w-0 flex-1">
-										<div class="truncate text-sm font-medium">{channel.label}</div>
-										{#if channel.recipients.length}
-											<div class="truncate text-xs text-[var(--muted)]">
-												{channel.recipients.map((entry) => entry.name).join(', ')}
-											</div>
-										{/if}
-									</div>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				{:else}
-					<p class="px-1 text-sm text-[var(--muted)]">{m.user_home_dms_empty()}</p>
-				{/if}
-			</div>
-		</section>
+                <section class="flex h-full w-80 flex-shrink-0 flex-col border-r border-[var(--stroke)]">
+                        <div class="flex items-center justify-between border-b border-[var(--stroke)] px-4 py-3">
+                                <h2 class="text-sm font-semibold">{m.user_home_dms_heading()}</h2>
+                        </div>
+                        <div class="flex min-h-0 flex-1 flex-col">
+                                <div class="flex-1 overflow-y-auto px-3 py-3">
+                                        {#if directChannels.length > 0}
+                                                <ul class="space-y-2">
+                                                        {#each directChannels as channel (channel.id)}
+                                                                <li>
+                                                                        <div
+                                                                                class="flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                                        >
+                                                                                <div class="min-w-0 flex-1">
+                                                                                        <div class="truncate text-sm font-medium">{channel.label}</div>
+                                                                                        {#if channel.recipients.length}
+                                                                                                <div class="truncate text-xs text-[var(--muted)]">
+                                                                                                        {channel.recipients.map((entry) => entry.name).join(', ')}
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                </div>
+                                                                        </div>
+                                                                </li>
+                                                        {/each}
+                                                </ul>
+                                        {:else}
+                                                <p class="px-1 text-sm text-[var(--muted)]">{m.user_home_dms_empty()}</p>
+                                        {/if}
+                                </div>
+                                <UserPanel />
+                        </div>
+                </section>
 		<section class="flex flex-1 flex-col overflow-y-auto px-6 py-4">
 			<h2 class="mb-4 text-lg font-semibold">{m.user_home_friends_heading()}</h2>
                         {#if friends.length > 0}
