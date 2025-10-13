@@ -218,7 +218,7 @@
 	"user_home_friend_action_error": "We couldn't update your friends list. Try again.",
 	"user_home_friend_accept": "Accept",
 	"user_home_friend_decline": "Decline",
-	"user_home_friend_cancel": "Cancel request",
+	"user_home_friend_cancel": "Deny",
 	"user_home_friend_remove": "Remove friend",
 	"message_placeholder": "Message #{channel}",
 	"start_of_history": "Start of history",

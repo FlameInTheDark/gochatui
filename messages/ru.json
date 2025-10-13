@@ -218,7 +218,7 @@
 	"user_home_friend_action_error": "Не удалось обновить список друзей. Попробуйте ещё раз.",
 	"user_home_friend_accept": "Принять",
 	"user_home_friend_decline": "Отклонить",
-	"user_home_friend_cancel": "Отменить заявку",
+	"user_home_friend_cancel": "Отказать",
 	"user_home_friend_remove": "Удалить из друзей",
 	"message_placeholder": "Сообщение #{channel}",
 	"start_of_history": "Начало истории",
