@@ -1086,8 +1086,8 @@
 			bind:value={filter}
 		/>
 	</div>
-	<div
-		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
+        <div
+                class="scroll-area channel-scroll flex-1 space-y-2 overflow-y-auto p-2"
 		role="region"
 		oncontextmenu={(e: MouseEvent) => {
 			e.preventDefault();
@@ -1706,3 +1706,38 @@
                 </div>
         {/if}
 </div>
+
+<style lang="postcss">
+        .channel-scroll {
+                scrollbar-gutter: stable;
+                scrollbar-width: thin;
+                scrollbar-color: transparent transparent;
+        }
+
+        .channel-scroll:hover {
+                scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.06);
+        }
+
+        .channel-scroll::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+                background: transparent;
+        }
+
+        .channel-scroll::-webkit-scrollbar-thumb {
+                background-color: transparent;
+                border-radius: 9999px;
+        }
+
+        .channel-scroll:hover::-webkit-scrollbar-thumb {
+                background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .channel-scroll::-webkit-scrollbar-track {
+                background: transparent;
+        }
+
+        .channel-scroll:hover::-webkit-scrollbar-track {
+                background-color: rgba(255, 255, 255, 0.06);
+        }
+</style>

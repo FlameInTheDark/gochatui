@@ -901,7 +901,7 @@
 </script>
 
 <div
-	class="scroll-area relative flex-1 overflow-y-auto"
+    class="scroll-area chat-scroll relative flex-1 overflow-y-auto"
 	bind:this={scroller}
         onscroll={() => {
                 const nearBottom = isNearBottom();
@@ -1119,11 +1119,44 @@
 		-webkit-backdrop-filter: blur(8px) !important;
 		mask: linear-gradient(180deg, transparent 75%, #000 87.5%, #000);
 	}
-	.gradient-blur:after {
-		content: '';
-		z-index: 8;
-		backdrop-filter: blur(10px);
-		-webkit-backdrop-filter: blur(10px) !important;
-		mask: linear-gradient(180deg, transparent 87.5%, #000);
-	}
+        .gradient-blur:after {
+                content: '';
+                z-index: 8;
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px) !important;
+                mask: linear-gradient(180deg, transparent 87.5%, #000);
+        }
+
+        .chat-scroll {
+                scrollbar-gutter: stable;
+                scrollbar-width: thin;
+                scrollbar-color: transparent transparent;
+        }
+
+        .chat-scroll:hover {
+                scrollbar-color: rgba(255, 255, 255, 0.25) rgba(255, 255, 255, 0.08);
+        }
+
+        .chat-scroll::-webkit-scrollbar {
+                width: 10px;
+                height: 10px;
+                background: transparent;
+        }
+
+        .chat-scroll::-webkit-scrollbar-thumb {
+                background-color: transparent;
+                border-radius: 9999px;
+        }
+
+        .chat-scroll:hover::-webkit-scrollbar-thumb {
+                background-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .chat-scroll::-webkit-scrollbar-track {
+                background: transparent;
+        }
+
+        .chat-scroll:hover::-webkit-scrollbar-track {
+                background-color: rgba(255, 255, 255, 0.08);
+        }
 </style>
