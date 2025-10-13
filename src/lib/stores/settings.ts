@@ -165,7 +165,12 @@ export type GuildLayoutItem = GuildTopLevelItem | GuildFolderItem;
 export interface VisibleDmChannel {
         channelId: string;
         userId: string | null;
+        isDead: boolean;
 }
+
+export interface DmChannelMetadata extends VisibleDmChannel {}
+
+export type DmChannelMetadataLookup = Record<string, DmChannelMetadata>;
 
 export interface AppSettings {
         language: Locale;
@@ -243,6 +248,20 @@ export const guildChannelReadStateLookup = derived(appSettings, ($settings) => {
         }
         return lookup;
 });
+
+export const dmChannelMetadataLookup = derived(appSettings, ($settings) => {
+        const lookup: DmChannelMetadataLookup = {};
+        for (const entry of $settings.dmChannels) {
+                const channelId = entry.channelId;
+                if (!channelId) continue;
+                lookup[channelId] = {
+                        channelId,
+                        userId: entry.userId ?? null,
+                        isDead: entry.isDead ?? false
+                } satisfies DmChannelMetadata;
+        }
+        return lookup;
+});
 export const settingsOpen = writable(false);
 export const folderSettingsOpen = writable(false);
 export const folderSettingsRequest = writable<
@@ -290,7 +309,8 @@ function cloneSettings(settings: AppSettings): AppSettings {
                 },
                 dmChannels: settings.dmChannels.map((entry) => ({
                         channelId: entry.channelId,
-                        userId: entry.userId
+                        userId: entry.userId,
+                        isDead: entry.isDead ?? false
                 })),
                 guildLayout: settings.guildLayout.map((item) => {
                         if (item.kind === 'guild') {
@@ -352,6 +372,42 @@ function normalizeFolderArray(
 ): ModelUserSettingsGuildFolders[] {
         if (!input) return [];
         return Array.isArray(input) ? input : [input];
+}
+
+function detectDmChannelDeadState(entry: AnyRecord | null | undefined): boolean {
+        if (!entry || typeof entry !== 'object') return false;
+
+        const booleanCandidates = [
+                entry.dead,
+                entry.is_dead,
+                entry.isDead,
+                entry.closed,
+                entry.archived
+        ];
+        if (booleanCandidates.some((value) => value === true)) {
+                return true;
+        }
+
+        const stringCandidates = [
+                entry.state,
+                entry.status,
+                entry.channel_state,
+                entry.channelState,
+                entry.dm_state,
+                entry.dmState,
+                entry.visibility
+        ];
+
+        for (const candidate of stringCandidates) {
+                if (typeof candidate !== 'string') continue;
+                const normalized = candidate.trim().toLowerCase();
+                if (!normalized) continue;
+                if (normalized === 'dead' || normalized.endsWith(':dead') || normalized.includes('dead')) {
+                        return true;
+                }
+        }
+
+        return false;
 }
 
 function buildReadStateLookupFromLayout(layout: GuildLayoutItem[]): GuildChannelReadStateLookup {
@@ -574,14 +630,18 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
         const dmChannelEntries = Array.isArray(data.dm_channels)
                 ? data.dm_channels
                               .map((entry) => {
+                                      const record = (entry ?? {}) as AnyRecord;
                                       const channelId = toSnowflakeString(
-                                              (entry as AnyRecord)?.channel_id ?? (entry as AnyRecord)?.channelId
+                                              record?.channel_id ?? record?.channelId
                                       );
                                       if (!channelId) return null;
-                                      const userId = toSnowflakeString(
-                                              (entry as AnyRecord)?.user_id ?? (entry as AnyRecord)?.userId
-                                      );
-                                      return { channelId, userId: userId ?? null } satisfies VisibleDmChannel;
+                                      const userId = toSnowflakeString(record?.user_id ?? record?.userId);
+                                      const isDead = detectDmChannelDeadState(record);
+                                      return {
+                                              channelId,
+                                              userId: userId ?? null,
+                                              isDead
+                                      } satisfies VisibleDmChannel;
                               })
                               .filter((entry): entry is VisibleDmChannel => Boolean(entry))
                 : [];
@@ -845,22 +905,33 @@ export function updateGuildSelectedChannel(guildId: string, channelId: string | 
         });
 }
 
-export function addVisibleDmChannel(channelId: string | null | undefined, userId?: string | null | undefined) {
+export function addVisibleDmChannel(
+        channelId: string | null | undefined,
+        userId?: string | null | undefined,
+        options?: { isDead?: boolean | null | undefined }
+) {
         const normalizedChannelId = toSnowflakeString(channelId);
         if (!normalizedChannelId) return;
         const normalizedUserId = toSnowflakeString(userId) ?? null;
+        const desiredDeadState = options?.isDead != null ? Boolean(options.isDead) : null;
         mutateAppSettings((settings) => {
                 const existingIndex = settings.dmChannels.findIndex(
                         (entry) => entry.channelId === normalizedChannelId
                 );
                 if (existingIndex !== -1) {
                         const existing = settings.dmChannels[existingIndex];
-                        if ((existing.userId ?? null) === normalizedUserId) {
+                        const currentDead = existing.isDead ?? false;
+                        const nextDead = desiredDeadState != null ? desiredDeadState : currentDead;
+                        if (
+                                (existing.userId ?? null) === normalizedUserId &&
+                                currentDead === nextDead
+                        ) {
                                 return false;
                         }
                         settings.dmChannels[existingIndex] = {
                                 ...existing,
-                                userId: normalizedUserId
+                                userId: normalizedUserId,
+                                isDead: nextDead
                         };
                         return true;
                 }
@@ -868,7 +939,8 @@ export function addVisibleDmChannel(channelId: string | null | undefined, userId
                         ...settings.dmChannels,
                         {
                                 channelId: normalizedChannelId,
-                                userId: normalizedUserId
+                                userId: normalizedUserId,
+                                isDead: desiredDeadState != null ? desiredDeadState : false
                         }
                 ];
                 return true;
@@ -876,20 +948,40 @@ export function addVisibleDmChannel(channelId: string | null | undefined, userId
 }
 
 export function setVisibleDmChannels(
-        entries: Iterable<{ channelId: string | null | undefined; userId?: string | null | undefined }>
+        entries: Iterable<{
+                channelId: string | null | undefined;
+                userId?: string | null | undefined;
+                isDead?: boolean | null | undefined;
+                state?: unknown;
+        }>
 ) {
-        const normalized: VisibleDmChannel[] = [];
-        const seen = new Set<string>();
-        for (const entry of entries ?? []) {
-                const channelId = toSnowflakeString(entry?.channelId);
-                if (!channelId || seen.has(channelId)) continue;
-                seen.add(channelId);
-                const userId = entry?.userId ? toSnowflakeString(entry.userId) : null;
-                normalized.push({ channelId, userId });
-        }
-
+        const incoming = Array.from(entries ?? []);
         mutateAppSettings((settings) => {
                 const previous = settings.dmChannels;
+                const previousById = new Map(previous.map((entry) => [entry.channelId, entry]));
+                const normalized: VisibleDmChannel[] = [];
+                const seen = new Set<string>();
+
+                for (const entry of incoming) {
+                        const record = (entry ?? {}) as AnyRecord;
+                        const channelId = toSnowflakeString(record?.channelId);
+                        if (!channelId || seen.has(channelId)) continue;
+                        seen.add(channelId);
+                        const userId = record?.userId ? toSnowflakeString(record.userId) : null;
+                        let explicitDead: boolean | null = null;
+                        if (typeof record?.isDead === 'boolean') {
+                                explicitDead = record.isDead;
+                        } else if (detectDmChannelDeadState(record)) {
+                                explicitDead = true;
+                        }
+                        const previousEntry = previousById.get(channelId);
+                        normalized.push({
+                                channelId,
+                                userId,
+                                isDead: explicitDead ?? (previousEntry?.isDead ?? false)
+                        });
+                }
+
                 if (
                         previous.length === normalized.length &&
                         previous.every((item, index) => {
@@ -897,7 +989,8 @@ export function setVisibleDmChannels(
                                 if (!candidate) return false;
                                 return (
                                         item.channelId === candidate.channelId &&
-                                        (item.userId ?? null) === (candidate.userId ?? null)
+                                        (item.userId ?? null) === (candidate.userId ?? null) &&
+                                        (item.isDead ?? false) === (candidate.isDead ?? false)
                                 );
                         })
                 ) {

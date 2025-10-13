@@ -41,6 +41,7 @@
                 recipients: FriendEntry[];
                 userId: string | null;
                 avatarUrl: string | null;
+                isDead: boolean;
         };
 
 	type FriendRequestDirection = 'incoming' | 'outgoing' | 'unknown';
@@ -284,7 +285,7 @@
                         (entry) => entry.userId === normalizedUserId
                 );
                 if (existing) {
-                        addVisibleDmChannel(existing.id, normalizedUserId);
+                        addVisibleDmChannel(existing.id, normalizedUserId, { isDead: existing.isDead });
                         return existing.id;
                 }
                 const pending = pendingDmRequests.get(normalizedUserId);
@@ -323,7 +324,9 @@
                                                 [dmKey]: [...filtered, enriched]
                                         };
                                 });
-                                addVisibleDmChannel(channelId, normalizedUserId);
+                                addVisibleDmChannel(channelId, normalizedUserId, {
+                                        isDead: detectDirectChannelDeadState(channel)
+                                });
                                 return channelId;
                         } catch (error) {
                                 console.error('Failed to open DM channel', error);
@@ -356,7 +359,12 @@
                 selectedChannelId.set(null);
                 selectedGuildId.set('@me');
                 selectedChannelId.set(normalizedChannelId);
-                addVisibleDmChannel(normalizedChannelId, normalizedTargetId);
+                const existingEntry = directChannels.find(
+                        (entry) => toSnowflakeString(entry.id) === normalizedChannelId
+                );
+                addVisibleDmChannel(normalizedChannelId, normalizedTargetId, {
+                        isDead: existingEntry?.isDead
+                });
                 channelReady.set(true);
         }
 
@@ -388,7 +396,8 @@
                         (channel.recipients.length === 1 ? channel.recipients[0]?.id ?? null : null);
                 return {
                         channelId,
-                        userId: toSnowflakeString(resolvedUserId)
+                        userId: toSnowflakeString(resolvedUserId),
+                        isDead: channel.isDead ?? false
                 };
         }
 
@@ -613,12 +622,37 @@
                 return { id, name, discriminator, avatarUrl };
         }
 
-	function normalizeDirectChannel(
-		raw: any,
-		selfId: string | null,
-		fallbackName: string
-	): DirectChannelEntry | null {
-		if (!raw) return null;
+        function detectDirectChannelDeadState(raw: any): boolean {
+                if (!raw || typeof raw !== 'object') return false;
+                if (raw.dead === true || raw.is_dead === true || raw.isDead === true) {
+                        return true;
+                }
+                const stateCandidates = [
+                        raw.state,
+                        raw.status,
+                        raw.channel_state,
+                        raw.channelState,
+                        raw.dm_state,
+                        raw.dmState,
+                        raw.relationship_state
+                ];
+                for (const candidate of stateCandidates) {
+                        if (typeof candidate !== 'string') continue;
+                        const normalized = candidate.trim().toLowerCase();
+                        if (!normalized) continue;
+                        if (normalized === 'dead' || normalized.endsWith(':dead') || normalized.includes('dead')) {
+                                return true;
+                        }
+                }
+                return false;
+        }
+
+        function normalizeDirectChannel(
+                raw: any,
+                selfId: string | null,
+                fallbackName: string
+        ): DirectChannelEntry | null {
+                if (!raw) return null;
 		const id =
 			toSnowflakeString(raw?.id) ??
 			toSnowflakeString(raw?.channel_id) ??
@@ -664,12 +698,15 @@
                         recipients.length === 1
                                 ? recipients[0]?.avatarUrl ?? resolveAvatarUrl(raw)
                                 : resolveAvatarUrl(raw);
+                const isDead = detectDirectChannelDeadState(raw);
+
                 return {
                         id,
                         label,
                         recipients,
                         userId: rawUserId ?? fallbackRecipientId ?? null,
-                        avatarUrl: channelAvatar ?? null
+                        avatarUrl: channelAvatar ?? null,
+                        isDead
                 };
         }
 
@@ -1018,7 +1055,8 @@
                                 label: friend?.name ?? m.user_home_dm_placeholder(),
                                 recipients: friend ? [friend] : [],
                                 userId: storedUserId,
-                                avatarUrl: friend?.avatarUrl ?? null
+                                avatarUrl: friend?.avatarUrl ?? null,
+                                isDead: entry.isDead ?? false
                         });
                 }
                 result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
