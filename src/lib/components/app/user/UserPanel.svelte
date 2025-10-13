@@ -23,8 +23,8 @@
         let muted = $state(false);
         let deafened = $state(false);
         let statusMenuOpen = $state(false);
-        let statusMenuEl: HTMLDivElement | null = null;
-        let statusTriggerEl: HTMLButtonElement | null = null;
+        let statusMenuEl: HTMLDivElement | null = $state(null);
+        let statusTriggerEl: HTMLButtonElement | null = $state(null);
         let customStatusDraft = $state('');
         let customStatusDirty = $state(false);
 
@@ -175,7 +175,7 @@
                 <button
                         type="button"
                         class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-1 py-1 text-left hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
-                        on:click={toggleStatusMenu}
+                        onclick={toggleStatusMenu}
                         aria-haspopup="menu"
                         aria-expanded={statusMenuOpen}
                         bind:this={statusTriggerEl}
@@ -187,9 +187,9 @@
 				>
 					{$user?.name?.[0] ?? m.user_default_name()[0]}
 				</div>
-				<span
-					class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass($presenceStatus)}`}
-				/>
+                                  <span
+                                          class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass($presenceStatus)}`}
+                                  ></span>
 			</div>
 			<div class="min-w-0">
 				<div class="truncate text-sm font-medium">{$user?.name ?? m.user_default_name()}</div>
@@ -204,7 +204,7 @@
                                 class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {muted
                                         ? 'text-red-400'
                                         : ''}"
-                                on:click={toggleMute}
+                                onclick={toggleMute}
                                 aria-label={muted ? m.unmute() : m.mute()}
 			>
 				{#if muted}
@@ -218,7 +218,7 @@
                                 class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)] {deafened
                                         ? 'text-red-400'
                                         : ''}"
-                                on:click={toggleDeafen}
+                                onclick={toggleDeafen}
                                 aria-label={deafened ? m.undeafen() : m.deafen()}
 			>
 				{#if deafened}
@@ -230,7 +230,7 @@
                         <button
                                 type="button"
                                 class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)]"
-                                on:click={() => settingsOpen.set(true)}
+                                onclick={() => settingsOpen.set(true)}
                                 aria-label={m.settings()}
                         >
 				<Settings class="h-4 w-4" stroke-width={2} />
@@ -254,14 +254,14 @@
                                                         <button
                                                                 type="button"
                                                                 class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
-                                                                on:pointerdown={(event) => handleStatusPointer(event, option)}
-                                                                on:keydown={(event) => handleStatusKey(event, option)}
+                                                                onpointerdown={(event) => handleStatusPointer(event, option)}
+                                                                onkeydown={(event) => handleStatusKey(event, option)}
                                                                 role="menuitemradio"
                                                                 aria-checked={isOptionActive(option, $presenceMode)}
                                                         >
-                                                                <span
-                                                                        class={`mt-1 h-3 w-3 flex-shrink-0 rounded-full border border-[var(--panel)] ${presenceIndicatorClass(option.indicator)}`}
-                                                                />
+                                                                  <span
+                                                                          class={`mt-1 h-3 w-3 flex-shrink-0 rounded-full border border-[var(--panel)] ${presenceIndicatorClass(option.indicator)}`}
+                                                                  ></span>
                                                                 <div class="min-w-0 flex-1">
                                                                         <div class="flex items-center gap-2">
                                                                                 <span class="truncate text-sm font-medium">{option.label}</span>
@@ -284,16 +284,16 @@
                                                                 class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
                                                                 type="text"
                                                                 value={customStatusDraft}
-                                                                on:input={handleCustomStatusInput}
-                                                                on:keydown={handleCustomStatusKey}
-                                                                on:blur={handleCustomStatusBlur}
+                                                                oninput={handleCustomStatusInput}
+                                                                onkeydown={handleCustomStatusKey}
+                                                                onblur={handleCustomStatusBlur}
                                                                 placeholder={m.status_custom_placeholder()}
                                                         />
                                                         {#if $customStatusText}
                                                                 <button
                                                                         type="button"
                                                                         class="rounded-md px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-                                                                        on:click={clearCustomStatus}
+                                                                        onclick={clearCustomStatus}
                                                                 >
                                                                         {m.status_custom_clear()}
                                                                 </button>

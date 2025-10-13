@@ -57,7 +57,7 @@
 
 <form
 	class="space-y-3"
-	on:submit={(e) => {
+	onsubmit={(e) => {
 		e.preventDefault();
 		onSubmit();
 	}}

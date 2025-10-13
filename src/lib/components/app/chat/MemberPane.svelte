@@ -421,8 +421,8 @@
                                                                 <button
                                                                         type="button"
                                                                         class="group/member flex w-full select-none items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-                                                                        on:click={(event) => openMemberPanel(event, entry)}
-                                                                        on:contextmenu={(event) =>
+                                                                        onclick={(event) => openMemberPanel(event, entry)}
+                                                                        oncontextmenu={(event) =>
                                                                                 openUserContextMenu(
                                                                                         event,
                                                                                         { member: entry.member },

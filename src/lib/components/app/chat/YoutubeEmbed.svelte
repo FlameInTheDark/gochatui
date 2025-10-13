@@ -27,7 +27,7 @@
                 <button
                         type="button"
                         class="group relative flex h-full w-full items-center justify-center focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
-                        on:click={loadPlayer}
+                        onclick={loadPlayer}
                         aria-label="Play YouTube video"
                         data-tooltip-disabled
                 >

@@ -880,8 +880,8 @@
 <div
         role="listitem"
         class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
-        on:pointerup={handleRootPointerUp}
-        on:contextmenu={openMessageMenu}
+        onpointerup={handleRootPointerUp}
+        oncontextmenu={openMessageMenu}
         data-message-id={messageDomId((message as any)?.id)}
 >
 	{#if compact}
@@ -898,8 +898,8 @@
                         data-user-menu="true"
                         data-tooltip-disabled
                         aria-label={message.author?.name ?? 'User'}
-                        on:contextmenu={openUserMenu}
-                        on:click={openAuthorProfile}
+                        oncontextmenu={openUserMenu}
+                        onclick={openAuthorProfile}
                 >
                         {(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
                 </button>
@@ -913,7 +913,7 @@
                                         <button
                                                 class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
                                                 aria-label="Edit"
-						on:click={() => {
+						onclick={() => {
 							void startEditing();
 						}}
 					>
@@ -924,7 +924,7 @@
                                         <button
                                                 class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
                                                 aria-label="Delete"
-						on:click={deleteMsg}
+						onclick={deleteMsg}
 					>
 						<Trash2 class="h-3.5 w-3.5" stroke-width={2} />
 					</button>
@@ -939,8 +939,8 @@
                                         style:color={primaryRoleColor ?? null}
                                         data-user-menu="true"
                                         data-tooltip-disabled
-                                        on:contextmenu={openUserMenu}
-                                        on:click={openAuthorProfile}
+                                        oncontextmenu={openUserMenu}
+                                        onclick={openAuthorProfile}
                                 >
                                         {message.author?.name ?? 'User'}
                                 </button>
@@ -956,17 +956,17 @@
 					bind:this={editTextarea}
 					bind:value={draft}
 					style:overflow-y={'hidden'}
-					on:input={autoSizeEditTextarea}
+					oninput={autoSizeEditTextarea}
 				></textarea>
 				<div class="mt-1 flex gap-2 text-sm">
 					<button
 						class="rounded-md bg-[var(--brand)] px-2 py-1 text-[var(--bg)]"
 						disabled={saving}
-						on:click={saveEdit}>{saving ? 'Saving…' : 'Save'}</button
+						onclick={saveEdit}>{saving ? 'Saving…' : 'Save'}</button
 					>
 					<button
 						class="rounded-md border border-[var(--stroke)] px-2 py-1"
-						on:click={() => (isEditing = false)}>Cancel</button
+						onclick={() => (isEditing = false)}>Cancel</button
 					>
 				</div>
 			</div>

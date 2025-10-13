@@ -175,7 +175,7 @@
 				class="rounded-md bg-[var(--brand)] px-3 py-1.5 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-2)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
 				disabled={accepted || accepting}
 				type="button"
-				on:click={acceptInvite}
+				onclick={acceptInvite}
 			>
 				{accepted
 					? m.invite_preview_joined()

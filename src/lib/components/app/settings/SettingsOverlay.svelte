@@ -32,7 +32,7 @@
 			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'profile'
 				? 'bg-[var(--panel)] font-semibold'
 				: ''}"
-			on:click={() => (category = 'profile')}
+			onclick={() => (category = 'profile')}
 		>
 			{m.profile()}
 		</button>
@@ -40,7 +40,7 @@
 			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'general'
 				? 'bg-[var(--panel)] font-semibold'
 				: ''}"
-			on:click={() => (category = 'general')}
+			onclick={() => (category = 'general')}
 		>
 			{m.general()}
 		</button>
@@ -48,7 +48,7 @@
 			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'appearance'
 				? 'bg-[var(--panel)] font-semibold'
 				: ''}"
-			on:click={() => (category = 'appearance')}
+			onclick={() => (category = 'appearance')}
 		>
 			{m.appearance()}
 		</button>
@@ -56,7 +56,7 @@
 			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'other'
 				? 'bg-[var(--panel)] font-semibold'
 				: ''}"
-			on:click={() => (category = 'other')}
+			onclick={() => (category = 'other')}
 		>
 			{m.other()}
 		</button>
@@ -79,7 +79,7 @@
 							class="sr-only"
 							value={lang.code}
 							checked={$locale === lang.code}
-							on:change={() => locale.set(lang.code)}
+							onchange={() => locale.set(lang.code)}
 						/>
 						<label
 							for={`language-${lang.code}`}
@@ -120,7 +120,7 @@
 							class="sr-only"
 							value={option.value}
 							checked={$theme === option.value}
-							on:change={() => theme.set(option.value)}
+							onchange={() => theme.set(option.value)}
 						/>
 						<label
 							for={`theme-${option.value}`}

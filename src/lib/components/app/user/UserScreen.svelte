@@ -1069,11 +1069,18 @@
 		showAddFriendModal = true;
 	}
 
-	function closeAddFriendModal() {
-		if (isSubmittingAddFriend) return;
-		addFriendError = null;
-		showAddFriendModal = false;
-	}
+        function closeAddFriendModal() {
+                if (isSubmittingAddFriend) return;
+                addFriendIdentifier = '';
+                addFriendError = null;
+                showAddFriendModal = false;
+        }
+
+        function handleAddFriendBackdropClick(event: MouseEvent) {
+                if (event.target === event.currentTarget) {
+                        closeAddFriendModal();
+                }
+        }
 
 	async function handleAddFriendSubmit() {
 		addFriendError = null;
@@ -1121,7 +1128,7 @@
 		<button
 			type="button"
 			class="ml-auto rounded-md bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none"
-			on:click={openAddFriendModal}
+			onclick={openAddFriendModal}
 		>
 			{m.user_home_add_friend()}
 		</button>
@@ -1140,7 +1147,7 @@
 								: 'text-[var(--muted)] hover:text-[var(--text)]'
 						}`}
 						aria-pressed={activeList === 'friends'}
-						on:click={() => (activeList = 'friends')}
+						onclick={() => (activeList = 'friends')}
 					>
 						<span class="truncate">{m.user_home_tab_friends()}</span>
 					</button>
@@ -1152,7 +1159,7 @@
 								: 'text-[var(--muted)] hover:text-[var(--text)]'
 						}`}
 						aria-pressed={activeList === 'requests'}
-						on:click={() => (activeList = 'requests')}
+						onclick={() => (activeList = 'requests')}
 					>
 						<span class="truncate">{m.user_home_tab_requests()}</span>
 					</button>
@@ -1206,7 +1213,7 @@
                                                                                         disabled={isLoading}
                                                                                         aria-busy={isLoading}
                                                                                         aria-pressed={isActive}
-                                                                                        on:click={() => handleActivateDirectChannel(channel)}
+                                                                                        onclick={() => handleActivateDirectChannel(channel)}
                                                                                 >
                                                                                         <div class="relative">
                                                                                                 <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
@@ -1232,7 +1239,7 @@
                                                                                 <button
                                                                                         type="button"
                                                                                         class="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--stroke)] text-[var(--muted)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none"
-                                                                                        on:click={() => handleHideDirectChannel(channel.id)}
+                                                                                        onclick={() => handleHideDirectChannel(channel.id)}
                                                                                         aria-label={m.user_home_dm_remove()}
                                                                                         title={m.user_home_dm_remove()}
                                                                                 >
@@ -1255,7 +1262,7 @@
                                         <button
                                                 type="button"
                                                 class="flex items-center gap-2 rounded-md border border-[var(--stroke)] px-3 py-1 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
-                                                on:click={clearActiveDmChannel}
+                                                onclick={clearActiveDmChannel}
                                         >
                                                 <ArrowLeft class="h-4 w-4" stroke-width={2} />
                                                 <span>{m.user_home_tab_friends()}</span>
@@ -1305,8 +1312,6 @@
                                                                         {@const friendPresence = $presenceMap[friend.id] ?? null}
                                                                         {@const friendPresenceStatus = friendPresence?.status ?? null}
                                                                         <div class="flex items-center gap-2">
-                                                                                {@const friendPresence = $presenceMap[friend.id] ?? null}
-                                                                                {@const friendPresenceStatus = friendPresence?.status ?? null}
                                                                                 <button
                                                                                         type="button"
                                                                                         class={`flex flex-1 items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
@@ -1316,7 +1321,7 @@
                                                                                         } ${isOpening ? 'cursor-wait opacity-70' : ''}`}
                                                                                         disabled={isOpening}
                                                                                         aria-busy={isOpening}
-                                                                                        on:click={() => handleFriendOpenDirectChannel(friend)}
+                                                                                        onclick={() => handleFriendOpenDirectChannel(friend)}
                                                                                 >
                                                                                         <div class="relative">
                                                                                                 <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
@@ -1340,7 +1345,7 @@
                                                                                 <button
                                                                                         type="button"
                                                                                         class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                        on:click={() => handleRemoveFriend(friend.id)}
+                                                                                        onclick={() => handleRemoveFriend(friend.id)}
                                                                                         disabled={removingFriendIds.has(friend.id)}
                                                                                 >
                                                                                         {m.user_home_friend_remove()}
@@ -1384,7 +1389,7 @@
                                                                                         <button
                                                                                                 type="button"
                                                                                                 class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                                on:click={() => handleFriendRequest(request.id, 'decline')}
+                                                                                                onclick={() => handleFriendRequest(request.id, 'decline')}
                                                                                                 disabled={processingRequestIds.has(request.id)}
                                                                                         >
                                                                                                 {m.user_home_friend_cancel()}
@@ -1393,7 +1398,7 @@
                                                                                         <button
                                                                                                 type="button"
                                                                                                 class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                                on:click={() => handleFriendRequest(request.id, 'accept')}
+                                                                                                onclick={() => handleFriendRequest(request.id, 'accept')}
                                                                                                 disabled={processingRequestIds.has(request.id)}
                                                                                         >
                                                                                                 {m.user_home_friend_accept()}
@@ -1401,7 +1406,7 @@
                                                                                         <button
                                                                                                 type="button"
                                                                                                 class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                                on:click={() => handleFriendRequest(request.id, 'decline')}
+                                                                                                onclick={() => handleFriendRequest(request.id, 'decline')}
                                                                                                 disabled={processingRequestIds.has(request.id)}
                                                                                         >
                                                                                                 {request.direction === 'incoming'
@@ -1423,25 +1428,34 @@
 </div>
 
 {#if showAddFriendModal}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="user-screen-add-friend-title"
-	>
-		<div class="absolute inset-0 bg-black/50" on:click={closeAddFriendModal} />
-		<div
-			class="relative z-10 w-full max-w-sm rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-6 shadow-xl"
-			role="document"
-			on:click|stopPropagation
-		>
+        <div
+                class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="user-screen-add-friend-title"
+                tabindex="-1"
+                onclick={handleAddFriendBackdropClick}
+                onkeydown={(event) => {
+                        if (event.key === 'Escape') {
+                                closeAddFriendModal();
+                        }
+                }}
+        >
+                <div aria-hidden="true" class="absolute inset-0 bg-black/50"></div>
+                <div
+                        class="relative z-10 w-full max-w-sm rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-6 shadow-xl"
+                        role="document"
+                >
 			<h2 id="user-screen-add-friend-title" class="text-lg font-semibold text-[var(--text-strong)]">
 				{m.user_home_add_friend_title()}
 			</h2>
 			<form
 				class="mt-4 space-y-4"
-				aria-busy={isSubmittingAddFriend}
-				on:submit|preventDefault={handleAddFriendSubmit}
+                                aria-busy={isSubmittingAddFriend}
+                                onsubmit={(event) => {
+                                        event.preventDefault();
+                                        handleAddFriendSubmit();
+                                }}
 			>
 				<label class="flex flex-col gap-2 text-sm">
 					<span class="font-medium text-[var(--text-strong)]">
@@ -1461,7 +1475,7 @@
 					<button
 						type="button"
 						class="rounded-md border border-[var(--stroke)] px-4 py-2 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-						on:click={closeAddFriendModal}
+						onclick={closeAddFriendModal}
 						disabled={isSubmittingAddFriend}
 					>
 						{m.cancel()}
@@ -1479,4 +1493,4 @@
 	</div>
 {/if}
 
-<svelte:window on:keydown={handleWindowKeydown} />
+<svelte:window onkeydown={handleWindowKeydown} />
