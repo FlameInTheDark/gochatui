@@ -1,5 +1,5 @@
 <script lang="ts">
-        import type { DtoMember, DtoRole } from '$lib/api';
+        import type { DtoMember, DtoRole, DtoUser } from '$lib/api';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
         import { presenceByUser, presenceIndicatorClass } from '$lib/stores/presence';
         import { loadGuildRolesCached } from '$lib/utils/guildRoles';
@@ -33,6 +33,11 @@
 
         function resolveMember(): DtoMember | null {
                 return $memberProfilePanel.member ?? null;
+        }
+
+        function resolveUser(): DtoUser | null {
+                const memberUser = ($memberProfilePanel.member as any)?.user ?? null;
+                return memberUser ?? ($memberProfilePanel.user ?? null);
         }
 
         function updatePosition(anchor: { x: number; y: number; width: number; height: number } | null) {
@@ -101,10 +106,12 @@
         });
 
         const selectedMember = $derived(resolveMember());
+        const selectedUser = $derived(resolveUser());
 
         const userId = $derived.by(() =>
                 toSnowflakeString((selectedMember as any)?.user?.id) ??
-                toSnowflakeString((selectedMember as any)?.id)
+                toSnowflakeString((selectedMember as any)?.id) ??
+                toSnowflakeString((selectedUser as any)?.id)
         );
 
         const presenceInfo = $derived.by(() => (userId ? $presenceMap[userId] ?? null : null));
@@ -113,14 +120,55 @@
         const statusLabel = $derived.by(() => presenceStatusLabel(presenceStatus, customStatusText));
         const hasPresence = $derived.by(() => Boolean(presenceInfo));
 
-        const primaryName = $derived.by(() => memberPrimaryName(selectedMember));
-        const secondaryName = $derived.by(() => memberSecondaryName(selectedMember));
-        const discriminator = $derived.by(() =>
-                (selectedMember as any)?.user?.discriminator?.toString()?.trim() ?? ''
-        );
+        const primaryName = $derived.by(() => {
+                const member = selectedMember;
+                if (member) {
+                        return memberPrimaryName(member);
+                }
+                const user = selectedUser;
+                const userName = (user as any)?.name;
+                if (typeof userName === 'string' && userName.trim()) {
+                        return userName.trim();
+                }
+                const id = toSnowflakeString((user as any)?.id);
+                if (id) {
+                        return `${m.user_default_name()} ${id}`;
+                }
+                return m.user_default_name();
+        });
+
+        const secondaryName = $derived.by(() => {
+                const member = selectedMember;
+                if (member) {
+                        return memberSecondaryName(member);
+                }
+                const user = selectedUser;
+                const username = (user as any)?.name;
+                if (typeof username === 'string') {
+                        const trimmed = username.trim();
+                        if (trimmed && trimmed !== primaryName) {
+                                return trimmed;
+                        }
+                }
+                return '';
+        });
+
+        const discriminator = $derived.by(() => {
+                const memberDisc = (selectedMember as any)?.user?.discriminator;
+                if (typeof memberDisc === 'string' && memberDisc.trim()) {
+                        return memberDisc.trim();
+                }
+                const userDisc = (selectedUser as any)?.discriminator;
+                if (typeof userDisc === 'string' && userDisc.trim()) {
+                        return userDisc.trim();
+                }
+                return '';
+        });
+
         const avatarId = $derived.by(() =>
                 toSnowflakeString((selectedMember as any)?.avatar) ??
-                toSnowflakeString((selectedMember as any)?.user?.avatar)
+                toSnowflakeString((selectedMember as any)?.user?.avatar) ??
+                toSnowflakeString((selectedUser as any)?.avatar)
         );
         const avatarUrl = $derived.by(() => (avatarId ? buildAttachmentUrl(avatarId) : null));
 
@@ -158,7 +206,18 @@
                 return resolveMemberRoleColor(member, gid, roleMap);
         });
 
-        const avatarInitial = $derived.by(() => memberInitial(selectedMember));
+        const avatarInitial = $derived.by(() => {
+                const member = selectedMember;
+                if (member) {
+                        return memberInitial(member);
+                }
+                const user = selectedUser;
+                const userName = (user as any)?.name;
+                if (typeof userName === 'string' && userName.trim()) {
+                        return userName.trim().charAt(0).toUpperCase();
+                }
+                return memberInitial(null);
+        });
 
         function handleKeydown(event: KeyboardEvent) {
                 if (event.key === 'Escape') {
@@ -200,7 +259,7 @@
         on:contextmenu={handleWindowContextMenu}
 />
 
-{#if $memberProfilePanel.open && selectedMember}
+{#if $memberProfilePanel.open && (selectedMember || selectedUser)}
         <div class="pointer-events-none fixed inset-0 z-40" aria-hidden={false}>
                 <div
                         bind:this={panelEl}
@@ -254,29 +313,31 @@
                                         &times;
                                 </button>
                         </div>
-                        <div class="mt-4">
-                                <div class="text-xs font-semibold uppercase text-[var(--muted)]">
-                                        {m.ctx_roles_menu()}
-                                </div>
-                                {#if rolesLoading}
-                                        <div class="mt-2 text-xs text-[var(--muted)]">{m.ctx_roles_loading()}</div>
-                                {:else if rolesError}
-                                        <div class="mt-2 text-xs text-[var(--danger)]">{rolesError}</div>
-                                {:else if roleEntries.length === 0}
-                                        <div class="mt-2 text-xs text-[var(--muted)]">{m.ctx_roles_empty()}</div>
-                                {:else}
-                                        <div class="mt-2 flex flex-wrap gap-2">
-                                                {#each roleEntries as role (role.id)}
-                                                        <span
-                                                                class="rounded-full border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs font-medium"
-                                                                style:color={role.color ?? null}
-                                                        >
-                                                                {role.name}
-                                                        </span>
-                                                {/each}
+                        {#if guildId && selectedMember}
+                                <div class="mt-4">
+                                        <div class="text-xs font-semibold uppercase text-[var(--muted)]">
+                                                {m.ctx_roles_menu()}
                                         </div>
-                                {/if}
-                        </div>
+                                        {#if rolesLoading}
+                                                <div class="mt-2 text-xs text-[var(--muted)]">{m.ctx_roles_loading()}</div>
+                                        {:else if rolesError}
+                                                <div class="mt-2 text-xs text-[var(--danger)]">{rolesError}</div>
+                                        {:else if roleEntries.length === 0}
+                                                <div class="mt-2 text-xs text-[var(--muted)]">{m.ctx_roles_empty()}</div>
+                                        {:else}
+                                                <div class="mt-2 flex flex-wrap gap-2">
+                                                        {#each roleEntries as role (role.id)}
+                                                                <span
+                                                                        class="rounded-full border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs font-medium"
+                                                                        style:color={role.color ?? null}
+                                                                >
+                                                                        {role.name}
+                                                                </span>
+                                                        {/each}
+                                                </div>
+                                        {/if}
+                                </div>
+                        {/if}
                 </div>
         </div>
 {/if}

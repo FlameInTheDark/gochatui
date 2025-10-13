@@ -372,6 +372,7 @@
 
                 memberProfilePanel.open({
                         member: entry.member,
+                        user: (entry.member as any)?.user ?? null,
                         guildId: $selectedGuildId,
                         anchor
                 });

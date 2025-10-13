@@ -851,8 +851,9 @@
         }
 
         function openAuthorProfile(event: MouseEvent) {
-                const member = resolvedAuthorMember;
-                if (!member) {
+                const member = resolvedAuthorMember ?? ((message as any)?.member ?? null);
+                const user = (message as any)?.author ?? null;
+                if (!member && !user) {
                         return;
                 }
                 const target = event.currentTarget as HTMLElement | null;
@@ -868,7 +869,8 @@
                 }
 
                 memberProfilePanel.open({
-                        member,
+                        member: member ?? null,
+                        user: user ?? null,
                         guildId: $selectedGuildId,
                         anchor
                 });

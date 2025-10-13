@@ -482,6 +482,7 @@
                         class={`grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                 $view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                         }`}
+                        data-tooltip-disabled
                         use:tooltip={{
                                 content: () => m.user_home_open_label(),
                                 placement: 'right'
@@ -510,6 +511,7 @@
                                                 class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                                 } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
+                                                data-tooltip-disabled
                                                 use:tooltip={{
                                                         content: () => item.guild.name ?? 'Server',
                                                         placement: 'right'
@@ -563,6 +565,7 @@
                                                         }`}
                                                         type="button"
                                                         draggable="true"
+                                                        data-tooltip-disabled
                                                         use:tooltip={{
                                                                 content: () => folderLabel,
                                                                 placement: 'right'
@@ -632,7 +635,7 @@
 							></div>
 							{#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
 								{@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
-								<div class="group relative flex justify-center">
+                                                                <div class="group relative flex justify-center">
                                                                         <button
                                                                                 class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                                         isGuildSelected(nestedGuild.guildId)
@@ -644,6 +647,7 @@
                                                                                                 ? 'ring-2 ring-[var(--brand)]'
                                                                                                 : ''
                                                                                 }`}
+                                                                                data-tooltip-disabled
                                                                                 use:tooltip={{
                                                                                         content: () => nestedGuild.guild.name ?? 'Server',
                                                                                         placement: 'right'
@@ -689,6 +693,7 @@
                 <button
                         class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
                         on:click={() => (creating = !creating)}
+                        data-tooltip-disabled
                         use:tooltip={{
                                 content: () => m.new_server(),
                                 placement: 'right'
