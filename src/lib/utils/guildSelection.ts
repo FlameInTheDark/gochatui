@@ -51,10 +51,10 @@ export async function selectGuild(guildId: string | number | bigint | null | und
 
 	const myToken = ++switchToken;
 
-	activeView.set('guild');
+        selectedGuildId.set(gid);
+        activeView.set('guild');
         channelReady.set(false);
         selectedChannelId.set(null);
-        selectedGuildId.set(gid);
 
         try {
 		const channelRequest = auth.api.guild.guildGuildIdChannelGet({
