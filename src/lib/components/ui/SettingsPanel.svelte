@@ -28,25 +28,25 @@
         };
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 {#if open}
         <div
                 class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
                 role="presentation"
-                on:click={handleBackdropClick}
+                onclick={handleBackdropClick}
         >
                 <div
                         class={`relative flex h-[80vh] w-full flex-col overflow-hidden rounded-lg bg-[var(--bg)] shadow-xl ${maxWidthClass}`}
                         role="dialog"
                         aria-modal="true"
-                        on:pointerdown={(event) => event.stopPropagation()}
+                        onpointerdown={(event) => event.stopPropagation()}
                 >
                         <header class="relative z-20 flex items-center justify-end border-b border-[var(--stroke)] bg-[var(--panel)] px-4 py-3">
                                 <button
                                         aria-label={m.close()}
                                         class="relative z-20 rounded p-1 text-xl leading-none hover:bg-[var(--panel-strong)]"
-                                        on:click={close}
+                                        onclick={close}
                                 >
                                         &times;
                                 </button>

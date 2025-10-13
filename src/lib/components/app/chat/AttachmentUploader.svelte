@@ -77,8 +77,8 @@
 	class="flex items-center gap-2"
 	role="button"
 	tabindex="0"
-	on:dragover={(e: DragEvent) => e.preventDefault()}
-	on:drop={(e: DragEvent) => {
+	ondragover={(e: DragEvent) => e.preventDefault()}
+	ondrop={(e: DragEvent) => {
 		e.preventDefault();
 		const dt = e.dataTransfer;
 		if (!dt) return;
@@ -95,7 +95,7 @@
                         : 'cursor-pointer rounded-md border border-[var(--stroke)] px-2 py-1'}
                 use:tooltip={() => (loading ? 'Uploading…' : 'Attach files')}
         >
-		<input type="file" class="hidden" multiple on:change={pickFiles} />
+		<input type="file" class="hidden" multiple onchange={pickFiles} />
 		{#if inline}
                         {#if loading}
                                 <LoaderCircle class="h-[18px] w-[18px] animate-spin" stroke-width={2} />

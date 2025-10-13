@@ -27,10 +27,10 @@
 		<button
 			class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:opacity-50"
 			disabled={loading}
-			on:click={save}>Save</button
+			onclick={save}>Save</button
 		>
 	</div>
 	{#if message}<div class="text-xs text-green-500">{message}</div>{/if}
 	<div class="text-xs text-[var(--muted)]">Use logout/login if not reflected immediately.</div>
-	<button class="mt-2 text-sm text-red-400 underline" on:click={() => auth.logout()}>Logout</button>
+	<button class="mt-2 text-sm text-red-400 underline" onclick={() => auth.logout()}>Logout</button>
 </div>

@@ -254,9 +254,9 @@
 </script>
 
 <svelte:window
-        on:keydown={handleKeydown}
-        on:pointerdown={handleWindowPointerDown}
-        on:contextmenu={handleWindowContextMenu}
+        onkeydown={handleKeydown}
+        onpointerdown={handleWindowPointerDown}
+        oncontextmenu={handleWindowContextMenu}
 />
 
 {#if $memberProfilePanel.open && (selectedMember || selectedUser)}
@@ -282,7 +282,7 @@
                                         <span
                                                 class={`absolute -right-0.5 -bottom-0.5 h-4 w-4 rounded-full border-2 border-[var(--panel-strong)] ${presenceIndicatorClass(presenceStatus)}`}
                                                 class:opacity-50={!hasPresence}
-                                        />
+                                        ></span>
                                 </div>
                                 <div class="min-w-0 flex-1 space-y-1">
                                         <div class="truncate text-lg font-semibold" style:color={topRoleColor ?? null}>
@@ -307,7 +307,7 @@
                                         class="ml-2 rounded-md p-1 text-lg leading-none text-[var(--muted)] hover:bg-[var(--panel)]"
                                         type="button"
                                         aria-label={m.close()}
-                                        on:click={closePanel}
+                                        onclick={closePanel}
                                         data-tooltip-disabled
                                 >
                                         &times;

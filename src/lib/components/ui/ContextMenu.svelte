@@ -341,12 +341,12 @@
 </script>
 
 <svelte:window
-	on:keydown={onGlobalKey}
-	on:click={() => contextMenu.close()}
-	on:resize={() => {
-		updatePosition();
-		updateSubmenuPosition();
-	}}
+        onkeydown={onGlobalKey}
+        onclick={() => contextMenu.close()}
+        onresize={() => {
+                updatePosition();
+                updateSubmenuPosition();
+        }}
 />
 
 {#if $contextMenu.open}
@@ -357,9 +357,9 @@
 			role="menu"
 			tabindex="-1"
 			style={`left:${posX}px; top:${posY}px`}
-			on:pointerdown={(e) => e.stopPropagation()}
-			on:contextmenu={(e) => e.stopPropagation()}
-			on:keydown={onRootKeydown}
+			onpointerdown={(e) => e.stopPropagation()}
+			oncontextmenu={(e) => e.stopPropagation()}
+			onkeydown={onRootKeydown}
 		>
 			<div class="rounded-lg backdrop-blur-md">
 				<div class="panel max-w-[260px] min-w-[200px] rounded-md p-1">
@@ -376,9 +376,9 @@
 								? $contextMenu.openSubmenuIndex === index
 								: undefined}
 							disabled={it.disabled}
-							on:pointerenter={() => handleTriggerEnter(index, it)}
-							on:pointerleave={() => handleTriggerLeave(index)}
-							on:click={(event) => handleItemClick(event, it, index)}
+							onpointerenter={() => handleTriggerEnter(index, it)}
+							onpointerleave={() => handleTriggerLeave(index)}
+							onclick={(event) => handleItemClick(event, it, index)}
 						>
 							<span class="truncate">{it.label}</span>
 							{#if it.children?.length}
@@ -398,11 +398,11 @@
 					role="menu"
 					tabindex="-1"
 					style={`left:${submenuX}px; top:${submenuY}px`}
-					on:pointerenter={clearSubmenuCloseTimeout}
-					on:pointerleave={scheduleSubmenuClose}
-					on:pointerdown={(e) => e.stopPropagation()}
-					on:contextmenu={(e) => e.stopPropagation()}
-					on:keydown={onSubmenuKeydown}
+					onpointerenter={clearSubmenuCloseTimeout}
+					onpointerleave={scheduleSubmenuClose}
+					onpointerdown={(e) => e.stopPropagation()}
+					oncontextmenu={(e) => e.stopPropagation()}
+					onkeydown={onSubmenuKeydown}
 				>
 					<div class="rounded-lg backdrop-blur-md">
 						<div class="panel max-w-[260px] min-w-[200px] rounded-md p-1">
@@ -415,7 +415,7 @@
 									role="menuitem"
 									type="button"
 									disabled={child.disabled}
-									on:click={() => handleSubmenuItemClick(child)}
+									onclick={() => handleSubmenuItemClick(child)}
 								>
 									<span class="truncate">{child.label}</span>
 								</button>

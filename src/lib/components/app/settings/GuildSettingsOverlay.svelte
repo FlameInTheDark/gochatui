@@ -112,7 +112,7 @@
 				class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'profile'
 					? 'bg-[var(--panel)] font-semibold'
 					: ''}"
-				on:click={() => (category = 'profile')}
+				onclick={() => (category = 'profile')}
 			>
 				{m.server_profile()}
 			</button>
@@ -122,7 +122,7 @@
 				class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'roles'
 					? 'bg-[var(--panel)] font-semibold'
 					: ''}"
-				on:click={() => (category = 'roles')}
+				onclick={() => (category = 'roles')}
 			>
 				{m.roles()}
 			</button>
@@ -132,7 +132,7 @@
 				class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'moderation'
 					? 'bg-[var(--panel)] font-semibold'
 					: ''}"
-				on:click={() => (category = 'moderation')}
+				onclick={() => (category = 'moderation')}
 			>
 				{m.moderation()}
 			</button>
@@ -142,7 +142,7 @@
 				class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'invites'
 					? 'bg-[var(--panel)] font-semibold'
 					: ''}"
-				on:click={() => (category = 'invites')}
+				onclick={() => (category = 'invites')}
 			>
 				{m.invites()}
 			</button>
@@ -153,7 +153,7 @@
 				'integrations'
 					? 'bg-[var(--panel)] font-semibold'
 					: ''}"
-				on:click={() => (category = 'integrations')}
+				onclick={() => (category = 'integrations')}
 			>
 				{m.integrations()}
 			</button>
@@ -171,7 +171,7 @@
 			<div class="mt-2 flex gap-2">
 				<button
 					class="rounded bg-blue-500 px-3 py-1 text-white hover:bg-blue-600 disabled:opacity-50"
-					on:click={save}
+					onclick={save}
 					disabled={saving}
 				>
 					{saving ? m.saving() : m.save()}

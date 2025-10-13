@@ -489,7 +489,7 @@
                         }}
                         aria-current={$view === 'user' ? 'true' : 'false'}
                         aria-label={m.user_home_open_label()}
-                        on:click={openUserHome}
+                        onclick={openUserHome}
                 >
 			<User class="h-5 w-5" stroke-width={2} />
 		</button>
@@ -499,8 +499,8 @@
 			class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 				topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
 			}`}
-			on:dragover={(event) => onTopDragOver(event, 0)}
-			on:drop={(event) => onTopDrop(event, 0)}
+			ondragover={(event) => onTopDragOver(event, 0)}
+			ondrop={(event) => onTopDrop(event, 0)}
 			role="presentation"
 		></div>
 		{#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
@@ -519,13 +519,13 @@
                                                 aria-current={isGuildSelected(item.guildId) ? 'true' : 'false'}
                                                 aria-label={item.guild.name ?? 'Server'}
                                                 draggable="true"
-                                                on:dragstart={(event) => startGuildDrag(event, item.guildId, item.folderId)}
-                                                on:dragend={endDrag}
-                                                on:dragover={(event) =>
+                                                ondragstart={(event) => startGuildDrag(event, item.guildId, item.folderId)}
+                                                ondragend={endDrag}
+                                                ondragover={(event) =>
                                                         onGuildMergeOver(event, item.guildId, item.topIndex, item.folderId)}
-                                                on:drop={(event) => onGuildMergeDrop(event, item.guildId, item.topIndex)}
-                                                on:click={() => selectGuildFromSidebar(item.guildId)}
-                                                on:contextmenu={(event) => openGuildMenu(event, item.guild)}
+                                                ondrop={(event) => onGuildMergeDrop(event, item.guildId, item.topIndex)}
+                                                onclick={() => selectGuildFromSidebar(item.guildId)}
+                                                oncontextmenu={(event) => openGuildMenu(event, item.guild)}
                                         >
 						<span class="font-bold">{guildInitials(item.guild)}</span>
 						{#if guildUnread}
@@ -571,13 +571,13 @@
                                                                 placement: 'right'
                                                         }}
                                                         aria-label={folderLabel}
-							on:dragstart={(event) => startFolderDrag(event, item.folder.id)}
-							on:dragend={endDrag}
-							on:contextmenu={(event) => openFolderMenu(event, item)}
-							on:dragover={(event) =>
+							ondragstart={(event) => startFolderDrag(event, item.folder.id)}
+							ondragend={endDrag}
+							oncontextmenu={(event) => openFolderMenu(event, item)}
+							ondragover={(event) =>
 								onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
-							on:drop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
-							on:click={() =>
+							ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
+							onclick={() =>
 								(expandedFolders = {
 									...expandedFolders,
 									[item.folder.id]: !expandedFolders[item.folder.id]
@@ -629,8 +629,8 @@
 										? 'opacity-80'
 										: 'opacity-0'
 								}`}
-								on:dragover={(event) => onFolderDropZoneOver(event, item.folder.id, 0)}
-								on:drop={(event) => onFolderDrop(event, item.folder.id, 0)}
+								ondragover={(event) => onFolderDropZoneOver(event, item.folder.id, 0)}
+								ondrop={(event) => onFolderDrop(event, item.folder.id, 0)}
 								role="presentation"
 							></div>
 							{#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
@@ -655,14 +655,14 @@
                                                                                 aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
                                                                                 aria-label={nestedGuild.guild.name ?? 'Server'}
                                                                                 draggable="true"
-										on:dragstart={(event) =>
+										ondragstart={(event) =>
 											startGuildDrag(event, nestedGuild.guildId, nestedGuild.folderId)}
-										on:dragend={endDrag}
-										on:dragover={(event) =>
+										ondragend={endDrag}
+										ondragover={(event) =>
 											onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
-										on:drop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
-                                                                on:click={() => selectGuildFromSidebar(nestedGuild.guildId)}
-										on:contextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
+										ondrop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
+                                                                onclick={() => selectGuildFromSidebar(nestedGuild.guildId)}
+										oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
 									>
 										<span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
 										{#if nestedGuildUnread}
@@ -683,8 +683,8 @@
 				class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 					topDropIndex === displayIndex + 1 ? 'opacity-80' : 'opacity-0'
 				}`}
-				on:dragover={(event) => onTopDragOver(event, displayIndex + 1)}
-				on:drop={(event) => onTopDrop(event, displayIndex + 1)}
+				ondragover={(event) => onTopDragOver(event, displayIndex + 1)}
+				ondrop={(event) => onTopDrop(event, displayIndex + 1)}
 				role="presentation"
 			></div>
 		{/each}
@@ -692,7 +692,7 @@
         <div>
                 <button
                         class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                        on:click={() => (creating = !creating)}
+                        onclick={() => (creating = !creating)}
                         data-tooltip-disabled
                         use:tooltip={{
                                 content: () => m.new_server(),
@@ -709,11 +709,11 @@
 			class="fixed inset-0 z-50"
 			role="dialog"
 			tabindex="0"
-			on:click={(event) => {
+			onclick={(event) => {
 				if (event.target !== event.currentTarget) return;
 				creating = false;
 			}}
-			on:keydown={(event) => {
+			onkeydown={(event) => {
 				if (event.key === 'Escape') creating = false;
 				if (event.key === 'Enter') createGuild();
 			}}
@@ -728,7 +728,7 @@
 						class="panel relative z-10 w-64 p-3"
 						role="document"
 						tabindex="-1"
-						on:pointerdown={(event) => event.stopPropagation()}
+						onpointerdown={(event) => event.stopPropagation()}
 					>
 						<div class="mb-2 text-sm font-medium">{m.new_server()}</div>
 						{#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}
@@ -740,13 +740,13 @@
 						<div class="flex justify-end gap-2">
 							<button
 								class="rounded-md border border-[var(--stroke)] px-3 py-1"
-								on:click={() => (creating = false)}
+								onclick={() => (creating = false)}
 							>
 								{m.cancel()}
 							</button>
 							<button
 								class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-								on:click={createGuild}
+								onclick={createGuild}
 							>
 								{m.create()}
 							</button>
@@ -762,11 +762,11 @@
 			class="fixed inset-0 z-50"
 			role="dialog"
 			tabindex="0"
-			on:click={(event) => {
+			onclick={(event) => {
 				if (event.target !== event.currentTarget) return;
 				leavingGuild = null;
 			}}
-			on:keydown={(event) => {
+			onkeydown={(event) => {
 				if (event.key === 'Escape') leavingGuild = null;
 				if (event.key === 'Enter') confirmLeaveGuild();
 			}}
@@ -781,7 +781,7 @@
 						class="panel relative z-10 w-72 p-4"
 						role="document"
 						tabindex="-1"
-						on:pointerdown={(event) => event.stopPropagation()}
+						onpointerdown={(event) => event.stopPropagation()}
 					>
 						<div class="mb-2 text-base font-semibold">
 							{m.leave_server_confirm_title({ server: leavingGuild.name })}
@@ -792,13 +792,13 @@
 						<div class="flex justify-end gap-2">
 							<button
 								class="rounded-md border border-[var(--stroke)] px-3 py-1"
-								on:click={() => (leavingGuild = null)}
+								onclick={() => (leavingGuild = null)}
 							>
 								{m.cancel()}
 							</button>
 							<button
 								class="rounded-md bg-[var(--danger)] px-3 py-1 text-[var(--bg)]"
-								on:click={confirmLeaveGuild}
+								onclick={confirmLeaveGuild}
 							>
 								{m.leave_server()}
 							</button>

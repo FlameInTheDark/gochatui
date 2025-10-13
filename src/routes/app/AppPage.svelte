@@ -59,8 +59,8 @@
 </AuthGate>
 
 <svelte:window
-	on:focus={updateAppFocus}
-	on:blur={updateAppFocus}
-	on:visibilitychange={updateAppFocus}
-	on:keydown={handleKeyDown}
+	onfocus={updateAppFocus}
+	onblur={updateAppFocus}
+	onvisibilitychange={updateAppFocus}
+	onkeydown={handleKeyDown}
 />

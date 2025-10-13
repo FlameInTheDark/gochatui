@@ -79,8 +79,8 @@
 			rows={1}
 			placeholder={m.message_placeholder({ channel: channelName() })}
 			bind:value={content}
-			on:input={autoResize}
-			on:keydown={(e) => {
+			oninput={autoResize}
+			onkeydown={(e) => {
 				if (e.key === 'Enter' && !e.shiftKey) {
 					e.preventDefault();
 					send();
@@ -93,7 +93,7 @@
                 <button
                         class="grid h-8 w-8 place-items-center rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50"
                         disabled={sending}
-                        on:click={send}
+                        onclick={send}
                         aria-label={m.send()}
                 >
                         <Send class="h-[18px] w-[18px]" stroke-width={2} />

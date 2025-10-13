@@ -125,7 +125,7 @@
 	}
 </script>
 
-<svelte:window on:resize={handleWindowChange} on:scroll={handleWindowChange} />
+<svelte:window onresize={handleWindowChange} onscroll={handleWindowChange} />
 
 {#if $tooltipState.visible}
 	<div class="pointer-events-none fixed inset-0 z-[1200]">
