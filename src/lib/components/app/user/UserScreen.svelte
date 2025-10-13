@@ -430,12 +430,85 @@
 
         function extractUserCandidate(candidate: any): DtoUser | null {
                 if (!candidate) return null;
-                if (candidate.user) return candidate.user as DtoUser;
-                if (candidate.member?.user) return candidate.member.user as DtoUser;
-                if (candidate.profile?.user) return candidate.profile.user as DtoUser;
-                if (candidate.profile) return candidate.profile as DtoUser;
-                if (candidate.target) return candidate.target as DtoUser;
-                return candidate as DtoUser;
+
+                const seen = new Set<any>();
+                const queue: any[] = [candidate];
+
+                const isLikelyUser = (value: any): value is DtoUser => {
+                        if (!value || typeof value !== 'object') return false;
+                        const id =
+                                toSnowflakeString((value as any)?.id) ??
+                                toSnowflakeString((value as any)?.user_id) ??
+                                toSnowflakeString((value as any)?.userId);
+                        if (!id) return false;
+                        if (
+                                typeof (value as any)?.username === 'string' ||
+                                typeof (value as any)?.name === 'string' ||
+                                typeof (value as any)?.display_name === 'string'
+                        ) {
+                                return true;
+                        }
+                        if (typeof (value as any)?.discriminator === 'string') {
+                                return true;
+                        }
+                        if (
+                                (value as any)?.avatar != null ||
+                                (value as any)?.avatarUrl != null ||
+                                (value as any)?.avatar_url != null
+                        ) {
+                                return true;
+                        }
+                        return false;
+                };
+
+                while (queue.length) {
+                        const current = queue.shift();
+                        if (!current || typeof current !== 'object') continue;
+                        if (seen.has(current)) continue;
+                        seen.add(current);
+
+                        if (isLikelyUser(current)) {
+                                return current as DtoUser;
+                        }
+
+                        const nextCandidates: any[] = [
+                                current.user,
+                                current.member?.user,
+                                current.profile?.user,
+                                current.profile,
+                                current.target,
+                                current.relationship,
+                                current.relationship?.user,
+                                current.relationship?.member?.user,
+                                current.relationship?.profile,
+                                current.relationship?.profile?.user,
+                                current.relationship?.target,
+                                current.friend,
+                                current.friend?.user,
+                                current.friend?.profile,
+                                current.recipient,
+                                current.sender,
+                                current.initiator,
+                                current.request,
+                                current.request?.user,
+                                current.target_user,
+                                current.targetUser,
+                                current.data,
+                                current.value
+                        ];
+
+                        if (Array.isArray(current.recipients)) {
+                                nextCandidates.push(...current.recipients);
+                        }
+
+                        for (const next of nextCandidates) {
+                                if (!next || typeof next !== 'object') continue;
+                                if (seen.has(next)) continue;
+                                queue.push(next);
+                        }
+                }
+
+                return null;
         }
 
         function normalizeAvatarValue(value: any): string | null {
@@ -507,27 +580,34 @@
 	function normalizeFriendEntry(value: any, fallbackName: string): FriendEntry | null {
 		const base = extractUserCandidate(value);
 		if (!base) return null;
-		const id =
-			toSnowflakeString((base as any)?.id) ??
-			toSnowflakeString((value as any)?.user_id) ??
-			toSnowflakeString((value as any)?.userId);
-		if (!id) return null;
-		const nameSource =
-			(base as any)?.name ??
-			(base as any)?.username ??
-			(base as any)?.display_name ??
-			(value as any)?.name ??
-			(value as any)?.username ??
-			(value as any)?.display_name;
-		const name =
-			typeof nameSource === 'string' && nameSource.trim() ? nameSource.trim() : fallbackName;
-		const discSource =
-			(base as any)?.discriminator ??
-			(base as any)?.tag ??
-			(value as any)?.discriminator ??
-			(value as any)?.tag;
-		const discriminator =
-			typeof discSource === 'string' && discSource.trim() ? discSource.trim() : null;
+                const id =
+                        toSnowflakeString((base as any)?.id) ??
+                        toSnowflakeString((value as any)?.user_id) ??
+                        toSnowflakeString((value as any)?.userId) ??
+                        toSnowflakeString((value as any)?.relationship?.user_id) ??
+                        toSnowflakeString((value as any)?.relationship?.userId);
+                if (!id) return null;
+                const nameSource =
+                        (base as any)?.name ??
+                        (base as any)?.username ??
+                        (base as any)?.display_name ??
+                        (value as any)?.name ??
+                        (value as any)?.username ??
+                        (value as any)?.display_name ??
+                        (value as any)?.relationship?.name ??
+                        (value as any)?.relationship?.username ??
+                        (value as any)?.relationship?.display_name;
+                const name =
+                        typeof nameSource === 'string' && nameSource.trim() ? nameSource.trim() : fallbackName;
+                const discSource =
+                        (base as any)?.discriminator ??
+                        (base as any)?.tag ??
+                        (value as any)?.discriminator ??
+                        (value as any)?.tag ??
+                        (value as any)?.relationship?.discriminator ??
+                        (value as any)?.relationship?.tag;
+                const discriminator =
+                        typeof discSource === 'string' && discSource.trim() ? discSource.trim() : null;
                 const avatarUrl =
                         resolveAvatarUrl(base) ?? resolveAvatarUrl(value) ?? null;
                 return { id, name, discriminator, avatarUrl };
@@ -612,18 +692,41 @@
 		source: any,
 		selfId: string | null
 	): 'friend' | 'incoming_request' | 'outgoing_request' | 'blocked' | 'unknown' {
-		const rawType =
-			source?.relationship_type ??
-			source?.relationshipType ??
-			source?.type ??
-			source?.status ??
-			source?.state ??
-			source?.kind ??
-			null;
+                const relationCandidates = [
+                        source,
+                        source?.relationship,
+                        source?.relationship?.relationship,
+                        source?.friend,
+                        source?.friendship,
+                        source?.request,
+                        source?.data,
+                        source?.value
+                ];
 
-		const normalizeNumericType = (value: number) => {
-			switch (value) {
-				case 1:
+                const pick = <T>(resolver: (candidate: any) => T | null | undefined): T | null => {
+                        for (const candidate of relationCandidates) {
+                                if (!candidate) continue;
+                                const result = resolver(candidate);
+                                if (result != null) {
+                                        return result as T;
+                                }
+                        }
+                        return null;
+                };
+
+                const rawType = pick((candidate) =>
+                        candidate?.relationship_type ??
+                        candidate?.relationshipType ??
+                        candidate?.type ??
+                        candidate?.status ??
+                        candidate?.state ??
+                        candidate?.kind ??
+                        null
+                );
+
+                const normalizeNumericType = (value: number) => {
+                        switch (value) {
+                                case 1:
 					return 'friend';
 				case 2:
 					return 'blocked';
@@ -674,62 +777,74 @@
 			}
 		}
 
-		const directionField = source?.direction ?? source?.request_direction;
-		if (typeof directionField === 'string') {
-			const lowered = directionField.toLowerCase();
-			if (['incoming', 'inbound', 'received'].includes(lowered)) {
-				return 'incoming_request';
-			}
+                const directionField = pick((candidate) => candidate?.direction ?? candidate?.request_direction);
+                if (typeof directionField === 'string') {
+                        const lowered = directionField.toLowerCase();
+                        if (['incoming', 'inbound', 'received'].includes(lowered)) {
+                                return 'incoming_request';
+                        }
 			if (['outgoing', 'outbound', 'sent'].includes(lowered)) {
 				return 'outgoing_request';
 			}
 		}
 
-		const incomingLike =
-			source?.incoming ??
-			source?.is_incoming ??
-			source?.incoming_request ??
-			source?.is_received ??
-			null;
-		const outgoingLike =
-			source?.outgoing ??
-			source?.is_outgoing ??
-			source?.outgoing_request ??
-			source?.is_sent ??
-			null;
+                const incomingLike = pick((candidate) =>
+                        candidate?.incoming ??
+                        candidate?.is_incoming ??
+                        candidate?.incoming_request ??
+                        candidate?.is_received ??
+                        null
+                );
+                const outgoingLike = pick((candidate) =>
+                        candidate?.outgoing ??
+                        candidate?.is_outgoing ??
+                        candidate?.outgoing_request ??
+                        candidate?.is_sent ??
+                        null
+                );
 
-		if (incomingLike === true && outgoingLike !== true) {
-			return 'incoming_request';
-		}
-		if (outgoingLike === true && incomingLike !== true) {
-			return 'outgoing_request';
-		}
+                if (incomingLike === true && outgoingLike !== true) {
+                        return 'incoming_request';
+                }
+                if (outgoingLike === true && incomingLike !== true) {
+                        return 'outgoing_request';
+                }
 
-		const pendingLike = source?.pending ?? source?.is_pending ?? source?.request ?? null;
-		if (pendingLike === true) {
-			const initiatorId = toSnowflakeString(
-				source?.initiator_id ?? source?.initiatorId ?? source?.sender_id
-			);
-			const recipientId = toSnowflakeString(
-				source?.recipient_id ?? source?.recipientId ?? source?.target_id
-			);
-			if (selfId) {
-				if (initiatorId && initiatorId === selfId) {
-					return 'outgoing_request';
-				}
-				if (recipientId && recipientId === selfId) {
+                const pendingLike = pick((candidate) =>
+                        candidate?.pending ?? candidate?.is_pending ?? candidate?.request ?? null
+                );
+                if (pendingLike === true) {
+                        const initiatorId = toSnowflakeString(
+                                pick((candidate) =>
+                                        candidate?.initiator_id ?? candidate?.initiatorId ?? candidate?.sender_id ?? null
+                                )
+                        );
+                        const recipientId = toSnowflakeString(
+                                pick((candidate) =>
+                                        candidate?.recipient_id ?? candidate?.recipientId ?? candidate?.target_id ?? null
+                                )
+                        );
+                        if (selfId) {
+                                if (initiatorId && initiatorId === selfId) {
+                                        return 'outgoing_request';
+                                }
+                                if (recipientId && recipientId === selfId) {
 					return 'incoming_request';
 				}
 			}
 			return 'unknown';
 		}
 
-		const initiatorId = toSnowflakeString(
-			source?.initiator_id ?? source?.initiatorId ?? source?.sender_id
-		);
-		const recipientId = toSnowflakeString(
-			source?.recipient_id ?? source?.recipientId ?? source?.target_id
-		);
+                const initiatorId = toSnowflakeString(
+                        pick((candidate) =>
+                                candidate?.initiator_id ?? candidate?.initiatorId ?? candidate?.sender_id ?? null
+                        )
+                );
+                const recipientId = toSnowflakeString(
+                        pick((candidate) =>
+                                candidate?.recipient_id ?? candidate?.recipientId ?? candidate?.target_id ?? null
+                        )
+                );
 		if (selfId) {
 			if (initiatorId && initiatorId === selfId) {
 				return 'outgoing_request';
