@@ -490,30 +490,30 @@
 	<div class="flex min-h-0 flex-1 overflow-hidden">
                 <section class="flex h-full w-80 flex-shrink-0 flex-col border-r border-[var(--stroke)]">
                         <div class="flex flex-col gap-3 border-b border-[var(--stroke)] px-4 py-3">
-                                <div class="flex flex-col gap-2">
+                                <div class="flex flex-col gap-1">
                                         <button
                                                 type="button"
-                                                class={`w-full rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                                                class={`flex w-full items-center rounded px-2 py-1 text-left text-sm font-medium transition-colors hover:bg-[var(--panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
                                                         activeList === 'friends'
-                                                                ? 'bg-[var(--panel-strong)] text-[var(--text-strong)]'
+                                                                ? 'bg-[var(--panel)] text-[var(--text-strong)]'
                                                                 : 'text-[var(--muted)] hover:text-[var(--text)]'
                                                 }`}
                                                 aria-pressed={activeList === 'friends'}
                                                 on:click={() => (activeList = 'friends')}
                                         >
-                                                {m.user_home_tab_friends()}
+                                                <span class="truncate">{m.user_home_tab_friends()}</span>
                                         </button>
                                         <button
                                                 type="button"
-                                                class={`w-full rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                                                class={`flex w-full items-center rounded px-2 py-1 text-left text-sm font-medium transition-colors hover:bg-[var(--panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
                                                         activeList === 'requests'
-                                                                ? 'bg-[var(--panel-strong)] text-[var(--text-strong)]'
+                                                                ? 'bg-[var(--panel)] text-[var(--text-strong)]'
                                                                 : 'text-[var(--muted)] hover:text-[var(--text)]'
                                                 }`}
                                                 aria-pressed={activeList === 'requests'}
                                                 on:click={() => (activeList = 'requests')}
                                         >
-                                                {m.user_home_tab_requests()}
+                                                <span class="truncate">{m.user_home_tab_requests()}</span>
                                         </button>
                                 </div>
                         </div>
