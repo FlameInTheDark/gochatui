@@ -803,44 +803,37 @@
 									{/if}
 								</div>
 							</div>
-							<div class="ml-auto flex flex-wrap items-center gap-2">
-								{#if request.direction === 'incoming'}
-									<button
-										type="button"
-										class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-										on:click={() => handleFriendRequest(request.id, 'accept')}
-										disabled={processingRequestIds.has(request.id)}
-									>
-										{m.user_home_friend_accept()}
-									</button>
-									<button
-										type="button"
-										class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-										on:click={() => handleFriendRequest(request.id, 'decline')}
-										disabled={processingRequestIds.has(request.id)}
-									>
-										{m.user_home_friend_decline()}
-									</button>
-								{:else if request.direction === 'outgoing'}
-									<button
-										type="button"
-										class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-										on:click={() => handleFriendRequest(request.id, 'decline')}
-										disabled={processingRequestIds.has(request.id)}
-									>
-										{m.user_home_friend_cancel()}
-									</button>
-								{:else}
-									<button
-										type="button"
-										class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-										on:click={() => handleFriendRequest(request.id, 'decline')}
-										disabled={processingRequestIds.has(request.id)}
-									>
-										{m.user_home_friend_decline()}
-									</button>
-								{/if}
-							</div>
+                                                        <div class="ml-auto flex flex-wrap items-center gap-2">
+                                                                {#if request.direction === 'outgoing'}
+                                                                        <button
+                                                                                type="button"
+                                                                                class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                                on:click={() => handleFriendRequest(request.id, 'decline')}
+                                                                                disabled={processingRequestIds.has(request.id)}
+                                                                        >
+                                                                                {m.user_home_friend_cancel()}
+                                                                        </button>
+                                                                {:else}
+                                                                        <button
+                                                                                type="button"
+                                                                                class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                                on:click={() => handleFriendRequest(request.id, 'accept')}
+                                                                                disabled={processingRequestIds.has(request.id)}
+                                                                        >
+                                                                                {m.user_home_friend_accept()}
+                                                                        </button>
+                                                                        <button
+                                                                                type="button"
+                                                                                class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                                on:click={() => handleFriendRequest(request.id, 'decline')}
+                                                                                disabled={processingRequestIds.has(request.id)}
+                                                                        >
+                                                                                {request.direction === 'incoming'
+                                                                                        ? m.user_home_friend_decline()
+                                                                                        : m.user_home_friend_cancel()}
+                                                                        </button>
+                                                                {/if}
+                                                        </div>
 						</div>
 					{/each}
 				</div>
