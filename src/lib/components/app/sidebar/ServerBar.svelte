@@ -24,7 +24,7 @@
 	import type { GuildFolderItem, GuildLayoutItem, GuildLayoutGuild } from '$lib/stores/settings';
 	import { Folder, Plus, User } from 'lucide-svelte';
 	import { onMount } from 'svelte';
-	import { persistSelectedGuildId, selectGuild } from '$lib/utils/guildSelection';
+        import { selectGuild } from '$lib/utils/guildSelection';
 	import {
 		PERMISSION_MANAGE_CHANNELS,
 		PERMISSION_MANAGE_GUILD,
@@ -345,15 +345,14 @@
 	}
 
 	async function confirmLeaveGuild() {
-		if (!leavingGuild) return;
-		const { id } = leavingGuild;
-		leavingGuild = null;
-		await leaveGuildDirect(id);
-		if ($selectedGuildId === id) {
-			selectedGuildId.set(null);
-			persistSelectedGuildId(null);
-		}
-	}
+                if (!leavingGuild) return;
+                const { id } = leavingGuild;
+                leavingGuild = null;
+                await leaveGuildDirect(id);
+                if ($selectedGuildId === id) {
+                        selectedGuildId.set(null);
+                }
+        }
 
 	function openGuildMenu(event: MouseEvent, guild: DtoGuild) {
 		event.preventDefault();
@@ -400,38 +399,40 @@
 		return $selectedGuildId === guildId;
 	}
 
-	function selectGuildAndPersist(id: string) {
-		selectGuild(id);
-	}
+        function selectGuildFromSidebar(id: string) {
+                selectGuild(id);
+        }
 
-	function openUserHome() {
-		activeView.set('user');
-		selectedGuildId.set(null);
-		selectedChannelId.set(null);
-		channelReady.set(false);
-		persistSelectedGuildId(null);
-	}
+        function openUserHome() {
+                activeView.set('user');
+                selectedGuildId.set(null);
+                selectedChannelId.set(null);
+                channelReady.set(false);
+        }
 
-	function ensureDefaultGuildSelection() {
-		if ($view !== 'guild') return;
-		if ($selectedGuildId) return;
-		const list = $guilds ?? [];
-		if (!list.length) return;
-		let target = $appSettings.selectedGuildId ?? '';
-		if (!target) {
-			try {
-				const saved = localStorage.getItem('lastGuild');
-				if (saved) target = saved;
-			} catch {
-				/* ignore */
-			}
-		}
-		const exists = target && list.some((g: any) => String((g as any)?.id) === target);
-		const pick = exists ? target : String((list[0] as any)?.id ?? '');
-		if (pick) {
-			selectGuildAndPersist(pick);
-		}
-	}
+        function ensureDefaultGuildSelection() {
+                const list = $guilds ?? [];
+                if (!list.length) return;
+
+                const currentExists =
+                        $selectedGuildId &&
+                        list.some((g: any) => String((g as any)?.id) === $selectedGuildId);
+
+                if ($view !== 'guild') {
+                        if (!currentExists && $selectedGuildId) {
+                                selectedGuildId.set(null);
+                                channelReady.set(false);
+                        }
+                        return;
+                }
+
+                if (currentExists) return;
+
+                const fallbackId = String((list[0] as any)?.id ?? '');
+                if (fallbackId) {
+                        selectGuildFromSidebar(fallbackId);
+                }
+        }
 
 	function resolveFolderColor(color: GuildFolderItem['color']): string | null {
 		const numeric = parseColorValue(color);
@@ -517,7 +518,7 @@
 						ondragover={(event) =>
 							onGuildMergeOver(event, item.guildId, item.topIndex, item.folderId)}
 						ondrop={(event) => onGuildMergeDrop(event, item.guildId, item.topIndex)}
-						onclick={() => selectGuildAndPersist(item.guildId)}
+                                                onclick={() => selectGuildFromSidebar(item.guildId)}
 						oncontextmenu={(event) => openGuildMenu(event, item.guild)}
 					>
 						<span class="font-bold">{guildInitials(item.guild)}</span>
@@ -648,7 +649,7 @@
 										ondragover={(event) =>
 											onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
 										ondrop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
-										onclick={() => selectGuildAndPersist(nestedGuild.guildId)}
+                                                                onclick={() => selectGuildFromSidebar(nestedGuild.guildId)}
 										oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
 									>
 										<span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
