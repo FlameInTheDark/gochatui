@@ -185,11 +185,11 @@
 								type="text"
 								class="w-full rounded border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 focus:border-[var(--brand)] focus:outline-none"
 								value={drafts[folder.id].name}
-								oninput={(event) => {
+								on:input={(event) => {
 									drafts[folder.id].name = event.currentTarget.value;
 									drafts[folder.id].error = null;
 								}}
-								onblur={() => saveFolder(folder)}
+								on:blur={() => saveFolder(folder)}
 								placeholder={m.folder_name_placeholder()}
 							/>
 							{#if drafts[folder.id].error}
@@ -214,7 +214,7 @@
                                                                                 }`}
                                                                                 style={`background-color: ${normalizeHex(drafts[folder.id].color)};`}
                                                                                 aria-label={m.color_picker_custom()}
-                                                                                onclick={() => openColorPicker(folder.id)}
+                                                                                on:click={() => openColorPicker(folder.id)}
                                                                         >
                                                                                 <Palette class="h-6 w-6 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)]" />
                                                                         </button>
@@ -229,7 +229,7 @@
                                                                                                 }`}
                                                                                                 style={`background-color: ${preset};`}
                                                                                                 aria-label={`${m.folder_color()} ${preset}`}
-                                                                                                onclick={() => applyPresetColor(folder, preset)}
+                                                                                                on:click={() => applyPresetColor(folder, preset)}
                                                                                         ></button>
                                                                                 {/each}
                                                                         </div>
@@ -240,10 +240,10 @@
                                                                                 type="text"
                                                                                 class="w-32 rounded border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 font-mono text-sm focus:border-[var(--brand)] focus:outline-none"
                                                                                 value={drafts[folder.id].color}
-                                                                                oninput={(event) => {
+                                                                                on:input={(event) => {
                                                                                         drafts[folder.id].color = event.currentTarget.value.toUpperCase();
                                                                                 }}
-                                                                                onblur={() => {
+                                                                                on:blur={() => {
                                                                                         drafts[folder.id].color = normalizeHex(drafts[folder.id].color);
                                                                                         saveFolder(folder);
                                                                                 }}
@@ -254,10 +254,10 @@
                                                                         type="color"
                                                                         class="sr-only"
                                                                         value={drafts[folder.id].color}
-                                                                        oninput={(event) => {
+                                                                        on:input={(event) => {
                                                                                 drafts[folder.id].color = event.currentTarget.value.toUpperCase();
                                                                         }}
-                                                                        onchange={() => {
+                                                                        on:change={() => {
                                                                                 drafts[folder.id].color = normalizeHex(drafts[folder.id].color);
                                                                                 saveFolder(folder);
                                                                         }}
@@ -270,7 +270,7 @@
 								{#if draftIsDirty(folder, drafts[folder.id])}
 									<button
 										class="rounded bg-[var(--brand)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--brand-strong)]"
-										onclick={() => saveFolder(folder)}
+										on:click={() => saveFolder(folder)}
 									>
 										{m.save()}
 									</button>

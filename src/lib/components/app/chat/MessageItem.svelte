@@ -851,8 +851,9 @@
         }
 
         function openAuthorProfile(event: MouseEvent) {
-                const member = resolvedAuthorMember;
-                if (!member) {
+                const member = resolvedAuthorMember ?? ((message as any)?.member ?? null);
+                const user = (message as any)?.author ?? null;
+                if (!member && !user) {
                         return;
                 }
                 const target = event.currentTarget as HTMLElement | null;
@@ -868,7 +869,8 @@
                 }
 
                 memberProfilePanel.open({
-                        member,
+                        member: member ?? null,
+                        user: user ?? null,
                         guildId: $selectedGuildId,
                         anchor
                 });
@@ -878,8 +880,8 @@
 <div
         role="listitem"
         class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
-        onpointerup={handleRootPointerUp}
-        oncontextmenu={openMessageMenu}
+        on:pointerup={handleRootPointerUp}
+        on:contextmenu={openMessageMenu}
         data-message-id={messageDomId((message as any)?.id)}
 >
 	{#if compact}
@@ -896,8 +898,8 @@
                         data-user-menu="true"
                         data-tooltip-disabled
                         aria-label={message.author?.name ?? 'User'}
-                        oncontextmenu={openUserMenu}
-                        onclick={openAuthorProfile}
+                        on:contextmenu={openUserMenu}
+                        on:click={openAuthorProfile}
                 >
                         {(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
                 </button>
@@ -911,7 +913,7 @@
                                         <button
                                                 class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
                                                 aria-label="Edit"
-						onclick={() => {
+						on:click={() => {
 							void startEditing();
 						}}
 					>
@@ -922,7 +924,7 @@
                                         <button
                                                 class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
                                                 aria-label="Delete"
-						onclick={deleteMsg}
+						on:click={deleteMsg}
 					>
 						<Trash2 class="h-3.5 w-3.5" stroke-width={2} />
 					</button>
@@ -937,8 +939,8 @@
                                         style:color={primaryRoleColor ?? null}
                                         data-user-menu="true"
                                         data-tooltip-disabled
-                                        oncontextmenu={openUserMenu}
-                                        onclick={openAuthorProfile}
+                                        on:contextmenu={openUserMenu}
+                                        on:click={openAuthorProfile}
                                 >
                                         {message.author?.name ?? 'User'}
                                 </button>
@@ -954,17 +956,17 @@
 					bind:this={editTextarea}
 					bind:value={draft}
 					style:overflow-y={'hidden'}
-					oninput={autoSizeEditTextarea}
+					on:input={autoSizeEditTextarea}
 				></textarea>
 				<div class="mt-1 flex gap-2 text-sm">
 					<button
 						class="rounded-md bg-[var(--brand)] px-2 py-1 text-[var(--bg)]"
 						disabled={saving}
-						onclick={saveEdit}>{saving ? 'Saving…' : 'Save'}</button
+						on:click={saveEdit}>{saving ? 'Saving…' : 'Save'}</button
 					>
 					<button
 						class="rounded-md border border-[var(--stroke)] px-2 py-1"
-						onclick={() => (isEditing = false)}>Cancel</button
+						on:click={() => (isEditing = false)}>Cancel</button
 					>
 				</div>
 			</div>

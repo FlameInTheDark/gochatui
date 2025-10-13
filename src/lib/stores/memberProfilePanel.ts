@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import type { DtoMember } from '$lib/api';
+import type { DtoMember, DtoUser } from '$lib/api';
 
 export type MemberProfilePanelAnchor = {
         x: number;
@@ -11,6 +11,7 @@ export type MemberProfilePanelAnchor = {
 export type MemberProfilePanelState = {
         open: boolean;
         member: DtoMember | null;
+        user: DtoUser | null;
         guildId: string | null;
         anchor: MemberProfilePanelAnchor | null;
 };
@@ -18,6 +19,7 @@ export type MemberProfilePanelState = {
 const initialState: MemberProfilePanelState = {
         open: false,
         member: null,
+        user: null,
         guildId: null,
         anchor: null
 };
@@ -28,16 +30,19 @@ export const memberProfilePanel = {
         subscribe: state.subscribe,
         open({
                 member,
+                user,
                 guildId,
                 anchor
         }: {
                 member: DtoMember | null;
+                user: DtoUser | null;
                 guildId: string | null;
                 anchor: MemberProfilePanelAnchor | null;
         }) {
                 state.set({
                         open: true,
                         member: member ?? null,
+                        user: user ?? null,
                         guildId: guildId ?? null,
                         anchor: anchor ?? null
                 });

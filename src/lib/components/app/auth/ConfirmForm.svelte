@@ -82,7 +82,7 @@
 
 <form
 	class="space-y-3"
-	onsubmit={(e) => {
+	on:submit={(e) => {
 		e.preventDefault();
 		onSubmit();
 	}}

@@ -124,6 +124,7 @@ function walkButtons(root: Node, callback: (button: HTMLButtonElement) => void) 
 
 export const tooltipButtons: Action<HTMLElement, void> = (node) => {
         const instances = new Map<HTMLButtonElement, TooltipInstance>();
+        const captureOptions = { capture: true } as const;
 
         function handleAdd(root: Node) {
                 walkButtons(root, (button) => applyTooltip(button, instances));
@@ -134,6 +135,21 @@ export const tooltipButtons: Action<HTMLElement, void> = (node) => {
         }
 
         handleAdd(node);
+
+        function handlePointerOver(event: PointerEvent) {
+                const button = findButton(event.target as Node);
+                if (!button) return;
+                applyTooltip(button, instances);
+        }
+
+        function handleFocusIn(event: FocusEvent) {
+                const button = findButton(event.target as Node);
+                if (!button) return;
+                applyTooltip(button, instances);
+        }
+
+        node.addEventListener('pointerover', handlePointerOver, captureOptions);
+        node.addEventListener('focusin', handleFocusIn, captureOptions);
 
         const observer = new MutationObserver((mutations) => {
                 for (const mutation of mutations) {
@@ -178,6 +194,8 @@ export const tooltipButtons: Action<HTMLElement, void> = (node) => {
         return {
                 destroy() {
                         observer.disconnect();
+                        node.removeEventListener('pointerover', handlePointerOver, captureOptions);
+                        node.removeEventListener('focusin', handleFocusIn, captureOptions);
                         for (const [, instance] of instances) {
                                 instance.destroy?.();
                         }

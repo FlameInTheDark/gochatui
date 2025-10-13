@@ -173,7 +173,7 @@
 		<p class="mt-1 text-sm text-[var(--fg-muted)]">{m.invite_manage_description()}</p>
 	</div>
 
-	<form class="space-y-3" onsubmit={handleSubmit}>
+	<form class="space-y-3" on:submit={handleSubmit}>
                 <div class="space-y-2">
                         <div>
                                 <label class="mb-1 block text-sm font-medium" for="invite-expiration">
@@ -222,7 +222,7 @@
 			<button
 				class="rounded border border-[var(--stroke)] px-3 py-1.5 text-sm hover:bg-[var(--panel-strong)]"
 				type="button"
-				onclick={loadInvites}
+				on:click={loadInvites}
 				disabled={loading}
 			>
 				{loading ? m.loading() : m.invite_refresh()}
@@ -272,7 +272,7 @@
                                                                         <button
                                                                                 class="rounded border border-[var(--stroke)] px-2 py-1 text-xs font-medium hover:bg-[var(--panel-strong)] disabled:opacity-50"
                                                                                 type="button"
-                                                                                onclick={() => copyInvite(invite)}
+                                                                                on:click={() => copyInvite(invite)}
                                                                                 disabled={copyingId === invite.id}
                                                                         >
                                                                                 {copyingId === invite.id ? m.invite_copying() : m.invite_copy_link()}
@@ -280,7 +280,7 @@
                                                                         <button
                                                                                 class="rounded border border-red-500/60 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-500/10 disabled:opacity-50"
                                                                                 type="button"
-                                                                                onclick={() => deleteInvite(invite.id)}
+                                                                                on:click={() => deleteInvite(invite.id)}
                                                                                 disabled={deletingId === invite.id}
                                                                         >
                                                                                 {deletingId === invite.id ? m.loading() : m.delete()}
