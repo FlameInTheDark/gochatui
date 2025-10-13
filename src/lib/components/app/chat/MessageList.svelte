@@ -18,6 +18,7 @@
         import { Sparkles } from 'lucide-svelte';
         import {
                 guildChannelReadStateLookup,
+                dmChannelMetadataLookup,
                 mutateAppSettingsWithoutSaving,
                 type GuildChannelReadState,
                 type GuildLayoutGuild,
@@ -370,9 +371,17 @@
                 const gid = $selectedGuildId ?? '';
                 const cid = $selectedChannelId ?? '';
                 const lookup = $guildChannelReadStateLookup;
+                const dmLookup = $dmChannelMetadataLookup;
                 if (!atBottom || !gid || !cid || !messageId) {
                         clearAckTimer();
                         return;
+                }
+                if (gid === '@me') {
+                        const metadata = dmLookup?.[cid] ?? null;
+                        if (metadata?.isDead) {
+                                clearAckTimer();
+                                return;
+                        }
                 }
                 const key = `${gid}:${cid}`;
                 const persisted = lastPersistedReadStates.get(key);
