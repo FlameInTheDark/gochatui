@@ -81,6 +81,8 @@
         let openingDmChannelIds = new Set<string>();
         let friendDirectory: Map<string, FriendEntry> = new Map();
         const pendingDmRequests = new Map<string, Promise<string | null>>();
+        let dmChannelMetadataRequest: Promise<void> | null = null;
+        let dmChannelMetadataToken = 0;
 
 	function toSnowflakeString(value: unknown): string | null {
 		if (value == null) return null;
@@ -890,7 +892,7 @@
                         }
                         result.push(normalized);
                 }
-		for (const entry of $settingsStore.dmChannels) {
+                for (const entry of $settingsStore.dmChannels) {
                         const channelId = toSnowflakeString(entry.channelId);
                         if (!channelId || seen.has(channelId)) continue;
                         seen.add(channelId);
@@ -907,6 +909,66 @@
                 result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
                 directChannels = result;
         }
+
+        async function ensureVisibleDmChannelMetadata(): Promise<void> {
+                const settings = $settingsStore;
+                const map = $channelsByGuild;
+                const visible = Array.isArray(settings.dmChannels)
+                        ? settings.dmChannels.map((entry) => toSnowflakeString(entry.channelId)).filter(Boolean)
+                        : [];
+                if (!visible.length) return;
+                const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
+                const existing = new Set(
+                        existingList
+                                .map((channel: any) => toSnowflakeString((channel as any)?.id))
+                                .filter((id): id is string => Boolean(id))
+                );
+                const missing = visible.filter((id) => !existing.has(id));
+                if (!missing.length) return;
+                const token = ++dmChannelMetadataToken;
+                try {
+                        const response = await api.user.userMeChannelsGet();
+                        if (dmChannelMetadataToken !== token) return;
+                        const fetched = Array.isArray(response?.data) ? response.data : [];
+                        if (!fetched.length) return;
+                        channelsByGuild.update((current) => {
+                                const existingChannels = Array.isArray(current['@me']) ? current['@me'] : [];
+                                const byId = new Map<string, DtoChannel>();
+                                for (const channel of existingChannels) {
+                                        const id = toSnowflakeString((channel as any)?.id);
+                                        if (!id) continue;
+                                        byId.set(id, channel as DtoChannel);
+                                }
+                                for (const entry of fetched) {
+                                        const normalized = normalizeDtoChannel(entry) as DtoChannel;
+                                        const id = toSnowflakeString((normalized as any)?.id);
+                                        if (!id) continue;
+                                        byId.set(id, normalized);
+                                }
+                                return { ...current, ['@me']: Array.from(byId.values()) };
+                        });
+                } catch (error) {
+                        console.error('Failed to load DM channels', error);
+                }
+        }
+
+        $effect(() => {
+                const dmEntries = $settingsStore.dmChannels;
+                const dmList = $channelsByGuild['@me'] ?? [];
+                const missing = dmEntries.some((entry) => {
+                        const id = toSnowflakeString(entry.channelId);
+                        if (!id) return false;
+                        return !dmList.some((channel: any) => toSnowflakeString((channel as any)?.id) === id);
+                });
+                if (!missing) return;
+                if (dmChannelMetadataRequest) return;
+                const request = ensureVisibleDmChannelMetadata().finally(() => {
+                        if (dmChannelMetadataRequest === request) {
+                                dmChannelMetadataRequest = null;
+                        }
+                });
+                dmChannelMetadataRequest = request;
+        });
 
         $: {
                 const current = directChannels.find((entry) => entry.id === activeDmChannelId) ?? null;
