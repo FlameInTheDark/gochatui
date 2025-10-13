@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { DtoChannel, DtoUser } from '$lib/api';
 	import { m } from '$lib/paraglide/messages.js';
-	import DmCreate from '$lib/components/app/dm/DmCreate.svelte';
         import { auth } from '$lib/stores/auth';
         import { channelsByGuild } from '$lib/stores/appState';
         import UserPanel from '$lib/components/app/user/UserPanel.svelte';
@@ -479,16 +478,15 @@
 </script>
 
 <div class="col-span-2 flex h-full min-h-0 flex-col overflow-hidden">
-	<div
-		class="flex h-[var(--header-h)] flex-shrink-0 items-center justify-between border-b border-[var(--stroke)] px-5"
-	>
-		<h1 class="text-base font-semibold">{m.user_home_header()}</h1>
-		<div class="flex items-center gap-2">
-			<DmCreate />
-		</div>
-	</div>
-	<div class="flex min-h-0 flex-1 overflow-hidden">
-                <section class="flex h-full w-80 flex-shrink-0 flex-col border-r border-[var(--stroke)]">
+        <div
+                class="flex h-[var(--header-h)] flex-shrink-0 items-center border-b border-[var(--stroke)] px-5"
+        >
+                <h1 class="text-base font-semibold">{m.user_home_header()}</h1>
+        </div>
+        <div class="flex min-h-0 flex-1 overflow-hidden">
+                <section
+                        class="flex h-full min-h-0 w-[var(--col2)] flex-shrink-0 flex-col overflow-hidden border-r border-[var(--stroke)]"
+                >
                         <div class="flex flex-col gap-3 border-b border-[var(--stroke)] px-4 py-3">
                                 <div class="flex flex-col gap-1">
                                         <button
