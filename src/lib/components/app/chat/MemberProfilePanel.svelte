@@ -170,7 +170,42 @@
                 toSnowflakeString((selectedMember as any)?.user?.avatar) ??
                 toSnowflakeString((selectedUser as any)?.avatar)
         );
-        const avatarUrl = $derived.by(() => (avatarId ? buildAttachmentUrl(avatarId) : null));
+
+        function resolveFallbackAvatarUrl(): string | null {
+                const member = selectedMember;
+                const user = selectedUser;
+                const candidates = [
+                        (member as any)?.avatarUrl,
+                        (member as any)?.avatar_url,
+                        (member as any)?.user?.avatarUrl,
+                        (member as any)?.user?.avatar_url,
+                        (member as any)?.user?.avatarURL,
+                        (user as any)?.avatarUrl,
+                        (user as any)?.avatar_url,
+                        (user as any)?.avatarURL,
+                        (user as any)?.profile?.avatarUrl,
+                        (user as any)?.profile?.avatar_url
+                ];
+                for (const candidate of candidates) {
+                        if (typeof candidate !== 'string') continue;
+                        const trimmed = candidate.trim();
+                        if (trimmed) {
+                                return trimmed;
+                        }
+                }
+                return null;
+        }
+
+        const avatarUrl = $derived.by(() => {
+                const id = avatarId;
+                if (id) {
+                        const built = buildAttachmentUrl(id);
+                        if (built) {
+                                return built;
+                        }
+                }
+                return resolveFallbackAvatarUrl();
+        });
 
         const guildId = $derived.by(() => $memberProfilePanel.guildId ?? null);
 
