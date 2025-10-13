@@ -26,7 +26,7 @@
                 presenceByUser,
                 presenceIndicatorClass
         } from '$lib/stores/presence';
-        import { ArrowLeft, X } from 'lucide-svelte';
+        import { X } from 'lucide-svelte';
 
         type FriendEntry = {
                 id: string;
@@ -428,6 +428,13 @@
                         selectedGuildId.set(null);
                 }
                 activeView.set('user');
+        }
+
+        function activateList(next: 'friends' | 'requests') {
+                activeList = next;
+                if (activeDmChannelId) {
+                        clearActiveDmChannel();
+                }
         }
 
         onMount(() => {
@@ -1371,28 +1378,28 @@
 		>
 			<div class="flex flex-col gap-3 border-b border-[var(--stroke)] px-4 py-3">
 				<div class="flex flex-col gap-1">
-					<button
-						type="button"
-						class={`flex w-full items-center rounded px-2 py-1 text-left text-sm font-medium transition-colors hover:bg-[var(--panel)] focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:outline-none ${
-							activeList === 'friends'
-								? 'bg-[var(--panel)] text-[var(--text-strong)]'
-								: 'text-[var(--muted)] hover:text-[var(--text)]'
-						}`}
-						aria-pressed={activeList === 'friends'}
-						onclick={() => (activeList = 'friends')}
-					>
-						<span class="truncate">{m.user_home_tab_friends()}</span>
-					</button>
-					<button
-						type="button"
-						class={`flex w-full items-center rounded px-2 py-1 text-left text-sm font-medium transition-colors hover:bg-[var(--panel)] focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:outline-none ${
-							activeList === 'requests'
-								? 'bg-[var(--panel)] text-[var(--text-strong)]'
-								: 'text-[var(--muted)] hover:text-[var(--text)]'
-						}`}
-						aria-pressed={activeList === 'requests'}
-						onclick={() => (activeList = 'requests')}
-					>
+                                        <button
+                                                type="button"
+                                                class={`flex w-full items-center rounded px-2 py-1 text-left text-sm font-medium transition-colors hover:bg-[var(--panel)] focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:outline-none ${
+                                                        activeList === 'friends'
+                                                                ? 'bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                : 'text-[var(--muted)] hover:text-[var(--text)]'
+                                                }`}
+                                                aria-pressed={activeList === 'friends'}
+                                                onclick={() => activateList('friends')}
+                                        >
+                                                <span class="truncate">{m.user_home_tab_friends()}</span>
+                                        </button>
+                                        <button
+                                                type="button"
+                                                class={`flex w-full items-center rounded px-2 py-1 text-left text-sm font-medium transition-colors hover:bg-[var(--panel)] focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:outline-none ${
+                                                        activeList === 'requests'
+                                                                ? 'bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                : 'text-[var(--muted)] hover:text-[var(--text)]'
+                                                }`}
+                                                aria-pressed={activeList === 'requests'}
+                                                onclick={() => activateList('requests')}
+                                        >
 						<span class="truncate">{m.user_home_tab_requests()}</span>
 					</button>
 				</div>
@@ -1497,14 +1504,6 @@
                 <section class="flex flex-1 flex-col overflow-hidden">
                         {#if activeDmChannel}
                                 <div class="flex h-[var(--header-h)] flex-shrink-0 items-center gap-4 border-b border-[var(--stroke)] px-6">
-                                        <button
-                                                type="button"
-                                                class="flex items-center gap-2 rounded-md border border-[var(--stroke)] px-3 py-1 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
-                                                onclick={clearActiveDmChannel}
-                                        >
-                                                <ArrowLeft class="h-4 w-4" stroke-width={2} />
-                                                <span>{m.user_home_tab_friends()}</span>
-                                        </button>
                                         <div class="flex min-w-0 items-center gap-3">
                                                 <div class="grid h-12 w-12 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-base font-semibold">
                                                         {#if activeDmAvatarUrl}
