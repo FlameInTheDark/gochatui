@@ -158,6 +158,39 @@
                 mutateAppSettingsWithoutSaving((settings) => {
                         let changed = false;
                         for (const [guildId, states] of updatesByGuild) {
+                                if (guildId === '@me') {
+                                        if (!Array.isArray(settings.dmChannels) || !settings.dmChannels.length) {
+                                                continue;
+                                        }
+                                        const nextDmChannels = settings.dmChannels.map((entry) => ({
+                                                channelId: entry.channelId,
+                                                userId: entry.userId,
+                                                isDead: entry.isDead ?? false,
+                                                lastReadMessageId: entry.lastReadMessageId ?? null
+                                        }));
+                                        let dmChanged = false;
+                                        for (const state of states) {
+                                                const idx = nextDmChannels.findIndex(
+                                                        (entry) => entry.channelId === state.channelId
+                                                );
+                                                if (idx === -1) continue;
+                                                const current = nextDmChannels[idx];
+                                                const nextLastRead = state.lastReadMessageId ?? null;
+                                                if ((current.lastReadMessageId ?? null) === nextLastRead) {
+                                                        continue;
+                                                }
+                                                nextDmChannels[idx] = {
+                                                        ...current,
+                                                        lastReadMessageId: nextLastRead
+                                                };
+                                                dmChanged = true;
+                                        }
+                                        if (dmChanged) {
+                                                settings.dmChannels = nextDmChannels;
+                                                changed = true;
+                                        }
+                                        continue;
+                                }
                                 const entry = findGuildLayoutEntry(settings.guildLayout, guildId);
                                 if (!entry) continue;
                                 const existing = Array.isArray(entry.readStates) ? [...entry.readStates] : [];
