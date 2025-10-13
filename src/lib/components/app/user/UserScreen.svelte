@@ -1438,6 +1438,7 @@
                                                                                         : null}
                                                                 {@const presenceInfo = targetId ? $presenceMap[targetId] ?? null : null}
                                                                 {@const presenceStatus = presenceInfo?.status ?? null}
+                                                                {@const customStatus = presenceInfo?.customStatusText ?? null}
                                                                 <li>
                                                                         <div class={`group relative ${isLoading ? 'opacity-70' : ''}`}>
                                                                                 <button
@@ -1470,6 +1471,9 @@
                                                                                                 <div class="truncate text-sm font-semibold">{displayName}</div>
                                                                                                 {#if secondaryLine}
                                                                                                         <div class="truncate text-xs text-[var(--muted)]">{secondaryLine}</div>
+                                                                                                {/if}
+                                                                                                {#if customStatus}
+                                                                                                        <div class="truncate text-xs text-[var(--muted)]">{customStatus}</div>
                                                                                                 {/if}
                                                                                         </div>
                                                                                 </button>
@@ -1548,6 +1552,7 @@
                                                                         {@const isActiveFriend = activeDmTargetId === friend.id}
                                                                         {@const friendPresence = $presenceMap[friend.id] ?? null}
                                                                         {@const friendPresenceStatus = friendPresence?.status ?? null}
+                                                                        {@const friendCustomStatus = friendPresence?.customStatusText ?? null}
                                                                         <div class="flex items-center gap-2">
                                                                                 <button
                                                                                         type="button"
@@ -1574,8 +1579,8 @@
                                                                                         </div>
                                                                                         <div class="min-w-0 flex-1">
                                                                                                 <div class="truncate text-sm font-semibold">{friend.name}</div>
-                                                                                                {#if friend.discriminator}
-                                                                                                        <div class="truncate text-xs text-[var(--muted)]">#{friend.discriminator}</div>
+                                                                                                {#if friendCustomStatus}
+                                                                                                        <div class="truncate text-xs text-[var(--muted)]">{friendCustomStatus}</div>
                                                                                                 {/if}
                                                                                         </div>
                                                                                 </button>
