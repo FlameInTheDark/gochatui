@@ -452,7 +452,7 @@
                 class="fixed inset-0 z-[1000]"
                 role="button"
                 tabindex="0"
-                onclick={(event) => {
+                on:click={(event) => {
                         if (event.target !== event.currentTarget) return;
                         if (pendingFilter) {
                                 closeFilterPrompt();
@@ -462,7 +462,7 @@
                                 searchOpen.set(false);
                         }
                 }}
-                onkeydown={(e) => {
+                on:keydown={(e) => {
                         if (e.key === 'Escape') {
                                 if (pendingFilter) {
                                         closeFilterPrompt();
@@ -486,12 +486,12 @@
                                         class="panel relative z-10 w-[min(90vw,720px)] p-5"
                                         role="dialog"
                                         tabindex="-1"
-                                        onpointerdown={(e) => e.stopPropagation()}
+                                        on:pointerdown={(e) => e.stopPropagation()}
                                 >
                                         <div class="flex flex-col gap-3">
                                                 <div
                                                         class="relative"
-                                                        onpointerdown={(event) => {
+                                                        on:pointerdown={(event) => {
                                                                 if (
                                                                         showKeywordHelp &&
                                                                         !(event.target as HTMLElement | null)?.closest('#search-filter-help') &&
@@ -517,7 +517,7 @@
                                                                                         class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                                         type="button"
                                                                                         aria-label={m.search_filter_remove()}
-                                                                                        onclick={(event) => {
+                                                                                        on:click={(event) => {
                                                                                                 event.stopPropagation();
                                                                                                 removeAuthor();
                                                                                         }}
@@ -538,7 +538,7 @@
                                                                                         class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                                         type="button"
                                                                                         aria-label={m.search_filter_remove()}
-                                                                                        onclick={(event) => {
+                                                                                        on:click={(event) => {
                                                                                                 event.stopPropagation();
                                                                                                 removeMention(index);
                                                                                         }}
@@ -559,7 +559,7 @@
                                                                                         class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                                         type="button"
                                                                                         aria-label={m.search_filter_remove()}
-                                                                                        onclick={(event) => {
+                                                                                        on:click={(event) => {
                                                                                                 event.stopPropagation();
                                                                                                 removeHas(option);
                                                                                         }}
@@ -582,13 +582,13 @@
                                                                                 ? m.search_filter_from_placeholder()
                                                                                 : m.search_filter_mentions_placeholder()}
                                                                         bind:value={pendingValue}
-                                                                        onkeydown={onPromptKeydown}
+                                                                        on:keydown={onPromptKeydown}
                                                                 />
                                                                 <button
                                                                         class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                         type="button"
                                                                         aria-label={m.search_filter_cancel()}
-                                                                        onclick={(event) => {
+                                                                        on:click={(event) => {
                                                                                 event.stopPropagation();
                                                                                 closeFilterPrompt();
                                                                         }}
@@ -598,7 +598,7 @@
                                                                 <button
                                                                         class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand)]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 disabled:opacity-50"
                                                                         type="button"
-                                                                        onclick={(event) => {
+                                                                        on:click={(event) => {
                                                                                 event.stopPropagation();
                                                                                 applyPendingFilter();
                                                                         }}
@@ -615,7 +615,7 @@
                                                                         class="w-32 border-none bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:outline-none focus-visible:outline-none focus-visible:ring-0"
                                                                         placeholder={m.search_filter_has_placeholder()}
                                                                         bind:value={pendingValue}
-                                                                        onkeydown={onPromptKeydown}
+                                                                        on:keydown={onPromptKeydown}
                                                                 />
                                                                 <div class="flex flex-wrap gap-1">
                                                                         {#each hasOptions as option}
@@ -626,7 +626,7 @@
                                                                                                         : 'border-[var(--stroke)] text-[var(--fg)] hover:bg-[var(--panel)]'
                                                                                         }`}
                                                                                         type="button"
-                                                                                        onclick={(event) => {
+                                                                                        on:click={(event) => {
                                                                                                 event.stopPropagation();
                                                                                                 applyHasOption(option.value);
                                                                                         }}
@@ -639,7 +639,7 @@
                                                                         class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
                                                                         type="button"
                                                                         aria-label={m.search_filter_cancel()}
-                                                                        onclick={(event) => {
+                                                                        on:click={(event) => {
                                                                                 event.stopPropagation();
                                                                                 closeFilterPrompt();
                                                                         }}
@@ -649,7 +649,7 @@
                                                                 <button
                                                                         class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand)]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 disabled:opacity-50"
                                                                         type="button"
-                                                                        onclick={(event) => {
+                                                                        on:click={(event) => {
                                                                                 event.stopPropagation();
                                                                                 applyPendingFilter();
                                                                         }}
@@ -664,8 +664,8 @@
                                                         class="min-w-[6rem] flex-1 border-none bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:outline-none focus-visible:outline-none focus-visible:ring-0"
                                                         placeholder={m.search_placeholder()}
                                                         bind:value={inputValue}
-                                                        oninput={onInputChange}
-                                                        onkeydown={onSearchInputKeydown}
+                                                        on:input={onInputChange}
+                                                        on:keydown={onSearchInputKeydown}
                                                 />
                                                 <button
                                                         id="search-filter-help-button"
@@ -675,7 +675,7 @@
                                                         aria-expanded={showKeywordHelp}
                                                         aria-controls="search-filter-help"
                                                         aria-label={m.search_filter_help_label()}
-                                                        onclick={(event) => {
+                                                        on:click={(event) => {
                                                                 event.stopPropagation();
                                                                 if (pendingFilter) {
                                                                         closeFilterPrompt();
@@ -688,7 +688,7 @@
                                                 <button
                                                         class="ml-2 shrink-0 rounded-md bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand)]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 disabled:opacity-50"
                                                         type="button"
-                                                        onclick={() => {
+                                                        on:click={() => {
                                                                 showKeywordHelp = false;
                                                                 page = 0;
                                                                 doSearch();
@@ -744,8 +744,8 @@
                                                                 class="group/result flex cursor-pointer gap-3 rounded-lg border border-transparent px-3 py-2 transition hover:border-[var(--stroke)] hover:bg-[var(--panel)]"
                                                                 role="button"
                                                                 tabindex="0"
-                                                                onclick={() => openMessage(message)}
-                                                                onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && openMessage(message)}
+                                                                on:click={() => openMessage(message)}
+                                                                on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openMessage(message)}
                                                         >
                                                                 <div
                                                                         class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel)] text-sm font-semibold text-[var(--fg)]"
@@ -794,7 +794,7 @@
                                                         class="rounded-md border border-[var(--stroke)] px-2 py-1 text-sm disabled:opacity-50"
                                                         aria-label={m.pager_prev()}
                                                         disabled={loading || page <= 0}
-                                                        onclick={() => {
+                                                        on:click={() => {
                                                                 if (page > 0) {
                                                                         page -= 1;
                                                                         doSearch();
@@ -812,7 +812,7 @@
                                                                                 p === page ? 'bg-[var(--panel)]' : ''
                                                                         }`}
                                                                         aria-current={p === page ? 'page' : undefined}
-                                                                        onclick={() => {
+                                                                        on:click={() => {
                                                                                 if (!loading && p !== page) {
                                                                                         page = p;
                                                                                         doSearch();
@@ -828,7 +828,7 @@
                                                         class="rounded-md border border-[var(--stroke)] px-2 py-1 text-sm disabled:opacity-50"
                                                         aria-label={m.pager_next()}
                                                         disabled={loading || (pages ? page >= pages - 1 : false)}
-                                                        onclick={() => {
+                                                        on:click={() => {
                                                                 if (!pages || page < pages - 1) {
                                                                         page += 1;
                                                                         doSearch();

@@ -75,7 +75,7 @@
                                         <button
                                                 class="underline"
                                                 type="button"
-                                                onclick={() => {
+                                                on:click={() => {
                                                         registerEmail = null;
                                                         mode = 'register';
                                                 }}
@@ -85,7 +85,7 @@
                                         <button
                                                 class="underline"
                                                 type="button"
-                                                onclick={() => (mode = 'recovery')}
+                                                on:click={() => (mode = 'recovery')}
                                         >
                                                 {m.auth_forgot()}
                                         </button>
@@ -95,7 +95,7 @@
                                         <button
                                                 class="underline"
                                                 type="button"
-                                                onclick={() => (mode = 'confirm')}
+                                                on:click={() => (mode = 'confirm')}
                                         >
                                                 {m.auth_confirm_word()}
                                         </button>
@@ -103,7 +103,7 @@
                                         <button
                                                 class="underline"
                                                 type="button"
-                                                onclick={() => (mode = 'reset')}
+                                                on:click={() => (mode = 'reset')}
                                         >
                                                 {m.auth_reset_word()}
                                         </button>
@@ -120,7 +120,7 @@
                                         <button
                                                 class="underline"
                                                 type="button"
-                                                onclick={() => (mode = 'login')}
+                                                on:click={() => (mode = 'login')}
                                         >
                                                 {m.auth_back_to_sign_in()}
                                         </button>
@@ -146,7 +146,7 @@
                                         <button
                                                 class="w-full rounded-md bg-[var(--brand)] py-2 font-medium text-[var(--bg)]"
                                                 type="button"
-                                                onclick={() => {
+                                                on:click={() => {
                                                         mode = 'login';
                                                         registerEmail = null;
                                                 }}
@@ -157,7 +157,7 @@
                                                 <button
                                                         class="underline"
                                                         type="button"
-                                                        onclick={() => {
+                                                        on:click={() => {
                                                                 registerEmail = null;
                                                                 mode = 'register';
                                                         }}
@@ -172,21 +172,21 @@
                                         on:success={() => (mode = 'login')}
                                 />
                                 <div class="mt-3 text-sm text-[var(--muted)]">
-                                        <button class="underline" onclick={() => (mode = 'login')}
+                                        <button class="underline" on:click={() => (mode = 'login')}
                                                 >{m.auth_back_to_sign_in()}</button
                                         >
                                 </div>
                         {:else if mode === 'recovery'}
                                 <RecoveryForm />
                                 <div class="mt-3 text-sm text-[var(--muted)]">
-                                        <button class="underline" onclick={() => (mode = 'login')}
+                                        <button class="underline" on:click={() => (mode = 'login')}
                                                 >{m.auth_back_to_sign_in()}</button
                                         >
                                 </div>
                         {:else if mode === 'reset'}
                                 <ResetForm defaults={resetDefaults} />
                                 <div class="mt-3 text-sm text-[var(--muted)]">
-                                        <button class="underline" onclick={() => (mode = 'login')}
+                                        <button class="underline" on:click={() => (mode = 'login')}
                                                 >{m.auth_back_to_sign_in()}</button
                                         >
                                 </div>

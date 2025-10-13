@@ -66,7 +66,7 @@
 <div>
         <button
                 class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                onclick={() => (open = true)}
+                on:click={() => (open = true)}
                 aria-label={m.new_dm()}
         >
                 <MessageCirclePlus class="h-4 w-4" stroke-width={2} />
@@ -76,14 +76,14 @@
 			class="fixed inset-0 z-40 grid place-items-center bg-black/40"
 			role="button"
 			tabindex="0"
-			onclick={() => (open = false)}
-			onkeydown={(e) => (e.key === 'Escape' || e.key === 'Enter') && (open = false)}
+			on:click={() => (open = false)}
+			on:keydown={(e) => (e.key === 'Escape' || e.key === 'Enter') && (open = false)}
 		>
 			<div
 				class="panel w-full max-w-md p-4"
 				role="dialog"
 				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
+				on:pointerdown={(e) => e.stopPropagation()}
 			>
 				<div class="mb-2 text-sm font-medium">{m.create_dm()}</div>
 				{#if error}<div class="mb-2 text-sm text-red-500">{error}</div>{/if}
@@ -99,7 +99,7 @@
 							<button
 								class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:opacity-50"
 								disabled={loading}
-								onclick={createSingle}>{m.create_dm()}</button
+								on:click={createSingle}>{m.create_dm()}</button
 							>
 						</div>
 					</div>
@@ -114,7 +114,7 @@
 							<button
 								class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:opacity-50"
 								disabled={loading}
-								onclick={createGroup}>{m.create_group_dm()}</button
+								on:click={createGroup}>{m.create_group_dm()}</button
 							>
 						</div>
 					</div>

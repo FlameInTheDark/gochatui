@@ -2,6 +2,10 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import type { DtoChannel, DtoMember, DtoMessage } from '$lib/api';
 
+export type AppView = 'user' | 'guild';
+
+export const activeView = writable<AppView>('user');
+
 export const selectedGuildId = writable<string | null>(null);
 export const selectedChannelId = writable<string | null>(null);
 
@@ -24,18 +28,15 @@ export const lastChannelByGuild = writable<Record<string, string>>({});
 export const channelReady = writable(false);
 
 // Cross-component request to jump to a specific message within a channel
-export const messageJumpRequest = writable<
-        | {
-                channelId: string;
-                messageId: string;
-        }
-        | null
->(null);
+export const messageJumpRequest = writable<{
+	channelId: string;
+	messageId: string;
+} | null>(null);
 
 // Guild settings overlay state
 export const guildSettingsOpen = writable(false);
 
 const currentFocusState = () =>
-        browser ? document.visibilityState === 'visible' && document.hasFocus() : true;
+	browser ? document.visibilityState === 'visible' && document.hasFocus() : true;
 
 export const appHasFocus = writable(currentFocusState());
