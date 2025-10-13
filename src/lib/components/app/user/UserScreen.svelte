@@ -1,22 +1,37 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import type { DtoChannel, DtoUser } from '$lib/api';
-	import { m } from '$lib/paraglide/messages.js';
-	import { auth } from '$lib/stores/auth';
-	import { channelsByGuild } from '$lib/stores/appState';
-	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
+        import { onMount } from 'svelte';
+        import { get } from 'svelte/store';
+        import type { DtoChannel, DtoUser } from '$lib/api';
+        import { m } from '$lib/paraglide/messages.js';
+        import { auth } from '$lib/stores/auth';
+        import {
+                activeView,
+                channelReady,
+                channelsByGuild,
+                selectedChannelId,
+                selectedGuildId
+        } from '$lib/stores/appState';
+        import { appSettings, addVisibleDmChannel } from '$lib/stores/settings';
+        import MessageInput from '$lib/components/app/chat/MessageInput.svelte';
+        import MessageList from '$lib/components/app/chat/MessageList.svelte';
+        import UserPanel from '$lib/components/app/user/UserPanel.svelte';
+        import { buildAttachmentUrl } from '$lib/utils/cdn';
+        import { ArrowLeft } from 'lucide-svelte';
 
-	type FriendEntry = {
-		id: string;
-		name: string;
-		discriminator: string | null;
-	};
+        type FriendEntry = {
+                id: string;
+                name: string;
+                discriminator: string | null;
+                avatarUrl: string | null;
+        };
 
-	type DirectChannelEntry = {
-		id: string;
-		label: string;
-		recipients: FriendEntry[];
-	};
+        type DirectChannelEntry = {
+                id: string;
+                label: string;
+                recipients: FriendEntry[];
+                userId: string | null;
+                avatarUrl: string | null;
+        };
 
 	type FriendRequestDirection = 'incoming' | 'outgoing' | 'unknown';
 
@@ -25,22 +40,33 @@
 	};
 
 	const user = auth.user;
-	const channelStore = channelsByGuild;
+        const channelStore = channelsByGuild;
+        const settingsStore = appSettings;
 	const api = auth.api;
 
-	let directChannels: DirectChannelEntry[] = [];
-	let apiFriendList: any[] = [];
-	let apiFriendRequests: any[] = [];
-	let friends: FriendEntry[] = [];
-	let friendRequests: FriendRequestEntry[] = [];
-	let activeList: 'friends' | 'requests' = 'friends';
-	let showAddFriendModal = false;
+        let directChannels: DirectChannelEntry[] = [];
+        let activeDmChannelId: string | null = null;
+        let activeDmTargetId: string | null = null;
+        let activeDmChannel: DirectChannelEntry | null = null;
+        let activeDmRecipient: FriendEntry | null = null;
+        let activeDmTitle = '';
+        let activeDmSubtext: string | null = null;
+        let activeDmAvatarUrl: string | null = null;
+        let apiFriendList: any[] = [];
+        let apiFriendRequests: any[] = [];
+        let friends: FriendEntry[] = [];
+        let friendRequests: FriendRequestEntry[] = [];
+        let dmChannelError: string | null = null;
+        let activeList: 'friends' | 'requests' = 'friends';
+        let showAddFriendModal = false;
 	let addFriendIdentifier = '';
 	let friendActionError: string | null = null;
 	let isSubmittingAddFriend = false;
-	let addFriendError: string | null = null;
-	let removingFriendIds = new Set<string>();
-	let processingRequestIds = new Set<string>();
+        let addFriendError: string | null = null;
+        let removingFriendIds = new Set<string>();
+        let processingRequestIds = new Set<string>();
+        let openingDmChannelIds = new Set<string>();
+        const pendingDmRequests = new Map<string, Promise<string | null>>();
 
 	function toSnowflakeString(value: unknown): string | null {
 		if (value == null) return null;
@@ -78,15 +104,25 @@
 		removingFriendIds = next;
 	}
 
-	function setRequestLoading(id: string, value: boolean) {
-		const next = new Set(processingRequestIds);
-		if (value) {
-			next.add(id);
-		} else {
-			next.delete(id);
-		}
-		processingRequestIds = next;
-	}
+        function setRequestLoading(id: string, value: boolean) {
+                const next = new Set(processingRequestIds);
+                if (value) {
+                        next.add(id);
+                } else {
+                        next.delete(id);
+                }
+                processingRequestIds = next;
+        }
+
+        function setDmChannelLoading(id: string, value: boolean) {
+                const next = new Set(openingDmChannelIds);
+                if (value) {
+                        next.add(id);
+                } else {
+                        next.delete(id);
+                }
+                openingDmChannelIds = next;
+        }
 
 	async function refreshFriendData(syncUser = false, clearError = false) {
 		if (clearError) {
@@ -143,11 +179,11 @@
 		}
 	}
 
-	async function handleFriendRequest(id: string, action: 'accept' | 'decline') {
-		const snowflake = toSnowflakeBigInt(id);
-		if (!snowflake) {
-			friendActionError = m.user_home_friend_action_error();
-			return;
+        async function handleFriendRequest(id: string, action: 'accept' | 'decline') {
+                const snowflake = toSnowflakeBigInt(id);
+                if (!snowflake) {
+                        friendActionError = m.user_home_friend_action_error();
+                        return;
 		}
 		setRequestLoading(id, true);
 		try {
@@ -166,22 +202,206 @@
 			friendActionError = m.user_home_friend_action_error();
 		} finally {
 			setRequestLoading(id, false);
-		}
-	}
+                }
+        }
+
+        async function ensureDirectChannel(rawUserId: string | null | undefined): Promise<string | null> {
+                const normalizedUserId = toSnowflakeString(rawUserId);
+                if (!normalizedUserId) {
+                        dmChannelError = m.user_home_friend_action_error();
+                        return null;
+                }
+                const existing = directChannels.find((entry) => entry.userId === normalizedUserId);
+                if (existing) {
+                        addVisibleDmChannel(existing.id, normalizedUserId);
+                        return existing.id;
+                }
+                const pending = pendingDmRequests.get(normalizedUserId);
+                if (pending) {
+                        return pending;
+                }
+                const request = (async () => {
+                        const snowflake = toSnowflakeBigInt(normalizedUserId);
+                        if (!snowflake) {
+                                dmChannelError = m.user_home_friend_action_error();
+                                return null;
+                        }
+                        setDmChannelLoading(normalizedUserId, true);
+                        dmChannelError = null;
+                        try {
+                                const response = await api.user.userMeFriendsUserIdGet({
+                                        userId: snowflake as any
+                                });
+                                const channel = response.data ?? null;
+                                const channelId = toSnowflakeString((channel as any)?.id);
+                                if (!channel || !channelId) {
+                                        throw new Error('Invalid DM channel response');
+                                }
+                                const normalized = normalizeDtoChannel(channel) as DtoChannel;
+                                channelsByGuild.update((map) => {
+                                        const dmKey = '@me';
+                                        const existingList = Array.isArray(map[dmKey]) ? map[dmKey] : [];
+                                        const filtered = existingList.filter(
+                                                (entry) => toSnowflakeString((entry as any)?.id) !== channelId
+                                        );
+                                        return {
+                                                ...map,
+                                                [dmKey]: [...filtered, normalized]
+                                        };
+                                });
+                                addVisibleDmChannel(channelId, normalizedUserId);
+                                return channelId;
+                        } catch (error) {
+                                console.error('Failed to open DM channel', error);
+                                dmChannelError = m.user_home_friend_action_error();
+                                return null;
+                        } finally {
+                                setDmChannelLoading(normalizedUserId, false);
+                        }
+                })();
+                pendingDmRequests.set(normalizedUserId, request);
+                request.finally(() => pendingDmRequests.delete(normalizedUserId));
+                return request;
+        }
+
+        function openDirectChannelById(
+                channelId: string | null | undefined,
+                targetUserId?: string | null | undefined
+        ) {
+                const normalizedChannelId = toSnowflakeString(channelId);
+                if (!normalizedChannelId) {
+                        dmChannelError = m.user_home_friend_action_error();
+                        return;
+                }
+                const normalizedTargetId = toSnowflakeString(targetUserId) ?? null;
+                dmChannelError = null;
+                activeDmChannelId = normalizedChannelId;
+                activeDmTargetId = normalizedTargetId;
+                activeView.set('user');
+                channelReady.set(false);
+                selectedChannelId.set(null);
+                selectedGuildId.set('@me');
+                selectedChannelId.set(normalizedChannelId);
+                addVisibleDmChannel(normalizedChannelId, normalizedTargetId);
+                channelReady.set(true);
+        }
+
+        async function handleFriendOpenDirectChannel(friend: FriendEntry) {
+                const channelId = await ensureDirectChannel(friend?.id ?? null);
+                if (channelId) {
+                        openDirectChannelById(channelId, friend.id);
+                }
+        }
+
+        async function handleActivateDirectChannel(channel: DirectChannelEntry) {
+                const candidateTarget =
+                        channel.userId ??
+                        (channel.recipients.length === 1 ? channel.recipients[0]?.id ?? null : null);
+                if (candidateTarget) {
+                        const ensuredChannelId = await ensureDirectChannel(candidateTarget);
+                        if (ensuredChannelId) {
+                                openDirectChannelById(ensuredChannelId, candidateTarget);
+                                return;
+                        }
+                }
+                openDirectChannelById(channel.id, candidateTarget);
+        }
+
+        function clearActiveDmChannel() {
+                activeDmChannelId = null;
+                activeDmTargetId = null;
+                activeDmChannel = null;
+                activeDmRecipient = null;
+                activeDmTitle = '';
+                activeDmSubtext = null;
+                activeDmAvatarUrl = null;
+                channelReady.set(false);
+                selectedChannelId.set(null);
+                if (get(selectedGuildId) === '@me') {
+                        selectedGuildId.set(null);
+                }
+                activeView.set('user');
+        }
 
 	onMount(() => {
 		void refreshFriendData(false, true);
 	});
 
-	function extractUserCandidate(candidate: any): DtoUser | null {
-		if (!candidate) return null;
-		if (candidate.user) return candidate.user as DtoUser;
-		if (candidate.member?.user) return candidate.member.user as DtoUser;
-		if (candidate.profile?.user) return candidate.profile.user as DtoUser;
-		if (candidate.profile) return candidate.profile as DtoUser;
-		if (candidate.target) return candidate.target as DtoUser;
-		return candidate as DtoUser;
-	}
+        function extractUserCandidate(candidate: any): DtoUser | null {
+                if (!candidate) return null;
+                if (candidate.user) return candidate.user as DtoUser;
+                if (candidate.member?.user) return candidate.member.user as DtoUser;
+                if (candidate.profile?.user) return candidate.profile.user as DtoUser;
+                if (candidate.profile) return candidate.profile as DtoUser;
+                if (candidate.target) return candidate.target as DtoUser;
+                return candidate as DtoUser;
+        }
+
+        function normalizeAvatarValue(value: any): string | null {
+                if (value == null) return null;
+                if (typeof value === 'object') {
+                        if (typeof value.url === 'string') {
+                                return normalizeAvatarValue(value.url);
+                        }
+                        if ('id' in value) {
+                                return normalizeAvatarValue((value as any).id);
+                        }
+                        if ('avatar' in value) {
+                                return normalizeAvatarValue((value as any).avatar);
+                        }
+                }
+                if (typeof value === 'string') {
+                        const trimmed = value.trim();
+                        if (!trimmed) return null;
+                        if (/^https?:\/\//i.test(trimmed)) {
+                                return trimmed;
+                        }
+                        return buildAttachmentUrl(trimmed);
+                }
+                return buildAttachmentUrl(value);
+        }
+
+        function resolveAvatarUrl(source: any): string | null {
+                if (!source) return null;
+                const candidates = [
+                        source?.avatarUrl,
+                        source?.avatar_url,
+                        source?.avatar,
+                        source?.avatarId,
+                        source?.avatar_id,
+                        source?.image,
+                        source?.icon,
+                        source?.iconUrl,
+                        source?.icon_url,
+                        source?.profile?.avatarUrl,
+                        source?.profile?.avatar_url,
+                        source?.profile?.avatar,
+                        source?.profile?.avatarId,
+                        source?.profile?.avatar_id,
+                        source?.profile?.image,
+                        source?.profile?.icon,
+                        source?.profile?.iconUrl,
+                        source?.profile?.icon_url,
+                        source?.user?.avatarUrl,
+                        source?.user?.avatar_url,
+                        source?.user?.avatar,
+                        source?.user?.avatarId,
+                        source?.user?.avatar_id,
+                        source?.member?.avatarUrl,
+                        source?.member?.avatar_url,
+                        source?.member?.avatar,
+                        source?.member?.avatarId,
+                        source?.member?.avatar_id,
+                        source?.member?.user?.avatar,
+                        source?.member?.user?.avatarUrl,
+                        source?.member?.user?.avatar_url
+                ];
+                for (const candidate of candidates) {
+                        const resolved = normalizeAvatarValue(candidate);
+                        if (resolved) return resolved;
+                }
+                return null;
+        }
 
 	function normalizeFriendEntry(value: any, fallbackName: string): FriendEntry | null {
 		const base = extractUserCandidate(value);
@@ -207,8 +427,10 @@
 			(value as any)?.tag;
 		const discriminator =
 			typeof discSource === 'string' && discSource.trim() ? discSource.trim() : null;
-		return { id, name, discriminator };
-	}
+                const avatarUrl =
+                        resolveAvatarUrl(base) ?? resolveAvatarUrl(value) ?? null;
+                return { id, name, discriminator, avatarUrl };
+        }
 
 	function normalizeDirectChannel(
 		raw: any,
@@ -248,11 +470,27 @@
 		if (!label && recipients.length) {
 			label = recipients.map((entry) => entry.name).join(', ');
 		}
-		if (!label) {
-			label = `Channel ${id}`;
-		}
-		return { id, label, recipients };
-	}
+                if (!label) {
+                        label = `Channel ${id}`;
+                }
+                const rawUserId =
+                        toSnowflakeString(raw?.user_id) ??
+                        toSnowflakeString(raw?.userId) ??
+                        toSnowflakeString(raw?.recipient_id) ??
+                        toSnowflakeString(raw?.recipientId);
+                const fallbackRecipientId = recipients.length === 1 ? recipients[0]?.id ?? null : null;
+                const channelAvatar =
+                        recipients.length === 1
+                                ? recipients[0]?.avatarUrl ?? resolveAvatarUrl(raw)
+                                : resolveAvatarUrl(raw);
+                return {
+                        id,
+                        label,
+                        recipients,
+                        userId: rawUserId ?? fallbackRecipientId ?? null,
+                        avatarUrl: channelAvatar ?? null
+                };
+        }
 
 	function normalizeDtoChannel(raw: DtoChannel | any): any {
 		if (!raw) return raw;
@@ -464,13 +702,18 @@
 	$: {
 		const meId = toSnowflakeString(($user as any)?.id);
 		const fallbackName = m.user_default_name();
-		const sources: any[] = [];
-		const userData = $user as any;
-		const candidateFields = ['dm_channels', 'direct_channels', 'directs', 'channels'];
-		for (const field of candidateFields) {
-			const value = userData?.[field];
-			if (Array.isArray(value)) {
-				sources.push(...value);
+                const sources: any[] = [];
+                const userData = $user as any;
+                const dmVisibility = new Set($settingsStore.dmChannels.map((entry) => entry.channelId));
+                const dmUserHints = new Map(
+                        $settingsStore.dmChannels.map((entry) => [entry.channelId, entry.userId ?? null])
+                );
+                const restrictToVisible = dmVisibility.size > 0;
+                const candidateFields = ['dm_channels', 'direct_channels', 'directs', 'channels'];
+                for (const field of candidateFields) {
+                        const value = userData?.[field];
+                        if (Array.isArray(value)) {
+                                sources.push(...value);
 			}
 		}
 		const map = $channelStore as Record<string, DtoChannel[]> | undefined;
@@ -491,15 +734,58 @@
 		const seen = new Set<string>();
 		const result: DirectChannelEntry[] = [];
 		for (const source of sources) {
-			const normalized = normalizeDirectChannel(source, meId, fallbackName);
-			if (!normalized) continue;
-			if (seen.has(normalized.id)) continue;
-			seen.add(normalized.id);
-			result.push(normalized);
-		}
-		result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
-		directChannels = result;
-	}
+                        const normalized = normalizeDirectChannel(source, meId, fallbackName);
+                        if (!normalized) continue;
+                        if (restrictToVisible && !dmVisibility.has(normalized.id)) continue;
+                        if (seen.has(normalized.id)) continue;
+                        seen.add(normalized.id);
+                        const storedUserId = dmUserHints.get(normalized.id) ?? null;
+                        if (storedUserId && normalized.userId !== storedUserId) {
+                                normalized.userId = storedUserId;
+                        } else if (!normalized.userId && normalized.recipients.length === 1) {
+                                normalized.userId = normalized.recipients[0]?.id ?? null;
+                        }
+                        result.push(normalized);
+                }
+                result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+                directChannels = result;
+        }
+
+        $: {
+                const current = directChannels.find((entry) => entry.id === activeDmChannelId) ?? null;
+                activeDmChannel = current;
+                if (current?.userId) {
+                        activeDmTargetId = current.userId;
+                }
+                if (current) {
+                        if (current.recipients.length === 1) {
+                                const recipient = current.recipients[0] ?? null;
+                                activeDmRecipient = recipient;
+                                activeDmTitle = recipient?.name ?? current.label;
+                                if (recipient?.discriminator) {
+                                        activeDmSubtext = `#${recipient.discriminator}`;
+                                } else if (current.label && current.label !== activeDmTitle) {
+                                        activeDmSubtext = current.label;
+                                } else {
+                                        activeDmSubtext = null;
+                                }
+                                activeDmAvatarUrl = recipient?.avatarUrl ?? current.avatarUrl ?? null;
+                        } else {
+                                activeDmRecipient = null;
+                                activeDmTitle = current.label;
+                                activeDmSubtext =
+                                        current.recipients.length > 1
+                                                ? current.recipients.map((entry) => entry.name).join(', ')
+                                                : null;
+                                activeDmAvatarUrl = current.avatarUrl ?? null;
+                        }
+                } else {
+                        activeDmRecipient = null;
+                        activeDmTitle = '';
+                        activeDmSubtext = null;
+                        activeDmAvatarUrl = null;
+                }
+        }
 
 	$: {
 		const fallbackName = m.user_default_name();
@@ -705,142 +991,237 @@
 				</div>
 			</div>
 			<div class="flex min-h-0 flex-1 flex-col">
-				<div class="flex-1 overflow-y-auto px-3 py-3">
-					{#if directChannels.length > 0}
-						<ul class="space-y-2">
-							{#each directChannels as channel (channel.id)}
-								<li>
-									<div
-										class="flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-									>
-										<div class="min-w-0 flex-1">
-											<div class="truncate text-sm font-medium">{channel.label}</div>
-											{#if channel.recipients.length}
-												<div class="truncate text-xs text-[var(--muted)]">
-													{channel.recipients.map((entry) => entry.name).join(', ')}
-												</div>
-											{/if}
-										</div>
-									</div>
-								</li>
-							{/each}
-						</ul>
-					{:else}
-						<p class="px-1 text-sm text-[var(--muted)]">{m.user_home_dms_empty()}</p>
-					{/if}
-				</div>
+                                <div class="flex-1 overflow-y-auto px-3 py-3">
+                                        {#if dmChannelError}
+                                                <p class="mb-2 px-1 text-sm text-[var(--danger)]">{dmChannelError}</p>
+                                        {/if}
+                                        {#if directChannels.length > 0}
+                                                <ul class="space-y-2">
+                                                        {#each directChannels as channel (channel.id)}
+                                                                {@const targetIdRaw =
+                                                                        channel.userId ??
+                                                                        (channel.recipients.length === 1
+                                                                                ? channel.recipients[0]?.id ?? null
+                                                                                : null)}
+                                                                {@const targetId = toSnowflakeString(targetIdRaw)}
+                                                                {@const isLoading = targetId ? openingDmChannelIds.has(targetId) : false}
+                                                                {@const isActive = activeDmChannelId === channel.id}
+                                                                {@const recipient =
+                                                                        channel.recipients.length === 1
+                                                                                ? channel.recipients[0]
+                                                                                : null}
+                                                                {@const displayName = recipient ? recipient.name : channel.label}
+                                                                {@const avatarUrl = recipient?.avatarUrl ?? channel.avatarUrl}
+                                                                {@const showSecondaryLabel =
+                                                                        recipient && channel.label && channel.label !== recipient.name
+                                                                                ? channel.label
+                                                                                : null}
+                                                                {@const secondaryLine =
+                                                                        recipient
+                                                                                ? recipient.discriminator
+                                                                                        ? `#${recipient.discriminator}`
+                                                                                        : showSecondaryLabel
+                                                                                : channel.recipients.length > 1
+                                                                                        ? channel.recipients.map((entry) => entry.name).join(', ')
+                                                                                        : null}
+                                                                <li>
+                                                                        <button
+                                                                                type="button"
+                                                                                class={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                                                                                        isActive
+                                                                                                ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                                                : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
+                                                                                } ${isLoading ? 'cursor-wait opacity-70' : ''}`}
+                                                                                disabled={isLoading}
+                                                                                aria-busy={isLoading}
+                                                                                aria-pressed={isActive}
+                                                                                on:click={() => handleActivateDirectChannel(channel)}
+                                                                        >
+                                                                                <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
+                                                                                        {#if avatarUrl}
+                                                                                                <img alt={displayName} class="h-full w-full object-cover" src={avatarUrl} />
+                                                                                        {:else}
+                                                                                                <span>{initialsFor(displayName)}</span>
+                                                                                        {/if}
+                                                                                </div>
+                                                                                <div class="min-w-0 flex-1">
+                                                                                        <div class="truncate text-sm font-semibold">{displayName}</div>
+                                                                                        {#if secondaryLine}
+                                                                                                <div class="truncate text-xs text-[var(--muted)]">{secondaryLine}</div>
+                                                                                        {/if}
+                                                                                </div>
+                                                                        </button>
+                                                                </li>
+                                                        {/each}
+                                                </ul>
+                                        {:else}
+                                                <p class="px-1 text-sm text-[var(--muted)]">{m.user_home_dms_empty()}</p>
+                                        {/if}
+                                </div>
 				<UserPanel />
 			</div>
 		</section>
-		<section class="flex flex-1 flex-col overflow-y-auto px-6 py-4">
-			<h2 class="mb-4 text-lg font-semibold">
-				{#if activeList === 'friends'}
-					{m.user_home_friends_heading()}
-				{:else}
-					{m.user_home_requests_heading()}
-				{/if}
-			</h2>
-			{#if friendActionError}
-				<p class="mb-3 text-sm text-[var(--danger)]">{friendActionError}</p>
-			{/if}
-			{#if activeList === 'friends'}
-				{#if friends.length > 0}
-					<div class="grid gap-3">
-						{#each friends as friend (friend.id)}
-							<div
-								class="flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-							>
-								<div
-									class="grid h-10 w-10 place-items-center rounded-full bg-[var(--panel)] text-sm font-semibold"
-								>
-									{initialsFor(friend.name)}
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="truncate text-sm font-semibold">{friend.name}</div>
-									{#if friend.discriminator}
-										<div class="truncate text-xs text-[var(--muted)]">#{friend.discriminator}</div>
-									{/if}
-								</div>
-								<div class="ml-auto flex items-center gap-2">
-									<button
-										type="button"
-										class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-										on:click={() => handleRemoveFriend(friend.id)}
-										disabled={removingFriendIds.has(friend.id)}
-									>
-										{m.user_home_friend_remove()}
-									</button>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<p class="text-sm text-[var(--muted)]">{m.user_home_friends_empty()}</p>
-				{/if}
-			{:else if friendRequests.length > 0}
-				<div class="grid gap-3">
-					{#each friendRequests as request (request.id)}
-						<div
-							class="flex flex-wrap items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-						>
-							<div
-								class="grid h-10 w-10 place-items-center rounded-full bg-[var(--panel)] text-sm font-semibold"
-							>
-								{initialsFor(request.name)}
-							</div>
-							<div class="min-w-0 flex-1">
-								<div class="truncate text-sm font-semibold">{request.name}</div>
-								{#if request.discriminator}
-									<div class="truncate text-xs text-[var(--muted)]">#{request.discriminator}</div>
-								{/if}
-								<div class="truncate text-xs text-[var(--muted)]">
-									{#if request.direction === 'incoming'}
-										{m.user_home_requests_incoming()}
-									{:else if request.direction === 'outgoing'}
-										{m.user_home_requests_outgoing()}
-									{:else}
-										{m.user_home_requests_unknown()}
-									{/if}
-								</div>
-							</div>
-                                                        <div class="ml-auto flex flex-wrap items-center gap-2">
-                                                                {#if request.direction === 'outgoing'}
-                                                                        <button
-                                                                                type="button"
-                                                                                class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                on:click={() => handleFriendRequest(request.id, 'decline')}
-                                                                                disabled={processingRequestIds.has(request.id)}
-                                                                        >
-                                                                                {m.user_home_friend_cancel()}
-                                                                        </button>
-                                                                {:else}
-                                                                        <button
-                                                                                type="button"
-                                                                                class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                on:click={() => handleFriendRequest(request.id, 'accept')}
-                                                                                disabled={processingRequestIds.has(request.id)}
-                                                                        >
-                                                                                {m.user_home_friend_accept()}
-                                                                        </button>
-                                                                        <button
-                                                                                type="button"
-                                                                                class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                on:click={() => handleFriendRequest(request.id, 'decline')}
-                                                                                disabled={processingRequestIds.has(request.id)}
-                                                                        >
-                                                                                {request.direction === 'incoming'
-                                                                                        ? m.user_home_friend_decline()
-                                                                                        : m.user_home_friend_cancel()}
-                                                                        </button>
-                                                                {/if}
+                <section class="flex flex-1 flex-col overflow-hidden">
+                        {#if activeDmChannel}
+                                <div class="flex h-[var(--header-h)] flex-shrink-0 items-center gap-4 border-b border-[var(--stroke)] px-6">
+                                        <button
+                                                type="button"
+                                                class="flex items-center gap-2 rounded-md border border-[var(--stroke)] px-3 py-1 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 focus-visible:outline-none"
+                                                on:click={clearActiveDmChannel}
+                                        >
+                                                <ArrowLeft class="h-4 w-4" stroke-width={2} />
+                                                <span>{m.user_home_tab_friends()}</span>
+                                        </button>
+                                        <div class="flex min-w-0 items-center gap-3">
+                                                <div class="grid h-12 w-12 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-base font-semibold">
+                                                        {#if activeDmAvatarUrl}
+                                                                <img alt={activeDmTitle} class="h-full w-full object-cover" src={activeDmAvatarUrl} />
+                                                        {:else}
+                                                                <span>{initialsFor(activeDmTitle)}</span>
+                                                        {/if}
+                                                </div>
+                                                <div class="min-w-0">
+                                                        <div class="truncate text-base font-semibold">{activeDmTitle || m.user_home_header()}</div>
+                                                        {#if activeDmSubtext}
+                                                                <div class="truncate text-sm text-[var(--muted)]">{activeDmSubtext}</div>
+                                                        {/if}
+                                                </div>
+                                        </div>
+                                </div>
+                                <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+                                        {#if $selectedChannelId === activeDmChannel.id && $channelReady}
+                                                <MessageList />
+                                                <MessageInput />
+                                        {:else}
+                                                <div class="grid flex-1 place-items-center text-[var(--muted)]">{m.loading()}</div>
+                                        {/if}
+                                </div>
+                        {:else}
+                                <div class="flex flex-1 flex-col overflow-y-auto px-6 py-4">
+                                        <h2 class="mb-4 text-lg font-semibold">
+                                                {#if activeList === 'friends'}
+                                                        {m.user_home_friends_heading()}
+                                                {:else}
+                                                        {m.user_home_requests_heading()}
+                                                {/if}
+                                        </h2>
+                                        {#if friendActionError}
+                                                <p class="mb-3 text-sm text-[var(--danger)]">{friendActionError}</p>
+                                        {/if}
+                                        {#if activeList === 'friends'}
+                                                {#if friends.length > 0}
+                                                        <div class="grid gap-3">
+                                                                {#each friends as friend (friend.id)}
+                                                                        {@const isOpening = openingDmChannelIds.has(friend.id)}
+                                                                        {@const isActiveFriend = activeDmTargetId === friend.id}
+                                                                        <div class="flex items-center gap-2">
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class={`flex flex-1 items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                                                                                                isActiveFriend
+                                                                                                        ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                                                        : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
+                                                                                        } ${isOpening ? 'cursor-wait opacity-70' : ''}`}
+                                                                                        disabled={isOpening}
+                                                                                        aria-busy={isOpening}
+                                                                                        on:click={() => handleFriendOpenDirectChannel(friend)}
+                                                                                >
+                                                                                        <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
+                                                                                                {#if friend.avatarUrl}
+                                                                                                        <img alt={friend.name} class="h-full w-full object-cover" src={friend.avatarUrl} />
+                                                                                                {:else}
+                                                                                                        <span>{initialsFor(friend.name)}</span>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                        <div class="min-w-0 flex-1">
+                                                                                                <div class="truncate text-sm font-semibold">{friend.name}</div>
+                                                                                                {#if friend.discriminator}
+                                                                                                        <div class="truncate text-xs text-[var(--muted)]">#{friend.discriminator}</div>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                </button>
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                                        on:click={() => handleRemoveFriend(friend.id)}
+                                                                                        disabled={removingFriendIds.has(friend.id)}
+                                                                                >
+                                                                                        {m.user_home_friend_remove()}
+                                                                                </button>
+                                                                        </div>
+                                                                {/each}
                                                         </div>
-						</div>
-					{/each}
-				</div>
-			{:else}
-				<p class="text-sm text-[var(--muted)]">{m.user_home_requests_empty()}</p>
-			{/if}
-		</section>
+                                                {:else}
+                                                        <p class="text-sm text-[var(--muted)]">{m.user_home_friends_empty()}</p>
+                                                {/if}
+                                        {:else if friendRequests.length > 0}
+                                                <div class="grid gap-3">
+                                                        {#each friendRequests as request (request.id)}
+                                                                <div
+                                                                        class="flex flex-wrap items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                                >
+                                                                        <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
+                                                                                {#if request.avatarUrl}
+                                                                                        <img alt={request.name} class="h-full w-full object-cover" src={request.avatarUrl} />
+                                                                                {:else}
+                                                                                        <span>{initialsFor(request.name)}</span>
+                                                                                {/if}
+                                                                        </div>
+                                                                        <div class="min-w-0 flex-1">
+                                                                                <div class="truncate text-sm font-semibold">{request.name}</div>
+                                                                                {#if request.discriminator}
+                                                                                        <div class="truncate text-xs text-[var(--muted)]">#{request.discriminator}</div>
+                                                                                {/if}
+                                                                                <div class="truncate text-xs text-[var(--muted)]">
+                                                                                        {#if request.direction === 'incoming'}
+                                                                                                {m.user_home_requests_incoming()}
+                                                                                        {:else if request.direction === 'outgoing'}
+                                                                                                {m.user_home_requests_outgoing()}
+                                                                                        {:else}
+                                                                                                {m.user_home_requests_unknown()}
+                                                                                        {/if}
+                                                                                </div>
+                                                                        </div>
+                                                                        <div class="ml-auto flex flex-wrap items-center gap-2">
+                                                                                {#if request.direction === 'outgoing'}
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                                                on:click={() => handleFriendRequest(request.id, 'decline')}
+                                                                                                disabled={processingRequestIds.has(request.id)}
+                                                                                        >
+                                                                                                {m.user_home_friend_cancel()}
+                                                                                        </button>
+                                                                                {:else}
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="rounded-md bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:ring-2 focus-visible:ring-[var(--brand)]/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                                                on:click={() => handleFriendRequest(request.id, 'accept')}
+                                                                                                disabled={processingRequestIds.has(request.id)}
+                                                                                        >
+                                                                                                {m.user_home_friend_accept()}
+                                                                                        </button>
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                                                on:click={() => handleFriendRequest(request.id, 'decline')}
+                                                                                                disabled={processingRequestIds.has(request.id)}
+                                                                                        >
+                                                                                                {request.direction === 'incoming'
+                                                                                                        ? m.user_home_friend_decline()
+                                                                                                        : m.user_home_friend_cancel()}
+                                                                                        </button>
+                                                                                {/if}
+                                                                        </div>
+                                                                </div>
+                                                        {/each}
+                                                </div>
+                                        {:else}
+                                                <p class="text-sm text-[var(--muted)]">{m.user_home_requests_empty()}</p>
+                                        {/if}
+                                </div>
+                        {/if}
+                </section>
 	</div>
 </div>
 
