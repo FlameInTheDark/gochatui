@@ -1,5 +1,5 @@
 <script lang="ts">
-        import { onMount } from 'svelte';
+        import { onDestroy, onMount } from 'svelte';
         import { get } from 'svelte/store';
         import type { DtoChannel, DtoUser } from '$lib/api';
         import { m } from '$lib/paraglide/messages.js';
@@ -11,12 +11,22 @@
                 selectedChannelId,
                 selectedGuildId
         } from '$lib/stores/appState';
-        import { appSettings, addVisibleDmChannel } from '$lib/stores/settings';
+        import {
+                appSettings,
+                addVisibleDmChannel,
+                setVisibleDmChannels,
+                type VisibleDmChannel
+        } from '$lib/stores/settings';
         import MessageInput from '$lib/components/app/chat/MessageInput.svelte';
         import MessageList from '$lib/components/app/chat/MessageList.svelte';
         import UserPanel from '$lib/components/app/user/UserPanel.svelte';
         import { buildAttachmentUrl } from '$lib/utils/cdn';
-        import { ArrowLeft } from 'lucide-svelte';
+        import {
+                createPresenceSubscription,
+                presenceByUser,
+                presenceIndicatorClass
+        } from '$lib/stores/presence';
+        import { ArrowLeft, X } from 'lucide-svelte';
 
         type FriendEntry = {
                 id: string;
@@ -42,7 +52,10 @@
 	const user = auth.user;
         const channelStore = channelsByGuild;
         const settingsStore = appSettings;
-	const api = auth.api;
+        const api = auth.api;
+        const presenceMap = presenceByUser;
+        const presenceSubscription = createPresenceSubscription();
+        let lastPresenceSignature = '';
 
         let directChannels: DirectChannelEntry[] = [];
         let activeDmChannelId: string | null = null;
@@ -366,6 +379,29 @@
                 openDirectChannelById(channel.id, candidateTarget);
         }
 
+        function directChannelToVisibleEntry(channel: DirectChannelEntry): VisibleDmChannel {
+                const channelId = toSnowflakeString(channel.id) ?? channel.id;
+                const resolvedUserId =
+                        channel.userId ??
+                        (channel.recipients.length === 1 ? channel.recipients[0]?.id ?? null : null);
+                return {
+                        channelId,
+                        userId: toSnowflakeString(resolvedUserId)
+                };
+        }
+
+        function handleHideDirectChannel(channelId: string) {
+                const normalizedChannelId = toSnowflakeString(channelId);
+                if (!normalizedChannelId) return;
+                const nextVisible = directChannels
+                        .filter((entry) => toSnowflakeString(entry.id) !== normalizedChannelId)
+                        .map(directChannelToVisibleEntry);
+                setVisibleDmChannels(nextVisible);
+                if (activeDmChannelId === normalizedChannelId) {
+                        clearActiveDmChannel();
+                }
+        }
+
         function clearActiveDmChannel() {
                 activeDmChannelId = null;
                 activeDmTargetId = null;
@@ -382,9 +418,13 @@
                 activeView.set('user');
         }
 
-	onMount(() => {
-		void refreshFriendData(false, true);
-	});
+        onMount(() => {
+                void refreshFriendData(false, true);
+        });
+
+        onDestroy(() => {
+                presenceSubscription.destroy();
+        });
 
         function extractUserCandidate(candidate: any): DtoUser | null {
                 if (!candidate) return null;
@@ -984,18 +1024,43 @@
 			unknown: 2
 		};
 
-		friendRequests = Array.from(requestMap.values()).sort((a, b) => {
-			const dirDelta = directionRank[a.direction] - directionRank[b.direction];
-			if (dirDelta !== 0) return dirDelta;
-			return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-		});
-	}
+                friendRequests = Array.from(requestMap.values()).sort((a, b) => {
+                        const dirDelta = directionRank[a.direction] - directionRank[b.direction];
+                        if (dirDelta !== 0) return dirDelta;
+                        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+                });
+        }
 
-	function initialsFor(name: string): string {
-		if (!name) return '';
-		const trimmed = name.trim();
-		if (!trimmed) return '';
-		return trimmed.slice(0, 2).toUpperCase();
+        $: {
+                const tracked = new Set<string>();
+                for (const friend of friends) {
+                        const id = toSnowflakeString(friend?.id);
+                        if (id) tracked.add(id);
+                }
+                for (const channel of directChannels) {
+                        if (!channel) continue;
+                        const directIds: Array<string | null | undefined> = [channel.userId];
+                        for (const recipient of channel.recipients) {
+                                directIds.push(recipient?.id ?? null);
+                        }
+                        for (const value of directIds) {
+                                const id = toSnowflakeString(value);
+                                if (id) tracked.add(id);
+                        }
+                }
+                const ids = Array.from(tracked).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+                const signature = ids.join(',');
+                if (signature !== lastPresenceSignature) {
+                        presenceSubscription.update(ids);
+                        lastPresenceSignature = signature;
+                }
+        }
+
+        function initialsFor(name: string): string {
+                if (!name) return '';
+                const trimmed = name.trim();
+                if (!trimmed) return '';
+                return trimmed.slice(0, 2).toUpperCase();
 	}
 
 	function openAddFriendModal() {
@@ -1127,33 +1192,53 @@
                                                                                 : channel.recipients.length > 1
                                                                                         ? channel.recipients.map((entry) => entry.name).join(', ')
                                                                                         : null}
+                                                                {@const presenceInfo = targetId ? $presenceMap[targetId] ?? null : null}
+                                                                {@const presenceStatus = presenceInfo?.status ?? null}
                                                                 <li>
-                                                                        <button
-                                                                                type="button"
-                                                                                class={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
-                                                                                        isActive
-                                                                                                ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
-                                                                                                : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                                } ${isLoading ? 'cursor-wait opacity-70' : ''}`}
-                                                                                disabled={isLoading}
-                                                                                aria-busy={isLoading}
-                                                                                aria-pressed={isActive}
-                                                                                on:click={() => handleActivateDirectChannel(channel)}
-                                                                        >
-                                                                                <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
-                                                                                        {#if avatarUrl}
-                                                                                                <img alt={displayName} class="h-full w-full object-cover" src={avatarUrl} />
-                                                                                        {:else}
-                                                                                                <span>{initialsFor(displayName)}</span>
-                                                                                        {/if}
-                                                                                </div>
-                                                                                <div class="min-w-0 flex-1">
-                                                                                        <div class="truncate text-sm font-semibold">{displayName}</div>
-                                                                                        {#if secondaryLine}
-                                                                                                <div class="truncate text-xs text-[var(--muted)]">{secondaryLine}</div>
-                                                                                        {/if}
-                                                                                </div>
-                                                                        </button>
+                                                                        <div class="flex items-center gap-2">
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class={`flex w-full flex-1 items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                                                                                                isActive
+                                                                                                        ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                                                        : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
+                                                                                        } ${isLoading ? 'cursor-wait opacity-70' : ''}`}
+                                                                                        disabled={isLoading}
+                                                                                        aria-busy={isLoading}
+                                                                                        aria-pressed={isActive}
+                                                                                        on:click={() => handleActivateDirectChannel(channel)}
+                                                                                >
+                                                                                        <div class="relative">
+                                                                                                <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
+                                                                                                        {#if avatarUrl}
+                                                                                                                <img alt={displayName} class="h-full w-full object-cover" src={avatarUrl} />
+                                                                                                        {:else}
+                                                                                                                <span>{initialsFor(displayName)}</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                                {#if targetId}
+                                                                                                        <span
+                                                                                                                class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(presenceStatus)}`}
+                                                                                                        ></span>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                        <div class="min-w-0 flex-1">
+                                                                                                <div class="truncate text-sm font-semibold">{displayName}</div>
+                                                                                                {#if secondaryLine}
+                                                                                                        <div class="truncate text-xs text-[var(--muted)]">{secondaryLine}</div>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                </button>
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--stroke)] text-[var(--muted)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none"
+                                                                                        on:click={() => handleHideDirectChannel(channel.id)}
+                                                                                        aria-label={m.user_home_dm_remove()}
+                                                                                        title={m.user_home_dm_remove()}
+                                                                                >
+                                                                                        <X class="h-4 w-4" stroke-width={2} />
+                                                                                </button>
+                                                                        </div>
                                                                 </li>
                                                         {/each}
                                                 </ul>
@@ -1218,6 +1303,8 @@
                                                                         {@const isOpening = openingDmChannelIds.has(friend.id)}
                                                                         {@const isActiveFriend = activeDmTargetId === friend.id}
                                                                         <div class="flex items-center gap-2">
+                                                                                {@const friendPresence = $presenceMap[friend.id] ?? null}
+                                                                                {@const friendPresenceStatus = friendPresence?.status ?? null}
                                                                                 <button
                                                                                         type="button"
                                                                                         class={`flex flex-1 items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
@@ -1229,12 +1316,17 @@
                                                                                         aria-busy={isOpening}
                                                                                         on:click={() => handleFriendOpenDirectChannel(friend)}
                                                                                 >
-                                                                                        <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
-                                                                                                {#if friend.avatarUrl}
-                                                                                                        <img alt={friend.name} class="h-full w-full object-cover" src={friend.avatarUrl} />
-                                                                                                {:else}
-                                                                                                        <span>{initialsFor(friend.name)}</span>
-                                                                                                {/if}
+                                                                                        <div class="relative">
+                                                                                                <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
+                                                                                                        {#if friend.avatarUrl}
+                                                                                                                <img alt={friend.name} class="h-full w-full object-cover" src={friend.avatarUrl} />
+                                                                                                        {:else}
+                                                                                                                <span>{initialsFor(friend.name)}</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                                <span
+                                                                                                        class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(friendPresenceStatus)}`}
+                                                                                                ></span>
                                                                                         </div>
                                                                                         <div class="min-w-0 flex-1">
                                                                                                 <div class="truncate text-sm font-semibold">{friend.name}</div>
