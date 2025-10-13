@@ -1715,13 +1715,19 @@
         }
 
         .channel-scroll:hover {
-                scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.06);
+                scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
         }
 
         .channel-scroll::-webkit-scrollbar {
                 width: 8px;
                 height: 8px;
                 background: transparent;
+        }
+
+        .channel-scroll::-webkit-scrollbar-button {
+                width: 0;
+                height: 0;
+                display: none;
         }
 
         .channel-scroll::-webkit-scrollbar-thumb {
@@ -1735,9 +1741,5 @@
 
         .channel-scroll::-webkit-scrollbar-track {
                 background: transparent;
-        }
-
-        .channel-scroll:hover::-webkit-scrollbar-track {
-                background-color: rgba(255, 255, 255, 0.06);
         }
 </style>

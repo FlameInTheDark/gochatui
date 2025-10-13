@@ -1134,13 +1134,19 @@
         }
 
         .chat-scroll:hover {
-                scrollbar-color: rgba(255, 255, 255, 0.25) rgba(255, 255, 255, 0.08);
+                scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
         }
 
         .chat-scroll::-webkit-scrollbar {
                 width: 10px;
                 height: 10px;
                 background: transparent;
+        }
+
+        .chat-scroll::-webkit-scrollbar-button {
+                width: 0;
+                height: 0;
+                display: none;
         }
 
         .chat-scroll::-webkit-scrollbar-thumb {
@@ -1154,9 +1160,5 @@
 
         .chat-scroll::-webkit-scrollbar-track {
                 background: transparent;
-        }
-
-        .chat-scroll:hover::-webkit-scrollbar-track {
-                background-color: rgba(255, 255, 255, 0.08);
         }
 </style>
