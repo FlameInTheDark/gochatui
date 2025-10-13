@@ -1182,7 +1182,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
         }
 }
 
-auth.token.subscribe((token) => {
+function handleAuthTokenChange(token: string | null) {
         if (token) {
                 if (!get(settingsReady) || loadedSettingsToken !== token) {
                         loadedSettingsToken = token;
@@ -1197,9 +1197,9 @@ auth.token.subscribe((token) => {
                 settingsReady.set(false);
                 loadedSettingsToken = null;
         }
-});
+}
 
-auth.guilds.subscribe((guilds) => {
+function handleGuildsChange(guilds: unknown) {
         latestGuilds = Array.isArray(guilds) ? guilds : [];
         if (get(settingsReady)) {
                 guildsHydrated = true;
@@ -1207,7 +1207,47 @@ auth.guilds.subscribe((guilds) => {
         if (get(settingsReady)) {
                 syncLayoutWithGuilds();
         }
-});
+}
+
+interface SettingsSubscriptionsState {
+        subscribed: boolean;
+        unsubscribers: (() => void)[];
+}
+
+declare global {
+        // eslint-disable-next-line no-var
+        var __GOCHAT_SETTINGS_SUBS__: SettingsSubscriptionsState | undefined;
+        interface Window {
+                __GOCHAT_SETTINGS_SUBS__?: SettingsSubscriptionsState;
+        }
+}
+
+const settingsGlobalScope =
+        globalThis as typeof globalThis & { __GOCHAT_SETTINGS_SUBS__?: SettingsSubscriptionsState };
+
+const settingsSubscriptions =
+        settingsGlobalScope.__GOCHAT_SETTINGS_SUBS__ ??
+        (settingsGlobalScope.__GOCHAT_SETTINGS_SUBS__ = { subscribed: false, unsubscribers: [] });
+
+if (!settingsSubscriptions.subscribed) {
+        const unsubscribers: (() => void)[] = [];
+        unsubscribers.push(auth.token.subscribe(handleAuthTokenChange));
+        unsubscribers.push(auth.guilds.subscribe(handleGuildsChange));
+
+        settingsSubscriptions.subscribed = true;
+        settingsSubscriptions.unsubscribers = unsubscribers;
+
+        if (import.meta.hot) {
+                import.meta.hot.dispose(() => {
+                        for (const unsubscribe of settingsSubscriptions.unsubscribers.splice(0)) {
+                                try {
+                                        unsubscribe();
+                                } catch {}
+                        }
+                        settingsSubscriptions.subscribed = false;
+                });
+        }
+}
 
 export function ingestPresenceSettingsUpdate(
         settingsPayload: ModelUserSettingsData | null | undefined

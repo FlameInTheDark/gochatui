@@ -1,4 +1,5 @@
 import { writable, get } from 'svelte/store';
+import type { Writable } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import {
 	channelRolesByGuild,
@@ -19,34 +20,92 @@ import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 
 type AnyRecord = Record<string, any>;
 
-export const wsConnected = writable(false);
-export const wsConnectionLost = writable(false);
-export const wsEvent = writable<AnyRecord | null>(null);
-export const wsAuthenticated = writable(false);
+interface WSGlobalState {
+        wsConnected: Writable<boolean>;
+        wsConnectionLost: Writable<boolean>;
+        wsEvent: Writable<AnyRecord | null>;
+        wsAuthenticated: Writable<boolean>;
+        socket: WebSocket | null;
+        hbTimer: ReturnType<typeof setInterval> | null;
+        hbWorker: Worker | null;
+        hbWorkerActive: boolean;
+        heartbeatMs: number;
+        lastT: number;
+        authed: boolean;
+        lastHeartbeatE: number;
+        reconnectTimer: ReturnType<typeof setTimeout> | null;
+        shouldReconnect: boolean;
+        latestToken: string | null;
+        heartbeatSessionId: string | null;
+        subscriptionsRegistered: boolean;
+        cleanupSubscribers: (() => void) | null;
+}
 
-let socket: WebSocket | null = null;
-let hbTimer: any = null;
-let hbWorker: Worker | null = null;
-let hbWorkerActive = false;
-let heartbeatMs = 15000;
-let lastT = 0;
-let authed = false;
-let lastHeartbeatE = 0; // monotonically increasing heartbeat ack
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let shouldReconnect = true;
-let latestToken: string | null = get(auth.token);
-let heartbeatSessionId: string | null = null;
+declare global {
+        // eslint-disable-next-line no-var
+        var __GOCHAT_WS_STATE__: WSGlobalState | undefined;
+        interface Window {
+                __GOCHAT_WS_STATE__?: WSGlobalState;
+        }
+}
+
+const globalScope = globalThis as typeof globalThis & { __GOCHAT_WS_STATE__?: WSGlobalState };
+
+const wsState: WSGlobalState =
+        globalScope.__GOCHAT_WS_STATE__ ??
+        (globalScope.__GOCHAT_WS_STATE__ = {
+                wsConnected: writable(false),
+                wsConnectionLost: writable(false),
+                wsEvent: writable<AnyRecord | null>(null),
+                wsAuthenticated: writable(false),
+                socket: null,
+                hbTimer: null,
+                hbWorker: null,
+                hbWorkerActive: false,
+                heartbeatMs: 15000,
+                lastT: 0,
+                authed: false,
+                lastHeartbeatE: 0,
+                reconnectTimer: null,
+                shouldReconnect: true,
+                latestToken: get(auth.token),
+                heartbeatSessionId: null,
+                subscriptionsRegistered: false,
+                cleanupSubscribers: null
+        });
+
+export const wsConnected = wsState.wsConnected;
+export const wsConnectionLost = wsState.wsConnectionLost;
+export const wsEvent = wsState.wsEvent;
+export const wsAuthenticated = wsState.wsAuthenticated;
+
+let socket: WebSocket | null = wsState.socket ?? null;
+let hbTimer: ReturnType<typeof setInterval> | null = wsState.hbTimer ?? null;
+let hbWorker: Worker | null = wsState.hbWorker ?? null;
+let hbWorkerActive = wsState.hbWorkerActive;
+let heartbeatMs = wsState.heartbeatMs;
+let lastT = wsState.lastT;
+let authed = wsState.authed;
+let lastHeartbeatE = wsState.lastHeartbeatE; // monotonically increasing heartbeat ack
+let reconnectTimer: ReturnType<typeof setTimeout> | null = wsState.reconnectTimer ?? null;
+let shouldReconnect = wsState.shouldReconnect;
+let latestToken: string | null = wsState.latestToken;
+let heartbeatSessionId: string | null = wsState.heartbeatSessionId;
 
 const WS_EVENT_MEMBER_JOIN = 200;
 const WS_EVENT_MEMBER_LEAVE = 202;
 
 function nextT() {
-	lastT += 1;
-	return lastT;
+        lastT += 1;
+        wsState.lastT = lastT;
+        return lastT;
 }
 
 function updateLastT(t?: number) {
-	if (typeof t === 'number' && t > lastT) lastT = t;
+        if (typeof t === 'number' && t > lastT) {
+                lastT = t;
+                wsState.lastT = lastT;
+        }
 }
 
 function wsUrl(): string {
@@ -432,8 +491,9 @@ function parseJSONPreserveLargeInts(data: string) {
 }
 
 function nextHeartbeatE(): number {
-	lastHeartbeatE += 1;
-	return lastHeartbeatE;
+        lastHeartbeatE += 1;
+        wsState.lastHeartbeatE = lastHeartbeatE;
+        return lastHeartbeatE;
 }
 
 function sendHeartbeatFrame() {
@@ -449,90 +509,105 @@ function sendHeartbeatFrame() {
 function ensureHeartbeatWorker(): Worker | null {
 	if (!browser) return null;
 	if (typeof Worker === 'undefined') return null;
-	if (!hbWorker) {
-		try {
-			hbWorker = new Worker(new URL('./heartbeatWorker.ts', import.meta.url), {
-				type: 'module'
-			});
-			hbWorker.onmessage = (event: MessageEvent<any>) => {
-				const payload = event?.data;
-				if (!payload || typeof payload !== 'object') return;
-				if (payload.type === 'beat') {
-					sendHeartbeatFrame();
+        if (!hbWorker) {
+                try {
+                        hbWorker = new Worker(new URL('./heartbeatWorker.ts', import.meta.url), {
+                                type: 'module'
+                        });
+                        wsState.hbWorker = hbWorker;
+                        hbWorker.onmessage = (event: MessageEvent<any>) => {
+                                const payload = event?.data;
+                                if (!payload || typeof payload !== 'object') return;
+                                if (payload.type === 'beat') {
+                                        sendHeartbeatFrame();
 				} else if (payload.type === 'dispose') {
-					try {
-						hbWorker?.terminate();
-					} catch {}
-					hbWorker = null;
-					hbWorkerActive = false;
-				}
-			};
-			hbWorker.onerror = () => {
-				try {
-					hbWorker?.terminate();
-				} catch {}
-				hbWorker = null;
-				hbWorkerActive = false;
-			};
-		} catch {
-			hbWorker = null;
-			hbWorkerActive = false;
-			return null;
-		}
-	}
-	return hbWorker;
+                                        try {
+                                                hbWorker?.terminate();
+                                        } catch {}
+                                        hbWorker = null;
+                                        hbWorkerActive = false;
+                                        wsState.hbWorker = null;
+                                        wsState.hbWorkerActive = false;
+                                }
+                        };
+                        hbWorker.onerror = () => {
+                                try {
+                                        hbWorker?.terminate();
+                                } catch {}
+                                hbWorker = null;
+                                hbWorkerActive = false;
+                                wsState.hbWorker = null;
+                                wsState.hbWorkerActive = false;
+                        };
+                } catch {
+                        hbWorker = null;
+                        hbWorkerActive = false;
+                        wsState.hbWorker = null;
+                        wsState.hbWorkerActive = false;
+                        return null;
+                }
+        }
+        return hbWorker;
 }
 
 function startHeartbeatWorker(interval: number): boolean {
 	const worker = ensureHeartbeatWorker();
 	if (!worker) return false;
-	try {
-		worker.postMessage({ type: 'start', interval });
-		hbWorkerActive = true;
-		return true;
-	} catch {
-		try {
-			worker.terminate();
-		} catch {}
-		if (hbWorker === worker) hbWorker = null;
-		hbWorkerActive = false;
-		return false;
-	}
+        try {
+                worker.postMessage({ type: 'start', interval });
+                hbWorkerActive = true;
+                wsState.hbWorkerActive = true;
+                return true;
+        } catch {
+                try {
+                        worker.terminate();
+                } catch {}
+                if (hbWorker === worker) hbWorker = null;
+                hbWorkerActive = false;
+                if (hbWorker === null) wsState.hbWorker = null;
+                wsState.hbWorkerActive = false;
+                return false;
+        }
 }
 
 function stopHeartbeatWorker() {
-	if (!hbWorker || !hbWorkerActive) return;
-	try {
-		hbWorker.postMessage({ type: 'stop' });
-	} catch {}
-	hbWorkerActive = false;
+        if (!hbWorker || !hbWorkerActive) return;
+        try {
+                hbWorker.postMessage({ type: 'stop' });
+        } catch {}
+        hbWorkerActive = false;
+        wsState.hbWorkerActive = false;
 }
 
 function startHeartbeat() {
-	stopHeartbeat();
-	if (heartbeatMs <= 0) return;
-	const started = startHeartbeatWorker(heartbeatMs);
-	if (!started) {
-		hbTimer = setInterval(() => {
-			sendHeartbeatFrame();
-		}, heartbeatMs);
-	}
-	// Send an initial heartbeat immediately so the server does not need to wait
-	sendHeartbeatFrame();
+        stopHeartbeat();
+        if (heartbeatMs <= 0) return;
+        const started = startHeartbeatWorker(heartbeatMs);
+        if (!started) {
+                hbTimer = setInterval(() => {
+                        sendHeartbeatFrame();
+                }, heartbeatMs);
+                wsState.hbTimer = hbTimer;
+        }
+        // Send an initial heartbeat immediately so the server does not need to wait
+        sendHeartbeatFrame();
 }
 
 function stopHeartbeat() {
-	if (hbTimer) clearInterval(hbTimer);
-	hbTimer = null;
-	stopHeartbeatWorker();
+        if (hbTimer) clearInterval(hbTimer);
+        hbTimer = null;
+        wsState.hbTimer = null;
+        stopHeartbeatWorker();
 }
 
 export function disconnectWS() {
         shouldReconnect = false;
+        wsState.shouldReconnect = false;
         stopHeartbeat();
         if (reconnectTimer) {
                 clearTimeout(reconnectTimer);
                 reconnectTimer = null;
+                wsState.reconnectTimer = null;
         }
         if (socket) {
                 try {
@@ -540,30 +615,38 @@ export function disconnectWS() {
                 } catch {}
         }
         socket = null;
+        wsState.socket = null;
         authed = false;
+        wsState.authed = false;
         lastHeartbeatE = 0;
+        wsState.lastHeartbeatE = 0;
         wsConnected.set(false);
         wsConnectionLost.set(false);
         wsAuthenticated.set(false);
         heartbeatSessionId = null;
+        wsState.heartbeatSessionId = null;
 }
 
 export function connectWS() {
-	if (!browser) return;
-	shouldReconnect = true;
-	if (reconnectTimer) {
-		clearTimeout(reconnectTimer);
-		reconnectTimer = null;
-	}
-	if (
-		socket &&
-		(socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
-	)
-		return;
-	const url = wsUrl();
-	socket = new WebSocket(url);
-	authed = false;
-	wsAuthenticated.set(false);
+        if (!browser) return;
+        shouldReconnect = true;
+        wsState.shouldReconnect = true;
+        if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+                wsState.reconnectTimer = null;
+        }
+        if (
+                socket &&
+                (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+        )
+                return;
+        const url = wsUrl();
+        socket = new WebSocket(url);
+        wsState.socket = socket;
+        authed = false;
+        wsState.authed = false;
+        wsAuthenticated.set(false);
 
         socket.onopen = () => {
                 wsConnected.set(true);
@@ -596,15 +679,18 @@ export function connectWS() {
                 ) {
                         const interval = (data?.d?.heartbeat_interval ?? data?.heartbeat_interval) as number;
                         heartbeatMs = interval;
+                        wsState.heartbeatMs = heartbeatMs;
                         const sessionId =
                                 (data?.d?.session_id ?? data?.session_id ?? null) as string | null;
                         if (typeof sessionId === 'string' && sessionId) {
                                 heartbeatSessionId = sessionId;
+                                wsState.heartbeatSessionId = heartbeatSessionId;
                         }
                         startHeartbeat();
                         // Mark authed and subscribe to current selections
                         const alreadyAuthed = authed;
                         authed = true;
+                        wsState.authed = true;
                         if (!alreadyAuthed) {
                                 wsAuthenticated.set(true);
                                 // After auth, (re)subscribe to current selections
@@ -664,21 +750,25 @@ export function connectWS() {
 		}
 	};
 
-	socket.onclose = () => {
-		wsConnected.set(false);
-		wsAuthenticated.set(false);
-		stopHeartbeat();
-		authed = false;
-		socket = null;
-		if (!shouldReconnect) return;
-		wsConnectionLost.set(true);
-		if (!reconnectTimer) {
-			reconnectTimer = setTimeout(() => {
-				reconnectTimer = null;
-				connectWS();
-			}, 1000);
-		}
-	};
+        socket.onclose = () => {
+                wsConnected.set(false);
+                wsAuthenticated.set(false);
+                stopHeartbeat();
+                authed = false;
+                wsState.authed = false;
+                socket = null;
+                wsState.socket = null;
+                if (!shouldReconnect) return;
+                wsConnectionLost.set(true);
+                if (!reconnectTimer) {
+                        reconnectTimer = setTimeout(() => {
+                                reconnectTimer = null;
+                                wsState.reconnectTimer = null;
+                                connectWS();
+                        }, 1000);
+                        wsState.reconnectTimer = reconnectTimer;
+                }
+        };
 
 	socket.onerror = () => {
 		// handled by onclose
@@ -699,26 +789,67 @@ export function subscribeWS(guilds: (number | string)[] = [], channel?: number |
 }
 
 // React to auth & selection changes (browser only)
-if (browser) {
-	auth.token.subscribe((value) => {
-		latestToken = value;
-	});
+if (browser && !wsState.subscriptionsRegistered) {
+        const unsubscribers: (() => void)[] = [];
 
-	auth.isAuthenticated.subscribe((ok) => {
-		if (ok) connectWS();
-		else disconnectWS();
-	});
+        unsubscribers.push(
+                auth.token.subscribe((value) => {
+                        latestToken = value;
+                        wsState.latestToken = value;
+                })
+        );
 
-	selectedChannelId.subscribe((ch) => {
-		const channelId = normalizeSnowflake(ch);
-		resubscribe(channelId);
-	});
+        unsubscribers.push(
+                auth.isAuthenticated.subscribe((ok) => {
+                        if (ok) connectWS();
+                        else disconnectWS();
+                })
+        );
 
-	selectedGuildId.subscribe(() => {
-		resubscribe();
-	});
+        unsubscribers.push(
+                selectedChannelId.subscribe((ch) => {
+                        const channelId = normalizeSnowflake(ch);
+                        resubscribe(channelId);
+                })
+        );
 
-	auth.guilds.subscribe(() => {
-		resubscribe();
-	});
+        unsubscribers.push(
+                selectedGuildId.subscribe(() => {
+                        resubscribe();
+                })
+        );
+
+        unsubscribers.push(
+                auth.guilds.subscribe(() => {
+                        resubscribe();
+                })
+        );
+
+        wsState.cleanupSubscribers = () => {
+                for (const unsubscribe of unsubscribers.splice(0, unsubscribers.length)) {
+                        try {
+                                unsubscribe();
+                        } catch {}
+                }
+                wsState.subscriptionsRegistered = false;
+                wsState.cleanupSubscribers = null;
+        };
+
+        wsState.subscriptionsRegistered = true;
+
+        if (import.meta.hot) {
+                import.meta.hot.dispose(() => {
+                        wsState.cleanupSubscribers?.();
+                        disconnectWS();
+                        if (hbWorker) {
+                                try {
+                                        hbWorker.terminate();
+                                } catch {}
+                        }
+                        hbWorker = null;
+                        wsState.hbWorker = null;
+                        hbWorkerActive = false;
+                        wsState.hbWorkerActive = false;
+                });
+        }
 }
