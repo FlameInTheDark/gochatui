@@ -66,6 +66,7 @@
         let removingFriendIds = new Set<string>();
         let processingRequestIds = new Set<string>();
         let openingDmChannelIds = new Set<string>();
+        let friendDirectory: Map<string, FriendEntry> = new Map();
         const pendingDmRequests = new Map<string, Promise<string | null>>();
 
 	function toSnowflakeString(value: unknown): string | null {
@@ -205,13 +206,68 @@
                 }
         }
 
-        async function ensureDirectChannel(rawUserId: string | null | undefined): Promise<string | null> {
-                const normalizedUserId = toSnowflakeString(rawUserId);
+        function buildFriendRecipient(friend: FriendEntry | null): any | null {
+                if (!friend) return null;
+                const base = {
+                        id: friend.id,
+                        username: friend.name,
+                        global_name: friend.name,
+                        display_name: friend.name,
+                        discriminator: friend.discriminator,
+                        avatar: friend.avatarUrl,
+                        avatar_id: friend.avatarUrl,
+                        avatarId: friend.avatarUrl,
+                        avatarUrl: friend.avatarUrl
+                };
+                return {
+                        ...base,
+                        user: {
+                                ...base
+                        },
+                        profile: {
+                                ...base
+                        }
+                };
+        }
+
+        function enrichDirectChannel(channel: DtoChannel, friend: FriendEntry | null): DtoChannel {
+                if (!friend) return channel;
+                const recipient = buildFriendRecipient(friend);
+                const existingRecipients = Array.isArray((channel as any)?.recipients)
+                        ? [...((channel as any).recipients as any[])]
+                        : [];
+                if (recipient && !existingRecipients.some((entry) => toSnowflakeString(entry?.id) === friend.id)) {
+                        existingRecipients.push(recipient);
+                }
+                const enriched: any = {
+                        ...channel,
+                        name: friend.name,
+                        recipients: existingRecipients
+                };
+                if (!enriched.icon && friend.avatarUrl) {
+                        enriched.icon = friend.avatarUrl;
+                        enriched.iconUrl = friend.avatarUrl;
+                        enriched.avatar = friend.avatarUrl;
+                        enriched.avatarUrl = friend.avatarUrl;
+                }
+                return enriched;
+        }
+
+        async function ensureDirectChannel(
+                target: string | FriendEntry | null | undefined
+        ): Promise<string | null> {
+                const friendHint: FriendEntry | null =
+                        target && typeof target === 'object' ? { ...target } : null;
+                const normalizedUserId = toSnowflakeString(
+                        friendHint ? friendHint.id : (target as string | null | undefined)
+                );
                 if (!normalizedUserId) {
                         dmChannelError = m.user_home_friend_action_error();
                         return null;
                 }
-                const existing = directChannels.find((entry) => entry.userId === normalizedUserId);
+                const existing: DirectChannelEntry | undefined = directChannels.find(
+                        (entry) => entry.userId === normalizedUserId
+                );
                 if (existing) {
                         addVisibleDmChannel(existing.id, normalizedUserId);
                         return existing.id;
@@ -238,6 +294,9 @@
                                         throw new Error('Invalid DM channel response');
                                 }
                                 const normalized = normalizeDtoChannel(channel) as DtoChannel;
+                                const friendEntry =
+                                        friendHint ?? friendDirectory.get(normalizedUserId) ?? null;
+                                const enriched = enrichDirectChannel(normalized, friendEntry);
                                 channelsByGuild.update((map) => {
                                         const dmKey = '@me';
                                         const existingList = Array.isArray(map[dmKey]) ? map[dmKey] : [];
@@ -246,7 +305,7 @@
                                         );
                                         return {
                                                 ...map,
-                                                [dmKey]: [...filtered, normalized]
+                                                [dmKey]: [...filtered, enriched]
                                         };
                                 });
                                 addVisibleDmChannel(channelId, normalizedUserId);
@@ -287,7 +346,7 @@
         }
 
         async function handleFriendOpenDirectChannel(friend: FriendEntry) {
-                const channelId = await ensureDirectChannel(friend?.id ?? null);
+                const channelId = await ensureDirectChannel(friend ?? null);
                 if (channelId) {
                         openDirectChannelById(channelId, friend.id);
                 }
@@ -699,9 +758,35 @@
 		return fallback;
 	}
 
-	$: {
-		const meId = toSnowflakeString(($user as any)?.id);
-		const fallbackName = m.user_default_name();
+        $: {
+                const fallbackName = m.user_default_name();
+                const meId = toSnowflakeString(($user as any)?.id);
+                const userData = $user as any;
+                const candidateCollections = [
+                        apiFriendList,
+                        userData?.friends,
+                        userData?.friend_list,
+                        userData?.relationships,
+                        userData?.relationship_list
+                ];
+                const nextDirectory = new Map<string, FriendEntry>();
+                for (const collection of candidateCollections) {
+                        if (!Array.isArray(collection)) continue;
+                        for (const entry of collection) {
+                                const normalized = normalizeFriendEntry(entry, fallbackName);
+                                if (!normalized) continue;
+                                if (meId && normalized.id === meId) continue;
+                                if (!nextDirectory.has(normalized.id)) {
+                                        nextDirectory.set(normalized.id, normalized);
+                                }
+                        }
+                }
+                friendDirectory = nextDirectory;
+        }
+
+        $: {
+                const meId = toSnowflakeString(($user as any)?.id);
+                const fallbackName = m.user_default_name();
                 const sources: any[] = [];
                 const userData = $user as any;
                 const dmVisibility = new Set($settingsStore.dmChannels.map((entry) => entry.channelId));
@@ -744,6 +829,24 @@
                                 normalized.userId = storedUserId;
                         } else if (!normalized.userId && normalized.recipients.length === 1) {
                                 normalized.userId = normalized.recipients[0]?.id ?? null;
+                        }
+                        const candidateId =
+                                normalized.userId ??
+                                storedUserId ??
+                                (normalized.recipients.length === 1
+                                        ? normalized.recipients[0]?.id ?? null
+                                        : null);
+                        if (candidateId) {
+                                const friend = friendDirectory.get(candidateId) ?? null;
+                                if (friend) {
+                                        normalized.label = friend.name;
+                                        if (normalized.recipients.length === 0) {
+                                                normalized.recipients = [friend];
+                                        }
+                                        if (!normalized.avatarUrl) {
+                                                normalized.avatarUrl = friend.avatarUrl ?? null;
+                                        }
+                                }
                         }
                         result.push(normalized);
                 }
