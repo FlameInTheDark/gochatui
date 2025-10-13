@@ -1740,7 +1740,7 @@
                         }
                 }}
         >
-                <div aria-hidden="true" class="absolute inset-0 bg-black/50"></div>
+                <div aria-hidden="true" class="absolute inset-0 bg-black/50 backdrop-blur-md"></div>
                 <div
                         class="relative z-10 w-full max-w-sm rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-6 shadow-xl"
                         role="document"
