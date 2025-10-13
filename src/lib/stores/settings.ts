@@ -875,6 +875,40 @@ export function addVisibleDmChannel(channelId: string | null | undefined, userId
         });
 }
 
+export function setVisibleDmChannels(
+        entries: Iterable<{ channelId: string | null | undefined; userId?: string | null | undefined }>
+) {
+        const normalized: VisibleDmChannel[] = [];
+        const seen = new Set<string>();
+        for (const entry of entries ?? []) {
+                const channelId = toSnowflakeString(entry?.channelId);
+                if (!channelId || seen.has(channelId)) continue;
+                seen.add(channelId);
+                const userId = entry?.userId ? toSnowflakeString(entry.userId) : null;
+                normalized.push({ channelId, userId });
+        }
+
+        mutateAppSettings((settings) => {
+                const previous = settings.dmChannels;
+                if (
+                        previous.length === normalized.length &&
+                        previous.every((item, index) => {
+                                const candidate = normalized[index];
+                                if (!candidate) return false;
+                                return (
+                                        item.channelId === candidate.channelId &&
+                                        (item.userId ?? null) === (candidate.userId ?? null)
+                                );
+                        })
+                ) {
+                        return false;
+                }
+
+                settings.dmChannels = normalized;
+                return true;
+        });
+}
+
 function generateFolderId(): string {
 	return `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
