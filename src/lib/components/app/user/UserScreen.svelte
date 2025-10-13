@@ -490,10 +490,10 @@
 	<div class="flex min-h-0 flex-1 overflow-hidden">
                 <section class="flex h-full w-80 flex-shrink-0 flex-col border-r border-[var(--stroke)]">
                         <div class="flex flex-col gap-3 border-b border-[var(--stroke)] px-4 py-3">
-                                <div class="flex gap-2">
+                                <div class="flex flex-col gap-2">
                                         <button
                                                 type="button"
-                                                class={`flex-1 rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                                                class={`w-full rounded-md px-3 py-1 text-sm font-medium transition-colors ${
                                                         activeList === 'friends'
                                                                 ? 'bg-[var(--panel-strong)] text-[var(--text-strong)]'
                                                                 : 'text-[var(--muted)] hover:text-[var(--text)]'
@@ -505,7 +505,7 @@
                                         </button>
                                         <button
                                                 type="button"
-                                                class={`flex-1 rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                                                class={`w-full rounded-md px-3 py-1 text-sm font-medium transition-colors ${
                                                         activeList === 'requests'
                                                                 ? 'bg-[var(--panel-strong)] text-[var(--text-strong)]'
                                                                 : 'text-[var(--muted)] hover:text-[var(--text)]'
