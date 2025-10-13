@@ -38,12 +38,13 @@
         --text: #eef1f6;
         --text-2: #c5ccd6;
         --muted: #9aa3af;
-	--brand: #aebdde;
-	--brand-2: #c9d5ee;
-	--success: #5be0b3;
-	--warning: #ffd777;
-	--danger: #ff7a86;
-	color-scheme: dark;
+        --brand: #aebdde;
+        --brand-strong: #c4d2f1;
+        --brand-2: #c9d5ee;
+        --success: #5be0b3;
+        --warning: #ffd777;
+        --danger: #ff7a86;
+        color-scheme: dark;
 }
 
 [data-theme='light'] {
@@ -56,12 +57,13 @@
         --text: #111317;
         --text-2: #2e3239;
         --muted: #6b7280;
-	--brand: #8ea0c8;
-	--brand-2: #a8b6d6;
-	--success: #10b981;
-	--warning: #f59e0b;
-	--danger: #ef4444;
-	color-scheme: light;
+        --brand: #8ea0c8;
+        --brand-strong: #7489bc;
+        --brand-2: #a8b6d6;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        color-scheme: light;
 }
 
 html {
