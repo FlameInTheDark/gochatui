@@ -789,31 +789,22 @@
                                         {#if directChannels.length > 0}
                                                 <ul class="space-y-2">
                                                         {#each directChannels as channel (channel.id)}
+                                                                {@const targetId = channel.userId ?? channel.recipients[0]?.id ?? null}
+                                                                {@const isLoading = targetId ? openingDmChannelIds.has(targetId) : false}
+                                                                {@const isDisabled = isLoading || !targetId}
                                                                 <li>
-                                                                        {@const targetId = channel.userId ?? channel.recipients[0]?.id ?? null}
-                                                                        {@const isLoading = targetId ? openingDmChannelIds.has(targetId) : false}
-                                                                        <div
-                                                                                class={`flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 transition ${
+                                                                        <button
+                                                                                type="button"
+                                                                                class={`flex w-full items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-left transition ${
                                                                                         isLoading
                                                                                                 ? 'cursor-wait opacity-70'
-                                                                                                : 'cursor-pointer hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
+                                                                                                : 'hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
                                                                                 }`}
-                                                                                role="button"
-                                                                                tabindex={targetId ? 0 : -1}
-                                                                                aria-disabled={isLoading || !targetId}
+                                                                                disabled={isDisabled}
                                                                                 aria-busy={isLoading}
                                                                                 on:click={() => {
                                                                                         if (!targetId) return;
                                                                                         handleOpenDirectChannel(targetId);
-                                                                                }}
-                                                                                on:keydown={(event) => {
-                                                                                        if (event.defaultPrevented) return;
-                                                                                        if (event.target !== event.currentTarget) return;
-                                                                                        if (event.key === 'Enter' || event.key === ' ') {
-                                                                                                event.preventDefault();
-                                                                                                if (!targetId) return;
-                                                                                                handleOpenDirectChannel(targetId);
-                                                                                        }
                                                                                 }}
                                                                         >
                                                                                 <div class="min-w-0 flex-1">
@@ -824,7 +815,7 @@
                                                                                                 </div>
                                                                                         {/if}
                                                                                 </div>
-                                                                        </div>
+                                                                        </button>
                                                                 </li>
                                                         {/each}
                                                 </ul>
@@ -848,52 +839,42 @@
 			{/if}
 			{#if activeList === 'friends'}
 				{#if friends.length > 0}
-					<div class="grid gap-3">
+                                        <div class="grid gap-3">
                                                 {#each friends as friend (friend.id)}
-                                                        <div
-                                                                class={`flex items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 transition ${
-                                                                        openingDmChannelIds.has(friend.id)
-                                                                                ? 'cursor-wait opacity-70'
-                                                                                : 'cursor-pointer hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                }`}
-                                                                role="button"
-                                                                tabindex="0"
-                                                                aria-disabled={openingDmChannelIds.has(friend.id)}
-                                                                aria-busy={openingDmChannelIds.has(friend.id)}
-                                                                on:click={() => handleOpenDirectChannel(friend.id)}
-                                                                on:keydown={(event) => {
-                                                                        if (event.defaultPrevented) return;
-                                                                        if (event.target !== event.currentTarget) return;
-                                                                        if (event.key === 'Enter' || event.key === ' ') {
-                                                                                event.preventDefault();
-                                                                                handleOpenDirectChannel(friend.id);
-                                                                        }
-                                                                }}
-                                                        >
-								<div
-									class="grid h-10 w-10 place-items-center rounded-full bg-[var(--panel)] text-sm font-semibold"
-								>
-									{initialsFor(friend.name)}
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="truncate text-sm font-semibold">{friend.name}</div>
-									{#if friend.discriminator}
-										<div class="truncate text-xs text-[var(--muted)]">#{friend.discriminator}</div>
-									{/if}
-								</div>
-                                                                <div class="ml-auto flex items-center gap-2">
-                                                                        <button
-                                                                                type="button"
-                                                                                class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                on:click|stopPropagation={() => handleRemoveFriend(friend.id)}
-                                                                                disabled={removingFriendIds.has(friend.id)}
-                                                                        >
-                                                                                {m.user_home_friend_remove()}
-                                                                        </button>
-                                                                </div>
+                                                        {@const isOpening = openingDmChannelIds.has(friend.id)}
+                                                        <div class="flex items-center gap-2">
+                                                                <button
+                                                                        type="button"
+                                                                        class={`flex flex-1 items-center gap-3 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-left transition ${
+                                                                                isOpening
+                                                                                        ? 'cursor-wait opacity-70'
+                                                                                        : 'hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
+                                                                        }`}
+                                                                        disabled={isOpening}
+                                                                        aria-busy={isOpening}
+                                                                        on:click={() => handleOpenDirectChannel(friend.id)}
+                                                                >
+                                                                        <div class="grid h-10 w-10 place-items-center rounded-full bg-[var(--panel)] text-sm font-semibold">
+                                                                                {initialsFor(friend.name)}
+                                                                        </div>
+                                                                        <div class="min-w-0 flex-1">
+                                                                                <div class="truncate text-sm font-semibold">{friend.name}</div>
+                                                                                {#if friend.discriminator}
+                                                                                        <div class="truncate text-xs text-[var(--muted)]">#{friend.discriminator}</div>
+                                                                                {/if}
+                                                                        </div>
+                                                                </button>
+                                                                <button
+                                                                        type="button"
+                                                                        class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                        on:click={() => handleRemoveFriend(friend.id)}
+                                                                        disabled={removingFriendIds.has(friend.id)}
+                                                                >
+                                                                        {m.user_home_friend_remove()}
+                                                                </button>
                                                         </div>
-						{/each}
-					</div>
+                                                {/each}
+                                        </div>
 				{:else}
 					<p class="text-sm text-[var(--muted)]">{m.user_home_friends_empty()}</p>
 				{/if}
