@@ -30,6 +30,8 @@
         let friends: FriendEntry[] = [];
         let friendRequests: FriendRequestEntry[] = [];
         let activeList: 'friends' | 'requests' = 'friends';
+        let showAddFriendModal = false;
+        let addFriendIdentifier = '';
 
 	function toSnowflakeString(value: unknown): string | null {
 		if (value == null) return null;
@@ -469,19 +471,47 @@
                 });
         }
 
-	function initialsFor(name: string): string {
-		if (!name) return '';
-		const trimmed = name.trim();
-		if (!trimmed) return '';
-		return trimmed.slice(0, 2).toUpperCase();
-	}
+        function initialsFor(name: string): string {
+                if (!name) return '';
+                const trimmed = name.trim();
+                if (!trimmed) return '';
+                return trimmed.slice(0, 2).toUpperCase();
+        }
+
+        function openAddFriendModal() {
+                addFriendIdentifier = '';
+                showAddFriendModal = true;
+        }
+
+        function closeAddFriendModal() {
+                showAddFriendModal = false;
+        }
+
+        function handleAddFriendSubmit() {
+                closeAddFriendModal();
+        }
+
+        function handleWindowKeydown(event: KeyboardEvent) {
+                if (!showAddFriendModal) return;
+                if (event.key === 'Escape') {
+                        event.preventDefault();
+                        closeAddFriendModal();
+                }
+        }
 </script>
 
 <div class="col-span-2 flex h-full min-h-0 flex-col overflow-hidden">
         <div
-                class="flex h-[var(--header-h)] flex-shrink-0 items-center border-b border-[var(--stroke)] px-5"
+                class="flex h-[var(--header-h)] flex-shrink-0 items-center gap-3 border-b border-[var(--stroke)] px-5"
         >
                 <h1 class="text-base font-semibold">{m.user_home_header()}</h1>
+                <button
+                        type="button"
+                        class="ml-auto rounded-md bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50"
+                        on:click={openAddFriendModal}
+                >
+                        {m.user_home_add_friend()}
+                </button>
         </div>
         <div class="flex min-h-0 flex-1 overflow-hidden">
                 <section
@@ -612,3 +642,59 @@
                 </section>
         </div>
 </div>
+
+{#if showAddFriendModal}
+        <div
+                class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="user-screen-add-friend-title"
+        >
+                <div class="absolute inset-0 bg-black/50" on:click={closeAddFriendModal} />
+                <div
+                        class="relative z-10 w-full max-w-sm rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] p-6 shadow-xl"
+                        role="document"
+                        on:click|stopPropagation
+                >
+                        <h2
+                                id="user-screen-add-friend-title"
+                                class="text-lg font-semibold text-[var(--text-strong)]"
+                        >
+                                {m.user_home_add_friend_title()}
+                        </h2>
+                        <form
+                                class="mt-4 space-y-4"
+                                on:submit|preventDefault={handleAddFriendSubmit}
+                        >
+                                <label class="flex flex-col gap-2 text-sm">
+                                        <span class="font-medium text-[var(--text-strong)]">
+                                                {m.user_home_add_friend_label()}
+                                        </span>
+                                        <input
+                                                class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50"
+                                                type="text"
+                                                bind:value={addFriendIdentifier}
+                                                placeholder={m.user_home_add_friend_placeholder()}
+                                        />
+                                </label>
+                                <div class="flex justify-end gap-3">
+                                        <button
+                                                type="button"
+                                                class="rounded-md border border-[var(--stroke)] px-4 py-2 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+                                                on:click={closeAddFriendModal}
+                                        >
+                                                {m.cancel()}
+                                        </button>
+                                        <button
+                                                type="submit"
+                                                class="rounded-md bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[var(--bg)] transition hover:bg-[var(--brand-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/60"
+                                        >
+                                                {m.user_home_add_friend_submit()}
+                                        </button>
+                                </div>
+                        </form>
+                </div>
+        </div>
+{/if}
+
+<svelte:window on:keydown={handleWindowKeydown} />
