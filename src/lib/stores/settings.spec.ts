@@ -59,7 +59,8 @@ describe('applyReadStatesMapToLayout', () => {
                         status: {
                                 status: 'online',
                                 customStatusText: null
-                        }
+                        },
+                        dmChannels: []
                 });
 
                 const lookup = get(guildChannelReadStateLookup);
