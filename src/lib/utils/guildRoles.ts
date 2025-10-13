@@ -101,7 +101,7 @@ function toApiSnowflake(value: string): any {
 
 export async function loadGuildRolesCached(guildId: string): Promise<DtoRole[]> {
 	const key = String(guildId);
-	if (!key) return [];
+	if (!key || key === '@me') return [];
 
 	const cached = guildRolesResolved.get(key);
 	if (cached) return cached;
@@ -238,6 +238,7 @@ export function getCachedChannelRoleIds(
 }
 
 async function fetchChannelRoleIds(guildId: string, channelId: string): Promise<string[]> {
+        if (!guildId || guildId === '@me') return [];
         const response = await auth.api.guildRoles.guildGuildIdChannelChannelIdRolesGet({
                 guildId: toApiSnowflake(guildId),
                 channelId: toApiSnowflake(channelId)
@@ -254,7 +255,7 @@ export async function loadChannelRoleIds(
 ): Promise<string[]> {
         const gid = toSnowflakeString(guildId);
         const cid = toSnowflakeString(channelId);
-        if (!gid || !cid) return [];
+        if (!gid || gid === '@me' || !cid) return [];
         const cached = getCachedChannelRoleIds(gid, cid);
         if (cached) return cached;
         let guildInflight = channelRoleInflight.get(gid);
@@ -286,7 +287,7 @@ export async function refreshChannelRoleIds(
 ): Promise<string[]> {
         const gid = toSnowflakeString(guildId);
         const cid = toSnowflakeString(channelId);
-        if (!gid || !cid) return [];
+        if (!gid || gid === '@me' || !cid) return [];
         deleteChannelRoleCacheEntry(gid, cid);
         return loadChannelRoleIds(gid, cid);
 }
@@ -296,7 +297,7 @@ export function invalidateChannelRoleIds(
         channelId?: string | number | bigint
 ) {
         const gid = toSnowflakeString(guildId);
-        if (!gid) return;
+        if (!gid || gid === '@me') return;
         if (channelId == null) {
                 channelRoleCache.delete(gid);
                 channelRoleInflight.delete(gid);

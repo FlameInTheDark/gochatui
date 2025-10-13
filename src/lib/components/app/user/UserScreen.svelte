@@ -890,6 +890,20 @@
                         }
                         result.push(normalized);
                 }
+		for (const entry of $settingsStore.dmChannels) {
+                        const channelId = toSnowflakeString(entry.channelId);
+                        if (!channelId || seen.has(channelId)) continue;
+                        seen.add(channelId);
+                        const storedUserId = entry.userId ? toSnowflakeString(entry.userId) : null;
+                        const friend = storedUserId ? friendDirectory.get(storedUserId) ?? null : null;
+                        result.push({
+                                id: channelId,
+                                label: friend?.name ?? m.user_home_dm_placeholder(),
+                                recipients: friend ? [friend] : [],
+                                userId: storedUserId,
+                                avatarUrl: friend?.avatarUrl ?? null
+                        });
+                }
                 result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
                 directChannels = result;
         }
@@ -1193,23 +1207,21 @@
                                                                                 : null}
                                                                 {@const secondaryLine =
                                                                         recipient
-                                                                                ? recipient.discriminator
-                                                                                        ? `#${recipient.discriminator}`
-                                                                                        : showSecondaryLabel
+                                                                                ? showSecondaryLabel
                                                                                 : channel.recipients.length > 1
                                                                                         ? channel.recipients.map((entry) => entry.name).join(', ')
                                                                                         : null}
                                                                 {@const presenceInfo = targetId ? $presenceMap[targetId] ?? null : null}
                                                                 {@const presenceStatus = presenceInfo?.status ?? null}
                                                                 <li>
-                                                                        <div class="flex items-center gap-2">
+                                                                        <div class={`group relative ${isLoading ? 'opacity-70' : ''}`}>
                                                                                 <button
                                                                                         type="button"
-                                                                                        class={`flex w-full flex-1 items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                                                                                        class={`flex w-full items-center gap-3 rounded-md border px-3 py-2 pr-12 text-left transition ${
                                                                                                 isActive
                                                                                                         ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                                        } ${isLoading ? 'cursor-wait opacity-70' : ''}`}
+                                                                                        } ${isLoading ? 'cursor-wait' : ''}`}
                                                                                         disabled={isLoading}
                                                                                         aria-busy={isLoading}
                                                                                         aria-pressed={isActive}
@@ -1238,8 +1250,16 @@
                                                                                 </button>
                                                                                 <button
                                                                                         type="button"
-                                                                                        class="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--stroke)] text-[var(--muted)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none"
-                                                                                        onclick={() => handleHideDirectChannel(channel.id)}
+                                                                                        class={`absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-[var(--muted)] transition focus-visible:border-[var(--danger)] focus-visible:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none ${
+                                                                                                isActive
+                                                                                                        ? 'opacity-100'
+                                                                                                        : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                                                                                        }`}
+                                                                                        disabled={isLoading}
+                                                                                        onclick={(event) => {
+                                                                                                event.stopPropagation();
+                                                                                                handleHideDirectChannel(channel.id);
+                                                                                        }}
                                                                                         aria-label={m.user_home_dm_remove()}
                                                                                         title={m.user_home_dm_remove()}
                                                                                 >
