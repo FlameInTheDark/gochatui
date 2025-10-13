@@ -800,7 +800,7 @@
 		return fallback;
 	}
 
-        $: {
+        $effect(() => {
                 const fallbackName = m.user_default_name();
                 const meId = toSnowflakeString(($user as any)?.id);
                 const userData = $user as any;
@@ -824,9 +824,9 @@
                         }
                 }
                 friendDirectory = nextDirectory;
-        }
+        });
 
-        $: {
+        $effect(() => {
                 const meId = toSnowflakeString(($user as any)?.id);
                 const fallbackName = m.user_default_name();
                 const sources: any[] = [];
@@ -852,15 +852,15 @@
 					const type = (raw as any)?.type ?? null;
 					const guildId =
 						(raw as any)?.guild_id ?? (raw as any)?.guildId ?? (raw as any)?.guild ?? null;
-					if (guildId == null || type === 1 || type === 3) {
-						sources.push(raw);
-					}
-				}
-			}
-		}
-		const seen = new Set<string>();
-		const result: DirectChannelEntry[] = [];
-		for (const source of sources) {
+                                        if (guildId == null || type === 1 || type === 3) {
+                                                sources.push(raw);
+                                        }
+                                }
+                        }
+                }
+                const seen = new Set<string>();
+                const result: DirectChannelEntry[] = [];
+                for (const source of sources) {
                         const normalized = normalizeDirectChannel(source, meId, fallbackName);
                         if (!normalized) continue;
                         if (restrictToVisible && !dmVisibility.has(normalized.id)) continue;
@@ -908,7 +908,7 @@
                 }
                 result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
                 directChannels = result;
-        }
+        });
 
         async function ensureVisibleDmChannelMetadata(): Promise<void> {
                 const settings = $settingsStore;
@@ -970,7 +970,7 @@
                 dmChannelMetadataRequest = request;
         });
 
-        $: {
+        $effect(() => {
                 const current = directChannels.find((entry) => entry.id === activeDmChannelId) ?? null;
                 activeDmChannel = current;
                 if (current?.userId) {
@@ -1004,12 +1004,12 @@
                         activeDmSubtext = null;
                         activeDmAvatarUrl = null;
                 }
-        }
+        });
 
-	$: {
-		const fallbackName = m.user_default_name();
-		const meId = toSnowflakeString(($user as any)?.id);
-		const userData = $user as any;
+        $effect(() => {
+                const fallbackName = m.user_default_name();
+                const meId = toSnowflakeString(($user as any)?.id);
+                const userData = $user as any;
 		const friendSources = [
 			apiFriendList,
 			userData?.friends,
@@ -1105,9 +1105,9 @@
                         if (dirDelta !== 0) return dirDelta;
                         return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
                 });
-        }
+        });
 
-        $: {
+        $effect(() => {
                 const tracked = new Set<string>();
                 for (const friend of friends) {
                         const id = toSnowflakeString(friend?.id);
@@ -1130,7 +1130,7 @@
                         presenceSubscription.update(ids);
                         lastPresenceSignature = signature;
                 }
-        }
+        });
 
         function initialsFor(name: string): string {
                 if (!name) return '';
