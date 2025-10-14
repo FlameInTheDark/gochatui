@@ -213,6 +213,8 @@
     "user_home_friends_filter_label": "Filter friends",
     "user_home_friends_filter_placeholder": "Filter friends by name",
     "user_home_friends_filter_empty": "No friends match your search.",
+    "user_home_friends_tab_all": "All",
+    "user_home_friends_tab_online": "Online",
     "user_home_tab_friends": "Friends",
 	"user_home_tab_requests": "Requests",
 	"user_home_requests_heading": "Friend Requests",

@@ -73,6 +73,7 @@
         let apiFriendRequests = $state<any[]>([]);
         let friends = $state<FriendEntry[]>([]);
         let filteredFriends = $state<FriendEntry[]>([]);
+        let friendPresenceFilter = $state<'all' | 'online'>('all');
         let friendFilter = $state('');
         let friendRequests = $state<FriendRequestEntry[]>([]);
         let dmChannelError = $state<string | null>(null);
@@ -1396,11 +1397,26 @@
 
         $effect(() => {
                 const query = friendFilter.trim().toLowerCase();
-                if (!query) {
+                const presenceFilter = friendPresenceFilter;
+                const lookup = $presenceMap;
+                const hasQuery = query.length > 0;
+                const requireOnline = presenceFilter === 'online';
+
+                if (!hasQuery && !requireOnline) {
                         filteredFriends = friends;
                         return;
                 }
+
                 filteredFriends = friends.filter((entry) => {
+                        if (requireOnline) {
+                                const status = lookup[entry.id]?.status ?? 'offline';
+                                if (status === 'offline') {
+                                        return false;
+                                }
+                        }
+
+                        if (!hasQuery) return true;
+
                         const nameMatch = entry.name.toLowerCase().includes(query);
                         if (nameMatch) return true;
                         if (entry.discriminator) {
@@ -1700,6 +1716,32 @@
                                         {#if activeList === 'friends'}
                                                 {#if friends.length > 0}
                                                         <div class="space-y-3">
+                                                                <div class="flex gap-2">
+                                                                        <button
+                                                                                type="button"
+                                                                                class={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none ${
+                                                                                        friendPresenceFilter === 'all'
+                                                                                                ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                                                : 'border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--muted)] hover:border-[var(--brand)]/40 hover:text-[var(--text)]'
+                                                                                }`}
+                                                                                aria-pressed={friendPresenceFilter === 'all'}
+                                                                                onclick={() => (friendPresenceFilter = 'all')}
+                                                                        >
+                                                                                {m.user_home_friends_tab_all()}
+                                                                        </button>
+                                                                        <button
+                                                                                type="button"
+                                                                                class={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none ${
+                                                                                        friendPresenceFilter === 'online'
+                                                                                                ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                                                : 'border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--muted)] hover:border-[var(--brand)]/40 hover:text-[var(--text)]'
+                                                                                }`}
+                                                                                aria-pressed={friendPresenceFilter === 'online'}
+                                                                                onclick={() => (friendPresenceFilter = 'online')}
+                                                                        >
+                                                                                {m.user_home_friends_tab_online()}
+                                                                        </button>
+                                                                </div>
                                                                 <div>
                                                                         <label class="sr-only" for={friendFilterInputId}>
                                                                                 {m.user_home_friends_filter_label()}
