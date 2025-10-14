@@ -1057,7 +1057,10 @@ export function addVisibleDmChannel(
                         const existing = settings.dmChannels[existingIndex];
                         const currentDead = existing.isDead ?? false;
                         const nextDead = desiredDeadState != null ? desiredDeadState : currentDead;
+                        const shouldUpdateVisibility =
+                                existing.hidden || existing.hiddenAfterMessageId != null;
                         if (
+                                !shouldUpdateVisibility &&
                                 (existing.userId ?? null) === normalizedUserId &&
                                 currentDead === nextDead
                         ) {
