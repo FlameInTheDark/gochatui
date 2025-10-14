@@ -27,6 +27,7 @@
                 presenceIndicatorClass
         } from '$lib/stores/presence';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
+        import { applyFriendList } from '$lib/stores/friends';
         import { X } from 'lucide-svelte';
         import { isMessageNewer } from '$lib/components/app/chat/readStateUtils';
 
@@ -157,12 +158,13 @@
 			api.user.userMeFriendsRequestsGet()
 		]);
 		let encounteredError = false;
-		if (friendsResult.status === 'fulfilled') {
-			const data = friendsResult.value?.data;
-			apiFriendList = Array.isArray(data) ? data : [];
-		} else {
-			encounteredError = true;
-		}
+                if (friendsResult.status === 'fulfilled') {
+                        const data = friendsResult.value?.data;
+                        apiFriendList = Array.isArray(data) ? data : [];
+                        applyFriendList(apiFriendList);
+                } else {
+                        encounteredError = true;
+                }
 		if (requestsResult.status === 'fulfilled') {
 			const data = requestsResult.value?.data;
 			apiFriendRequests = Array.isArray(data) ? data : [];

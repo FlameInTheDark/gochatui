@@ -1,6 +1,13 @@
 <script lang="ts">
         import type { DtoMember, DtoRole, DtoUser } from '$lib/api';
+        import { auth } from '$lib/stores/auth';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
+        import {
+                ensureFriendsLoaded,
+                friendIds as friendIdStore,
+                markFriendRemoved,
+                refreshFriends
+        } from '$lib/stores/friends';
         import { presenceByUser, presenceIndicatorClass } from '$lib/stores/presence';
         import { loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { colorIntToHex } from '$lib/utils/color';
@@ -17,6 +24,7 @@
         import { buildAttachmentUrl } from '$lib/utils/cdn';
         import { m } from '$lib/paraglide/messages.js';
         import { tick } from 'svelte';
+        import { Loader2, UserMinus, UserPlus } from 'lucide-svelte';
 
         let panelEl: HTMLDivElement | null = $state(null);
         let posX = $state(0);
@@ -26,6 +34,12 @@
         let rolesError = $state<string | null>(null);
 
         const presenceMap = presenceByUser;
+        const me = auth.user;
+        const api = auth.api;
+        const friendIds = friendIdStore;
+
+        let friendActionPending = $state(false);
+        let friendActionError = $state<string | null>(null);
 
         function closePanel() {
                 memberProfilePanel.close();
@@ -113,6 +127,44 @@
                 toSnowflakeString((selectedMember as any)?.id) ??
                 toSnowflakeString((selectedUser as any)?.id)
         );
+
+        const isSelf = $derived.by(() => {
+                const targetId = userId;
+                if (!targetId) return false;
+                const meId = toSnowflakeString(($me as any)?.id);
+                if (!meId) return false;
+                return meId === targetId;
+        });
+
+        const isFriend = $derived.by(() => {
+                const targetId = userId;
+                if (!targetId) return false;
+                return $friendIds.has(targetId);
+        });
+
+        $effect(() => {
+                const open = $memberProfilePanel.open;
+                if (!open) {
+                        friendActionPending = false;
+                        friendActionError = null;
+                        return;
+                }
+                const targetId = userId;
+                if (!targetId || isSelf) {
+                        friendActionError = null;
+                        return;
+                }
+                ensureFriendsLoaded().catch((error) => {
+                        console.error('Failed to load friends list', error);
+                });
+        });
+
+        $effect(() => {
+                const targetId = userId;
+                void targetId;
+                friendActionPending = false;
+                friendActionError = null;
+        });
 
         const presenceInfo = $derived.by(() => (userId ? $presenceMap[userId] ?? null : null));
         const presenceStatus = $derived.by(() => presenceInfo?.status ?? null);
@@ -206,6 +258,82 @@
                 }
                 return resolveFallbackAvatarUrl();
         });
+
+        function toSnowflakeBigInt(value: string | null | undefined): bigint | null {
+                if (!value) return null;
+                try {
+                        return BigInt(value);
+                } catch {
+                        return null;
+                }
+        }
+
+        function buildFriendIdentifier(): string | null {
+                const baseUser = (selectedMember as any)?.user ?? (selectedUser as any) ?? null;
+                if (baseUser) {
+                        const discriminatorValue = (baseUser as any)?.discriminator;
+                        const username =
+                                (baseUser as any)?.username ??
+                                (baseUser as any)?.name ??
+                                (baseUser as any)?.display_name ??
+                                (baseUser as any)?.global_name ??
+                                primaryName;
+                        if (typeof discriminatorValue === 'string' && discriminatorValue.trim()) {
+                                const normalizedName =
+                                        typeof username === 'string' && username.trim() ? username.trim() : primaryName;
+                                return `${normalizedName}#${discriminatorValue.trim()}`;
+                        }
+                }
+                return userId ?? null;
+        }
+
+        async function handleAddFriend() {
+                if (friendActionPending || isSelf) return;
+                const identifier = buildFriendIdentifier();
+                if (!identifier) {
+                        friendActionError = m.user_home_friend_action_error();
+                        return;
+                }
+                friendActionPending = true;
+                friendActionError = null;
+                try {
+                        await api.user.userMeFriendsPost({
+                                userCreateFriendRequestRequest: { discriminator: identifier }
+                        });
+                } catch (error) {
+                        console.error('Failed to send friend request', error);
+                        friendActionError = m.user_home_friend_action_error();
+                } finally {
+                        friendActionPending = false;
+                }
+        }
+
+        async function handleUnfriend() {
+                if (friendActionPending || !isFriend) return;
+                const snowflake = toSnowflakeBigInt(userId);
+                if (!snowflake) {
+                        friendActionError = m.user_home_friend_action_error();
+                        return;
+                }
+                friendActionPending = true;
+                friendActionError = null;
+                try {
+                        await api.user.userMeFriendsDelete({
+                                userUnfriendRequest: { user_id: snowflake as any }
+                        });
+                        markFriendRemoved(userId);
+                        try {
+                                await refreshFriends(true);
+                        } catch (refreshError) {
+                                console.error('Failed to refresh friend list', refreshError);
+                        }
+                } catch (error) {
+                        console.error('Failed to remove friend', error);
+                        friendActionError = m.user_home_friend_action_error();
+                } finally {
+                        friendActionPending = false;
+                }
+        }
 
         const guildId = $derived.by(() => $memberProfilePanel.guildId ?? null);
 
@@ -338,16 +466,29 @@
                                         {/if}
                                         <div class="text-xs text-[var(--muted)]">{statusLabel}</div>
                                 </div>
-                                <button
-                                        class="ml-2 rounded-md p-1 text-lg leading-none text-[var(--muted)] hover:bg-[var(--panel)]"
-                                        type="button"
-                                        aria-label={m.close()}
-                                        onclick={closePanel}
-                                        data-tooltip-disabled
-                                >
-                                        &times;
-                                </button>
+                                {#if !isSelf && userId}
+                                        <button
+                                                class="ml-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--panel)] disabled:pointer-events-none disabled:opacity-60"
+                                                type="button"
+                                                aria-label={isFriend ? m.user_home_friend_remove() : m.user_home_add_friend()}
+                                                onclick={isFriend ? handleUnfriend : handleAddFriend}
+                                                disabled={friendActionPending}
+                                        >
+                                                {#if friendActionPending}
+                                                        <Loader2 class="h-4 w-4 animate-spin" />
+                                                {:else if isFriend}
+                                                        <UserMinus class="h-4 w-4" />
+                                                {:else}
+                                                        <UserPlus class="h-4 w-4" />
+                                                {/if}
+                                        </button>
+                                {/if}
                         </div>
+                        {#if friendActionError}
+                                <div class="mt-3 rounded-md bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger)]" role="alert">
+                                        {friendActionError}
+                                </div>
+                        {/if}
                         {#if guildId && selectedMember}
                                 <div class="mt-4">
                                         <div class="text-xs font-semibold uppercase text-[var(--muted)]">
