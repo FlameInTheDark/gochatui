@@ -620,7 +620,14 @@
 							{/if}
                                                         {#if folderHasUnread}
                                                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                                                                <span
+                                                                        aria-hidden="true"
+                                                                        class={
+                                                                                expandedFolders[item.folder.id]
+                                                                                        ? UNREAD_INDICATOR_CLASSES
+                                                                                        : FOLDER_UNREAD_INDICATOR_CLASSES
+                                                                        }
+                                                                ></span>
                                                         {/if}
 						</button>
 					</div>
