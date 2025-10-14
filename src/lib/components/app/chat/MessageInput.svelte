@@ -170,6 +170,58 @@
                 return filtered;
         }
 
+        function toHeaders(entries: Array<{ name: string; lower: string; value: string }>): HeadersInit | undefined {
+                if (!entries.length) return undefined;
+                const headers = new Headers();
+                for (const entry of entries) {
+                        headers.set(entry.name, entry.value);
+                }
+                return headers;
+        }
+
+        function createProgressReadableStream(
+                file: File,
+                totalBytes: number,
+                onProgress: (uploaded: number, total: number) => void
+        ) {
+                const stream = file.stream?.();
+                if (!stream || typeof ReadableStream === 'undefined') return null;
+
+                let uploaded = 0;
+                const safeTotal = totalBytes > 0 ? totalBytes : file.size;
+                return new ReadableStream<Uint8Array>({
+                        start(controller) {
+                                const reader = stream.getReader();
+                                const pump = (): void => {
+                                        reader
+                                                .read()
+                                                .then(({ done, value }) => {
+                                                        if (done) {
+                                                                onProgress(safeTotal || uploaded, safeTotal || uploaded);
+                                                                controller.close();
+                                                                return;
+                                                        }
+                                                        if (value) {
+                                                                uploaded += value.byteLength;
+                                                                const denominator = safeTotal || uploaded;
+                                                                onProgress(uploaded, denominator);
+                                                                controller.enqueue(value);
+                                                                pump();
+                                                        } else {
+                                                                pump();
+                                                        }
+                                                })
+                                                .catch((err) => {
+                                                        controller.error(err);
+                                                });
+                                };
+                                pump();
+                        }
+                });
+        }
+
+        type UploadRequestInit = RequestInit & { duplex?: 'half' };
+
         async function uploadWithProgress(
                 url: string,
                 file: File,
@@ -177,59 +229,55 @@
                 onProgress: (uploaded: number, total: number) => void
         ) {
                 const headerEntries = buildUploadHeaderEntries(headers, file);
+                const headersInit = toHeaders(headerEntries);
+                const totalBytes = file.size || 0;
+
+                const stream = createProgressReadableStream(file, totalBytes, onProgress);
+                if (stream) {
+                        const init: UploadRequestInit = {
+                                method: 'PUT',
+                                body: stream,
+                                headers: headersInit,
+                                mode: 'cors',
+                                credentials: 'omit'
+                        };
+                        (init as UploadRequestInit).duplex = 'half';
+
+                        try {
+                                const res = await fetch(url, init);
+                                if (!res.ok && res.type !== 'opaque') {
+                                        throw new Error(`Upload failed with status ${res.status}`);
+                                }
+                                onProgress(totalBytes || file.size, totalBytes || file.size);
+                                return;
+                        } catch (err) {
+                                if ((err as Error)?.name !== 'TypeError') {
+                                        throw err;
+                                }
+                                // Fall through to buffered upload below for browsers rejecting streaming PUTs.
+                        }
+                }
+
                 let buffer: ArrayBuffer;
-                let bodyView: Uint8Array;
                 try {
                         buffer = await file.arrayBuffer();
-                        bodyView = new Uint8Array(buffer);
                 } catch (err) {
                         throw new Error((err as Error)?.message ?? 'Unable to read attachment');
                 }
-                const totalBytes = bodyView.byteLength || file.size;
 
-                if (typeof XMLHttpRequest === 'undefined') {
-                        const init: RequestInit = {
-                                method: 'PUT',
-                                body: buffer,
-                                headers: headerEntries.length
-                                        ? Object.fromEntries(headerEntries.map((entry) => [entry.name, entry.value]))
-                                        : undefined
-                        };
-                        const res = await fetch(url, init);
-                        if (!res.ok) {
-                                throw new Error(`Upload failed with status ${res.status}`);
-                        }
-                        onProgress(totalBytes, totalBytes);
-                        return;
+                const fallbackInit: RequestInit = {
+                        method: 'PUT',
+                        body: buffer,
+                        headers: headersInit,
+                        mode: 'cors',
+                        credentials: 'omit'
+                };
+                const res = await fetch(url, fallbackInit);
+                if (!res.ok && res.type !== 'opaque') {
+                        throw new Error(`Upload failed with status ${res.status}`);
                 }
-
-                await new Promise<void>((resolve, reject) => {
-                        const xhr = new XMLHttpRequest();
-                        xhr.open('PUT', url);
-                        for (const entry of headerEntries) {
-                                try {
-                                        xhr.setRequestHeader(entry.name, entry.value);
-                                } catch {
-                                        // ignore header set failures
-                                }
-                        }
-                        xhr.upload.onprogress = (event) => {
-                                const expectedTotal = event.lengthComputable ? event.total : totalBytes;
-                                onProgress(event.loaded, expectedTotal);
-                        };
-                        xhr.onerror = () => {
-                                reject(new Error('Upload failed'));
-                        };
-                        xhr.onload = () => {
-                                if (xhr.status >= 200 && xhr.status < 300) {
-                                        onProgress(totalBytes, totalBytes);
-                                        resolve();
-                                } else {
-                                        reject(new Error(`Upload failed with status ${xhr.status}`));
-                                }
-                        };
-                        xhr.send(bodyView as Document | XMLHttpRequestBodyInit | null);
-                });
+                const bytesSent = buffer.byteLength || file.size;
+                onProgress(bytesSent, bytesSent);
         }
 
         async function processPendingMessage(message: PendingMessage) {
