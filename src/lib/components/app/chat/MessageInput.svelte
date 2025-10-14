@@ -177,22 +177,29 @@
                 onProgress: (uploaded: number, total: number) => void
         ) {
                 const headerEntries = buildUploadHeaderEntries(headers, file);
+                let buffer: ArrayBuffer;
+                let bodyView: Uint8Array;
+                try {
+                        buffer = await file.arrayBuffer();
+                        bodyView = new Uint8Array(buffer);
+                } catch (err) {
+                        throw new Error((err as Error)?.message ?? 'Unable to read attachment');
+                }
+                const totalBytes = bodyView.byteLength || file.size;
 
                 if (typeof XMLHttpRequest === 'undefined') {
                         const init: RequestInit = {
                                 method: 'PUT',
-                                body: file
+                                body: buffer,
+                                headers: headerEntries.length
+                                        ? Object.fromEntries(headerEntries.map((entry) => [entry.name, entry.value]))
+                                        : undefined
                         };
-                        if (headerEntries.length) {
-                                init.headers = Object.fromEntries(
-                                        headerEntries.map((entry) => [entry.name, entry.value])
-                                );
-                        }
                         const res = await fetch(url, init);
                         if (!res.ok) {
                                 throw new Error(`Upload failed with status ${res.status}`);
                         }
-                        onProgress(file.size, file.size);
+                        onProgress(totalBytes, totalBytes);
                         return;
                 }
 
@@ -207,22 +214,21 @@
                                 }
                         }
                         xhr.upload.onprogress = (event) => {
-                                if (event.lengthComputable) {
-                                        onProgress(event.loaded, event.total);
-                                }
+                                const expectedTotal = event.lengthComputable ? event.total : totalBytes;
+                                onProgress(event.loaded, expectedTotal);
                         };
                         xhr.onerror = () => {
                                 reject(new Error('Upload failed'));
                         };
                         xhr.onload = () => {
                                 if (xhr.status >= 200 && xhr.status < 300) {
-                                        onProgress(file.size, file.size);
+                                        onProgress(totalBytes, totalBytes);
                                         resolve();
                                 } else {
                                         reject(new Error(`Upload failed with status ${xhr.status}`));
                                 }
                         };
-                        xhr.send(file as Document | XMLHttpRequestBodyInit | null);
+                        xhr.send(bodyView as Document | XMLHttpRequestBodyInit | null);
                 });
         }
 
