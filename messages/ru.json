@@ -213,6 +213,8 @@
         "user_home_friends_filter_label": "Фильтр друзей",
         "user_home_friends_filter_placeholder": "Фильтровать друзей по имени",
         "user_home_friends_filter_empty": "Нет друзей, соответствующих вашему запросу.",
+        "user_home_friends_tab_all": "Все",
+        "user_home_friends_tab_online": "В сети",
         "user_home_tab_friends": "Друзья",
 	"user_home_tab_requests": "Заявки",
 	"user_home_requests_heading": "Заявки в друзья",
