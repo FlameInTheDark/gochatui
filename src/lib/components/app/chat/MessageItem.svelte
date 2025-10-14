@@ -7,7 +7,7 @@
 		selectedChannelId,
 		selectedGuildId
 	} from '$lib/stores/appState';
-	import { createEventDispatcher, tick } from 'svelte';
+        import { createEventDispatcher, onDestroy, tick } from 'svelte';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import type { ContextMenuItem } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
@@ -17,7 +17,7 @@
 	import InvitePreview from './InvitePreview.svelte';
 	import YoutubeEmbed from './YoutubeEmbed.svelte';
 	import { extractInvite } from './extractInvite';
-        import { Paperclip, Pencil, Trash2 } from 'lucide-svelte';
+        import { Paperclip, Pencil, Play, Trash2, X } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -550,8 +550,8 @@
                 contentType: string | null;
         };
 
-        const IMAGE_ZOOM_MIN = 1;
-        const IMAGE_ZOOM_MAX = 4;
+        const IMAGE_ZOOM_MIN_DEFAULT = 0.25;
+        const IMAGE_ZOOM_MAX = 6;
         const IMAGE_ZOOM_STEP = 0.25;
 
         function clamp(value: number, min: number, max: number): number {
@@ -576,13 +576,74 @@
         let resolvedAuthorMember = $state<DtoMember | null>(null);
         let imagePreview = $state<ImagePreviewState | null>(null);
         let imagePreviewZoom = $state(1);
+        let imagePreviewFitZoom = $state(1);
+        let imagePreviewOffsetX = $state(0);
+        let imagePreviewOffsetY = $state(0);
+        let imagePreviewViewport = $state<HTMLDivElement | null>(null);
+        let imagePreviewDragging = $state(false);
+        let imagePreviewNaturalWidth = 0;
+        let imagePreviewNaturalHeight = 0;
+        let imagePreviewPointerId: number | null = null;
+        let imagePreviewLastPointerX = 0;
+        let imagePreviewLastPointerY = 0;
+        let imagePreviewDragDistance = 0;
+        let detachPreviewResize: (() => void) | null = null;
+        let activeVideoAttachments = $state<Record<string, boolean>>({});
 
-	function resolveChannelPermissions(): number {
-		const gid = $selectedGuildId ?? '';
-		const cid = $selectedChannelId;
-		if (!cid) return 0;
-		const list = ($channelsByGuild[gid] ?? []) as DtoChannel[];
-		const channel = list.find((c) => String((c as any)?.id) === cid);
+        function attachmentStableKey(
+                attachment: MessageAttachment | undefined,
+                index: number
+        ): string {
+                const rawId = (attachment as any)?.id;
+                if (rawId != null) {
+                        try {
+                                if (typeof rawId === 'bigint') {
+                                        return rawId.toString();
+                                }
+                                return BigInt(rawId).toString();
+                        } catch {
+                                return String(rawId);
+                        }
+                }
+
+                const url = attachmentUrl(attachment);
+                if (url) {
+                        return `url:${url}`;
+                }
+
+                const messageId = (message as any)?.id;
+                const messageKey =
+                        typeof messageId === 'bigint'
+                                ? messageId.toString()
+                                : messageId != null
+                                        ? String(messageId)
+                                        : 'message';
+
+                return `${messageKey}:${attachmentFilename(attachment)}:${index}`;
+        }
+
+        function isVideoAttachmentActive(key: string): boolean {
+                return Boolean(activeVideoAttachments[key]);
+        }
+
+        function activateVideoAttachment(key: string): void {
+                if (activeVideoAttachments[key]) return;
+                activeVideoAttachments = { ...activeVideoAttachments, [key]: true };
+        }
+
+        function deactivateVideoAttachment(key: string): void {
+                if (!activeVideoAttachments[key]) return;
+                const next = { ...activeVideoAttachments };
+                delete next[key];
+                activeVideoAttachments = next;
+        }
+
+        function resolveChannelPermissions(): number {
+                const gid = $selectedGuildId ?? '';
+                const cid = $selectedChannelId;
+                if (!cid) return 0;
+                const list = ($channelsByGuild[gid] ?? []) as DtoChannel[];
+                const channel = list.find((c) => String((c as any)?.id) === cid);
 		const perms = (channel as any)?.permissions;
 		if (typeof perms === 'bigint') return Number(perms);
 		if (typeof perms === 'string') {
@@ -693,14 +754,47 @@
 					primaryRoleColor = null;
 				}
 			}
-		})();
-	});
+                })();
+        });
 
-	function autoSizeEditTextarea() {
-		if (!editTextarea) return;
-		editTextarea.style.height = 'auto';
-		const nextHeight = editTextarea.scrollHeight;
-		editTextarea.style.height = `${nextHeight}px`;
+        $effect(() => {
+                const attachments = (message.attachments ?? []) as MessageAttachment[];
+                const keys = new Set(
+                        attachments.map((attachment, index) =>
+                                attachmentStableKey(attachment, index)
+                        )
+                );
+
+                const entries = Object.entries(activeVideoAttachments);
+                if (entries.length === 0) {
+                        return;
+                }
+
+                let requiresUpdate = false;
+                for (const [key] of entries) {
+                        if (!keys.has(key)) {
+                                requiresUpdate = true;
+                                break;
+                        }
+                }
+
+                if (!requiresUpdate) return;
+
+                const next: Record<string, boolean> = {};
+                for (const [key, value] of entries) {
+                        if (keys.has(key)) {
+                                next[key] = value;
+                        }
+                }
+
+                activeVideoAttachments = next;
+        });
+
+        function autoSizeEditTextarea() {
+                if (!editTextarea) return;
+                editTextarea.style.height = 'auto';
+                const nextHeight = editTextarea.scrollHeight;
+                editTextarea.style.height = `${nextHeight}px`;
 		const viewportHeight =
 			typeof window !== 'undefined' ? window.innerHeight : Number.POSITIVE_INFINITY;
 		editTextarea.style.overflowY = nextHeight > viewportHeight ? 'auto' : 'hidden';
@@ -997,6 +1091,70 @@
                 });
         }
 
+        function detachImagePreviewResize() {
+                if (detachPreviewResize) {
+                        detachPreviewResize();
+                        detachPreviewResize = null;
+                }
+        }
+
+        onDestroy(() => {
+                detachImagePreviewResize();
+        });
+
+        function attachImagePreviewResize() {
+                if (typeof window === 'undefined') {
+                        return;
+                }
+                detachImagePreviewResize();
+                const handler = () => {
+                        updateImagePreviewFitZoom();
+                };
+                window.addEventListener('resize', handler);
+                detachPreviewResize = () => {
+                        window.removeEventListener('resize', handler);
+                };
+        }
+
+        function computeImagePreviewFitZoom(): number {
+                if (!imagePreviewViewport || !imagePreviewNaturalWidth || !imagePreviewNaturalHeight) {
+                        return 1;
+                }
+                const viewport = imagePreviewViewport;
+                const width = viewport.clientWidth;
+                const height = viewport.clientHeight;
+                if (!width || !height) {
+                        return 1;
+                }
+                const scale = Math.min(width / imagePreviewNaturalWidth, height / imagePreviewNaturalHeight, 1);
+                if (!Number.isFinite(scale) || scale <= 0) {
+                        return 1;
+                }
+                return scale;
+        }
+
+        function resetImagePreviewTransform() {
+                imagePreviewOffsetX = 0;
+                imagePreviewOffsetY = 0;
+        }
+
+        function updateImagePreviewFitZoom(options?: { reset?: boolean }) {
+                if (!imagePreview) {
+                        return;
+                }
+                const fit = computeImagePreviewFitZoom();
+                imagePreviewFitZoom = fit;
+                const minZoom = Math.min(IMAGE_ZOOM_MIN_DEFAULT, fit, 1);
+                if (options?.reset) {
+                        imagePreviewZoom = fit;
+                        resetImagePreviewTransform();
+                        return;
+                }
+                if (imagePreviewZoom < minZoom) {
+                        imagePreviewZoom = minZoom;
+                }
+        }
+
         function openImagePreview(meta: AttachmentMeta) {
                 if (meta.kind !== 'image' || !meta.url) return;
                 imagePreview = {
@@ -1006,26 +1164,71 @@
                         contentType: meta.contentType
                 };
                 imagePreviewZoom = 1;
+                imagePreviewFitZoom = 1;
+                imagePreviewOffsetX = 0;
+                imagePreviewOffsetY = 0;
+                imagePreviewNaturalWidth = 0;
+                imagePreviewNaturalHeight = 0;
+                imagePreviewDragging = false;
+                imagePreviewPointerId = null;
+                imagePreviewDragDistance = 0;
+                attachImagePreviewResize();
         }
 
         function closeImagePreview() {
                 imagePreview = null;
                 imagePreviewZoom = 1;
+                imagePreviewFitZoom = 1;
+                imagePreviewOffsetX = 0;
+                imagePreviewOffsetY = 0;
+                imagePreviewNaturalWidth = 0;
+                imagePreviewNaturalHeight = 0;
+                imagePreviewDragging = false;
+                imagePreviewPointerId = null;
+                imagePreviewDragDistance = 0;
+                detachImagePreviewResize();
         }
 
-        function setImagePreviewZoom(value: number) {
-                imagePreviewZoom = clamp(value, IMAGE_ZOOM_MIN, IMAGE_ZOOM_MAX);
+        function setImagePreviewZoom(
+                value: number,
+                options?: { anchor?: { x: number; y: number }; resetOffset?: boolean }
+        ) {
+                const fit = imagePreviewFitZoom;
+                const minZoom = Math.min(IMAGE_ZOOM_MIN_DEFAULT, fit, 1);
+                const clamped = clamp(value, minZoom, IMAGE_ZOOM_MAX);
+                if (clamped === imagePreviewZoom) {
+                        return;
+                }
+
+                if (options?.resetOffset || clamped <= fit + 0.001) {
+                        resetImagePreviewTransform();
+                } else if (options?.anchor && imagePreviewViewport) {
+                        const rect = imagePreviewViewport.getBoundingClientRect();
+                        const centerX = rect.left + rect.width / 2;
+                        const centerY = rect.top + rect.height / 2;
+                        const offsetX = options.anchor.x - centerX;
+                        const offsetY = options.anchor.y - centerY;
+                        const ratio = clamped / imagePreviewZoom;
+                        imagePreviewOffsetX = imagePreviewOffsetX * ratio + offsetX * (1 - ratio);
+                        imagePreviewOffsetY = imagePreviewOffsetY * ratio + offsetY * (1 - ratio);
+                } else {
+                        const ratio = clamped / imagePreviewZoom;
+                        imagePreviewOffsetX = imagePreviewOffsetX * ratio;
+                        imagePreviewOffsetY = imagePreviewOffsetY * ratio;
+                }
+
+                imagePreviewZoom = clamped;
         }
 
-        function adjustImagePreviewZoom(delta: number) {
-                setImagePreviewZoom(imagePreviewZoom + delta);
+        function adjustImagePreviewZoom(delta: number, options?: { anchor?: { x: number; y: number } }) {
+                setImagePreviewZoom(imagePreviewZoom + delta, options);
         }
 
         function handlePreviewWheel(event: WheelEvent) {
                 if (!imagePreview) return;
                 event.preventDefault();
                 const direction = event.deltaY < 0 ? IMAGE_ZOOM_STEP : -IMAGE_ZOOM_STEP;
-                adjustImagePreviewZoom(direction);
+                adjustImagePreviewZoom(direction, { anchor: { x: event.clientX, y: event.clientY } });
         }
 
         function handleWindowKeydown(event: KeyboardEvent) {
@@ -1043,7 +1246,7 @@
                         return;
                 }
                 if (event.key === '0') {
-                        setImagePreviewZoom(1);
+                        setImagePreviewZoom(imagePreviewFitZoom, { resetOffset: true });
                 }
         }
 
@@ -1053,6 +1256,107 @@
                 }
         }
 
+        function handleImagePreviewLoad(event: Event) {
+                const img = event.currentTarget as HTMLImageElement | null;
+                if (!img || !imagePreview) {
+                        return;
+                }
+                imagePreviewNaturalWidth = img.naturalWidth || img.width;
+                imagePreviewNaturalHeight = img.naturalHeight || img.height;
+                updateImagePreviewFitZoom({ reset: true });
+        }
+
+        function toggleImagePreviewZoom(anchor?: { x: number; y: number }) {
+                if (!imagePreview) {
+                        return;
+                }
+                const fit = imagePreviewFitZoom;
+                const epsilon = 0.001;
+                if (imagePreviewZoom <= fit + epsilon) {
+                        const target = Math.min(IMAGE_ZOOM_MAX, Math.max(1, fit * 2));
+                        setImagePreviewZoom(target, anchor ? { anchor } : undefined);
+                } else {
+                        setImagePreviewZoom(fit, {
+                                anchor,
+                                resetOffset: true
+                        });
+                }
+        }
+
+        function handleImagePreviewPointerDown(event: PointerEvent) {
+                if (!imagePreview || event.button !== 0) {
+                        return;
+                }
+                event.preventDefault();
+                const target = event.currentTarget as HTMLElement;
+                imagePreviewPointerId = event.pointerId;
+                imagePreviewLastPointerX = event.clientX;
+                imagePreviewLastPointerY = event.clientY;
+                imagePreviewDragDistance = 0;
+                imagePreviewDragging = true;
+                target.setPointerCapture(event.pointerId);
+        }
+
+        function handleImagePreviewPointerMove(event: PointerEvent) {
+                if (!imagePreviewDragging || imagePreviewPointerId !== event.pointerId) {
+                        return;
+                }
+                event.preventDefault();
+                const dx = event.clientX - imagePreviewLastPointerX;
+                const dy = event.clientY - imagePreviewLastPointerY;
+                imagePreviewLastPointerX = event.clientX;
+                imagePreviewLastPointerY = event.clientY;
+                const movement = Math.hypot(dx, dy);
+                imagePreviewDragDistance += movement;
+                const fit = imagePreviewFitZoom;
+                if (imagePreviewZoom <= fit + 0.001) {
+                        return;
+                }
+                imagePreviewOffsetX += dx;
+                imagePreviewOffsetY += dy;
+        }
+
+        function finishImagePreviewDrag(event: PointerEvent) {
+                if (!imagePreviewDragging || imagePreviewPointerId !== event.pointerId) {
+                        return;
+                }
+                const target = event.currentTarget as HTMLElement;
+                target.releasePointerCapture(event.pointerId);
+                imagePreviewDragging = false;
+                imagePreviewPointerId = null;
+                const wasClick = imagePreviewDragDistance < 4;
+                imagePreviewDragDistance = 0;
+                if (wasClick) {
+                        toggleImagePreviewZoom({ x: event.clientX, y: event.clientY });
+                }
+        }
+
+        function handleImagePreviewPointerUp(event: PointerEvent) {
+                if (!imagePreview) {
+                        return;
+                }
+                finishImagePreviewDrag(event);
+        }
+
+        function handleImagePreviewPointerCancel(event: PointerEvent) {
+                if (!imagePreviewDragging || imagePreviewPointerId !== event.pointerId) {
+                        return;
+                }
+                const target = event.currentTarget as HTMLElement;
+                target.releasePointerCapture(event.pointerId);
+                imagePreviewDragging = false;
+                imagePreviewPointerId = null;
+                imagePreviewDragDistance = 0;
+        }
+
+        $effect(() => {
+                const viewport = imagePreviewViewport;
+                if (viewport && imagePreview && imagePreviewNaturalWidth && imagePreviewNaturalHeight) {
+                        updateImagePreviewFitZoom();
+                }
+        });
+
+        const imagePreviewMinZoom = $derived(Math.min(IMAGE_ZOOM_MIN_DEFAULT, imagePreviewFitZoom, 1));
         const imagePreviewZoomPercent = $derived(Math.round(imagePreviewZoom * 100));
 </script>
 
@@ -1273,42 +1577,88 @@
                                                                         </div>
                                                                 </button>
                                                         {:else if meta.kind === 'video' && meta.url}
-                                                                <div class="max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
-                                                                        <!-- svelte-ignore a11y_media_has_caption -->
-                                                                        <video
-                                                                                class="max-h-64 w-full bg-black"
-                                                                                src={meta.url}
-                                                                                controls
-                                                                                preload="metadata"
-                                                                        ></video>
-                                                                        <div class="border-t border-[var(--stroke)] px-2 py-1">
-                                                                                <div class="truncate font-medium" title={meta.name}>
-                                                                                        {meta.name}
+                                                                {@const attachmentKey = attachmentStableKey(attachment, attachmentIndex)}
+                                                                {#if isVideoAttachmentActive(attachmentKey)}
+                                                                        <div class="max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
+                                                                                <div class="relative bg-black">
+                                                                                        <!-- svelte-ignore a11y_media_has_caption -->
+                                                                                        <video
+                                                                                                class="max-h-64 w-full bg-black"
+                                                                                                src={meta.url}
+                                                                                                controls
+                                                                                                preload="metadata"
+                                                                                                playsinline
+                                                                                        ></video>
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="absolute right-2 top-2 rounded-full border border-white/40 bg-black/60 p-1.5 text-white transition hover:bg-black/40"
+                                                                                                onclick={() => deactivateVideoAttachment(attachmentKey)}
+                                                                                                aria-label="Close video preview"
+                                                                                        >
+                                                                                                <X class="h-4 w-4" stroke-width={2} />
+                                                                                        </button>
                                                                                 </div>
-                                                                                {#if meta.sizeLabel || meta.contentType}
-                                                                                        <div class="flex items-center justify-between text-[var(--muted)]">
-                                                                                                {#if meta.sizeLabel}
-                                                                                                        <span>{meta.sizeLabel}</span>
-                                                                                                {/if}
-                                                                                                {#if meta.contentType}
-                                                                                                        <span>{meta.contentType}</span>
-                                                                                                {/if}
+                                                                                <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                        <div class="truncate font-medium" title={meta.name}>
+                                                                                                {meta.name}
                                                                                         </div>
-                                                                                {/if}
-                                                                                {#if meta.url}
-                                                                                        <div class="mt-1 text-right">
-                                                                                                <a
-                                                                                                        class="text-[var(--brand)] hover:underline"
-                                                                                                        href={meta.url}
-                                                                                                        rel="noopener noreferrer"
-                                                                                                        target="_blank"
-                                                                                                >
-                                                                                                        Open original
-                                                                                                </a>
-                                                                                        </div>
-                                                                                {/if}
+                                                                                        {#if meta.sizeLabel || meta.contentType}
+                                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                        {#if meta.sizeLabel}
+                                                                                                                <span>{meta.sizeLabel}</span>
+                                                                                                        {/if}
+                                                                                                        {#if meta.contentType}
+                                                                                                                <span>{meta.contentType}</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                        {#if meta.url}
+                                                                                                <div class="mt-1 text-right">
+                                                                                                        <a
+                                                                                                                class="text-[var(--brand)] hover:underline"
+                                                                                                                href={meta.url}
+                                                                                                                rel="noopener noreferrer"
+                                                                                                                target="_blank"
+                                                                                                        >
+                                                                                                                Open original
+                                                                                                        </a>
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                </div>
                                                                         </div>
-                                                                </div>
+                                                                {:else}
+                                                                        <button
+                                                                                type="button"
+                                                                                class="group block max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                                onclick={() => activateVideoAttachment(attachmentKey)}
+                                                                        >
+                                                                                <div class="relative w-full overflow-hidden bg-black">
+                                                                                        <div class="pt-[56.25%]"></div>
+                                                                                        <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 text-white transition group-hover:bg-black/55">
+                                                                                                <span class="rounded-full border border-white/60 bg-black/40 p-3">
+                                                                                                        <Play class="h-6 w-6" stroke-width={2} />
+                                                                                                </span>
+                                                                                                <span class="text-sm font-medium">Play video</span>
+                                                                                        </div>
+                                                                                </div>
+                                                                                <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                        <div class="truncate font-medium" title={meta.name}>
+                                                                                                {meta.name}
+                                                                                        </div>
+                                                                                        {#if meta.sizeLabel || meta.contentType}
+                                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                        {#if meta.sizeLabel}
+                                                                                                                <span>{meta.sizeLabel}</span>
+                                                                                                        {/if}
+                                                                                                        {#if meta.contentType}
+                                                                                                                <span>{meta.contentType}</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                        <div class="mt-1 text-[var(--brand)]">Click to play</div>
+                                                                                </div>
+                                                                        </button>
+                                                                {/if}
                                                         {:else if meta.kind === 'audio' && meta.url}
                                                                 <div class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
                                                                         <div class="truncate font-medium" title={meta.name}>
@@ -1408,7 +1758,7 @@
                                 </button>
                                 <input
                                         type="range"
-                                        min={IMAGE_ZOOM_MIN}
+                                        min={imagePreviewMinZoom}
                                         max={IMAGE_ZOOM_MAX}
                                         step={IMAGE_ZOOM_STEP}
                                         value={imagePreviewZoom}
@@ -1430,21 +1780,33 @@
                                 <button
                                         class="rounded border border-white/30 px-3 py-1 text-white/90 transition hover:bg-white/10"
                                         type="button"
-                                        onclick={() => setImagePreviewZoom(1)}
+                                        onclick={() =>
+                                                setImagePreviewZoom(imagePreviewFitZoom, { resetOffset: true })
+                                        }
                                 >
                                         Reset
                                 </button>
                         </div>
                 </div>
-                <div class="flex-1 overflow-auto" onwheel={handlePreviewWheel}>
-                        <div class="flex min-h-full items-center justify-center p-6">
+                <div
+                        class="flex-1 overflow-hidden"
+                        bind:this={imagePreviewViewport}
+                        onwheel={handlePreviewWheel}
+                >
+                        <div class="flex h-full w-full items-center justify-center p-6">
                                 <img
                                         src={imagePreview.url}
                                         alt={imagePreview.title}
-                                        class="max-h-none max-w-none select-none shadow-2xl"
-                                        style={`transform: scale(${imagePreviewZoom}); transform-origin: center center;`}
+                                        class={`max-h-none max-w-none select-none shadow-2xl transition-transform duration-100 ${
+                                                imagePreviewDragging ? 'cursor-grabbing' : 'cursor-grab'
+                                        }`}
+                                        style={`transform: translate(${imagePreviewOffsetX}px, ${imagePreviewOffsetY}px) scale(${imagePreviewZoom}); transform-origin: center center;`}
                                         draggable="false"
-                                        ondblclick={() => setImagePreviewZoom(1)}
+                                        onload={handleImagePreviewLoad}
+                                        onpointerdown={handleImagePreviewPointerDown}
+                                        onpointermove={handleImagePreviewPointerMove}
+                                        onpointerup={handleImagePreviewPointerUp}
+                                        onpointercancel={handleImagePreviewPointerCancel}
                                 />
                         </div>
                 </div>
