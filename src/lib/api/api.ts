@@ -1000,6 +1000,18 @@ export interface ModelUserDMChannels {
     'channel_id'?: number;
     /**
      * 
+     * @type {boolean}
+     * @memberof ModelUserDMChannels
+     */
+    'hidden'?: boolean;
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelUserDMChannels
+     */
+    'hidden_after'?: number;
+    /**
+     * 
      * @type {number}
      * @memberof ModelUserDMChannels
      */
