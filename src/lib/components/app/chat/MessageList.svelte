@@ -16,6 +16,8 @@
         import { fly } from 'svelte/transition';
         import { onDestroy, onMount, tick, untrack } from 'svelte';
         import { Sparkles } from 'lucide-svelte';
+        import { pendingMessages } from '$lib/stores/pendingMessages';
+        import PendingMessageItem from './PendingMessageItem.svelte';
         import {
                 guildChannelReadStateLookup,
                 dmChannelMetadataLookup,
@@ -1066,6 +1068,9 @@
                         </div>
                 {/if}
                 <MessageItem message={m} {compact} on:deleted={loadLatest} />
+        {/each}
+        {#each $pendingMessages.filter((msg) => msg.channelId === ($selectedChannelId ?? '')) as pending (pending.localId)}
+                <PendingMessageItem message={pending} />
         {/each}
         {#if loading && loadingDirection === 'newer'}
                 <div class="space-y-2 pt-2" aria-hidden="true">
