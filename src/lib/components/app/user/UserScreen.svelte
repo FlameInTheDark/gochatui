@@ -331,6 +331,47 @@
                         dmChannelError = m.user_home_friend_action_error();
                         return null;
                 }
+                const settings = get(settingsStore);
+                const channelMap = get(channelStore) ?? {};
+                const meSnowflake = toSnowflakeString(($user as any)?.id);
+                const fallbackName = m.user_default_name();
+                const hiddenSettingEntry = settings.dmChannels.find((entry) => {
+                        if (!entry.hidden) return false;
+                        const entryUserId = toSnowflakeString(entry.userId);
+                        if (entryUserId && entryUserId === normalizedUserId) return true;
+                        const entryChannelId = toSnowflakeString(entry.channelId);
+                        if (!entryChannelId) return false;
+                        const dmList = Array.isArray(channelMap['@me']) ? channelMap['@me'] : [];
+                        const match = dmList.find(
+                                (candidate: any) => toSnowflakeString((candidate as any)?.id) === entryChannelId
+                        );
+                        if (!match) return false;
+                        const normalized = normalizeDirectChannel(
+                                match,
+                                meSnowflake,
+                                fallbackName
+                        );
+                        if (!normalized) return false;
+                        if (normalized.userId && normalized.userId === normalizedUserId) {
+                                return true;
+                        }
+                        if (
+                                normalized.recipients.length === 1 &&
+                                normalized.recipients[0]?.id === normalizedUserId
+                        ) {
+                                return true;
+                        }
+                        return false;
+                });
+                if (hiddenSettingEntry) {
+                        const hiddenChannelId = toSnowflakeString(hiddenSettingEntry.channelId);
+                        if (hiddenChannelId) {
+                                addVisibleDmChannel(hiddenChannelId, normalizedUserId, {
+                                        isDead: hiddenSettingEntry.isDead
+                                });
+                                return hiddenChannelId;
+                        }
+                }
                 const existing: DirectChannelEntry | undefined = directChannels.find(
                         (entry) => entry.userId === normalizedUserId
                 );
