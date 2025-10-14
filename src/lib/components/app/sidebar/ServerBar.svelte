@@ -31,16 +31,20 @@
 		PERMISSION_MANAGE_ROLES,
 		hasAnyGuildPermission
 	} from '$lib/utils/permissions';
-	import { guildUnreadSummary } from '$lib/stores/unread';
-	import { colorIntToHex, parseColorValue } from '$lib/utils/color';
+        import { guildUnreadSummary } from '$lib/stores/unread';
+        import { colorIntToHex, parseColorValue } from '$lib/utils/color';
+        import {
+                FOLDER_UNREAD_BADGE_CLASSES,
+                SERVER_UNREAD_BADGE_CLASSES
+        } from '$lib/constants/unreadIndicator';
 
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadSummary = guildUnreadSummary;
         const view = activeView;
 
-        const UNREAD_INDICATOR_CLASSES =
-                'absolute top-1/2 -left-1.5 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]';
+        const UNREAD_INDICATOR_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
+        const FOLDER_UNREAD_INDICATOR_CLASSES = FOLDER_UNREAD_BADGE_CLASSES;
 
 	type DisplayGuild = {
 		type: 'guild';
@@ -620,7 +624,10 @@
 							{/if}
                                                         {#if folderHasUnread}
                                                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                                                                <span
+                                                                        aria-hidden="true"
+                                                                        class={FOLDER_UNREAD_INDICATOR_CLASSES}
+                                                                ></span>
                                                         {/if}
 						</button>
 					</div>
