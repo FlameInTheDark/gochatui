@@ -6,6 +6,9 @@ type AnyRecord = Record<string, unknown>;
 
 const friendIdsStore = writable<Set<string>>(new Set());
 const loadingStore = writable(false);
+const friendDataRefreshStore = writable(0);
+
+let friendDataRefreshCounter = 0;
 
 let lastLoadedAt: number | null = null;
 let pendingRefresh: Promise<Set<string>> | null = null;
@@ -112,6 +115,10 @@ export const friendsLoading: Readable<boolean> = {
 	subscribe: loadingStore.subscribe
 };
 
+export const friendDataRefreshSignal: Readable<number> = {
+	subscribe: friendDataRefreshStore.subscribe
+};
+
 export function applyFriendList(list: unknown): Set<string> {
 	const ids = normalizeFriendList(list);
 	setFriendIds(ids);
@@ -141,6 +148,17 @@ export function markFriendRemoved(id: string | null | undefined): void {
 		lastLoadedAt = Date.now();
 		return next;
 	});
+}
+
+export function isFriendId(id: string | null | undefined): boolean {
+	const normalized = toSnowflakeString(id);
+	if (!normalized) return false;
+	return get(friendIdsStore).has(normalized);
+}
+
+export function triggerFriendDataRefresh(): void {
+	friendDataRefreshCounter += 1;
+	friendDataRefreshStore.set(friendDataRefreshCounter);
 }
 
 export function refreshFriends(force = false): Promise<Set<string>> {
