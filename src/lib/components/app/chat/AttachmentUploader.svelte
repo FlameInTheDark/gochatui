@@ -99,6 +99,7 @@
                                         channelId: channelSnowflake as any,
                                         messageUploadAttachmentRequest: {
                                                 filename: file.name,
+                                                content_type: file.type || 'application/octet-stream',
                                                 file_size: file.size,
                                                 width: meta.width ?? undefined,
                                                 height: meta.height ?? undefined
