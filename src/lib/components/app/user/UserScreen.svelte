@@ -30,6 +30,7 @@
         import { applyFriendList } from '$lib/stores/friends';
         import { X } from 'lucide-svelte';
         import { isMessageNewer } from '$lib/components/app/chat/readStateUtils';
+        import { unreadChannelsByGuild } from '$lib/stores/unread';
 
         type FriendEntry = {
                 id: string;
@@ -60,6 +61,7 @@
         const api = auth.api;
         const presenceMap = presenceByUser;
         const presenceSubscription = createPresenceSubscription();
+        const unreadByGuild = unreadChannelsByGuild;
         let lastPresenceSignature = '';
 
         let directChannels = $state<DirectChannelEntry[]>([]);
@@ -110,20 +112,28 @@
 		}
 	}
 
-	function toSnowflakeBigInt(value: string | null | undefined): bigint | null {
-		if (!value) return null;
-		try {
-			return BigInt(value);
-		} catch {
-			return null;
-		}
-	}
+        function toSnowflakeBigInt(value: string | null | undefined): bigint | null {
+                if (!value) return null;
+                try {
+                        return BigInt(value);
+                } catch {
+                        return null;
+                }
+        }
 
-	function setFriendLoading(id: string, value: boolean) {
-		const next = new Set(removingFriendIds);
-		if (value) {
-			next.add(id);
-		} else {
+        function dmChannelHasUnread(channelId: unknown): boolean {
+                const normalized = toSnowflakeString(channelId);
+                if (!normalized) return false;
+                const guildUnread = $unreadByGuild?.['@me'] ?? null;
+                if (!guildUnread) return false;
+                return Boolean(guildUnread[normalized]);
+        }
+
+        function setFriendLoading(id: string, value: boolean) {
+                const next = new Set(removingFriendIds);
+                if (value) {
+                        next.add(id);
+                } else {
 			next.delete(id);
 		}
 		removingFriendIds = next;
@@ -760,6 +770,17 @@
                 return null;
         }
 
+        function compareMessageIdsDesc(a: string | null, b: string | null): number {
+                if (a && b) {
+                        if (isMessageNewer(a, b)) return -1;
+                        if (isMessageNewer(b, a)) return 1;
+                        return 0;
+                }
+                if (a) return -1;
+                if (b) return 1;
+                return 0;
+        }
+
         function normalizeDirectChannel(
                 raw: any,
                 selfId: string | null,
@@ -1110,15 +1131,25 @@
                         const value = userData?.[field];
                         if (Array.isArray(value)) {
                                 sources.push(...value);
-			}
-		}
-		const map = $channelStore as Record<string, DtoChannel[]> | undefined;
-		if (map && typeof map === 'object') {
-			for (const list of Object.values(map)) {
-				if (!Array.isArray(list)) continue;
-				for (const channel of list) {
-					const raw: any = normalizeDtoChannel(channel);
-					const type = (raw as any)?.type ?? null;
+                        }
+                }
+                const map = $channelStore as Record<string, DtoChannel[]> | undefined;
+                const dmChannelDataById = new Map<string, any>();
+                if (map && typeof map === 'object') {
+                        const dmListRaw = map['@me'];
+                        if (Array.isArray(dmListRaw)) {
+                                for (const channel of dmListRaw) {
+                                        const normalized = normalizeDtoChannel(channel);
+                                        const id = toSnowflakeString((normalized as any)?.id);
+                                        if (!id) continue;
+                                        dmChannelDataById.set(id, normalized);
+                                }
+                        }
+                        for (const list of Object.values(map)) {
+                                if (!Array.isArray(list)) continue;
+                                for (const channel of list) {
+                                        const raw: any = normalizeDtoChannel(channel);
+                                        const type = (raw as any)?.type ?? null;
 					const guildId =
 						(raw as any)?.guild_id ?? (raw as any)?.guildId ?? (raw as any)?.guild ?? null;
                                         if (guildId == null || type === 1 || type === 3) {
@@ -1172,6 +1203,12 @@
                                         }
                                 }
                         }
+                        if (!normalized.lastMessageId) {
+                                const channelSource = dmChannelDataById.get(normalized.id);
+                                if (channelSource) {
+                                        normalized.lastMessageId = extractChannelLastMessageId(channelSource);
+                                }
+                        }
                         result.push(normalized);
                 }
                 for (const entry of settingsDmChannels) {
@@ -1181,6 +1218,7 @@
                         seen.add(channelId);
                         const storedUserId = entry.userId ? toSnowflakeString(entry.userId) : null;
                         const friend = storedUserId ? friendDirectory.get(storedUserId) ?? null : null;
+                        const channelSource = dmChannelDataById.get(channelId) ?? null;
                         result.push({
                                 id: channelId,
                                 label: friend?.name ?? m.user_home_dm_placeholder(),
@@ -1188,10 +1226,21 @@
                                 userId: storedUserId,
                                 avatarUrl: friend?.avatarUrl ?? null,
                                 isDead: entry.isDead ?? false,
-                                lastMessageId: null
+                                lastMessageId: channelSource
+                                        ? extractChannelLastMessageId(channelSource)
+                                        : null
                         });
                 }
-                result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+                result.sort((a, b) => {
+                        const messageOrder = compareMessageIdsDesc(
+                                a.lastMessageId ?? null,
+                                b.lastMessageId ?? null
+                        );
+                        if (messageOrder !== 0) {
+                                return messageOrder;
+                        }
+                        return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+                });
                 directChannels = result;
                 if (autoUnhide.size > 0) {
                         for (const id of autoUnhide) {
@@ -1580,6 +1629,7 @@
                                                                 {@const targetId = toSnowflakeString(targetIdRaw)}
                                                                 {@const isLoading = targetId ? openingDmChannelIds.has(targetId) : false}
                                                                 {@const isActive = activeDmChannelId === channel.id}
+                                                                {@const hasUnread = dmChannelHasUnread(channel.id)}
                                                                 {@const recipient =
                                                                         channel.recipients.length === 1
                                                                                 ? channel.recipients[0]
@@ -1603,7 +1653,7 @@
                                                                         <div class={`group relative ${isLoading ? 'opacity-70' : ''}`}>
                                                                                 <button
                                                                                         type="button"
-                                                                                        class={`flex w-full items-center gap-3 rounded-md border px-3 py-2 pr-12 text-left transition ${
+                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border px-3 py-2 pr-12 text-left transition ${
                                                                                                 isActive
                                                                                                         ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
@@ -1613,6 +1663,13 @@
                                                                                         aria-pressed={isActive}
                                                                                         onclick={() => handleActivateDirectChannel(channel)}
                                                                                 >
+                                                                                        {#if hasUnread}
+                                                                                                <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                                <span
+                                                                                                        aria-hidden="true"
+                                                                                                        class="absolute left-1.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                                                ></span>
+                                                                                        {/if}
                                                                                         <div class="relative">
                                                                                                 <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
                                                                                                         {#if avatarUrl}

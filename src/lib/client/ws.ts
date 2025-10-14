@@ -1,22 +1,24 @@
 import { writable, get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
+import type { DtoChannel } from '$lib/api';
 import { auth } from '$lib/stores/auth';
 import {
-	channelRolesByGuild,
-	channelsByGuild,
-	lastChannelByGuild,
-	membersByGuild,
-	messagesByChannel,
-	myGuildRoleIdsByGuild,
-	appHasFocus,
-	selectedChannelId,
-	selectedGuildId
+        channelRolesByGuild,
+        channelsByGuild,
+        lastChannelByGuild,
+        membersByGuild,
+        messagesByChannel,
+        myGuildRoleIdsByGuild,
+        appHasFocus,
+        selectedChannelId,
+        selectedGuildId
 } from '$lib/stores/appState';
 import { markChannelUnread } from '$lib/stores/unread';
 import { browser } from '$app/environment';
 import { env as publicEnv } from '$env/dynamic/public';
 import { getRuntimeConfig } from '$lib/runtime/config';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
+import { addVisibleDmChannel } from '$lib/stores/settings';
 
 type AnyRecord = Record<string, any>;
 
@@ -705,12 +707,12 @@ export function connectWS() {
 		handleGuildMembershipEvent(data);
 
 		if (data?.op === 0 && typeof data?.t === 'number') {
-			if (data.t === 300) {
-				const payload = (data?.d as AnyRecord) ?? {};
-				const message = (payload?.message as AnyRecord) ?? payload;
-				const guildId =
-					normalizeSnowflake(payload?.guild_id) ??
-					normalizeSnowflake(message?.guild_id) ??
+                        if (data.t === 300) {
+                                const payload = (data?.d as AnyRecord) ?? {};
+                                const message = (payload?.message as AnyRecord) ?? payload;
+                                const guildId =
+                                        normalizeSnowflake(payload?.guild_id) ??
+                                        normalizeSnowflake(message?.guild_id) ??
 					normalizeSnowflake(payload?.guild?.id) ??
 					normalizeSnowflake(message?.guild?.id);
 				const channelId =
@@ -740,14 +742,93 @@ export function connectWS() {
 						markChannelUnread(guildId, channelId, messageId);
 					}
 
-					updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
-				}
-			}
+                                        updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
+                                }
+                        } else if (data.t === 405) {
+                                const payload = (data?.d as AnyRecord) ?? {};
+                                const channelId = normalizeSnowflake(payload?.channel_id);
+                                const messageId = normalizeSnowflake(payload?.message_id);
+                                if (!channelId || !messageId) {
+                                        return;
+                                }
 
-			if (data?.d?.message) {
-				// nothing here; consumers react via wsEvent
-			}
-		}
+                                const senderId = normalizeSnowflake(payload?.from?.id);
+                                if (senderId) {
+                                        addVisibleDmChannel(channelId, senderId);
+                                } else {
+                                        addVisibleDmChannel(channelId);
+                                }
+
+                                const minimalMessage: AnyRecord = { id: messageId };
+                                if (senderId) {
+                                        minimalMessage.author_id = senderId;
+                                        minimalMessage.authorId = senderId;
+                                }
+
+                                channelsByGuild.update((map) => {
+                                        const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
+                                        const idx = existingList.findIndex((entry) => {
+                                                const id = normalizeSnowflake((entry as AnyRecord)?.id);
+                                                return id === channelId;
+                                        });
+                                        let nextList = existingList;
+                                        let shouldUpdate = false;
+                                        let target: AnyRecord;
+                                        if (idx >= 0) {
+                                                target = { ...(existingList[idx] as AnyRecord) };
+                                                nextList = [...existingList];
+                                        } else {
+                                                target = { id: channelId };
+                                                nextList = [...existingList, target as DtoChannel];
+                                                shouldUpdate = true;
+                                        }
+
+                                        if (senderId && target.user_id !== senderId) {
+                                                target.user_id = senderId;
+                                                target.userId = senderId;
+                                                shouldUpdate = true;
+                                        }
+
+                                        if (target.last_message_id !== messageId) {
+                                                target.last_message_id = messageId;
+                                                shouldUpdate = true;
+                                        }
+                                        if (target.lastMessageId !== messageId) {
+                                                target.lastMessageId = messageId;
+                                                shouldUpdate = true;
+                                        }
+
+                                        if (minimalMessage) {
+                                                target.last_message = minimalMessage;
+                                                target.lastMessage = minimalMessage;
+                                                shouldUpdate = true;
+                                        }
+
+                                        if (!shouldUpdate && idx >= 0) {
+                                                return map;
+                                        }
+
+                                        if (idx >= 0) {
+                                                nextList[idx] = target as DtoChannel;
+                                        } else {
+                                                nextList[nextList.length - 1] = target as DtoChannel;
+                                        }
+
+                                        return { ...map, ['@me']: nextList };
+                                });
+
+                                const activeGuildId = normalizeSnowflake(get(selectedGuildId));
+                                const activeChannelId = normalizeSnowflake(get(selectedChannelId));
+                                const isActiveDm = activeGuildId === '@me' && activeChannelId === channelId;
+                                if (!isActiveDm) {
+                                        markChannelUnread('@me', channelId, messageId);
+                                }
+                        }
+
+                        if (data?.d?.message) {
+                                // nothing here; consumers react via wsEvent
+                        }
+                }
 	};
 
         socket.onclose = () => {
