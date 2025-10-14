@@ -943,6 +943,12 @@ export interface MessageUpdateMessageRequest {
  */
 export interface MessageUploadAttachmentRequest {
     /**
+     * File content-type meta data
+     * @type {string}
+     * @memberof MessageUploadAttachmentRequest
+     */
+    'content_type'?: string;
+    /**
      * File size in bytes
      * @type {number}
      * @memberof MessageUploadAttachmentRequest
