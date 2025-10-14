@@ -17,7 +17,7 @@
 	import InvitePreview from './InvitePreview.svelte';
 	import YoutubeEmbed from './YoutubeEmbed.svelte';
 	import { extractInvite } from './extractInvite';
-        import { Paperclip, Pencil, Trash2 } from 'lucide-svelte';
+        import { Paperclip, Pencil, Play, Trash2, X } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -588,13 +588,62 @@
         let imagePreviewLastPointerY = 0;
         let imagePreviewDragDistance = 0;
         let detachPreviewResize: (() => void) | null = null;
+        let activeVideoAttachments = $state<Record<string, boolean>>({});
 
-	function resolveChannelPermissions(): number {
-		const gid = $selectedGuildId ?? '';
-		const cid = $selectedChannelId;
-		if (!cid) return 0;
-		const list = ($channelsByGuild[gid] ?? []) as DtoChannel[];
-		const channel = list.find((c) => String((c as any)?.id) === cid);
+        function attachmentStableKey(
+                attachment: MessageAttachment | undefined,
+                index: number
+        ): string {
+                const rawId = (attachment as any)?.id;
+                if (rawId != null) {
+                        try {
+                                if (typeof rawId === 'bigint') {
+                                        return rawId.toString();
+                                }
+                                return BigInt(rawId).toString();
+                        } catch {
+                                return String(rawId);
+                        }
+                }
+
+                const url = attachmentUrl(attachment);
+                if (url) {
+                        return `url:${url}`;
+                }
+
+                const messageId = (message as any)?.id;
+                const messageKey =
+                        typeof messageId === 'bigint'
+                                ? messageId.toString()
+                                : messageId != null
+                                        ? String(messageId)
+                                        : 'message';
+
+                return `${messageKey}:${attachmentFilename(attachment)}:${index}`;
+        }
+
+        function isVideoAttachmentActive(key: string): boolean {
+                return Boolean(activeVideoAttachments[key]);
+        }
+
+        function activateVideoAttachment(key: string): void {
+                if (activeVideoAttachments[key]) return;
+                activeVideoAttachments = { ...activeVideoAttachments, [key]: true };
+        }
+
+        function deactivateVideoAttachment(key: string): void {
+                if (!activeVideoAttachments[key]) return;
+                const next = { ...activeVideoAttachments };
+                delete next[key];
+                activeVideoAttachments = next;
+        }
+
+        function resolveChannelPermissions(): number {
+                const gid = $selectedGuildId ?? '';
+                const cid = $selectedChannelId;
+                if (!cid) return 0;
+                const list = ($channelsByGuild[gid] ?? []) as DtoChannel[];
+                const channel = list.find((c) => String((c as any)?.id) === cid);
 		const perms = (channel as any)?.permissions;
 		if (typeof perms === 'bigint') return Number(perms);
 		if (typeof perms === 'string') {
@@ -705,14 +754,47 @@
 					primaryRoleColor = null;
 				}
 			}
-		})();
-	});
+                })();
+        });
 
-	function autoSizeEditTextarea() {
-		if (!editTextarea) return;
-		editTextarea.style.height = 'auto';
-		const nextHeight = editTextarea.scrollHeight;
-		editTextarea.style.height = `${nextHeight}px`;
+        $effect(() => {
+                const attachments = (message.attachments ?? []) as MessageAttachment[];
+                const keys = new Set(
+                        attachments.map((attachment, index) =>
+                                attachmentStableKey(attachment, index)
+                        )
+                );
+
+                const entries = Object.entries(activeVideoAttachments);
+                if (entries.length === 0) {
+                        return;
+                }
+
+                let requiresUpdate = false;
+                for (const [key] of entries) {
+                        if (!keys.has(key)) {
+                                requiresUpdate = true;
+                                break;
+                        }
+                }
+
+                if (!requiresUpdate) return;
+
+                const next: Record<string, boolean> = {};
+                for (const [key, value] of entries) {
+                        if (keys.has(key)) {
+                                next[key] = value;
+                        }
+                }
+
+                activeVideoAttachments = next;
+        });
+
+        function autoSizeEditTextarea() {
+                if (!editTextarea) return;
+                editTextarea.style.height = 'auto';
+                const nextHeight = editTextarea.scrollHeight;
+                editTextarea.style.height = `${nextHeight}px`;
 		const viewportHeight =
 			typeof window !== 'undefined' ? window.innerHeight : Number.POSITIVE_INFINITY;
 		editTextarea.style.overflowY = nextHeight > viewportHeight ? 'auto' : 'hidden';
@@ -1495,42 +1577,88 @@
                                                                         </div>
                                                                 </button>
                                                         {:else if meta.kind === 'video' && meta.url}
-                                                                <div class="max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
-                                                                        <!-- svelte-ignore a11y_media_has_caption -->
-                                                                        <video
-                                                                                class="max-h-64 w-full bg-black"
-                                                                                src={meta.url}
-                                                                                controls
-                                                                                preload="metadata"
-                                                                        ></video>
-                                                                        <div class="border-t border-[var(--stroke)] px-2 py-1">
-                                                                                <div class="truncate font-medium" title={meta.name}>
-                                                                                        {meta.name}
+                                                                {@const attachmentKey = attachmentStableKey(attachment, attachmentIndex)}
+                                                                {#if isVideoAttachmentActive(attachmentKey)}
+                                                                        <div class="max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
+                                                                                <div class="relative bg-black">
+                                                                                        <!-- svelte-ignore a11y_media_has_caption -->
+                                                                                        <video
+                                                                                                class="max-h-64 w-full bg-black"
+                                                                                                src={meta.url}
+                                                                                                controls
+                                                                                                preload="metadata"
+                                                                                                playsinline
+                                                                                        ></video>
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="absolute right-2 top-2 rounded-full border border-white/40 bg-black/60 p-1.5 text-white transition hover:bg-black/40"
+                                                                                                onclick={() => deactivateVideoAttachment(attachmentKey)}
+                                                                                                aria-label="Close video preview"
+                                                                                        >
+                                                                                                <X class="h-4 w-4" stroke-width={2} />
+                                                                                        </button>
                                                                                 </div>
-                                                                                {#if meta.sizeLabel || meta.contentType}
-                                                                                        <div class="flex items-center justify-between text-[var(--muted)]">
-                                                                                                {#if meta.sizeLabel}
-                                                                                                        <span>{meta.sizeLabel}</span>
-                                                                                                {/if}
-                                                                                                {#if meta.contentType}
-                                                                                                        <span>{meta.contentType}</span>
-                                                                                                {/if}
+                                                                                <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                        <div class="truncate font-medium" title={meta.name}>
+                                                                                                {meta.name}
                                                                                         </div>
-                                                                                {/if}
-                                                                                {#if meta.url}
-                                                                                        <div class="mt-1 text-right">
-                                                                                                <a
-                                                                                                        class="text-[var(--brand)] hover:underline"
-                                                                                                        href={meta.url}
-                                                                                                        rel="noopener noreferrer"
-                                                                                                        target="_blank"
-                                                                                                >
-                                                                                                        Open original
-                                                                                                </a>
-                                                                                        </div>
-                                                                                {/if}
+                                                                                        {#if meta.sizeLabel || meta.contentType}
+                                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                        {#if meta.sizeLabel}
+                                                                                                                <span>{meta.sizeLabel}</span>
+                                                                                                        {/if}
+                                                                                                        {#if meta.contentType}
+                                                                                                                <span>{meta.contentType}</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                        {#if meta.url}
+                                                                                                <div class="mt-1 text-right">
+                                                                                                        <a
+                                                                                                                class="text-[var(--brand)] hover:underline"
+                                                                                                                href={meta.url}
+                                                                                                                rel="noopener noreferrer"
+                                                                                                                target="_blank"
+                                                                                                        >
+                                                                                                                Open original
+                                                                                                        </a>
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                </div>
                                                                         </div>
-                                                                </div>
+                                                                {:else}
+                                                                        <button
+                                                                                type="button"
+                                                                                class="group block max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                                onclick={() => activateVideoAttachment(attachmentKey)}
+                                                                        >
+                                                                                <div class="relative w-full overflow-hidden bg-black">
+                                                                                        <div class="pt-[56.25%]"></div>
+                                                                                        <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 text-white transition group-hover:bg-black/55">
+                                                                                                <span class="rounded-full border border-white/60 bg-black/40 p-3">
+                                                                                                        <Play class="h-6 w-6" stroke-width={2} />
+                                                                                                </span>
+                                                                                                <span class="text-sm font-medium">Play video</span>
+                                                                                        </div>
+                                                                                </div>
+                                                                                <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                        <div class="truncate font-medium" title={meta.name}>
+                                                                                                {meta.name}
+                                                                                        </div>
+                                                                                        {#if meta.sizeLabel || meta.contentType}
+                                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                        {#if meta.sizeLabel}
+                                                                                                                <span>{meta.sizeLabel}</span>
+                                                                                                        {/if}
+                                                                                                        {#if meta.contentType}
+                                                                                                                <span>{meta.contentType}</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                        <div class="mt-1 text-[var(--brand)]">Click to play</div>
+                                                                                </div>
+                                                                        </button>
+                                                                {/if}
                                                         {:else if meta.kind === 'audio' && meta.url}
                                                                 <div class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
                                                                         <div class="truncate font-medium" title={meta.name}>
