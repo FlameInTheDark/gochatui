@@ -13,21 +13,34 @@
 	let error: string | null = $state(null);
 	const dispatch = createEventDispatcher<{ updated: void }>();
 
-	async function pickFiles(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const files = input.files;
-		if (!files || !$selectedChannelId) return;
-		loading = true;
-		error = null;
-		try {
-			for (const file of Array.from(files)) {
-				const meta = await getFileMeta(file);
-				const res = await auth.api.message.messageChannelChannelIdAttachmentPost({
-					channelId: Number($selectedChannelId),
-					messageUploadAttachmentRequest: {
-						filename: file.name,
-						file_size: file.size,
-						width: meta.width ?? undefined,
+        async function pickFiles(e: Event) {
+                const target = e.target as HTMLInputElement | { files: FileList | null };
+                const files = target.files;
+                const selected = $selectedChannelId;
+                if (!files || !selected) return;
+
+                let channelSnowflake: bigint;
+                try {
+                        channelSnowflake = BigInt(selected);
+                } catch (err) {
+                        error = 'Invalid channel selected';
+                        if ('value' in target) {
+                                target.value = '';
+                        }
+                        return;
+                }
+
+                loading = true;
+                error = null;
+                try {
+                        for (const file of Array.from(files)) {
+                                const meta = await getFileMeta(file);
+                                const res = await auth.api.message.messageChannelChannelIdAttachmentPost({
+                                        channelId: channelSnowflake as any,
+                                        messageUploadAttachmentRequest: {
+                                                filename: file.name,
+                                                file_size: file.size,
+                                                width: meta.width ?? undefined,
 						height: meta.height ?? undefined
 					}
 				});
@@ -42,18 +55,20 @@
 					dispatch('updated');
 				}
 			}
-		} catch (e) {
-			const err = e as {
-				response?: { data?: { message?: string } };
-				message?: string;
-			};
-			error = err.response?.data?.message ?? err.message ?? 'Attachment failed';
-		} finally {
-			loading = false;
-			// reset input value
-			(e.target as HTMLInputElement).value = '';
-		}
-	}
+                } catch (e) {
+                        const err = e as {
+                                response?: { data?: { message?: string } };
+                                message?: string;
+                        };
+                        error = err.response?.data?.message ?? err.message ?? 'Attachment failed';
+                } finally {
+                        loading = false;
+                        // reset input value
+                        if ('value' in target) {
+                                target.value = '';
+                        }
+                }
+        }
 
 	function getFileMeta(file: File): Promise<{ width?: number; height?: number }> {
 		return new Promise((resolve) => {
