@@ -4,9 +4,10 @@
         import { createEventDispatcher } from 'svelte';
         import { LoaderCircle, Paperclip } from 'lucide-svelte';
         import { tooltip } from '$lib/actions/tooltip';
+        import type { PendingAttachment } from '$lib/stores/pendingMessages';
 
         let { attachments, inline = false } = $props<{
-                attachments: bigint[];
+                attachments: PendingAttachment[];
                 inline?: boolean;
         }>();
 	let loading = $state(false);
@@ -41,12 +42,13 @@
                                                 filename: file.name,
                                                 file_size: file.size,
                                                 width: meta.width ?? undefined,
-						height: meta.height ?? undefined
-					}
-				});
+                                                height: meta.height ?? undefined
+                                        }
+                                });
                                 const data = res.data as {
                                         id?: string | number | bigint;
                                         attachment_id?: string | number | bigint;
+                                        upload_url?: string | null;
                                 };
                                 const rawId = data.id ?? data.attachment_id;
                                 if (rawId == null) {
@@ -65,7 +67,31 @@
                                         continue;
                                 }
 
-                                attachments.push(snowflake);
+                                const uploadUrl = typeof data.upload_url === 'string' ? data.upload_url : null;
+                                if (!uploadUrl) {
+                                        error = 'Attachment response missing upload URL';
+                                        continue;
+                                }
+
+                                const previewUrl = createPreviewUrl(file);
+                                const localId = createLocalId();
+                                attachments.push({
+                                        localId,
+                                        attachmentId: snowflake,
+                                        uploadUrl,
+                                        file,
+                                        filename: file.name,
+                                        size: file.size,
+                                        mimeType: file.type || 'application/octet-stream',
+                                        width: meta.width ?? undefined,
+                                        height: meta.height ?? undefined,
+                                        previewUrl,
+                                        isImage: file.type.startsWith('image/'),
+                                        status: 'queued',
+                                        progress: 0,
+                                        uploadedBytes: 0,
+                                        error: null
+                                });
                                 // notify parent for re-render/bindings
                                 dispatch('updated');
                         }
@@ -84,22 +110,50 @@
                 }
         }
 
-	function getFileMeta(file: File): Promise<{ width?: number; height?: number }> {
-		return new Promise((resolve) => {
-			if (!file.type.startsWith('image/')) return resolve({});
-			const img = new Image();
-			const url = URL.createObjectURL(file);
-			img.onload = () => {
-				URL.revokeObjectURL(url);
-				resolve({ width: img.width, height: img.height });
-			};
-			img.onerror = () => {
-				URL.revokeObjectURL(url);
-				resolve({});
-			};
-			img.src = url;
-		});
-	}
+        function getFileMeta(file: File): Promise<{ width?: number; height?: number }> {
+                return new Promise((resolve) => {
+                        if (!file.type.startsWith('image/')) return resolve({});
+                        const url = safeCreateObjectUrl(file);
+                        if (!url) {
+                                resolve({});
+                                return;
+                        }
+                        const img = new Image();
+                        img.onload = () => {
+                                URL.revokeObjectURL(url);
+                                resolve({ width: img.width, height: img.height });
+                        };
+                        img.onerror = () => {
+                                URL.revokeObjectURL(url);
+                                resolve({});
+                        };
+                        img.src = url;
+                });
+        }
+
+        function safeCreateObjectUrl(file: File): string | null {
+                try {
+                        if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+                                return URL.createObjectURL(file);
+                        }
+                        return null;
+                } catch {
+                        return null;
+                }
+        }
+
+        function createPreviewUrl(file: File): string | null {
+                const url = safeCreateObjectUrl(file);
+                if (!url) return null;
+                return url;
+        }
+
+        function createLocalId(): string {
+                if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                        return crypto.randomUUID();
+                }
+                return `attachment-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
 </script>
 
 <div
