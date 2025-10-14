@@ -130,20 +130,53 @@
                 }
         }
 
+        function sanitizeHeaderEntries(headers: Record<string, string> | undefined) {
+                const entries: Array<{ name: string; lower: string; value: string }> = [];
+                if (!headers) return entries;
+                for (const [rawName, rawValue] of Object.entries(headers)) {
+                        if (rawName == null) continue;
+                        const trimmedName = rawName.trim();
+                        if (!trimmedName) continue;
+                        if (rawValue == null) continue;
+                        const value = String(rawValue);
+                        entries.push({ name: trimmedName, lower: trimmedName.toLowerCase(), value });
+                }
+                return entries;
+        }
+
         async function uploadWithProgress(
                 url: string,
                 file: File,
+                headers: Record<string, string> | undefined,
                 onProgress: (uploaded: number, total: number) => void
         ) {
-                const contentType = file.type || 'application/octet-stream';
                 const allowContentType = canSendContentTypeHeader(url);
+                let headerEntries = sanitizeHeaderEntries(headers);
+                const hasExplicitContentType = headerEntries.some((entry) => entry.lower === 'content-type');
+
+                if (!allowContentType) {
+                        headerEntries = headerEntries.filter((entry) => entry.lower !== 'content-type');
+                } else if (!hasExplicitContentType) {
+                        const inferred = file.type || 'application/octet-stream';
+                        if (inferred) {
+                                headerEntries = [
+                                        ...headerEntries,
+                                        { name: 'Content-Type', lower: 'content-type', value: inferred }
+                                ];
+                        }
+                }
+
+                const payload = !allowContentType ? await file.arrayBuffer() : file;
+
                 if (typeof XMLHttpRequest === 'undefined') {
                         const init: RequestInit = {
                                 method: 'PUT',
-                                body: file
+                                body: payload
                         };
-                        if (allowContentType) {
-                                init.headers = { 'Content-Type': contentType };
+                        if (headerEntries.length) {
+                                init.headers = Object.fromEntries(
+                                        headerEntries.map((entry) => [entry.name, entry.value])
+                                );
                         }
                         const res = await fetch(url, init);
                         if (!res.ok) {
@@ -156,9 +189,9 @@
                 await new Promise<void>((resolve, reject) => {
                         const xhr = new XMLHttpRequest();
                         xhr.open('PUT', url);
-                        if (allowContentType) {
+                        for (const entry of headerEntries) {
                                 try {
-                                        xhr.setRequestHeader('Content-Type', contentType);
+                                        xhr.setRequestHeader(entry.name, entry.value);
                                 } catch {
                                         // ignore header set failures
                                 }
@@ -179,7 +212,7 @@
                                         reject(new Error(`Upload failed with status ${xhr.status}`));
                                 }
                         };
-                        xhr.send(file);
+                        xhr.send(payload as Document | XMLHttpRequestBodyInit | null);
                 });
         }
 
@@ -208,18 +241,23 @@
                         }));
 
                         try {
-                                await uploadWithProgress(attachment.uploadUrl, attachment.file, (uploaded, total) => {
-                                        updatePendingAttachment(localId, attachment.localId, (current) => {
-                                                const fallbackTotal = current.size > 0 ? current.size : total;
-                                                const denominator = total > 0 ? total : fallbackTotal;
-                                                const ratio = denominator > 0 ? Math.min(1, uploaded / denominator) : 1;
-                                                return {
-                                                        ...current,
-                                                        uploadedBytes: denominator > 0 ? Math.min(uploaded, denominator) : uploaded,
-                                                        progress: ratio
-                                                };
-                                        });
-                                });
+                                await uploadWithProgress(
+                                        attachment.uploadUrl,
+                                        attachment.file,
+                                        attachment.uploadHeaders,
+                                        (uploaded, total) => {
+                                                updatePendingAttachment(localId, attachment.localId, (current) => {
+                                                        const fallbackTotal = current.size > 0 ? current.size : total;
+                                                        const denominator = total > 0 ? total : fallbackTotal;
+                                                        const ratio = denominator > 0 ? Math.min(1, uploaded / denominator) : 1;
+                                                        return {
+                                                                ...current,
+                                                                uploadedBytes: denominator > 0 ? Math.min(uploaded, denominator) : uploaded,
+                                                                progress: ratio
+                                                        };
+                                                });
+                                        }
+                                );
                                 successfulIds.push(attachment.attachmentId);
                                 updatePendingAttachment(localId, attachment.localId, (current) => ({
                                         ...current,

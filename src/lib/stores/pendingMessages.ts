@@ -6,6 +6,7 @@ export interface PendingAttachment {
         localId: string;
         attachmentId: bigint | null;
         uploadUrl: string | null;
+        uploadHeaders: Record<string, string>;
         file: File;
         filename: string;
         size: number;

@@ -14,6 +14,65 @@
 	let error: string | null = $state(null);
 	const dispatch = createEventDispatcher<{ updated: void }>();
 
+        function normalizeUploadHeaders(input: unknown): Record<string, string> {
+                if (!input || typeof input !== 'object') {
+                        return {};
+                }
+
+                const entries: Array<[string, string]> = [];
+                const pushEntry = (key: unknown, value: unknown) => {
+                        if (typeof key !== 'string') return;
+                        const trimmedKey = key.trim();
+                        if (!trimmedKey) return;
+                        if (value == null) return;
+                        let normalizedValue: string | null = null;
+                        if (typeof value === 'string') {
+                                normalizedValue = value;
+                        } else if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+                                normalizedValue = value.toString();
+                        } else if (Array.isArray(value)) {
+                                normalizedValue = value.filter((item) => item != null).map((item) => String(item)).join(', ');
+                        } else if (typeof value === 'object') {
+                                const maybeValue =
+                                        (value as Record<string, unknown>).value ??
+                                        (value as Record<string, unknown>).val ??
+                                        (value as Record<string, unknown>).headerValue;
+                                if (maybeValue != null) {
+                                        normalizedValue = String(maybeValue);
+                                }
+                        }
+
+                        if (normalizedValue == null) return;
+                        entries.push([trimmedKey, normalizedValue]);
+                };
+
+                if (Array.isArray(input)) {
+                        for (const item of input) {
+                                if (!item) continue;
+                                if (Array.isArray(item) && item.length >= 2) {
+                                        pushEntry(item[0], item[1]);
+                                        continue;
+                                }
+                                if (typeof item === 'object') {
+                                        const record = item as Record<string, unknown>;
+                                        const key = record.name ?? record.key ?? record.header ?? record.headerName;
+                                        const value =
+                                                record.value ??
+                                                record.val ??
+                                                record.headerValue ??
+                                                (Array.isArray(record.values) ? record.values.join(', ') : undefined);
+                                        pushEntry(typeof key === 'string' ? key : '', value);
+                                }
+                        }
+                } else {
+                        for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+                                pushEntry(key, value);
+                        }
+                }
+
+                return Object.fromEntries(entries);
+        }
+
         async function pickFiles(e: Event) {
                 const target = e.target as HTMLInputElement | { files: FileList | null };
                 const files = target.files;
@@ -49,6 +108,8 @@
                                         id?: string | number | bigint;
                                         attachment_id?: string | number | bigint;
                                         upload_url?: string | null;
+                                        upload_headers?: unknown;
+                                        headers?: unknown;
                                 };
                                 const rawId = data.id ?? data.attachment_id;
                                 if (rawId == null) {
@@ -73,12 +134,15 @@
                                         continue;
                                 }
 
+                                const uploadHeaders = normalizeUploadHeaders(data.upload_headers ?? data.headers);
+
                                 const previewUrl = createPreviewUrl(file);
                                 const localId = createLocalId();
                                 attachments.push({
                                         localId,
                                         attachmentId: snowflake,
                                         uploadUrl,
+                                        uploadHeaders,
                                         file,
                                         filename: file.name,
                                         size: file.size,
