@@ -179,48 +179,62 @@
                 return headers;
         }
 
-        function createProgressReadableStream(
+        async function uploadWithXmlHttpRequest(
+                url: string,
                 file: File,
+                headerEntries: Array<{ name: string; lower: string; value: string }>,
                 totalBytes: number,
                 onProgress: (uploaded: number, total: number) => void
         ) {
-                const stream = file.stream?.();
-                if (!stream || typeof ReadableStream === 'undefined') return null;
+                await new Promise<void>((resolve, reject) => {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('PUT', url, true);
+                        xhr.withCredentials = false;
 
-                let uploaded = 0;
-                const safeTotal = totalBytes > 0 ? totalBytes : file.size;
-                return new ReadableStream<Uint8Array>({
-                        start(controller) {
-                                const reader = stream.getReader();
-                                const pump = (): void => {
-                                        reader
-                                                .read()
-                                                .then(({ done, value }) => {
-                                                        if (done) {
-                                                                onProgress(safeTotal || uploaded, safeTotal || uploaded);
-                                                                controller.close();
-                                                                return;
-                                                        }
-                                                        if (value) {
-                                                                uploaded += value.byteLength;
-                                                                const denominator = safeTotal || uploaded;
-                                                                onProgress(uploaded, denominator);
-                                                                controller.enqueue(value);
-                                                                pump();
-                                                        } else {
-                                                                pump();
-                                                        }
-                                                })
-                                                .catch((err) => {
-                                                        controller.error(err);
-                                                });
-                                };
-                                pump();
+                        for (const entry of headerEntries) {
+                                try {
+                                        xhr.setRequestHeader(entry.name, entry.value);
+                                } catch (err) {
+                                        console.warn('Unable to set upload header', entry.name, err);
+                                }
+                        }
+
+                        xhr.upload.onprogress = (event) => {
+                                const uploaded = event.loaded;
+                                const total = event.lengthComputable
+                                        ? event.total
+                                        : totalBytes > 0
+                                          ? totalBytes
+                                          : file.size;
+                                onProgress(uploaded, total);
+                        };
+
+                        xhr.onload = () => {
+                                const status = xhr.status === 0 ? 200 : xhr.status;
+                                if (status >= 200 && status < 300) {
+                                        const finalTotal = totalBytes > 0 ? totalBytes : file.size;
+                                        onProgress(finalTotal, finalTotal);
+                                        resolve();
+                                        return;
+                                }
+                                reject(new Error(`Upload failed with status ${status}`));
+                        };
+
+                        xhr.onerror = () => {
+                                reject(new Error('Upload failed'));
+                        };
+
+                        xhr.onabort = () => {
+                                reject(new Error('Upload aborted'));
+                        };
+
+                        try {
+                                xhr.send(file);
+                        } catch (err) {
+                                reject(err instanceof Error ? err : new Error('Upload failed'));
                         }
                 });
         }
-
-        type UploadRequestInit = RequestInit & { duplex?: 'half' };
 
         async function uploadWithProgress(
                 url: string,
@@ -232,42 +246,14 @@
                 const headersInit = toHeaders(headerEntries);
                 const totalBytes = file.size || 0;
 
-                const stream = createProgressReadableStream(file, totalBytes, onProgress);
-                if (stream) {
-                        const init: UploadRequestInit = {
-                                method: 'PUT',
-                                body: stream,
-                                headers: headersInit,
-                                mode: 'cors',
-                                credentials: 'omit'
-                        };
-                        (init as UploadRequestInit).duplex = 'half';
-
-                        try {
-                                const res = await fetch(url, init);
-                                if (!res.ok && res.type !== 'opaque') {
-                                        throw new Error(`Upload failed with status ${res.status}`);
-                                }
-                                onProgress(totalBytes || file.size, totalBytes || file.size);
-                                return;
-                        } catch (err) {
-                                if ((err as Error)?.name !== 'TypeError') {
-                                        throw err;
-                                }
-                                // Fall through to buffered upload below for browsers rejecting streaming PUTs.
-                        }
-                }
-
-                let buffer: ArrayBuffer;
-                try {
-                        buffer = await file.arrayBuffer();
-                } catch (err) {
-                        throw new Error((err as Error)?.message ?? 'Unable to read attachment');
+                if (typeof XMLHttpRequest !== 'undefined') {
+                        await uploadWithXmlHttpRequest(url, file, headerEntries, totalBytes, onProgress);
+                        return;
                 }
 
                 const fallbackInit: RequestInit = {
                         method: 'PUT',
-                        body: buffer,
+                        body: file,
                         headers: headersInit,
                         mode: 'cors',
                         credentials: 'omit'
@@ -276,7 +262,7 @@
                 if (!res.ok && res.type !== 'opaque') {
                         throw new Error(`Upload failed with status ${res.status}`);
                 }
-                const bytesSent = buffer.byteLength || file.size;
+                const bytesSent = file.size;
                 onProgress(bytesSent, bytesSent);
         }
 
