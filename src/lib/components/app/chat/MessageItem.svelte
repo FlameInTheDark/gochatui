@@ -728,9 +728,27 @@
 
                 const handleError = () => finalize(null);
 
+                const handleLoadedMetadata = () => {
+                        try {
+                                // Request a frame without downloading the entire video by seeking to a
+                                // small offset. Browsers will fetch just enough data to render the frame.
+                                const hasDuration = Number.isFinite(video.duration) && video.duration > 0;
+                                const epsilon = 0.001;
+                                const targetTime = hasDuration
+                                        ? Math.min(Math.max(epsilon, video.duration - epsilon), 0.1)
+                                        : epsilon;
+                                if (video.currentTime !== targetTime) {
+                                        video.currentTime = targetTime;
+                                }
+                        } catch {
+                                // noop — if seeking fails we will rely on the default frame fetch.
+                        }
+                };
+
                 const cleanup = () => {
                         video.removeEventListener('loadeddata', handleLoadedData);
                         video.removeEventListener('error', handleError);
+                        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
                         try {
                                 video.pause();
                         } catch {
@@ -759,6 +777,7 @@
 
                 video.addEventListener('loadeddata', handleLoadedData, { once: true });
                 video.addEventListener('error', handleError, { once: true });
+                video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
                 video.crossOrigin = 'anonymous';
                 video.preload = 'metadata';
                 video.muted = true;
