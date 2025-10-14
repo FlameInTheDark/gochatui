@@ -114,21 +114,29 @@
                 return error.response?.data?.message ?? error.message ?? 'Failed to send message';
         }
 
-        function canSendContentTypeHeader(url: string): boolean {
-                try {
-                        const parsed = new URL(url);
-                        const signedHeaders = parsed.searchParams.get('X-Amz-SignedHeaders');
-                        if (!signedHeaders) return true;
-                        const allowed = signedHeaders
-                                .split(';')
-                                .map((header) => header.trim().toLowerCase())
-                                .filter(Boolean);
-                        if (allowed.length === 0) return true;
-                        return allowed.includes('content-type');
-                } catch {
-                        return true;
-                }
-        }
+        const forbiddenUploadHeaders = new Set([
+                'accept-charset',
+                'accept-encoding',
+                'access-control-request-headers',
+                'access-control-request-method',
+                'connection',
+                'content-length',
+                'cookie',
+                'cookie2',
+                'date',
+                'dnt',
+                'expect',
+                'feature-policy',
+                'host',
+                'keep-alive',
+                'origin',
+                'referer',
+                'te',
+                'trailer',
+                'transfer-encoding',
+                'upgrade',
+                'via'
+        ]);
 
         function sanitizeHeaderEntries(headers: Record<string, string> | undefined) {
                 const entries: Array<{ name: string; lower: string; value: string }> = [];
@@ -144,34 +152,45 @@
                 return entries;
         }
 
+        function buildUploadHeaderEntries(
+                headers: Record<string, string> | undefined,
+                file: File
+        ): Array<{ name: string; lower: string; value: string }> {
+                const entries = sanitizeHeaderEntries(headers);
+                const filtered = entries.filter((entry) => !forbiddenUploadHeaders.has(entry.lower));
+                const hasContentType = filtered.some((entry) => entry.lower === 'content-type');
+                if (!hasContentType) {
+                        const fallback = file.type || 'application/octet-stream';
+                        if (fallback) {
+                                filtered.push({
+                                        name: 'Content-Type',
+                                        lower: 'content-type',
+                                        value: fallback
+                                });
+                        }
+                } else {
+                        for (const entry of filtered) {
+                                if (entry.lower === 'content-type' && !entry.value && file.type) {
+                                        entry.value = file.type;
+                                }
+                        }
+                }
+
+                return filtered;
+        }
+
         async function uploadWithProgress(
                 url: string,
                 file: File,
                 headers: Record<string, string> | undefined,
                 onProgress: (uploaded: number, total: number) => void
         ) {
-                const allowContentType = canSendContentTypeHeader(url);
-                let headerEntries = sanitizeHeaderEntries(headers);
-                const hasExplicitContentType = headerEntries.some((entry) => entry.lower === 'content-type');
-
-                if (!allowContentType) {
-                        headerEntries = headerEntries.filter((entry) => entry.lower !== 'content-type');
-                } else if (!hasExplicitContentType) {
-                        const inferred = file.type || 'application/octet-stream';
-                        if (inferred) {
-                                headerEntries = [
-                                        ...headerEntries,
-                                        { name: 'Content-Type', lower: 'content-type', value: inferred }
-                                ];
-                        }
-                }
-
-                const payload = !allowContentType ? await file.arrayBuffer() : file;
+                const headerEntries = buildUploadHeaderEntries(headers, file);
 
                 if (typeof XMLHttpRequest === 'undefined') {
                         const init: RequestInit = {
                                 method: 'PUT',
-                                body: payload
+                                body: file
                         };
                         if (headerEntries.length) {
                                 init.headers = Object.fromEntries(
@@ -212,7 +231,7 @@
                                         reject(new Error(`Upload failed with status ${xhr.status}`));
                                 }
                         };
-                        xhr.send(payload as Document | XMLHttpRequestBodyInit | null);
+                        xhr.send(file as Document | XMLHttpRequestBodyInit | null);
                 });
         }
 
