@@ -41,6 +41,7 @@
 
         const UNREAD_INDICATOR_CLASSES =
                 'absolute bottom-0 left-1/2 h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-[var(--panel-strong)] bg-[var(--brand)]';
+        const FOLDER_UNREAD_INDICATOR_CLASSES = UNREAD_INDICATOR_CLASSES;
 
 	type DisplayGuild = {
 		type: 'guild';
@@ -622,11 +623,7 @@
                                                                 <span class="sr-only">{m.unread_indicator()}</span>
                                                                 <span
                                                                         aria-hidden="true"
-                                                                        class={
-                                                                                expandedFolders[item.folder.id]
-                                                                                        ? UNREAD_INDICATOR_CLASSES
-                                                                                        : FOLDER_UNREAD_INDICATOR_CLASSES
-                                                                        }
+                                                                        class={FOLDER_UNREAD_INDICATOR_CLASSES}
                                                                 ></span>
                                                         {/if}
 						</button>
