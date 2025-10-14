@@ -310,6 +310,7 @@ let hasSyncedGuildLayout = false;
 let loadedSettingsToken: string | null = null;
 let settingsLoadInFlight = false;
 let settingsLoadToken: string | null = null;
+let settingsLoadedOnce = false;
 let queuedSettingsToken: string | null = null;
 
 function structuredCloneSafe<T>(value: T): T {
@@ -1351,6 +1352,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         loadedSettingsToken = null;
                         auth.ingestGuilds([]);
                         updateUnreadSnapshot(null);
+                        settingsLoadedOnce = false;
                         return;
                 }
 
@@ -1414,6 +1416,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         if (tokenToLoad) {
                                 loadedSettingsToken = tokenToLoad;
                         }
+                        settingsLoadedOnce = true;
                 } catch (error) {
                         console.error('Failed to load settings', error);
                         suppressSave = true;
@@ -1421,6 +1424,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         suppressSave = false;
                         loadedSettingsToken = null;
                         updateUnreadSnapshot(null);
+                        settingsLoadedOnce = false;
                 }
 
                 settingsReady.set(true);
@@ -1438,10 +1442,12 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
 
 function handleAuthTokenChange(token: string | null) {
         if (token) {
-                if (!get(settingsReady) || loadedSettingsToken !== token) {
+                if (!settingsLoadedOnce || !get(settingsReady)) {
                         loadedSettingsToken = token;
                         void loadSettingsFromApi(token);
+                        return;
                 }
+                loadedSettingsToken = token;
         } else {
                 hasSyncedGuildLayout = false;
                 guildsHydrated = false;
@@ -1450,6 +1456,7 @@ function handleAuthTokenChange(token: string | null) {
                 suppressSave = false;
                 settingsReady.set(false);
                 loadedSettingsToken = null;
+                settingsLoadedOnce = false;
         }
 }
 
