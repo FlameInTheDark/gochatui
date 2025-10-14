@@ -449,6 +449,7 @@
                 sizeLabel: string | null;
                 name: string;
                 contentType: string | null;
+                aspectRatio: string | null;
         };
 
         function formatContentType(value: unknown): string | null {
@@ -533,13 +534,32 @@
                 return `${formatted} ${units[unitIndex]}`;
         }
 
+        function parseAttachmentDimension(value: unknown): number | null {
+                if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+                        return value;
+                }
+                if (typeof value === 'string') {
+                        const parsed = Number(value);
+                        if (Number.isFinite(parsed) && parsed > 0) {
+                                return parsed;
+                        }
+                }
+                return null;
+        }
+
         function getAttachmentMeta(attachment: MessageAttachment | undefined): AttachmentMeta {
+                const width = parseAttachmentDimension((attachment as any)?.width);
+                const height = parseAttachmentDimension((attachment as any)?.height);
+                const aspectRatio =
+                        width != null && height != null ? `${width} / ${height}` : null;
+
                 return {
                         url: attachmentUrl(attachment),
                         kind: detectAttachmentKind(attachment),
                         sizeLabel: formatAttachmentSize((attachment as any)?.size),
                         name: attachmentFilename(attachment),
-                        contentType: attachmentContentType(attachment)
+                        contentType: attachmentContentType(attachment),
+                        aspectRatio,
                 };
         }
 
@@ -589,6 +609,9 @@
         let imagePreviewDragDistance = 0;
         let detachPreviewResize: (() => void) | null = null;
         let activeVideoAttachments = $state<Record<string, boolean>>({});
+        let videoPreviewPosters = $state<Record<string, string | null>>({});
+        const videoPosterTasks = new Map<string, () => void>();
+        let componentDestroyed = false;
 
         function attachmentStableKey(
                 attachment: MessageAttachment | undefined,
@@ -636,6 +659,121 @@
                 const next = { ...activeVideoAttachments };
                 delete next[key];
                 activeVideoAttachments = next;
+        }
+
+        function cleanupVideoPosterTasks() {
+                for (const cancel of videoPosterTasks.values()) {
+                        try {
+                                cancel();
+                        } catch {
+                                // noop
+                        }
+                }
+                videoPosterTasks.clear();
+        }
+
+        function stopVideoPosterTask(key: string) {
+                const cancel = videoPosterTasks.get(key);
+                if (!cancel) return;
+                videoPosterTasks.delete(key);
+                try {
+                        cancel();
+                } catch {
+                        // noop
+                }
+        }
+
+        function storeVideoPoster(key: string, value: string | null) {
+                videoPreviewPosters = { ...videoPreviewPosters, [key]: value };
+        }
+
+        function requestVideoPoster(key: string, url: string): void {
+                if (typeof window === 'undefined') {
+                        return;
+                }
+                if (videoPreviewPosters[key] !== undefined || videoPosterTasks.has(key)) {
+                        return;
+                }
+
+                let resolved = false;
+                const video = document.createElement('video');
+
+                const handleLoadedData = () => {
+                        try {
+                                const width = video.videoWidth;
+                                const height = video.videoHeight;
+                                if (!width || !height) {
+                                        throw new Error('missing dimensions');
+                                }
+
+                                const maxDimension = 640;
+                                const scale = Math.min(1, maxDimension / Math.max(width, height));
+                                const targetWidth = Math.max(1, Math.round(width * scale));
+                                const targetHeight = Math.max(1, Math.round(height * scale));
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = targetWidth;
+                                canvas.height = targetHeight;
+                                const context = canvas.getContext('2d');
+                                if (!context) {
+                                        throw new Error('no canvas context');
+                                }
+                                context.drawImage(video, 0, 0, targetWidth, targetHeight);
+                                const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                                finalize(dataUrl);
+                        } catch {
+                                finalize(null);
+                        }
+                };
+
+                const handleError = () => finalize(null);
+
+                const cleanup = () => {
+                        video.removeEventListener('loadeddata', handleLoadedData);
+                        video.removeEventListener('error', handleError);
+                        try {
+                                video.pause();
+                        } catch {
+                                // noop
+                        }
+                        video.src = '';
+                        try {
+                                video.load();
+                        } catch {
+                                // noop
+                        }
+                };
+
+                const finalize = (poster: string | null) => {
+                        if (resolved) {
+                                return;
+                        }
+                        resolved = true;
+                        cleanup();
+                        videoPosterTasks.delete(key);
+                        if (componentDestroyed) {
+                                return;
+                        }
+                        storeVideoPoster(key, poster);
+                };
+
+                video.addEventListener('loadeddata', handleLoadedData, { once: true });
+                video.addEventListener('error', handleError, { once: true });
+                video.crossOrigin = 'anonymous';
+                video.preload = 'metadata';
+                video.muted = true;
+                video.playsInline = true;
+                video.src = url;
+                try {
+                        video.load();
+                } catch {
+                        // noop
+                }
+
+                videoPosterTasks.set(key, () => {
+                        resolved = true;
+                        cleanup();
+                });
         }
 
         function resolveChannelPermissions(): number {
@@ -788,6 +926,49 @@
                 }
 
                 activeVideoAttachments = next;
+        });
+
+        $effect(() => {
+                if (typeof window === 'undefined') {
+                        return;
+                }
+
+                const attachments = (message.attachments ?? []) as MessageAttachment[];
+                const videoKeys = new Set<string>();
+
+                attachments.forEach((attachment, index) => {
+                        const meta = getAttachmentMeta(attachment);
+                        if (meta.kind !== 'video' || !meta.url) {
+                                return;
+                        }
+                        const key = attachmentStableKey(attachment, index);
+                        videoKeys.add(key);
+                        requestVideoPoster(key, meta.url);
+                });
+
+                for (const key of Array.from(videoPosterTasks.keys())) {
+                        if (!videoKeys.has(key)) {
+                                stopVideoPosterTask(key);
+                        }
+                }
+
+                const storedKeys = Object.keys(videoPreviewPosters);
+                if (!storedKeys.length) {
+                        return;
+                }
+
+                const next = { ...videoPreviewPosters };
+                let changed = false;
+                for (const key of storedKeys) {
+                        if (!videoKeys.has(key)) {
+                                delete next[key];
+                                changed = true;
+                        }
+                }
+
+                if (changed) {
+                        videoPreviewPosters = next;
+                }
         });
 
         function autoSizeEditTextarea() {
@@ -1099,7 +1280,9 @@
         }
 
         onDestroy(() => {
+                componentDestroyed = true;
                 detachImagePreviewResize();
+                cleanupVideoPosterTasks();
         });
 
         function attachImagePreviewResize() {
@@ -1578,12 +1761,14 @@
                                                                 </button>
                                                         {:else if meta.kind === 'video' && meta.url}
                                                                 {@const attachmentKey = attachmentStableKey(attachment, attachmentIndex)}
+                                                                {@const previewPoster = videoPreviewPosters[attachmentKey] ?? null}
+                                                                {@const previewAspectRatio = meta.aspectRatio ?? '16 / 9'}
                                                                 {#if isVideoAttachmentActive(attachmentKey)}
-                                                                        <div class="max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
+                                                                        <div class="w-full max-w-xl overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
                                                                                 <div class="relative bg-black">
                                                                                         <!-- svelte-ignore a11y_media_has_caption -->
                                                                                         <video
-                                                                                                class="max-h-64 w-full bg-black"
+                                                                                                class="max-h-80 w-full bg-black"
                                                                                                 src={meta.url}
                                                                                                 controls
                                                                                                 preload="metadata"
@@ -1629,12 +1814,25 @@
                                                                 {:else}
                                                                         <button
                                                                                 type="button"
-                                                                                class="group block max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                                class="group block w-full max-w-xl overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
                                                                                 onclick={() => activateVideoAttachment(attachmentKey)}
                                                                         >
-                                                                                <div class="relative w-full overflow-hidden bg-black">
-                                                                                        <div class="pt-[56.25%]"></div>
-                                                                                        <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 text-white transition group-hover:bg-black/55">
+                                                                                <div
+                                                                                        class="relative w-full overflow-hidden bg-black"
+                                                                                        style:aspect-ratio={previewAspectRatio}
+                                                                                >
+                                                                                        {#if previewPoster}
+                                                                                                <img
+                                                                                                        src={previewPoster}
+                                                                                                        alt={`Preview frame for ${meta.name}`}
+                                                                                                        class="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                                                                                                        loading="lazy"
+                                                                                                />
+                                                                                                <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/40"></div>
+                                                                                        {:else}
+                                                                                                <div class="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900"></div>
+                                                                                        {/if}
+                                                                                        <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 text-white transition group-hover:bg-black/40">
                                                                                                 <span class="rounded-full border border-white/60 bg-black/40 p-3">
                                                                                                         <Play class="h-6 w-6" stroke-width={2} />
                                                                                                 </span>
