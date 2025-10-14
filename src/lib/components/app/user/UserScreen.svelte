@@ -27,7 +27,7 @@
                 presenceIndicatorClass
         } from '$lib/stores/presence';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
-        import { applyFriendList } from '$lib/stores/friends';
+        import { applyFriendList, friendDataRefreshSignal } from '$lib/stores/friends';
         import { X } from 'lucide-svelte';
         import { isMessageNewer } from '$lib/components/app/chat/readStateUtils';
         import { unreadChannelsByGuild } from '$lib/stores/unread';
@@ -85,6 +85,9 @@
         let showAddFriendModal = $state(false);
         let addFriendIdentifier = $state('');
         let friendActionError = $state<string | null>(null);
+        let friendDataRefreshRequest: Promise<void> | null = null;
+        let lastFriendDataSignal = 0;
+        let pendingFriendDataSignal = false;
         let isSubmittingAddFriend = $state(false);
         let addFriendError = $state<string | null>(null);
         let removingFriendIds = $state(new Set<string>());
@@ -161,11 +164,11 @@
                 openingDmChannelIds = next;
         }
 
-	async function refreshFriendData(syncUser = false, clearError = false) {
-		if (clearError) {
-			friendActionError = null;
-		}
-		const [friendsResult, requestsResult] = await Promise.allSettled([
+        async function refreshFriendData(syncUser = false, clearError = false) {
+                if (clearError) {
+                        friendActionError = null;
+                }
+                const [friendsResult, requestsResult] = await Promise.allSettled([
 			api.user.userMeFriendsGet(),
 			api.user.userMeFriendsRequestsGet()
 		]);
@@ -241,6 +244,23 @@
 		} finally {
 			setRequestLoading(id, false);
                 }
+        }
+
+        function enqueueFriendDataRefresh() {
+                if (friendDataRefreshRequest) {
+                        pendingFriendDataSignal = true;
+                        return;
+                }
+                const request = refreshFriendData(false, false).finally(() => {
+                        if (friendDataRefreshRequest === request) {
+                                friendDataRefreshRequest = null;
+                        }
+                        if (pendingFriendDataSignal) {
+                                pendingFriendDataSignal = false;
+                                enqueueFriendDataRefresh();
+                        }
+                });
+                friendDataRefreshRequest = request;
         }
 
         function buildFriendRecipient(friend: FriendEntry | null): any | null {
@@ -538,6 +558,15 @@
 
         onDestroy(() => {
                 presenceSubscription.destroy();
+        });
+
+        $effect(() => {
+                const token = $friendDataRefreshSignal;
+                if (!token || token === lastFriendDataSignal) {
+                        return;
+                }
+                lastFriendDataSignal = token;
+                enqueueFriendDataRefresh();
         });
 
         function extractUserCandidate(candidate: any): DtoUser | null {
