@@ -157,24 +157,15 @@
                 file: File
         ): Array<{ name: string; lower: string; value: string }> {
                 const entries = sanitizeHeaderEntries(headers);
-                const filtered = entries.filter((entry) => !forbiddenUploadHeaders.has(entry.lower));
-                const hasContentType = filtered.some((entry) => entry.lower === 'content-type');
-                if (!hasContentType) {
-                        const fallback = file.type || 'application/octet-stream';
-                        if (fallback) {
-                                filtered.push({
-                                        name: 'Content-Type',
-                                        lower: 'content-type',
-                                        value: fallback
-                                });
-                        }
-                } else {
-                        for (const entry of filtered) {
+                const filtered = entries
+                        .filter((entry) => !forbiddenUploadHeaders.has(entry.lower))
+                        .map((entry) => {
                                 if (entry.lower === 'content-type' && !entry.value && file.type) {
-                                        entry.value = file.type;
+                                        return { ...entry, value: file.type };
                                 }
-                        }
-                }
+                                return entry;
+                        })
+                        .filter((entry) => entry.value.trim() !== '');
 
                 return filtered;
         }
