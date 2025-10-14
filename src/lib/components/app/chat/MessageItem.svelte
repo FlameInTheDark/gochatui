@@ -17,7 +17,7 @@
 	import InvitePreview from './InvitePreview.svelte';
 	import YoutubeEmbed from './YoutubeEmbed.svelte';
 	import { extractInvite } from './extractInvite';
-	import { Pencil, Trash2 } from 'lucide-svelte';
+        import { Paperclip, Pencil, Trash2 } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -397,12 +397,12 @@
 		}
 	}
 
-	function parseInline(content: string): InlineToken[] {
-		const tokens: InlineToken[] = [];
-		if (!content) return tokens;
+        function parseInline(content: string): InlineToken[] {
+                const tokens: InlineToken[] = [];
+                if (!content) return tokens;
 
-		let cursor = 0;
-		let encounteredCode = false;
+                let cursor = 0;
+                let encounteredCode = false;
 
 		while (cursor < content.length) {
 			const startIndex = content.indexOf('`', cursor);
@@ -434,13 +434,132 @@
 			parsePlainText(content, tokens);
 		} else if (cursor < content.length) {
 			parsePlainText(content.slice(cursor), tokens);
-		}
+                }
 
-		return tokens;
-	}
+                return tokens;
+        }
 
-	const me = auth.user;
-	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
+        type MessageAttachment = NonNullable<DtoMessage['attachments']>[number];
+
+        type AttachmentKind = 'image' | 'video' | 'audio' | 'other';
+
+        type AttachmentMeta = {
+                url: string | null;
+                kind: AttachmentKind;
+                sizeLabel: string | null;
+                name: string;
+                contentType: string | null;
+        };
+
+        function formatContentType(value: unknown): string | null {
+                if (typeof value !== 'string') return null;
+                const trimmed = value.trim();
+                return trimmed ? trimmed : null;
+        }
+
+        function attachmentUrl(attachment: MessageAttachment | undefined): string | null {
+                const raw = (attachment as any)?.url;
+                if (typeof raw !== 'string') return null;
+                const trimmed = raw.trim();
+                return trimmed ? trimmed : null;
+        }
+
+        function attachmentContentType(attachment: MessageAttachment | undefined): string | null {
+                return formatContentType((attachment as any)?.content_type);
+        }
+
+        function attachmentFilename(attachment: MessageAttachment | undefined): string {
+                const raw = (attachment as any)?.filename;
+                if (typeof raw === 'string' && raw.trim()) {
+                        return raw.trim();
+                }
+                return 'Attachment';
+        }
+
+        const imageExtensions = new Set([
+                'png',
+                'jpg',
+                'jpeg',
+                'gif',
+                'webp',
+                'avif',
+                'bmp',
+                'svg'
+        ]);
+        const videoExtensions = new Set(['mp4', 'webm', 'mov', 'm4v', 'mkv', 'ogv']);
+        const audioExtensions = new Set(['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'opus']);
+
+        function detectAttachmentKind(attachment: MessageAttachment | undefined): AttachmentKind {
+                const type = attachmentContentType(attachment)?.toLowerCase();
+                if (type) {
+                        if (type.startsWith('image/')) return 'image';
+                        if (type.startsWith('video/')) return 'video';
+                        if (type.startsWith('audio/')) return 'audio';
+                }
+
+                const filename = attachmentFilename(attachment).toLowerCase();
+                const ext = filename.split('.').pop();
+                if (ext) {
+                        if (imageExtensions.has(ext)) return 'image';
+                        if (videoExtensions.has(ext)) return 'video';
+                        if (audioExtensions.has(ext)) return 'audio';
+                }
+
+                return 'other';
+        }
+
+        function formatAttachmentSize(value: unknown): string | null {
+                let bytes: number | null = null;
+                if (typeof value === 'number' && Number.isFinite(value)) {
+                        bytes = value;
+                } else if (typeof value === 'string') {
+                        const parsed = Number(value);
+                        bytes = Number.isFinite(parsed) ? parsed : null;
+                }
+                if (bytes == null || bytes < 0) return null;
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+                let unitIndex = 0;
+                let display = bytes;
+                while (display >= 1024 && unitIndex < units.length - 1) {
+                        display /= 1024;
+                        unitIndex += 1;
+                }
+                const formatted =
+                        unitIndex === 0
+                                ? Math.round(display).toString()
+                                : display >= 10
+                                        ? display.toFixed(0)
+                                        : display.toFixed(1);
+                return `${formatted} ${units[unitIndex]}`;
+        }
+
+        function getAttachmentMeta(attachment: MessageAttachment | undefined): AttachmentMeta {
+                return {
+                        url: attachmentUrl(attachment),
+                        kind: detectAttachmentKind(attachment),
+                        sizeLabel: formatAttachmentSize((attachment as any)?.size),
+                        name: attachmentFilename(attachment),
+                        contentType: attachmentContentType(attachment)
+                };
+        }
+
+        type ImagePreviewState = {
+                url: string;
+                title: string;
+                sizeLabel: string | null;
+                contentType: string | null;
+        };
+
+        const IMAGE_ZOOM_MIN = 1;
+        const IMAGE_ZOOM_MAX = 4;
+        const IMAGE_ZOOM_STEP = 0.25;
+
+        function clamp(value: number, min: number, max: number): number {
+                return Math.min(Math.max(value, min), max);
+        }
+
+        const me = auth.user;
+        let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
 	let isEditing = $state(false);
 	let draft = $state(message.content ?? '');
 	let saving = $state(false);
@@ -450,11 +569,13 @@
 
 	const PERMISSION_MANAGE_MESSAGES = 1 << 17;
 
-	let canDeleteMessage = $state(false);
+        let canDeleteMessage = $state(false);
 	let canEditMessage = $state(false);
 	let primaryRoleColor = $state<string | null>(null);
         let roleColorRequest = 0;
         let resolvedAuthorMember = $state<DtoMember | null>(null);
+        let imagePreview = $state<ImagePreviewState | null>(null);
+        let imagePreviewZoom = $state(1);
 
 	function resolveChannelPermissions(): number {
 		const gid = $selectedGuildId ?? '';
@@ -875,7 +996,67 @@
                         anchor
                 });
         }
+
+        function openImagePreview(meta: AttachmentMeta) {
+                if (meta.kind !== 'image' || !meta.url) return;
+                imagePreview = {
+                        url: meta.url,
+                        title: meta.name,
+                        sizeLabel: meta.sizeLabel,
+                        contentType: meta.contentType
+                };
+                imagePreviewZoom = 1;
+        }
+
+        function closeImagePreview() {
+                imagePreview = null;
+                imagePreviewZoom = 1;
+        }
+
+        function setImagePreviewZoom(value: number) {
+                imagePreviewZoom = clamp(value, IMAGE_ZOOM_MIN, IMAGE_ZOOM_MAX);
+        }
+
+        function adjustImagePreviewZoom(delta: number) {
+                setImagePreviewZoom(imagePreviewZoom + delta);
+        }
+
+        function handlePreviewWheel(event: WheelEvent) {
+                if (!imagePreview) return;
+                event.preventDefault();
+                const direction = event.deltaY < 0 ? IMAGE_ZOOM_STEP : -IMAGE_ZOOM_STEP;
+                adjustImagePreviewZoom(direction);
+        }
+
+        function handleWindowKeydown(event: KeyboardEvent) {
+                if (!imagePreview) return;
+                if (event.key === 'Escape') {
+                        closeImagePreview();
+                        return;
+                }
+                if (event.key === '+' || event.key === '=') {
+                        adjustImagePreviewZoom(IMAGE_ZOOM_STEP);
+                        return;
+                }
+                if (event.key === '-' || event.key === '_') {
+                        adjustImagePreviewZoom(-IMAGE_ZOOM_STEP);
+                        return;
+                }
+                if (event.key === '0') {
+                        setImagePreviewZoom(1);
+                }
+        }
+
+        function handlePreviewOverlayClick(event: MouseEvent | PointerEvent) {
+                if (event.target === event.currentTarget) {
+                        closeImagePreview();
+                }
+        }
+
+        const imagePreviewZoomPercent = $derived(Math.round(imagePreviewZoom * 100));
 </script>
+
+<svelte:window on:keydown={handleWindowKeydown} />
 
 <div
         role="listitem"
@@ -1058,18 +1239,214 @@
 						{/each}
 					</div>
 				{/if}
-				{#if message.attachments?.length}
-					<div class={compact ? 'mt-1 flex flex-wrap gap-2' : 'mt-1.5 flex flex-wrap gap-2'}>
-						{#each message.attachments as a}
-							<div
-								class="rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-0.5 text-xs"
-							>
-								{a.filename}
-							</div>
-						{/each}
-					</div>
-				{/if}
+                                {#if message.attachments?.length}
+                                        <div class={compact ? 'mt-1 flex flex-wrap gap-3' : 'mt-1.5 flex flex-wrap gap-3'}>
+                                                {#each message.attachments as attachment, attachmentIndex (attachmentIndex)}
+                                                        {@const meta = getAttachmentMeta(attachment)}
+                                                        {#if meta.kind === 'image' && meta.url}
+                                                                <button
+                                                                        type="button"
+                                                                        class="group block max-w-xs overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                        onclick={() => openImagePreview(meta)}
+                                                                >
+                                                                        <img
+                                                                                src={meta.url}
+                                                                                alt={meta.name}
+                                                                                class="max-h-64 w-full object-cover transition group-hover:brightness-110"
+                                                                                loading="lazy"
+                                                                        />
+                                                                        <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                <div class="truncate font-medium" title={meta.name}>
+                                                                                        {meta.name}
+                                                                                </div>
+                                                                                {#if meta.sizeLabel || meta.contentType}
+                                                                                        <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                {#if meta.sizeLabel}
+                                                                                                        <span>{meta.sizeLabel}</span>
+                                                                                                {/if}
+                                                                                                {#if meta.contentType}
+                                                                                                        <span>{meta.contentType}</span>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                {/if}
+                                                                                <div class="mt-1 text-[var(--brand)]">Click to preview</div>
+                                                                        </div>
+                                                                </button>
+                                                        {:else if meta.kind === 'video' && meta.url}
+                                                                <div class="max-w-sm overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
+                                                                        <!-- svelte-ignore a11y_media_has_caption -->
+                                                                        <video
+                                                                                class="max-h-64 w-full bg-black"
+                                                                                src={meta.url}
+                                                                                controls
+                                                                                preload="metadata"
+                                                                        ></video>
+                                                                        <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                <div class="truncate font-medium" title={meta.name}>
+                                                                                        {meta.name}
+                                                                                </div>
+                                                                                {#if meta.sizeLabel || meta.contentType}
+                                                                                        <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                {#if meta.sizeLabel}
+                                                                                                        <span>{meta.sizeLabel}</span>
+                                                                                                {/if}
+                                                                                                {#if meta.contentType}
+                                                                                                        <span>{meta.contentType}</span>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                {/if}
+                                                                                {#if meta.url}
+                                                                                        <div class="mt-1 text-right">
+                                                                                                <a
+                                                                                                        class="text-[var(--brand)] hover:underline"
+                                                                                                        href={meta.url}
+                                                                                                        rel="noopener noreferrer"
+                                                                                                        target="_blank"
+                                                                                                >
+                                                                                                        Open original
+                                                                                                </a>
+                                                                                        </div>
+                                                                                {/if}
+                                                                        </div>
+                                                                </div>
+                                                        {:else if meta.kind === 'audio' && meta.url}
+                                                                <div class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
+                                                                        <div class="truncate font-medium" title={meta.name}>
+                                                                                {meta.name}
+                                                                        </div>
+                                                                        <audio class="w-full" controls preload="metadata" src={meta.url}></audio>
+                                                                        {#if meta.sizeLabel || meta.contentType}
+                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                        {#if meta.sizeLabel}
+                                                                                                <span>{meta.sizeLabel}</span>
+                                                                                        {/if}
+                                                                                        {#if meta.contentType}
+                                                                                                <span>{meta.contentType}</span>
+                                                                                        {/if}
+                                                                                </div>
+                                                                        {/if}
+                                                                        <div class="text-right">
+                                                                                <a
+                                                                                        class="text-[var(--brand)] hover:underline"
+                                                                                        href={meta.url}
+                                                                                        rel="noopener noreferrer"
+                                                                                        target="_blank"
+                                                                                >
+                                                                                        Open original
+                                                                                </a>
+                                                                        </div>
+                                                                </div>
+                                                        {:else}
+                                                                <a
+                                                                        class="flex max-w-[18rem] items-center gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        href={meta.url ?? undefined}
+                                                                        rel={meta.url ? 'noopener noreferrer' : undefined}
+                                                                        target={meta.url ? '_blank' : undefined}
+                                                                >
+                                                                        <Paperclip class="h-3.5 w-3.5 text-[var(--muted)]" stroke-width={2} />
+                                                                        <span class="truncate" title={meta.name}>
+                                                                                {meta.name}
+                                                                        </span>
+                                                                        {#if meta.sizeLabel}
+                                                                                <span class="ml-auto whitespace-nowrap text-[var(--muted)]">
+                                                                                        {meta.sizeLabel}
+                                                                                </span>
+                                                                        {/if}
+                                                                </a>
+                                                        {/if}
+                                                {/each}
+                                        </div>
+                                {/if}
 			</div>
 		{/if}
-	</div>
+        </div>
 </div>
+
+{#if imagePreview}
+        <div
+                class="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm"
+                onpointerdown={handlePreviewOverlayClick}
+        >
+                <div class="border-b border-white/10 px-6 py-4 text-white">
+                        <div class="flex items-start justify-between gap-4">
+                                <div class="min-w-0">
+                                        <div class="truncate text-base font-semibold">{imagePreview.title}</div>
+                                        <div class="mt-1 flex flex-wrap gap-3 text-xs text-white/70">
+                                                {#if imagePreview.sizeLabel}
+                                                        <span>{imagePreview.sizeLabel}</span>
+                                                {/if}
+                                                {#if imagePreview.contentType}
+                                                        <span>{imagePreview.contentType}</span>
+                                                {/if}
+                                        </div>
+                                </div>
+                                <div class="flex items-center gap-2 text-sm">
+                                        <a
+                                                class="rounded border border-white/30 px-3 py-1 text-white/90 transition hover:bg-white/10"
+                                                href={imagePreview.url}
+                                                rel="noopener noreferrer"
+                                                target="_blank"
+                                        >
+                                                Open original
+                                        </a>
+                                        <button
+                                                class="rounded border border-white/30 px-3 py-1 text-white/90 transition hover:bg-white/10"
+                                                type="button"
+                                                onclick={closeImagePreview}
+                                        >
+                                                Close
+                                        </button>
+                                </div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/80">
+                                <button
+                                        class="rounded border border-white/30 px-2 py-1 transition hover:bg-white/10"
+                                        type="button"
+                                        onclick={() => adjustImagePreviewZoom(-IMAGE_ZOOM_STEP)}
+                                >
+                                        −
+                                </button>
+                                <input
+                                        type="range"
+                                        min={IMAGE_ZOOM_MIN}
+                                        max={IMAGE_ZOOM_MAX}
+                                        step={IMAGE_ZOOM_STEP}
+                                        value={imagePreviewZoom}
+                                        oninput={(event) =>
+                                                setImagePreviewZoom(
+                                                        Number((event.currentTarget as HTMLInputElement).value)
+                                                )
+                                        }
+                                        class="h-1 w-32 cursor-pointer accent-[var(--brand)]"
+                                />
+                                <button
+                                        class="rounded border border-white/30 px-2 py-1 transition hover:bg-white/10"
+                                        type="button"
+                                        onclick={() => adjustImagePreviewZoom(IMAGE_ZOOM_STEP)}
+                                >
+                                        +
+                                </button>
+                                <span class="w-12 text-center text-white/90">{imagePreviewZoomPercent}%</span>
+                                <button
+                                        class="rounded border border-white/30 px-3 py-1 text-white/90 transition hover:bg-white/10"
+                                        type="button"
+                                        onclick={() => setImagePreviewZoom(1)}
+                                >
+                                        Reset
+                                </button>
+                        </div>
+                </div>
+                <div class="flex-1 overflow-auto" onwheel={handlePreviewWheel}>
+                        <div class="flex min-h-full items-center justify-center p-6">
+                                <img
+                                        src={imagePreview.url}
+                                        alt={imagePreview.title}
+                                        class="max-h-none max-w-none select-none shadow-2xl"
+                                        style={`transform: scale(${imagePreviewZoom}); transform-origin: center center;`}
+                                        draggable="false"
+                                        ondblclick={() => setImagePreviewZoom(1)}
+                                />
+                        </div>
+                </div>
+        </div>
+{/if}
