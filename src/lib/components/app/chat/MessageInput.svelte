@@ -114,17 +114,38 @@
                 return error.response?.data?.message ?? error.message ?? 'Failed to send message';
         }
 
+        function canSendContentTypeHeader(url: string): boolean {
+                try {
+                        const parsed = new URL(url);
+                        const signedHeaders = parsed.searchParams.get('X-Amz-SignedHeaders');
+                        if (!signedHeaders) return true;
+                        const allowed = signedHeaders
+                                .split(';')
+                                .map((header) => header.trim().toLowerCase())
+                                .filter(Boolean);
+                        if (allowed.length === 0) return true;
+                        return allowed.includes('content-type');
+                } catch {
+                        return true;
+                }
+        }
+
         async function uploadWithProgress(
                 url: string,
                 file: File,
                 onProgress: (uploaded: number, total: number) => void
         ) {
+                const contentType = file.type || 'application/octet-stream';
+                const allowContentType = canSendContentTypeHeader(url);
                 if (typeof XMLHttpRequest === 'undefined') {
-                        const res = await fetch(url, {
+                        const init: RequestInit = {
                                 method: 'PUT',
-                                body: file,
-                                headers: file.type ? { 'Content-Type': file.type } : undefined
-                        });
+                                body: file
+                        };
+                        if (allowContentType) {
+                                init.headers = { 'Content-Type': contentType };
+                        }
+                        const res = await fetch(url, init);
                         if (!res.ok) {
                                 throw new Error(`Upload failed with status ${res.status}`);
                         }
@@ -135,9 +156,9 @@
                 await new Promise<void>((resolve, reject) => {
                         const xhr = new XMLHttpRequest();
                         xhr.open('PUT', url);
-                        if (file.type) {
+                        if (allowContentType) {
                                 try {
-                                        xhr.setRequestHeader('Content-Type', file.type);
+                                        xhr.setRequestHeader('Content-Type', contentType);
                                 } catch {
                                         // ignore header set failures
                                 }
