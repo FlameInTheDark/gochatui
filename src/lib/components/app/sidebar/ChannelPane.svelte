@@ -1135,8 +1135,8 @@
                                                                         channelId
                                                                                 ? 'bg-[var(--panel)]'
                                                                                 : ''}"
-                                                                        class:pl-5={channelUnread}
-                                                                        class:pl-2={!channelUnread}
+                                                                        class:pl-6={channelUnread}
+                                                                        class:pl-3={!channelUnread}
                                                                         role="button"
                                                                         tabindex="0"
                                                                         draggable="true"
@@ -1155,10 +1155,7 @@
                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
                                                                                 <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                         {/if}
-                                                                        <div
-                                                                                class="flex w-full items-center gap-2 truncate"
-                                                                                class:pl-3={!channelUnread}
-                                                                        >
+                                                                        <div class="flex w-full items-center gap-2 truncate">
                                                                                 <span class="opacity-70">#</span>
                                                                                 {sec.ch.name}
                                                                         </div>
