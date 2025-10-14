@@ -73,7 +73,7 @@
         let apiFriendRequests = $state<any[]>([]);
         let friends = $state<FriendEntry[]>([]);
         let filteredFriends = $state<FriendEntry[]>([]);
-        let friendPresenceFilter = $state<'all' | 'online'>('all');
+        let friendPresenceFilter = $state<'all' | 'online'>('online');
         let friendFilter = $state('');
         let friendRequests = $state<FriendRequestEntry[]>([]);
         let dmChannelError = $state<string | null>(null);
@@ -1703,44 +1703,40 @@
                                 </div>
                         {:else}
                                 <div class="flex flex-1 flex-col overflow-y-auto px-6 py-4">
-                                        <h2 class="mb-4 text-lg font-semibold">
-                                                {#if activeList === 'friends'}
-                                                        {m.user_home_friends_heading()}
-                                                {:else}
-                                                        {m.user_home_requests_heading()}
-                                                {/if}
-                                        </h2>
                                         {#if friendActionError}
                                                 <p class="mb-3 text-sm text-[var(--danger)]">{friendActionError}</p>
                                         {/if}
                                         {#if activeList === 'friends'}
                                                 {#if friends.length > 0}
                                                         <div class="space-y-3">
-                                                                <div class="flex gap-2">
-                                                                        <button
-                                                                                type="button"
-                                                                                class={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none ${
-                                                                                        friendPresenceFilter === 'all'
-                                                                                                ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
-                                                                                                : 'border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--muted)] hover:border-[var(--brand)]/40 hover:text-[var(--text)]'
-                                                                                }`}
-                                                                                aria-pressed={friendPresenceFilter === 'all'}
-                                                                                onclick={() => (friendPresenceFilter = 'all')}
-                                                                        >
-                                                                                {m.user_home_friends_tab_all()}
-                                                                        </button>
-                                                                        <button
-                                                                                type="button"
-                                                                                class={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none ${
-                                                                                        friendPresenceFilter === 'online'
-                                                                                                ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
-                                                                                                : 'border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--muted)] hover:border-[var(--brand)]/40 hover:text-[var(--text)]'
-                                                                                }`}
-                                                                                aria-pressed={friendPresenceFilter === 'online'}
-                                                                                onclick={() => (friendPresenceFilter = 'online')}
-                                                                        >
-                                                                                {m.user_home_friends_tab_online()}
-                                                                        </button>
+                                                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                                                        <h2 class="text-lg font-semibold">{m.user_home_friends_heading()}</h2>
+                                                                        <div class="flex gap-2">
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none ${
+                                                                                                friendPresenceFilter === 'online'
+                                                                                                        ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                                                        : 'border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--muted)] hover:border-[var(--brand)]/40 hover:text-[var(--text)]'
+                                                                                        }`}
+                                                                                        aria-pressed={friendPresenceFilter === 'online'}
+                                                                                        onclick={() => (friendPresenceFilter = 'online')}
+                                                                                >
+                                                                                        {m.user_home_friends_tab_online()}
+                                                                                </button>
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none ${
+                                                                                                friendPresenceFilter === 'all'
+                                                                                                        ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                                                        : 'border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--muted)] hover:border-[var(--brand)]/40 hover:text-[var(--text)]'
+                                                                                        }`}
+                                                                                        aria-pressed={friendPresenceFilter === 'all'}
+                                                                                        onclick={() => (friendPresenceFilter = 'all')}
+                                                                                >
+                                                                                        {m.user_home_friends_tab_all()}
+                                                                                </button>
+                                                                        </div>
                                                                 </div>
                                                                 <div>
                                                                         <label class="sr-only" for={friendFilterInputId}>
@@ -1809,9 +1805,11 @@
                                                                 {/if}
                                                         </div>
                                                 {:else}
+                                                        <h2 class="mb-4 text-lg font-semibold">{m.user_home_friends_heading()}</h2>
                                                         <p class="text-sm text-[var(--muted)]">{m.user_home_friends_empty()}</p>
                                                 {/if}
                                         {:else if friendRequests.length > 0}
+                                                <h2 class="mb-4 text-lg font-semibold">{m.user_home_requests_heading()}</h2>
                                                 <div class="grid gap-3">
                                                         {#each friendRequests as request (request.id)}
                                                                 <div
@@ -1874,6 +1872,7 @@
                                                         {/each}
                                                 </div>
                                         {:else}
+                                                <h2 class="mb-4 text-lg font-semibold">{m.user_home_requests_heading()}</h2>
                                                 <p class="text-sm text-[var(--muted)]">{m.user_home_requests_empty()}</p>
                                         {/if}
                                 </div>
