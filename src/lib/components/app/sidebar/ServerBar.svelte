@@ -40,7 +40,7 @@
         const view = activeView;
 
         const UNREAD_INDICATOR_CLASSES =
-                'absolute top-1/2 -left-1.5 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]';
+                'absolute bottom-0 left-1/2 h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-[var(--panel-strong)] bg-[var(--brand)]';
 
 	type DisplayGuild = {
 		type: 'guild';
