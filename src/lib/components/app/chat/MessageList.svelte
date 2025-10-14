@@ -166,7 +166,9 @@
                                                 channelId: entry.channelId,
                                                 userId: entry.userId,
                                                 isDead: entry.isDead ?? false,
-                                                lastReadMessageId: entry.lastReadMessageId ?? null
+                                                lastReadMessageId: entry.lastReadMessageId ?? null,
+                                                hidden: entry.hidden ?? false,
+                                                hiddenAfterMessageId: entry.hiddenAfterMessageId ?? null
                                         }));
                                         let dmChanged = false;
                                         for (const state of states) {

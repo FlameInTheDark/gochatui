@@ -167,6 +167,8 @@ export interface VisibleDmChannel {
         userId: string | null;
         isDead: boolean;
         lastReadMessageId: string | null;
+        hidden: boolean;
+        hiddenAfterMessageId: string | null;
 }
 
 export interface DmChannelMetadata extends VisibleDmChannel {}
@@ -281,7 +283,9 @@ export const dmChannelMetadataLookup = derived(appSettings, ($settings) => {
                         channelId,
                         userId: entry.userId ?? null,
                         isDead: entry.isDead ?? false,
-                        lastReadMessageId: entry.lastReadMessageId ?? null
+                        lastReadMessageId: entry.lastReadMessageId ?? null,
+                        hidden: entry.hidden ?? false,
+                        hiddenAfterMessageId: entry.hiddenAfterMessageId ?? null
                 } satisfies DmChannelMetadata;
         }
         return lookup;
@@ -336,7 +340,9 @@ function cloneSettings(settings: AppSettings): AppSettings {
                         channelId: entry.channelId,
                         userId: entry.userId,
                         isDead: entry.isDead ?? false,
-                        lastReadMessageId: entry.lastReadMessageId ?? null
+                        lastReadMessageId: entry.lastReadMessageId ?? null,
+                        hidden: entry.hidden ?? false,
+                        hiddenAfterMessageId: entry.hiddenAfterMessageId ?? null
                 })),
                 guildLayout: settings.guildLayout.map((item) => {
                         if (item.kind === 'guild') {
@@ -760,7 +766,12 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
                                               channelId,
                                               userId: userId ?? null,
                                               isDead,
-                                              lastReadMessageId: extractLastReadMessageId(record) ?? null
+                                              lastReadMessageId: extractLastReadMessageId(record) ?? null,
+                                              hidden: record?.hidden === true,
+                                              hiddenAfterMessageId:
+                                                      toSnowflakeString(
+                                                              record?.hidden_after ?? record?.hiddenAfter
+                                                      ) ?? null
                                       } satisfies VisibleDmChannel;
                               })
                               .filter((entry): entry is VisibleDmChannel => Boolean(entry))
@@ -869,7 +880,11 @@ function convertToApi(settings: AppSettings): ModelUserSettingsData {
         const payloadFolders: ModelUserSettingsGuildFolders[] = [];
         const payloadDmChannels: ModelUserDMChannels[] = settings.dmChannels.map((entry) => ({
                 channel_id: toApiSnowflake(entry.channelId),
-                user_id: entry.userId ? toApiSnowflake(entry.userId) : undefined
+                user_id: entry.userId ? toApiSnowflake(entry.userId) : undefined,
+                hidden: entry.hidden,
+                hidden_after: entry.hiddenAfterMessageId
+                        ? toApiSnowflake(entry.hiddenAfterMessageId)
+                        : undefined
         }));
 
         let topPosition = 0;
@@ -1052,7 +1067,9 @@ export function addVisibleDmChannel(
                                 ...existing,
                                 userId: normalizedUserId,
                                 isDead: nextDead,
-                                lastReadMessageId: existing.lastReadMessageId ?? null
+                                lastReadMessageId: existing.lastReadMessageId ?? null,
+                                hidden: false,
+                                hiddenAfterMessageId: null
                         };
                         return true;
                 }
@@ -1062,7 +1079,84 @@ export function addVisibleDmChannel(
                                 channelId: normalizedChannelId,
                                 userId: normalizedUserId,
                                 isDead: desiredDeadState != null ? desiredDeadState : false,
-                                lastReadMessageId: null
+                                lastReadMessageId: null,
+                                hidden: false,
+                                hiddenAfterMessageId: null
+                        }
+                ];
+                return true;
+        });
+}
+
+export function markDmChannelHidden(
+        channelId: string | null | undefined,
+        hiddenAfter?: string | null | undefined
+) {
+        const normalizedChannelId = toSnowflakeString(channelId);
+        if (!normalizedChannelId) return;
+        const normalizedHiddenAfter = toSnowflakeString(hiddenAfter) ?? null;
+        mutateAppSettings((settings) => {
+                const existingIndex = settings.dmChannels.findIndex(
+                        (entry) => entry.channelId === normalizedChannelId
+                );
+                if (existingIndex !== -1) {
+                        const existing = settings.dmChannels[existingIndex];
+                        if (
+                                existing.hidden === true &&
+                                (existing.hiddenAfterMessageId ?? null) === normalizedHiddenAfter
+                        ) {
+                                return false;
+                        }
+                        settings.dmChannels[existingIndex] = {
+                                ...existing,
+                                hidden: true,
+                                hiddenAfterMessageId: normalizedHiddenAfter
+                        };
+                        return true;
+                }
+                settings.dmChannels = [
+                        ...settings.dmChannels,
+                        {
+                                channelId: normalizedChannelId,
+                                userId: null,
+                                isDead: false,
+                                lastReadMessageId: null,
+                                hidden: true,
+                                hiddenAfterMessageId: normalizedHiddenAfter
+                        }
+                ];
+                return true;
+        });
+}
+
+export function markDmChannelVisible(channelId: string | null | undefined) {
+        const normalizedChannelId = toSnowflakeString(channelId);
+        if (!normalizedChannelId) return;
+        mutateAppSettings((settings) => {
+                const existingIndex = settings.dmChannels.findIndex(
+                        (entry) => entry.channelId === normalizedChannelId
+                );
+                if (existingIndex !== -1) {
+                        const existing = settings.dmChannels[existingIndex];
+                        if (existing.hidden === false && existing.hiddenAfterMessageId == null) {
+                                return false;
+                        }
+                        settings.dmChannels[existingIndex] = {
+                                ...existing,
+                                hidden: false,
+                                hiddenAfterMessageId: null
+                        };
+                        return true;
+                }
+                settings.dmChannels = [
+                        ...settings.dmChannels,
+                        {
+                                channelId: normalizedChannelId,
+                                userId: null,
+                                isDead: false,
+                                lastReadMessageId: null,
+                                hidden: false,
+                                hiddenAfterMessageId: null
                         }
                 ];
                 return true;
@@ -1099,11 +1193,17 @@ export function setVisibleDmChannels(
                         const previousEntry = previousById.get(channelId);
                         const candidateLastRead = extractLastReadMessageId(record);
                         const resolvedLastRead = candidateLastRead ?? previousEntry?.lastReadMessageId ?? null;
+                        const hidden = record?.hidden === true;
+                        const hiddenAfter = hidden
+                                ? toSnowflakeString(record?.hidden_after ?? record?.hiddenAfter) ?? null
+                                : null;
                         normalized.push({
                                 channelId,
                                 userId,
                                 isDead: explicitDead ?? (previousEntry?.isDead ?? false),
-                                lastReadMessageId: resolvedLastRead
+                                lastReadMessageId: resolvedLastRead,
+                                hidden,
+                                hiddenAfterMessageId: hidden ? hiddenAfter : null
                         });
                 }
 
@@ -1116,7 +1216,11 @@ export function setVisibleDmChannels(
                                         item.channelId === candidate.channelId &&
                                         (item.userId ?? null) === (candidate.userId ?? null) &&
                                         (item.isDead ?? false) === (candidate.isDead ?? false) &&
-                                        (item.lastReadMessageId ?? null) === (candidate.lastReadMessageId ?? null)
+                                        (item.lastReadMessageId ?? null) ===
+                                                (candidate.lastReadMessageId ?? null) &&
+                                        (item.hidden ?? false) === (candidate.hidden ?? false) &&
+                                        (item.hiddenAfterMessageId ?? null) ===
+                                                (candidate.hiddenAfterMessageId ?? null)
                                 );
                         })
                 ) {

@@ -14,8 +14,8 @@
         import {
                 appSettings,
                 addVisibleDmChannel,
-                setVisibleDmChannels,
-                type VisibleDmChannel
+                markDmChannelHidden,
+                markDmChannelVisible
         } from '$lib/stores/settings';
         import MessageInput from '$lib/components/app/chat/MessageInput.svelte';
         import MessageList from '$lib/components/app/chat/MessageList.svelte';
@@ -28,6 +28,7 @@
         } from '$lib/stores/presence';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
         import { X } from 'lucide-svelte';
+        import { isMessageNewer } from '$lib/components/app/chat/readStateUtils';
 
         type FriendEntry = {
                 id: string;
@@ -43,6 +44,7 @@
                 userId: string | null;
                 avatarUrl: string | null;
                 isDead: boolean;
+                lastMessageId: string | null;
         };
 
 	type FriendRequestDirection = 'incoming' | 'outgoing' | 'unknown';
@@ -437,26 +439,12 @@
                 openDirectChannelById(channel.id, candidateTarget);
         }
 
-        function directChannelToVisibleEntry(channel: DirectChannelEntry): VisibleDmChannel {
-                const channelId = toSnowflakeString(channel.id) ?? channel.id;
-                const resolvedUserId =
-                        channel.userId ??
-                        (channel.recipients.length === 1 ? channel.recipients[0]?.id ?? null : null);
-                return {
-                        channelId,
-                        userId: toSnowflakeString(resolvedUserId),
-                        isDead: channel.isDead ?? false,
-                        lastReadMessageId: toSnowflakeString((channel as any)?.lastReadMessageId) ?? null
-                };
-        }
-
         function handleHideDirectChannel(channelId: string) {
                 const normalizedChannelId = toSnowflakeString(channelId);
                 if (!normalizedChannelId) return;
-                const nextVisible = directChannels
-                        .filter((entry) => toSnowflakeString(entry.id) !== normalizedChannelId)
-                        .map(directChannelToVisibleEntry);
-                setVisibleDmChannels(nextVisible);
+                const entry = directChannels.find((candidate) => candidate.id === normalizedChannelId) ?? null;
+                const lastMessageId = entry?.lastMessageId ?? null;
+                markDmChannelHidden(normalizedChannelId, lastMessageId);
                 if (activeDmChannelId === normalizedChannelId) {
                         clearActiveDmChannel();
                 }
@@ -703,6 +691,28 @@
                 return false;
         }
 
+        function extractChannelLastMessageId(raw: any): string | null {
+                const tryResolve = (value: any): string | null => {
+                        if (value == null) return null;
+                        if (typeof value === 'object') {
+                                const nested = toSnowflakeString((value as any)?.id);
+                                if (nested) return nested;
+                        }
+                        return toSnowflakeString(value);
+                };
+                const candidates = [
+                        raw?.last_message_id,
+                        raw?.lastMessageId,
+                        raw?.last_message,
+                        raw?.lastMessage
+                ];
+                for (const candidate of candidates) {
+                        const resolved = tryResolve(candidate);
+                        if (resolved) return resolved;
+                }
+                return null;
+        }
+
         function normalizeDirectChannel(
                 raw: any,
                 selfId: string | null,
@@ -762,7 +772,8 @@
                         recipients,
                         userId: rawUserId ?? fallbackRecipientId ?? null,
                         avatarUrl: channelAvatar ?? null,
-                        isDead
+                        isDead,
+                        lastMessageId: extractChannelLastMessageId(raw)
                 };
         }
 
@@ -1039,11 +1050,14 @@
                 const fallbackName = m.user_default_name();
                 const sources: any[] = [];
                 const userData = $user as any;
-                const dmVisibility = new Set($settingsStore.dmChannels.map((entry) => entry.channelId));
+                const settingsDmChannels = $settingsStore.dmChannels;
+                const dmVisibility = new Set(settingsDmChannels.map((entry) => entry.channelId));
                 const dmUserHints = new Map(
-                        $settingsStore.dmChannels.map((entry) => [entry.channelId, entry.userId ?? null])
+                        settingsDmChannels.map((entry) => [entry.channelId, entry.userId ?? null])
                 );
+                const dmSettingsById = new Map(settingsDmChannels.map((entry) => [entry.channelId, entry]));
                 const restrictToVisible = dmVisibility.size > 0;
+                const autoUnhide = new Set<string>();
                 const candidateFields = ['dm_channels', 'direct_channels', 'directs', 'channels'];
                 for (const field of candidateFields) {
                         const value = userData?.[field];
@@ -1072,6 +1086,19 @@
                         const normalized = normalizeDirectChannel(source, meId, fallbackName);
                         if (!normalized) continue;
                         if (restrictToVisible && !dmVisibility.has(normalized.id)) continue;
+                        const storedSettings = dmSettingsById.get(normalized.id) ?? null;
+                        if (storedSettings?.hidden === true) {
+                                if (
+                                        isMessageNewer(
+                                                normalized.lastMessageId ?? null,
+                                                storedSettings.hiddenAfterMessageId ?? null
+                                        )
+                                ) {
+                                        autoUnhide.add(normalized.id);
+                                } else {
+                                        continue;
+                                }
+                        }
                         if (seen.has(normalized.id)) continue;
                         seen.add(normalized.id);
                         const storedUserId = dmUserHints.get(normalized.id) ?? null;
@@ -1100,9 +1127,10 @@
                         }
                         result.push(normalized);
                 }
-                for (const entry of $settingsStore.dmChannels) {
+                for (const entry of settingsDmChannels) {
                         const channelId = toSnowflakeString(entry.channelId);
                         if (!channelId || seen.has(channelId)) continue;
+                        if (entry.hidden) continue;
                         seen.add(channelId);
                         const storedUserId = entry.userId ? toSnowflakeString(entry.userId) : null;
                         const friend = storedUserId ? friendDirectory.get(storedUserId) ?? null : null;
@@ -1112,11 +1140,17 @@
                                 recipients: friend ? [friend] : [],
                                 userId: storedUserId,
                                 avatarUrl: friend?.avatarUrl ?? null,
-                                isDead: entry.isDead ?? false
+                                isDead: entry.isDead ?? false,
+                                lastMessageId: null
                         });
                 }
                 result.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
                 directChannels = result;
+                if (autoUnhide.size > 0) {
+                        for (const id of autoUnhide) {
+                                markDmChannelVisible(id);
+                        }
+                }
         });
 
         async function ensureVisibleDmChannelMetadata(): Promise<void> {
