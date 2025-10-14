@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { get } from 'svelte/store';
-	import { auth } from '$lib/stores/auth';
-	import {
-		selectedGuildId,
-		selectedChannelId,
-		channelsByGuild,
-		messagesByChannel,
+        import { auth } from '$lib/stores/auth';
+        import {
+                selectedGuildId,
+                selectedChannelId,
+                channelsByGuild,
+                messagesByChannel,
 		lastChannelByGuild,
 		channelReady,
 		guildSettingsOpen,
@@ -38,21 +38,24 @@
 	} from '$lib/utils/guildRoles';
 	import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
 	import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
-	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
-	import { resolveCurrentUserRoleIds } from '$lib/utils/currentUserRoleIds';
-	import {
-		PERMISSION_MANAGE_CHANNELS,
-		PERMISSION_MANAGE_GUILD,
-		PERMISSION_MANAGE_ROLES,
-		PERMISSION_ADMINISTRATOR,
-		hasAnyGuildPermission,
-		normalizePermissionValue
-	} from '$lib/utils/permissions';
+        import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
+        import { resolveCurrentUserRoleIds } from '$lib/utils/currentUserRoleIds';
+        import {
+                PERMISSION_MANAGE_CHANNELS,
+                PERMISSION_MANAGE_GUILD,
+                PERMISSION_MANAGE_ROLES,
+                PERMISSION_ADMINISTRATOR,
+                hasAnyGuildPermission,
+                normalizePermissionValue
+        } from '$lib/utils/permissions';
+        import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadChannels = unreadChannelsByGuild;
 
-	const canAccessSelectedGuildSettings = $derived.by(() => {
+        const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
+
+        const canAccessSelectedGuildSettings = $derived.by(() => {
 		const gid = $selectedGuildId;
 		if (!gid) return false;
 		const guild = $guilds.find((g) => String((g as any)?.id) === gid) ?? null;
@@ -1149,10 +1152,7 @@
                                                                         <div class="relative flex w-full items-center gap-2 truncate pl-3">
                                                                                 {#if channelUnread}
                                                                                         <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                        <span
-                                                                                                aria-hidden="true"
-                                                                                                class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-                                                                                        ></span>
+                                                                                        <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                                 {/if}
                                                                                 <span class="opacity-70">#</span>
                                                                                 {sec.ch.name}

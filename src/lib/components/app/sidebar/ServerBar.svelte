@@ -31,17 +31,20 @@
 		PERMISSION_MANAGE_ROLES,
 		hasAnyGuildPermission
 	} from '$lib/utils/permissions';
-	import { guildUnreadSummary } from '$lib/stores/unread';
-	import { colorIntToHex, parseColorValue } from '$lib/utils/color';
+        import { guildUnreadSummary } from '$lib/stores/unread';
+        import { colorIntToHex, parseColorValue } from '$lib/utils/color';
+        import {
+                FOLDER_UNREAD_BADGE_CLASSES,
+                SERVER_UNREAD_BADGE_CLASSES
+        } from '$lib/constants/unreadIndicator';
 
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadSummary = guildUnreadSummary;
         const view = activeView;
 
-        const UNREAD_INDICATOR_CLASSES =
-                'absolute bottom-0 left-1/2 h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-[var(--panel-strong)] bg-[var(--brand)]';
-        const FOLDER_UNREAD_INDICATOR_CLASSES = UNREAD_INDICATOR_CLASSES;
+        const UNREAD_INDICATOR_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
+        const FOLDER_UNREAD_INDICATOR_CLASSES = FOLDER_UNREAD_BADGE_CLASSES;
 
 	type DisplayGuild = {
 		type: 'guild';
