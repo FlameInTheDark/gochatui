@@ -72,6 +72,8 @@
         let apiFriendList = $state<any[]>([]);
         let apiFriendRequests = $state<any[]>([]);
         let friends = $state<FriendEntry[]>([]);
+        let filteredFriends = $state<FriendEntry[]>([]);
+        let friendFilter = $state('');
         let friendRequests = $state<FriendRequestEntry[]>([]);
         let dmChannelError = $state<string | null>(null);
         let activeList = $state<'friends' | 'requests'>('friends');
@@ -84,6 +86,7 @@
         let processingRequestIds = $state(new Set<string>());
         let openingDmChannelIds = $state(new Set<string>());
         let friendDirectory = $state<Map<string, FriendEntry>>(new Map());
+        const friendFilterInputId = 'user-screen-friend-filter';
         const pendingDmRequests = new Map<string, Promise<string | null>>();
         let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
@@ -1392,6 +1395,24 @@
         });
 
         $effect(() => {
+                const query = friendFilter.trim().toLowerCase();
+                if (!query) {
+                        filteredFriends = friends;
+                        return;
+                }
+                filteredFriends = friends.filter((entry) => {
+                        const nameMatch = entry.name.toLowerCase().includes(query);
+                        if (nameMatch) return true;
+                        if (entry.discriminator) {
+                                const normalizedDisc = entry.discriminator.toLowerCase();
+                                if (normalizedDisc.includes(query)) return true;
+                                return `#${normalizedDisc}`.includes(query);
+                        }
+                        return false;
+                });
+        });
+
+        $effect(() => {
                 const tracked = new Set<string>();
                 for (const friend of friends) {
                         const id = toSnowflakeString(friend?.id);
@@ -1678,54 +1699,72 @@
                                         {/if}
                                         {#if activeList === 'friends'}
                                                 {#if friends.length > 0}
-                                                        <div class="grid gap-3">
-                                                                {#each friends as friend (friend.id)}
-                                                                        {@const isOpening = openingDmChannelIds.has(friend.id)}
-                                                                        {@const isActiveFriend = activeDmTargetId === friend.id}
-                                                                        {@const friendPresence = $presenceMap[friend.id] ?? null}
-                                                                        {@const friendPresenceStatus = friendPresence?.status ?? null}
-                                                                        {@const friendCustomStatus = friendPresence?.customStatusText ?? null}
-                                                                        <div class="flex items-center gap-2">
-                                                                                <button
-                                                                                        type="button"
-                                                                                        class={`flex flex-1 items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
-                                                                                                isActiveFriend
-                                                                                                        ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
-                                                                                                        : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                                        } ${isOpening ? 'cursor-wait opacity-70' : ''}`}
-                                                                                        disabled={isOpening}
-                                                                                        aria-busy={isOpening}
-                                                                                        onclick={() => handleFriendOpenDirectChannel(friend)}
-                                                                                >
-                                                                                        <div class="relative">
-                                                                                                <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
-                                                                                                        {#if friend.avatarUrl}
-                                                                                                                <img alt={friend.name} class="h-full w-full object-cover" src={friend.avatarUrl} />
-                                                                                                        {:else}
-                                                                                                                <span>{initialsFor(friend.name)}</span>
-                                                                                                        {/if}
-                                                                                                </div>
-                                                                                                <span
-                                                                                                        class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(friendPresenceStatus)}`}
-                                                                                                ></span>
+                                                        <div class="space-y-3">
+                                                                <div>
+                                                                        <label class="sr-only" for={friendFilterInputId}>
+                                                                                {m.user_home_friends_filter_label()}
+                                                                        </label>
+                                                                        <input
+                                                                                id={friendFilterInputId}
+                                                                                class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-[var(--brand)]/50 focus-visible:outline-none"
+                                                                                type="search"
+                                                                                bind:value={friendFilter}
+                                                                                placeholder={m.user_home_friends_filter_placeholder()}
+                                                                        />
+                                                                </div>
+                                                                {#if filteredFriends.length > 0}
+                                                                        <div class="grid gap-3">
+                                                                                {#each filteredFriends as friend (friend.id)}
+                                                                                        {@const isOpening = openingDmChannelIds.has(friend.id)}
+                                                                                        {@const isActiveFriend = activeDmTargetId === friend.id}
+                                                                                        {@const friendPresence = $presenceMap[friend.id] ?? null}
+                                                                                        {@const friendPresenceStatus = friendPresence?.status ?? null}
+                                                                                        {@const friendCustomStatus = friendPresence?.customStatusText ?? null}
+                                                                                        <div class="flex items-center gap-2">
+                                                                                                <button
+                                                                                                        type="button"
+                                                                                                        class={`flex flex-1 items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                                                                                                                isActiveFriend
+                                                                                                                        ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
+                                                                                                                        : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
+                                                                                                        } ${isOpening ? 'cursor-wait opacity-70' : ''}`}
+                                                                                                        disabled={isOpening}
+                                                                                                        aria-busy={isOpening}
+                                                                                                        onclick={() => handleFriendOpenDirectChannel(friend)}
+                                                                                                >
+                                                                                                        <div class="relative">
+                                                                                                                <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
+                                                                                                                        {#if friend.avatarUrl}
+                                                                                                                                <img alt={friend.name} class="h-full w-full object-cover" src={friend.avatarUrl} />
+                                                                                                                        {:else}
+                                                                                                                                <span>{initialsFor(friend.name)}</span>
+                                                                                                                        {/if}
+                                                                                                                </div>
+                                                                                                                <span
+                                                                                                                        class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(friendPresenceStatus)}`}
+                                                                                                                ></span>
+                                                                                                        </div>
+                                                                                                        <div class="min-w-0 flex-1">
+                                                                                                                <div class="truncate text-sm font-semibold">{friend.name}</div>
+                                                                                                                {#if friendCustomStatus}
+                                                                                                                        <div class="truncate text-xs text-[var(--muted)]">{friendCustomStatus}</div>
+                                                                                                                {/if}
+                                                                                                        </div>
+                                                                                                </button>
+                                                                                                <button
+                                                                                                        type="button"
+                                                                                                        class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                                                                        onclick={() => handleRemoveFriend(friend.id)}
+                                                                                                        disabled={removingFriendIds.has(friend.id)}
+                                                                                                >
+                                                                                                        {m.user_home_friend_remove()}
+                                                                                                </button>
                                                                                         </div>
-                                                                                        <div class="min-w-0 flex-1">
-                                                                                                <div class="truncate text-sm font-semibold">{friend.name}</div>
-                                                                                                {#if friendCustomStatus}
-                                                                                                        <div class="truncate text-xs text-[var(--muted)]">{friendCustomStatus}</div>
-                                                                                                {/if}
-                                                                                        </div>
-                                                                                </button>
-                                                                                <button
-                                                                                        type="button"
-                                                                                        class="rounded-md border border-[var(--stroke)] px-2 py-1 text-xs font-medium text-[var(--danger)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                                                        onclick={() => handleRemoveFriend(friend.id)}
-                                                                                        disabled={removingFriendIds.has(friend.id)}
-                                                                                >
-                                                                                        {m.user_home_friend_remove()}
-                                                                                </button>
+                                                                                {/each}
                                                                         </div>
-                                                                {/each}
+                                                                {:else}
+                                                                        <p class="text-sm text-[var(--muted)]">{m.user_home_friends_filter_empty()}</p>
+                                                                {/if}
                                                         </div>
                                                 {:else}
                                                         <p class="text-sm text-[var(--muted)]">{m.user_home_friends_empty()}</p>
