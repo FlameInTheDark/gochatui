@@ -34,10 +34,13 @@
 	import { guildUnreadSummary } from '$lib/stores/unread';
 	import { colorIntToHex, parseColorValue } from '$lib/utils/color';
 
-	const guilds = auth.guilds;
-	const me = auth.user;
-	const unreadSummary = guildUnreadSummary;
-	const view = activeView;
+        const guilds = auth.guilds;
+        const me = auth.user;
+        const unreadSummary = guildUnreadSummary;
+        const view = activeView;
+
+        const UNREAD_INDICATOR_CLASSES =
+                'absolute top-1/2 -left-1.5 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]';
 
 	type DisplayGuild = {
 		type: 'guild';
@@ -498,10 +501,7 @@
                 >
                         {#if userHomeHasUnread()}
                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                <span
-                                        aria-hidden="true"
-                                        class="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-[var(--brand)]"
-                                ></span>
+                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                         {/if}
                         <User class="h-5 w-5" stroke-width={2} />
                 </button>
@@ -540,13 +540,10 @@
                                                 oncontextmenu={(event) => openGuildMenu(event, item.guild)}
                                         >
 						<span class="font-bold">{guildInitials(item.guild)}</span>
-						{#if guildUnread}
-							<span class="sr-only">{m.unread_indicator()}</span>
-							<span
-								aria-hidden="true"
-								class="absolute top-1/2 -left-1.5 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-							></span>
-						{/if}
+                                                {#if guildUnread}
+                                                        <span class="sr-only">{m.unread_indicator()}</span>
+                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                                                {/if}
 					</button>
 				</div>
 			{:else}
@@ -621,13 +618,10 @@
 									{/if}
 								</div>
 							{/if}
-							{#if folderHasUnread}
-								<span class="sr-only">{m.unread_indicator()}</span>
-								<span
-									aria-hidden="true"
-									class="absolute top-1/2 -left-1.5 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-								></span>
-							{/if}
+                                                        {#if folderHasUnread}
+                                                                <span class="sr-only">{m.unread_indicator()}</span>
+                                                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                                                        {/if}
 						</button>
 					</div>
 
@@ -677,13 +671,10 @@
 										oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
 									>
 										<span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
-										{#if nestedGuildUnread}
-											<span class="sr-only">{m.unread_indicator()}</span>
-											<span
-												aria-hidden="true"
-												class="absolute top-1/2 -left-1.5 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-											></span>
-										{/if}
+                                                                                {#if nestedGuildUnread}
+                                                                                        <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                                                                                {/if}
 									</button>
 								</div>
 							{/each}
