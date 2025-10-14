@@ -7,7 +7,7 @@
         import { Send } from 'lucide-svelte';
 
 	let content = '';
-	let attachments: number[] = [];
+        let attachments: bigint[] = [];
 	let sending = false;
 	const dispatch = createEventDispatcher<{ sent: void }>();
 
@@ -44,8 +44,8 @@
 				channelId: $selectedChannelId as any,
 				messageSendMessageRequest: {
 					content: content.trim(),
-					attachments: attachments as any
-				}
+                                        attachments: attachments as any
+                                }
 			});
 			content = '';
 			// wait for DOM to reflect cleared content, then collapse height

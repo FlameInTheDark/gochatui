@@ -5,10 +5,10 @@
         import { LoaderCircle, Paperclip } from 'lucide-svelte';
         import { tooltip } from '$lib/actions/tooltip';
 
-	let { attachments, inline = false } = $props<{
-		attachments: (number | string)[];
-		inline?: boolean;
-	}>();
+        let { attachments, inline = false } = $props<{
+                attachments: bigint[];
+                inline?: boolean;
+        }>();
 	let loading = $state(false);
 	let error: string | null = $state(null);
 	const dispatch = createEventDispatcher<{ updated: void }>();
@@ -44,17 +44,31 @@
 						height: meta.height ?? undefined
 					}
 				});
-				const data = res.data as {
-					id?: string | number;
-					attachment_id?: string | number;
-				};
-				const id = data.id ?? data.attachment_id;
-				if (id) {
-					attachments.push(id);
-					// notify parent for re-render/bindings
-					dispatch('updated');
-				}
-			}
+                                const data = res.data as {
+                                        id?: string | number | bigint;
+                                        attachment_id?: string | number | bigint;
+                                };
+                                const rawId = data.id ?? data.attachment_id;
+                                if (rawId == null) {
+                                        error = 'Attachment response missing id';
+                                        continue;
+                                }
+
+                                let snowflake: bigint;
+                                try {
+                                        snowflake =
+                                                typeof rawId === 'bigint'
+                                                        ? rawId
+                                                        : BigInt(rawId);
+                                } catch {
+                                        error = 'Attachment response malformed';
+                                        continue;
+                                }
+
+                                attachments.push(snowflake);
+                                // notify parent for re-render/bindings
+                                dispatch('updated');
+                        }
                 } catch (e) {
                         const err = e as {
                                 response?: { data?: { message?: string } };
