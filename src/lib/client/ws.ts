@@ -19,7 +19,12 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { getRuntimeConfig } from '$lib/runtime/config';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 import { addVisibleDmChannel } from '$lib/stores/settings';
-import { isFriendId, markFriendRemoved, triggerFriendDataRefresh } from '$lib/stores/friends';
+import {
+        isFriendId,
+        markFriendAdded,
+        markFriendRemoved,
+        triggerFriendDataRefresh
+} from '$lib/stores/friends';
 
 type AnyRecord = Record<string, any>;
 
@@ -98,6 +103,7 @@ let heartbeatSessionId: string | null = wsState.heartbeatSessionId;
 const WS_EVENT_MEMBER_JOIN = 200;
 const WS_EVENT_MEMBER_LEAVE = 202;
 const WS_EVENT_FRIEND_REQUEST = 402;
+const WS_EVENT_FRIEND_ADDED = 403;
 const WS_EVENT_FRIEND_REMOVED = 404;
 const WS_EVENT_DM_MESSAGE = 405;
 
@@ -881,6 +887,18 @@ export function connectWS() {
                                         normalizeSnowflake(payload?.relationship?.user_id) ??
                                         normalizeSnowflake(payload?.relationship?.target_id);
                                 if (requesterId) {
+                                        triggerFriendDataRefresh();
+                                }
+                        } else if (data.t === WS_EVENT_FRIEND_ADDED) {
+                                const payload = (data?.d as AnyRecord) ?? {};
+                                const friendId =
+                                        normalizeSnowflake(payload?.friend?.id) ??
+                                        normalizeSnowflake(payload?.relationship?.user_id) ??
+                                        normalizeSnowflake(payload?.relationship?.target_id) ??
+                                        normalizeSnowflake(payload?.from?.id) ??
+                                        normalizeSnowflake(payload?.user?.id);
+                                if (friendId) {
+                                        markFriendAdded(friendId);
                                         triggerFriendDataRefresh();
                                 }
                         } else if (data.t === WS_EVENT_FRIEND_REMOVED) {
