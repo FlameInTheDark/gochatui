@@ -114,12 +114,17 @@
 		}
 	}
 
-	function guildHasUnread(guildId: unknown): boolean {
-		const gid = toSnowflakeString(guildId);
-		if (!gid) return false;
-		const entry = $unreadSummary?.[gid];
-		return Boolean(entry?.channelCount);
-	}
+        function guildHasUnread(guildId: unknown): boolean {
+                const gid = toSnowflakeString(guildId);
+                if (!gid) return false;
+                const entry = $unreadSummary?.[gid];
+                return Boolean(entry?.channelCount);
+        }
+
+        function userHomeHasUnread(): boolean {
+                const entry = $unreadSummary?.['@me'];
+                return Boolean(entry?.channelCount);
+        }
 
 	function canAccessGuildSettings(guild: any): boolean {
 		return hasAnyGuildPermission(
@@ -479,7 +484,7 @@
 >
         <div class="group relative flex justify-center">
                 <button
-                        class={`grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                        class={`relative grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                 $view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                         }`}
                         data-tooltip-disabled
@@ -491,8 +496,15 @@
                         aria-label={m.user_home_open_label()}
                         onclick={openUserHome}
                 >
-			<User class="h-5 w-5" stroke-width={2} />
-		</button>
+                        {#if userHomeHasUnread()}
+                                <span class="sr-only">{m.unread_indicator()}</span>
+                                <span
+                                        aria-hidden="true"
+                                        class="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-[var(--brand)]"
+                                ></span>
+                        {/if}
+                        <User class="h-5 w-5" stroke-width={2} />
+                </button>
 	</div>
         <div class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
 		<div
