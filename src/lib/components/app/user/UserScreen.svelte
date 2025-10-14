@@ -31,6 +31,7 @@
         import { X } from 'lucide-svelte';
         import { isMessageNewer } from '$lib/components/app/chat/readStateUtils';
         import { unreadChannelsByGuild } from '$lib/stores/unread';
+        import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
 
         type FriendEntry = {
                 id: string;
@@ -94,6 +95,7 @@
         const pendingDmRequests = new Map<string, Promise<string | null>>();
         let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
+        const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
 
 	function toSnowflakeString(value: unknown): string | null {
 		if (value == null) return null;
@@ -1665,10 +1667,7 @@
                                                                                 >
                                                                                         {#if hasUnread}
                                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                                <span
-                                                                                                        aria-hidden="true"
-                                                                                                        class="absolute left-1.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-                                                                                                ></span>
+                                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                                         {/if}
                                                                                         <div class="relative">
                                                                                                 <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
