@@ -17,7 +17,7 @@
 	import InvitePreview from './InvitePreview.svelte';
 	import YoutubeEmbed from './YoutubeEmbed.svelte';
 	import { extractInvite } from './extractInvite';
-	import { Pencil, Trash2 } from 'lucide-svelte';
+        import { Paperclip, Pencil, Trash2 } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -397,12 +397,12 @@
 		}
 	}
 
-	function parseInline(content: string): InlineToken[] {
-		const tokens: InlineToken[] = [];
-		if (!content) return tokens;
+        function parseInline(content: string): InlineToken[] {
+                const tokens: InlineToken[] = [];
+                if (!content) return tokens;
 
-		let cursor = 0;
-		let encounteredCode = false;
+                let cursor = 0;
+                let encounteredCode = false;
 
 		while (cursor < content.length) {
 			const startIndex = content.indexOf('`', cursor);
@@ -434,13 +434,65 @@
 			parsePlainText(content, tokens);
 		} else if (cursor < content.length) {
 			parsePlainText(content.slice(cursor), tokens);
-		}
+                }
 
-		return tokens;
-	}
+                return tokens;
+        }
 
-	const me = auth.user;
-	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
+        type AttachmentMeta = {
+                url: string | null;
+                isImage: boolean;
+                sizeLabel: string | null;
+        };
+
+        function attachmentUrl(attachment: DtoMessage['attachments'][number] | undefined): string | null {
+                const raw = (attachment as any)?.url;
+                if (typeof raw !== 'string') return null;
+                const trimmed = raw.trim();
+                return trimmed ? trimmed : null;
+        }
+
+        function isImageAttachment(attachment: DtoMessage['attachments'][number] | undefined): boolean {
+                const type = (attachment as any)?.content_type;
+                if (typeof type !== 'string') return false;
+                return type.toLowerCase().startsWith('image/');
+        }
+
+        function formatAttachmentSize(value: unknown): string | null {
+                let bytes: number | null = null;
+                if (typeof value === 'number' && Number.isFinite(value)) {
+                        bytes = value;
+                } else if (typeof value === 'string') {
+                        const parsed = Number(value);
+                        bytes = Number.isFinite(parsed) ? parsed : null;
+                }
+                if (bytes == null || bytes < 0) return null;
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+                let unitIndex = 0;
+                let display = bytes;
+                while (display >= 1024 && unitIndex < units.length - 1) {
+                        display /= 1024;
+                        unitIndex += 1;
+                }
+                const formatted =
+                        unitIndex === 0
+                                ? Math.round(display).toString()
+                                : display >= 10
+                                        ? display.toFixed(0)
+                                        : display.toFixed(1);
+                return `${formatted} ${units[unitIndex]}`;
+        }
+
+        function getAttachmentMeta(attachment: DtoMessage['attachments'][number] | undefined): AttachmentMeta {
+                return {
+                        url: attachmentUrl(attachment),
+                        isImage: isImageAttachment(attachment),
+                        sizeLabel: formatAttachmentSize((attachment as any)?.size)
+                };
+        }
+
+        const me = auth.user;
+        let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
 	let isEditing = $state(false);
 	let draft = $state(message.content ?? '');
 	let saving = $state(false);
@@ -1058,17 +1110,61 @@
 						{/each}
 					</div>
 				{/if}
-				{#if message.attachments?.length}
-					<div class={compact ? 'mt-1 flex flex-wrap gap-2' : 'mt-1.5 flex flex-wrap gap-2'}>
-						{#each message.attachments as a}
-							<div
-								class="rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-0.5 text-xs"
-							>
-								{a.filename}
-							</div>
-						{/each}
-					</div>
-				{/if}
+                                {#if message.attachments?.length}
+                                        <div class={compact ? 'mt-1 flex flex-wrap gap-3' : 'mt-1.5 flex flex-wrap gap-3'}>
+                                                {#each message.attachments as attachment, attachmentIndex (attachmentIndex)}
+                                                        {@const meta = getAttachmentMeta(attachment)}
+                                                        {#if meta.isImage && meta.url}
+                                                                <a
+                                                                        class="group block max-w-xs overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs"
+                                                                        href={meta.url}
+                                                                        rel="noopener noreferrer"
+                                                                        target="_blank"
+                                                                >
+                                                                        <img
+                                                                                src={meta.url}
+                                                                                alt={attachment.filename ?? 'Image attachment'}
+                                                                                class="max-h-64 w-full object-cover"
+                                                                                loading="lazy"
+                                                                        />
+                                                                        <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                <div
+                                                                                        class="truncate font-medium text-[var(--fg)]"
+                                                                                        title={attachment.filename ?? undefined}
+                                                                                >
+                                                                                        {attachment.filename ?? 'Image'}
+                                                                                </div>
+                                                                                {#if meta.sizeLabel}
+                                                                                        <div class="text-[var(--muted)]">
+                                                                                                {meta.sizeLabel}
+                                                                                        </div>
+                                                                                {/if}
+                                                                        </div>
+                                                                </a>
+                                                        {:else}
+                                                                <a
+                                                                        class="flex max-w-[18rem] items-center gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        href={meta.url ?? undefined}
+                                                                        rel={meta.url ? 'noopener noreferrer' : undefined}
+                                                                        target={meta.url ? '_blank' : undefined}
+                                                                >
+                                                                        <Paperclip class="h-3.5 w-3.5 text-[var(--muted)]" stroke-width={2} />
+                                                                        <span
+                                                                                class="truncate"
+                                                                                title={attachment.filename ?? undefined}
+                                                                        >
+                                                                                {attachment.filename ?? 'Attachment'}
+                                                                        </span>
+                                                                        {#if meta.sizeLabel}
+                                                                                <span class="ml-auto whitespace-nowrap text-[var(--muted)]">
+                                                                                        {meta.sizeLabel}
+                                                                                </span>
+                                                                        {/if}
+                                                                </a>
+                                                        {/if}
+                                                {/each}
+                                        </div>
+                                {/if}
 			</div>
 		{/if}
 	</div>
