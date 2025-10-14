@@ -1655,11 +1655,13 @@
                                                                         <div class={`group relative ${isLoading ? 'opacity-70' : ''}`}>
                                                                                 <button
                                                                                         type="button"
-                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border px-3 py-2 pr-12 text-left transition ${
+                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pr-12 text-left transition ${
                                                                                                 isActive
                                                                                                         ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
                                                                                         } ${isLoading ? 'cursor-wait' : ''}`}
+                                                                                        class:pl-6={hasUnread}
+                                                                                        class:pl-3={!hasUnread}
                                                                                         disabled={isLoading}
                                                                                         aria-busy={isLoading}
                                                                                         aria-pressed={isActive}

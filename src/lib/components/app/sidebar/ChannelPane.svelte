@@ -1131,10 +1131,12 @@
                                                                         ></div>
                                                                 {/if}
                                                                 <div
-                                                                        class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
+                                                                        class="relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)] {$selectedChannelId ===
                                                                         channelId
                                                                                 ? 'bg-[var(--panel)]'
                                                                                 : ''}"
+                                                                        class:pl-5={channelUnread}
+                                                                        class:pl-2={!channelUnread}
                                                                         role="button"
                                                                         tabindex="0"
                                                                         draggable="true"
@@ -1149,11 +1151,14 @@
                                                                                 openChannelMenu(e, sec.ch);
                                                                         }}
                                                                 >
-                                                                        <div class="relative flex w-full items-center gap-2 truncate pl-3">
-                                                                                {#if channelUnread}
-                                                                                        <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                        <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
-                                                                                {/if}
+                                                                        {#if channelUnread}
+                                                                                <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                        {/if}
+                                                                        <div
+                                                                                class="flex w-full items-center gap-2 truncate"
+                                                                                class:pl-3={!channelUnread}
+                                                                        >
                                                                                 <span class="opacity-70">#</span>
                                                                                 {sec.ch.name}
                                                                         </div>
