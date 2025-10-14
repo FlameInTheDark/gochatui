@@ -7,7 +7,7 @@
 		selectedChannelId,
 		selectedGuildId
 	} from '$lib/stores/appState';
-	import { createEventDispatcher, tick } from 'svelte';
+        import { createEventDispatcher, onDestroy, tick } from 'svelte';
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import type { ContextMenuItem } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
@@ -17,7 +17,7 @@
 	import InvitePreview from './InvitePreview.svelte';
 	import YoutubeEmbed from './YoutubeEmbed.svelte';
 	import { extractInvite } from './extractInvite';
-	import { Pencil, Trash2 } from 'lucide-svelte';
+        import { Paperclip, Pencil, Play, Trash2, X } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -397,12 +397,12 @@
 		}
 	}
 
-	function parseInline(content: string): InlineToken[] {
-		const tokens: InlineToken[] = [];
-		if (!content) return tokens;
+        function parseInline(content: string): InlineToken[] {
+                const tokens: InlineToken[] = [];
+                if (!content) return tokens;
 
-		let cursor = 0;
-		let encounteredCode = false;
+                let cursor = 0;
+                let encounteredCode = false;
 
 		while (cursor < content.length) {
 			const startIndex = content.indexOf('`', cursor);
@@ -434,13 +434,152 @@
 			parsePlainText(content, tokens);
 		} else if (cursor < content.length) {
 			parsePlainText(content.slice(cursor), tokens);
-		}
+                }
 
-		return tokens;
-	}
+                return tokens;
+        }
 
-	const me = auth.user;
-	let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
+        type MessageAttachment = NonNullable<DtoMessage['attachments']>[number];
+
+        type AttachmentKind = 'image' | 'video' | 'audio' | 'other';
+
+        type AttachmentMeta = {
+                url: string | null;
+                kind: AttachmentKind;
+                sizeLabel: string | null;
+                name: string;
+                contentType: string | null;
+                aspectRatio: string | null;
+        };
+
+        function formatContentType(value: unknown): string | null {
+                if (typeof value !== 'string') return null;
+                const trimmed = value.trim();
+                return trimmed ? trimmed : null;
+        }
+
+        function attachmentUrl(attachment: MessageAttachment | undefined): string | null {
+                const raw = (attachment as any)?.url;
+                if (typeof raw !== 'string') return null;
+                const trimmed = raw.trim();
+                return trimmed ? trimmed : null;
+        }
+
+        function attachmentContentType(attachment: MessageAttachment | undefined): string | null {
+                return formatContentType((attachment as any)?.content_type);
+        }
+
+        function attachmentFilename(attachment: MessageAttachment | undefined): string {
+                const raw = (attachment as any)?.filename;
+                if (typeof raw === 'string' && raw.trim()) {
+                        return raw.trim();
+                }
+                return 'Attachment';
+        }
+
+        const imageExtensions = new Set([
+                'png',
+                'jpg',
+                'jpeg',
+                'gif',
+                'webp',
+                'avif',
+                'bmp',
+                'svg'
+        ]);
+        const videoExtensions = new Set(['mp4', 'webm', 'mov', 'm4v', 'mkv', 'ogv']);
+        const audioExtensions = new Set(['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'opus']);
+
+        function detectAttachmentKind(attachment: MessageAttachment | undefined): AttachmentKind {
+                const type = attachmentContentType(attachment)?.toLowerCase();
+                if (type) {
+                        if (type.startsWith('image/')) return 'image';
+                        if (type.startsWith('video/')) return 'video';
+                        if (type.startsWith('audio/')) return 'audio';
+                }
+
+                const filename = attachmentFilename(attachment).toLowerCase();
+                const ext = filename.split('.').pop();
+                if (ext) {
+                        if (imageExtensions.has(ext)) return 'image';
+                        if (videoExtensions.has(ext)) return 'video';
+                        if (audioExtensions.has(ext)) return 'audio';
+                }
+
+                return 'other';
+        }
+
+        function formatAttachmentSize(value: unknown): string | null {
+                let bytes: number | null = null;
+                if (typeof value === 'number' && Number.isFinite(value)) {
+                        bytes = value;
+                } else if (typeof value === 'string') {
+                        const parsed = Number(value);
+                        bytes = Number.isFinite(parsed) ? parsed : null;
+                }
+                if (bytes == null || bytes < 0) return null;
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+                let unitIndex = 0;
+                let display = bytes;
+                while (display >= 1024 && unitIndex < units.length - 1) {
+                        display /= 1024;
+                        unitIndex += 1;
+                }
+                const formatted =
+                        unitIndex === 0
+                                ? Math.round(display).toString()
+                                : display >= 10
+                                        ? display.toFixed(0)
+                                        : display.toFixed(1);
+                return `${formatted} ${units[unitIndex]}`;
+        }
+
+        function parseAttachmentDimension(value: unknown): number | null {
+                if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+                        return value;
+                }
+                if (typeof value === 'string') {
+                        const parsed = Number(value);
+                        if (Number.isFinite(parsed) && parsed > 0) {
+                                return parsed;
+                        }
+                }
+                return null;
+        }
+
+        function getAttachmentMeta(attachment: MessageAttachment | undefined): AttachmentMeta {
+                const width = parseAttachmentDimension((attachment as any)?.width);
+                const height = parseAttachmentDimension((attachment as any)?.height);
+                const aspectRatio =
+                        width != null && height != null ? `${width} / ${height}` : null;
+
+                return {
+                        url: attachmentUrl(attachment),
+                        kind: detectAttachmentKind(attachment),
+                        sizeLabel: formatAttachmentSize((attachment as any)?.size),
+                        name: attachmentFilename(attachment),
+                        contentType: attachmentContentType(attachment),
+                        aspectRatio,
+                };
+        }
+
+        type ImagePreviewState = {
+                url: string;
+                title: string;
+                sizeLabel: string | null;
+                contentType: string | null;
+        };
+
+        const IMAGE_ZOOM_MIN_DEFAULT = 0.25;
+        const IMAGE_ZOOM_MAX = 6;
+        const IMAGE_ZOOM_STEP = 0.25;
+
+        function clamp(value: number, min: number, max: number): number {
+                return Math.min(Math.max(value, min), max);
+        }
+
+        const me = auth.user;
+        let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
 	let isEditing = $state(false);
 	let draft = $state(message.content ?? '');
 	let saving = $state(false);
@@ -450,18 +589,199 @@
 
 	const PERMISSION_MANAGE_MESSAGES = 1 << 17;
 
-	let canDeleteMessage = $state(false);
+        let canDeleteMessage = $state(false);
 	let canEditMessage = $state(false);
 	let primaryRoleColor = $state<string | null>(null);
         let roleColorRequest = 0;
         let resolvedAuthorMember = $state<DtoMember | null>(null);
+        let imagePreview = $state<ImagePreviewState | null>(null);
+        let imagePreviewZoom = $state(1);
+        let imagePreviewFitZoom = $state(1);
+        let imagePreviewOffsetX = $state(0);
+        let imagePreviewOffsetY = $state(0);
+        let imagePreviewViewport = $state<HTMLDivElement | null>(null);
+        let imagePreviewDragging = $state(false);
+        let imagePreviewNaturalWidth = 0;
+        let imagePreviewNaturalHeight = 0;
+        let imagePreviewPointerId: number | null = null;
+        let imagePreviewLastPointerX = 0;
+        let imagePreviewLastPointerY = 0;
+        let imagePreviewDragDistance = 0;
+        let detachPreviewResize: (() => void) | null = null;
+        let activeVideoAttachments = $state<Record<string, boolean>>({});
+        let videoPreviewPosters = $state<Record<string, string | null>>({});
+        const videoPosterTasks = new Map<string, () => void>();
+        let componentDestroyed = false;
 
-	function resolveChannelPermissions(): number {
-		const gid = $selectedGuildId ?? '';
-		const cid = $selectedChannelId;
-		if (!cid) return 0;
-		const list = ($channelsByGuild[gid] ?? []) as DtoChannel[];
-		const channel = list.find((c) => String((c as any)?.id) === cid);
+        function attachmentStableKey(
+                attachment: MessageAttachment | undefined,
+                index: number
+        ): string {
+                const rawId = (attachment as any)?.id;
+                if (rawId != null) {
+                        try {
+                                if (typeof rawId === 'bigint') {
+                                        return rawId.toString();
+                                }
+                                return BigInt(rawId).toString();
+                        } catch {
+                                return String(rawId);
+                        }
+                }
+
+                const url = attachmentUrl(attachment);
+                if (url) {
+                        return `url:${url}`;
+                }
+
+                const messageId = (message as any)?.id;
+                const messageKey =
+                        typeof messageId === 'bigint'
+                                ? messageId.toString()
+                                : messageId != null
+                                        ? String(messageId)
+                                        : 'message';
+
+                return `${messageKey}:${attachmentFilename(attachment)}:${index}`;
+        }
+
+        function isVideoAttachmentActive(key: string): boolean {
+                return Boolean(activeVideoAttachments[key]);
+        }
+
+        function activateVideoAttachment(key: string): void {
+                if (activeVideoAttachments[key]) return;
+                activeVideoAttachments = { ...activeVideoAttachments, [key]: true };
+        }
+
+        function deactivateVideoAttachment(key: string): void {
+                if (!activeVideoAttachments[key]) return;
+                const next = { ...activeVideoAttachments };
+                delete next[key];
+                activeVideoAttachments = next;
+        }
+
+        function cleanupVideoPosterTasks() {
+                for (const cancel of videoPosterTasks.values()) {
+                        try {
+                                cancel();
+                        } catch {
+                                // noop
+                        }
+                }
+                videoPosterTasks.clear();
+        }
+
+        function stopVideoPosterTask(key: string) {
+                const cancel = videoPosterTasks.get(key);
+                if (!cancel) return;
+                videoPosterTasks.delete(key);
+                try {
+                        cancel();
+                } catch {
+                        // noop
+                }
+        }
+
+        function storeVideoPoster(key: string, value: string | null) {
+                videoPreviewPosters = { ...videoPreviewPosters, [key]: value };
+        }
+
+        function requestVideoPoster(key: string, url: string): void {
+                if (typeof window === 'undefined') {
+                        return;
+                }
+                if (videoPreviewPosters[key] !== undefined || videoPosterTasks.has(key)) {
+                        return;
+                }
+
+                let resolved = false;
+                const video = document.createElement('video');
+
+                const handleLoadedData = () => {
+                        try {
+                                const width = video.videoWidth;
+                                const height = video.videoHeight;
+                                if (!width || !height) {
+                                        throw new Error('missing dimensions');
+                                }
+
+                                const maxDimension = 640;
+                                const scale = Math.min(1, maxDimension / Math.max(width, height));
+                                const targetWidth = Math.max(1, Math.round(width * scale));
+                                const targetHeight = Math.max(1, Math.round(height * scale));
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = targetWidth;
+                                canvas.height = targetHeight;
+                                const context = canvas.getContext('2d');
+                                if (!context) {
+                                        throw new Error('no canvas context');
+                                }
+                                context.drawImage(video, 0, 0, targetWidth, targetHeight);
+                                const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                                finalize(dataUrl);
+                        } catch {
+                                finalize(null);
+                        }
+                };
+
+                const handleError = () => finalize(null);
+
+                const cleanup = () => {
+                        video.removeEventListener('loadeddata', handleLoadedData);
+                        video.removeEventListener('error', handleError);
+                        try {
+                                video.pause();
+                        } catch {
+                                // noop
+                        }
+                        video.src = '';
+                        try {
+                                video.load();
+                        } catch {
+                                // noop
+                        }
+                };
+
+                const finalize = (poster: string | null) => {
+                        if (resolved) {
+                                return;
+                        }
+                        resolved = true;
+                        cleanup();
+                        videoPosterTasks.delete(key);
+                        if (componentDestroyed) {
+                                return;
+                        }
+                        storeVideoPoster(key, poster);
+                };
+
+                video.addEventListener('loadeddata', handleLoadedData, { once: true });
+                video.addEventListener('error', handleError, { once: true });
+                video.crossOrigin = 'anonymous';
+                video.preload = 'metadata';
+                video.muted = true;
+                video.playsInline = true;
+                video.src = url;
+                try {
+                        video.load();
+                } catch {
+                        // noop
+                }
+
+                videoPosterTasks.set(key, () => {
+                        resolved = true;
+                        cleanup();
+                });
+        }
+
+        function resolveChannelPermissions(): number {
+                const gid = $selectedGuildId ?? '';
+                const cid = $selectedChannelId;
+                if (!cid) return 0;
+                const list = ($channelsByGuild[gid] ?? []) as DtoChannel[];
+                const channel = list.find((c) => String((c as any)?.id) === cid);
 		const perms = (channel as any)?.permissions;
 		if (typeof perms === 'bigint') return Number(perms);
 		if (typeof perms === 'string') {
@@ -572,14 +892,90 @@
 					primaryRoleColor = null;
 				}
 			}
-		})();
-	});
+                })();
+        });
 
-	function autoSizeEditTextarea() {
-		if (!editTextarea) return;
-		editTextarea.style.height = 'auto';
-		const nextHeight = editTextarea.scrollHeight;
-		editTextarea.style.height = `${nextHeight}px`;
+        $effect(() => {
+                const attachments = (message.attachments ?? []) as MessageAttachment[];
+                const keys = new Set(
+                        attachments.map((attachment, index) =>
+                                attachmentStableKey(attachment, index)
+                        )
+                );
+
+                const entries = Object.entries(activeVideoAttachments);
+                if (entries.length === 0) {
+                        return;
+                }
+
+                let requiresUpdate = false;
+                for (const [key] of entries) {
+                        if (!keys.has(key)) {
+                                requiresUpdate = true;
+                                break;
+                        }
+                }
+
+                if (!requiresUpdate) return;
+
+                const next: Record<string, boolean> = {};
+                for (const [key, value] of entries) {
+                        if (keys.has(key)) {
+                                next[key] = value;
+                        }
+                }
+
+                activeVideoAttachments = next;
+        });
+
+        $effect(() => {
+                if (typeof window === 'undefined') {
+                        return;
+                }
+
+                const attachments = (message.attachments ?? []) as MessageAttachment[];
+                const videoKeys = new Set<string>();
+
+                attachments.forEach((attachment, index) => {
+                        const meta = getAttachmentMeta(attachment);
+                        if (meta.kind !== 'video' || !meta.url) {
+                                return;
+                        }
+                        const key = attachmentStableKey(attachment, index);
+                        videoKeys.add(key);
+                        requestVideoPoster(key, meta.url);
+                });
+
+                for (const key of Array.from(videoPosterTasks.keys())) {
+                        if (!videoKeys.has(key)) {
+                                stopVideoPosterTask(key);
+                        }
+                }
+
+                const storedKeys = Object.keys(videoPreviewPosters);
+                if (!storedKeys.length) {
+                        return;
+                }
+
+                const next = { ...videoPreviewPosters };
+                let changed = false;
+                for (const key of storedKeys) {
+                        if (!videoKeys.has(key)) {
+                                delete next[key];
+                                changed = true;
+                        }
+                }
+
+                if (changed) {
+                        videoPreviewPosters = next;
+                }
+        });
+
+        function autoSizeEditTextarea() {
+                if (!editTextarea) return;
+                editTextarea.style.height = 'auto';
+                const nextHeight = editTextarea.scrollHeight;
+                editTextarea.style.height = `${nextHeight}px`;
 		const viewportHeight =
 			typeof window !== 'undefined' ? window.innerHeight : Number.POSITIVE_INFINITY;
 		editTextarea.style.overflowY = nextHeight > viewportHeight ? 'auto' : 'hidden';
@@ -875,7 +1271,279 @@
                         anchor
                 });
         }
+
+        function detachImagePreviewResize() {
+                if (detachPreviewResize) {
+                        detachPreviewResize();
+                        detachPreviewResize = null;
+                }
+        }
+
+        onDestroy(() => {
+                componentDestroyed = true;
+                detachImagePreviewResize();
+                cleanupVideoPosterTasks();
+        });
+
+        function attachImagePreviewResize() {
+                if (typeof window === 'undefined') {
+                        return;
+                }
+                detachImagePreviewResize();
+                const handler = () => {
+                        updateImagePreviewFitZoom();
+                };
+                window.addEventListener('resize', handler);
+                detachPreviewResize = () => {
+                        window.removeEventListener('resize', handler);
+                };
+        }
+
+        function computeImagePreviewFitZoom(): number {
+                if (!imagePreviewViewport || !imagePreviewNaturalWidth || !imagePreviewNaturalHeight) {
+                        return 1;
+                }
+                const viewport = imagePreviewViewport;
+                const width = viewport.clientWidth;
+                const height = viewport.clientHeight;
+                if (!width || !height) {
+                        return 1;
+                }
+                const scale = Math.min(width / imagePreviewNaturalWidth, height / imagePreviewNaturalHeight, 1);
+                if (!Number.isFinite(scale) || scale <= 0) {
+                        return 1;
+                }
+                return scale;
+        }
+
+        function resetImagePreviewTransform() {
+                imagePreviewOffsetX = 0;
+                imagePreviewOffsetY = 0;
+        }
+
+        function updateImagePreviewFitZoom(options?: { reset?: boolean }) {
+                if (!imagePreview) {
+                        return;
+                }
+                const fit = computeImagePreviewFitZoom();
+                imagePreviewFitZoom = fit;
+                const minZoom = Math.min(IMAGE_ZOOM_MIN_DEFAULT, fit, 1);
+                if (options?.reset) {
+                        imagePreviewZoom = fit;
+                        resetImagePreviewTransform();
+                        return;
+                }
+                if (imagePreviewZoom < minZoom) {
+                        imagePreviewZoom = minZoom;
+                }
+        }
+
+        function openImagePreview(meta: AttachmentMeta) {
+                if (meta.kind !== 'image' || !meta.url) return;
+                imagePreview = {
+                        url: meta.url,
+                        title: meta.name,
+                        sizeLabel: meta.sizeLabel,
+                        contentType: meta.contentType
+                };
+                imagePreviewZoom = 1;
+                imagePreviewFitZoom = 1;
+                imagePreviewOffsetX = 0;
+                imagePreviewOffsetY = 0;
+                imagePreviewNaturalWidth = 0;
+                imagePreviewNaturalHeight = 0;
+                imagePreviewDragging = false;
+                imagePreviewPointerId = null;
+                imagePreviewDragDistance = 0;
+                attachImagePreviewResize();
+        }
+
+        function closeImagePreview() {
+                imagePreview = null;
+                imagePreviewZoom = 1;
+                imagePreviewFitZoom = 1;
+                imagePreviewOffsetX = 0;
+                imagePreviewOffsetY = 0;
+                imagePreviewNaturalWidth = 0;
+                imagePreviewNaturalHeight = 0;
+                imagePreviewDragging = false;
+                imagePreviewPointerId = null;
+                imagePreviewDragDistance = 0;
+                detachImagePreviewResize();
+        }
+
+        function setImagePreviewZoom(
+                value: number,
+                options?: { anchor?: { x: number; y: number }; resetOffset?: boolean }
+        ) {
+                const fit = imagePreviewFitZoom;
+                const minZoom = Math.min(IMAGE_ZOOM_MIN_DEFAULT, fit, 1);
+                const clamped = clamp(value, minZoom, IMAGE_ZOOM_MAX);
+                if (clamped === imagePreviewZoom) {
+                        return;
+                }
+
+                if (options?.resetOffset || clamped <= fit + 0.001) {
+                        resetImagePreviewTransform();
+                } else if (options?.anchor && imagePreviewViewport) {
+                        const rect = imagePreviewViewport.getBoundingClientRect();
+                        const centerX = rect.left + rect.width / 2;
+                        const centerY = rect.top + rect.height / 2;
+                        const offsetX = options.anchor.x - centerX;
+                        const offsetY = options.anchor.y - centerY;
+                        const ratio = clamped / imagePreviewZoom;
+                        imagePreviewOffsetX = imagePreviewOffsetX * ratio + offsetX * (1 - ratio);
+                        imagePreviewOffsetY = imagePreviewOffsetY * ratio + offsetY * (1 - ratio);
+                } else {
+                        const ratio = clamped / imagePreviewZoom;
+                        imagePreviewOffsetX = imagePreviewOffsetX * ratio;
+                        imagePreviewOffsetY = imagePreviewOffsetY * ratio;
+                }
+
+                imagePreviewZoom = clamped;
+        }
+
+        function adjustImagePreviewZoom(delta: number, options?: { anchor?: { x: number; y: number } }) {
+                setImagePreviewZoom(imagePreviewZoom + delta, options);
+        }
+
+        function handlePreviewWheel(event: WheelEvent) {
+                if (!imagePreview) return;
+                event.preventDefault();
+                const direction = event.deltaY < 0 ? IMAGE_ZOOM_STEP : -IMAGE_ZOOM_STEP;
+                adjustImagePreviewZoom(direction, { anchor: { x: event.clientX, y: event.clientY } });
+        }
+
+        function handleWindowKeydown(event: KeyboardEvent) {
+                if (!imagePreview) return;
+                if (event.key === 'Escape') {
+                        closeImagePreview();
+                        return;
+                }
+                if (event.key === '+' || event.key === '=') {
+                        adjustImagePreviewZoom(IMAGE_ZOOM_STEP);
+                        return;
+                }
+                if (event.key === '-' || event.key === '_') {
+                        adjustImagePreviewZoom(-IMAGE_ZOOM_STEP);
+                        return;
+                }
+                if (event.key === '0') {
+                        setImagePreviewZoom(imagePreviewFitZoom, { resetOffset: true });
+                }
+        }
+
+        function handlePreviewOverlayClick(event: MouseEvent | PointerEvent) {
+                if (event.target === event.currentTarget) {
+                        closeImagePreview();
+                }
+        }
+
+        function handleImagePreviewLoad(event: Event) {
+                const img = event.currentTarget as HTMLImageElement | null;
+                if (!img || !imagePreview) {
+                        return;
+                }
+                imagePreviewNaturalWidth = img.naturalWidth || img.width;
+                imagePreviewNaturalHeight = img.naturalHeight || img.height;
+                updateImagePreviewFitZoom({ reset: true });
+        }
+
+        function toggleImagePreviewZoom(anchor?: { x: number; y: number }) {
+                if (!imagePreview) {
+                        return;
+                }
+                const fit = imagePreviewFitZoom;
+                const epsilon = 0.001;
+                if (imagePreviewZoom <= fit + epsilon) {
+                        const target = Math.min(IMAGE_ZOOM_MAX, Math.max(1, fit * 2));
+                        setImagePreviewZoom(target, anchor ? { anchor } : undefined);
+                } else {
+                        setImagePreviewZoom(fit, {
+                                anchor,
+                                resetOffset: true
+                        });
+                }
+        }
+
+        function handleImagePreviewPointerDown(event: PointerEvent) {
+                if (!imagePreview || event.button !== 0) {
+                        return;
+                }
+                event.preventDefault();
+                const target = event.currentTarget as HTMLElement;
+                imagePreviewPointerId = event.pointerId;
+                imagePreviewLastPointerX = event.clientX;
+                imagePreviewLastPointerY = event.clientY;
+                imagePreviewDragDistance = 0;
+                imagePreviewDragging = true;
+                target.setPointerCapture(event.pointerId);
+        }
+
+        function handleImagePreviewPointerMove(event: PointerEvent) {
+                if (!imagePreviewDragging || imagePreviewPointerId !== event.pointerId) {
+                        return;
+                }
+                event.preventDefault();
+                const dx = event.clientX - imagePreviewLastPointerX;
+                const dy = event.clientY - imagePreviewLastPointerY;
+                imagePreviewLastPointerX = event.clientX;
+                imagePreviewLastPointerY = event.clientY;
+                const movement = Math.hypot(dx, dy);
+                imagePreviewDragDistance += movement;
+                const fit = imagePreviewFitZoom;
+                if (imagePreviewZoom <= fit + 0.001) {
+                        return;
+                }
+                imagePreviewOffsetX += dx;
+                imagePreviewOffsetY += dy;
+        }
+
+        function finishImagePreviewDrag(event: PointerEvent) {
+                if (!imagePreviewDragging || imagePreviewPointerId !== event.pointerId) {
+                        return;
+                }
+                const target = event.currentTarget as HTMLElement;
+                target.releasePointerCapture(event.pointerId);
+                imagePreviewDragging = false;
+                imagePreviewPointerId = null;
+                const wasClick = imagePreviewDragDistance < 4;
+                imagePreviewDragDistance = 0;
+                if (wasClick) {
+                        toggleImagePreviewZoom({ x: event.clientX, y: event.clientY });
+                }
+        }
+
+        function handleImagePreviewPointerUp(event: PointerEvent) {
+                if (!imagePreview) {
+                        return;
+                }
+                finishImagePreviewDrag(event);
+        }
+
+        function handleImagePreviewPointerCancel(event: PointerEvent) {
+                if (!imagePreviewDragging || imagePreviewPointerId !== event.pointerId) {
+                        return;
+                }
+                const target = event.currentTarget as HTMLElement;
+                target.releasePointerCapture(event.pointerId);
+                imagePreviewDragging = false;
+                imagePreviewPointerId = null;
+                imagePreviewDragDistance = 0;
+        }
+
+        $effect(() => {
+                const viewport = imagePreviewViewport;
+                if (viewport && imagePreview && imagePreviewNaturalWidth && imagePreviewNaturalHeight) {
+                        updateImagePreviewFitZoom();
+                }
+        });
+
+        const imagePreviewMinZoom = $derived(Math.min(IMAGE_ZOOM_MIN_DEFAULT, imagePreviewFitZoom, 1));
+        const imagePreviewZoomPercent = $derived(Math.round(imagePreviewZoom * 100));
 </script>
+
+<svelte:window on:keydown={handleWindowKeydown} />
 
 <div
         role="listitem"
@@ -1058,18 +1726,287 @@
 						{/each}
 					</div>
 				{/if}
-				{#if message.attachments?.length}
-					<div class={compact ? 'mt-1 flex flex-wrap gap-2' : 'mt-1.5 flex flex-wrap gap-2'}>
-						{#each message.attachments as a}
-							<div
-								class="rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-0.5 text-xs"
-							>
-								{a.filename}
-							</div>
-						{/each}
-					</div>
-				{/if}
+                                {#if message.attachments?.length}
+                                        <div class={compact ? 'mt-1 flex flex-wrap gap-3' : 'mt-1.5 flex flex-wrap gap-3'}>
+                                                {#each message.attachments as attachment, attachmentIndex (attachmentIndex)}
+                                                        {@const meta = getAttachmentMeta(attachment)}
+                                                        {#if meta.kind === 'image' && meta.url}
+                                                                <button
+                                                                        type="button"
+                                                                        class="group block max-w-xs overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                        onclick={() => openImagePreview(meta)}
+                                                                >
+                                                                        <img
+                                                                                src={meta.url}
+                                                                                alt={meta.name}
+                                                                                class="max-h-64 w-full object-cover transition group-hover:brightness-110"
+                                                                                loading="lazy"
+                                                                        />
+                                                                        <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                <div class="truncate font-medium" title={meta.name}>
+                                                                                        {meta.name}
+                                                                                </div>
+                                                                                {#if meta.sizeLabel || meta.contentType}
+                                                                                        <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                {#if meta.sizeLabel}
+                                                                                                        <span>{meta.sizeLabel}</span>
+                                                                                                {/if}
+                                                                                                {#if meta.contentType}
+                                                                                                        <span>{meta.contentType}</span>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                {/if}
+                                                                                <div class="mt-1 text-[var(--brand)]">Click to preview</div>
+                                                                        </div>
+                                                                </button>
+                                                        {:else if meta.kind === 'video' && meta.url}
+                                                                {@const attachmentKey = attachmentStableKey(attachment, attachmentIndex)}
+                                                                {@const previewPoster = videoPreviewPosters[attachmentKey] ?? null}
+                                                                {@const previewAspectRatio = meta.aspectRatio ?? '16 / 9'}
+                                                                {#if isVideoAttachmentActive(attachmentKey)}
+                                                                        <div class="w-full max-w-xl overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
+                                                                                <div class="relative bg-black">
+                                                                                        <!-- svelte-ignore a11y_media_has_caption -->
+                                                                                        <video
+                                                                                                class="max-h-80 w-full bg-black"
+                                                                                                src={meta.url}
+                                                                                                controls
+                                                                                                preload="metadata"
+                                                                                                playsinline
+                                                                                        ></video>
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="absolute right-2 top-2 rounded-full border border-white/40 bg-black/60 p-1.5 text-white transition hover:bg-black/40"
+                                                                                                onclick={() => deactivateVideoAttachment(attachmentKey)}
+                                                                                                aria-label="Close video preview"
+                                                                                        >
+                                                                                                <X class="h-4 w-4" stroke-width={2} />
+                                                                                        </button>
+                                                                                </div>
+                                                                                <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                        <div class="truncate font-medium" title={meta.name}>
+                                                                                                {meta.name}
+                                                                                        </div>
+                                                                                        {#if meta.sizeLabel || meta.contentType}
+                                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                        {#if meta.sizeLabel}
+                                                                                                                <span>{meta.sizeLabel}</span>
+                                                                                                        {/if}
+                                                                                                        {#if meta.contentType}
+                                                                                                                <span>{meta.contentType}</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                        {#if meta.url}
+                                                                                                <div class="mt-1 text-right">
+                                                                                                        <a
+                                                                                                                class="text-[var(--brand)] hover:underline"
+                                                                                                                href={meta.url}
+                                                                                                                rel="noopener noreferrer"
+                                                                                                                target="_blank"
+                                                                                                        >
+                                                                                                                Open original
+                                                                                                        </a>
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                </div>
+                                                                        </div>
+                                                                {:else}
+                                                                        <button
+                                                                                type="button"
+                                                                                class="group block w-full max-w-xl overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                                onclick={() => activateVideoAttachment(attachmentKey)}
+                                                                        >
+                                                                                <div
+                                                                                        class="relative w-full overflow-hidden bg-black"
+                                                                                        style:aspect-ratio={previewAspectRatio}
+                                                                                >
+                                                                                        {#if previewPoster}
+                                                                                                <img
+                                                                                                        src={previewPoster}
+                                                                                                        alt={`Preview frame for ${meta.name}`}
+                                                                                                        class="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                                                                                                        loading="lazy"
+                                                                                                />
+                                                                                                <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/40"></div>
+                                                                                        {:else}
+                                                                                                <div class="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900"></div>
+                                                                                        {/if}
+                                                                                        <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 text-white transition group-hover:bg-black/40">
+                                                                                                <span class="rounded-full border border-white/60 bg-black/40 p-3">
+                                                                                                        <Play class="h-6 w-6" stroke-width={2} />
+                                                                                                </span>
+                                                                                                <span class="text-sm font-medium">Play video</span>
+                                                                                        </div>
+                                                                                </div>
+                                                                                <div class="border-t border-[var(--stroke)] px-2 py-1">
+                                                                                        <div class="truncate font-medium" title={meta.name}>
+                                                                                                {meta.name}
+                                                                                        </div>
+                                                                                        {#if meta.sizeLabel || meta.contentType}
+                                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                        {#if meta.sizeLabel}
+                                                                                                                <span>{meta.sizeLabel}</span>
+                                                                                                        {/if}
+                                                                                                        {#if meta.contentType}
+                                                                                                                <span>{meta.contentType}</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        {/if}
+                                                                                        <div class="mt-1 text-[var(--brand)]">Click to play</div>
+                                                                                </div>
+                                                                        </button>
+                                                                {/if}
+                                                        {:else if meta.kind === 'audio' && meta.url}
+                                                                <div class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
+                                                                        <div class="truncate font-medium" title={meta.name}>
+                                                                                {meta.name}
+                                                                        </div>
+                                                                        <audio class="w-full" controls preload="metadata" src={meta.url}></audio>
+                                                                        {#if meta.sizeLabel || meta.contentType}
+                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                        {#if meta.sizeLabel}
+                                                                                                <span>{meta.sizeLabel}</span>
+                                                                                        {/if}
+                                                                                        {#if meta.contentType}
+                                                                                                <span>{meta.contentType}</span>
+                                                                                        {/if}
+                                                                                </div>
+                                                                        {/if}
+                                                                        <div class="text-right">
+                                                                                <a
+                                                                                        class="text-[var(--brand)] hover:underline"
+                                                                                        href={meta.url}
+                                                                                        rel="noopener noreferrer"
+                                                                                        target="_blank"
+                                                                                >
+                                                                                        Open original
+                                                                                </a>
+                                                                        </div>
+                                                                </div>
+                                                        {:else}
+                                                                <a
+                                                                        class="flex max-w-[18rem] items-center gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        href={meta.url ?? undefined}
+                                                                        rel={meta.url ? 'noopener noreferrer' : undefined}
+                                                                        target={meta.url ? '_blank' : undefined}
+                                                                >
+                                                                        <Paperclip class="h-3.5 w-3.5 text-[var(--muted)]" stroke-width={2} />
+                                                                        <span class="truncate" title={meta.name}>
+                                                                                {meta.name}
+                                                                        </span>
+                                                                        {#if meta.sizeLabel}
+                                                                                <span class="ml-auto whitespace-nowrap text-[var(--muted)]">
+                                                                                        {meta.sizeLabel}
+                                                                                </span>
+                                                                        {/if}
+                                                                </a>
+                                                        {/if}
+                                                {/each}
+                                        </div>
+                                {/if}
 			</div>
 		{/if}
-	</div>
+        </div>
 </div>
+
+{#if imagePreview}
+        <div
+                class="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm"
+                onpointerdown={handlePreviewOverlayClick}
+        >
+                <div class="border-b border-white/10 px-6 py-4 text-white">
+                        <div class="flex items-start justify-between gap-4">
+                                <div class="min-w-0">
+                                        <div class="truncate text-base font-semibold">{imagePreview.title}</div>
+                                        <div class="mt-1 flex flex-wrap gap-3 text-xs text-white/70">
+                                                {#if imagePreview.sizeLabel}
+                                                        <span>{imagePreview.sizeLabel}</span>
+                                                {/if}
+                                                {#if imagePreview.contentType}
+                                                        <span>{imagePreview.contentType}</span>
+                                                {/if}
+                                        </div>
+                                </div>
+                                <div class="flex items-center gap-2 text-sm">
+                                        <a
+                                                class="rounded border border-white/30 px-3 py-1 text-white/90 transition hover:bg-white/10"
+                                                href={imagePreview.url}
+                                                rel="noopener noreferrer"
+                                                target="_blank"
+                                        >
+                                                Open original
+                                        </a>
+                                        <button
+                                                class="rounded border border-white/30 px-3 py-1 text-white/90 transition hover:bg-white/10"
+                                                type="button"
+                                                onclick={closeImagePreview}
+                                        >
+                                                Close
+                                        </button>
+                                </div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/80">
+                                <button
+                                        class="rounded border border-white/30 px-2 py-1 transition hover:bg-white/10"
+                                        type="button"
+                                        onclick={() => adjustImagePreviewZoom(-IMAGE_ZOOM_STEP)}
+                                >
+                                        −
+                                </button>
+                                <input
+                                        type="range"
+                                        min={imagePreviewMinZoom}
+                                        max={IMAGE_ZOOM_MAX}
+                                        step={IMAGE_ZOOM_STEP}
+                                        value={imagePreviewZoom}
+                                        oninput={(event) =>
+                                                setImagePreviewZoom(
+                                                        Number((event.currentTarget as HTMLInputElement).value)
+                                                )
+                                        }
+                                        class="h-1 w-32 cursor-pointer accent-[var(--brand)]"
+                                />
+                                <button
+                                        class="rounded border border-white/30 px-2 py-1 transition hover:bg-white/10"
+                                        type="button"
+                                        onclick={() => adjustImagePreviewZoom(IMAGE_ZOOM_STEP)}
+                                >
+                                        +
+                                </button>
+                                <span class="w-12 text-center text-white/90">{imagePreviewZoomPercent}%</span>
+                                <button
+                                        class="rounded border border-white/30 px-3 py-1 text-white/90 transition hover:bg-white/10"
+                                        type="button"
+                                        onclick={() =>
+                                                setImagePreviewZoom(imagePreviewFitZoom, { resetOffset: true })
+                                        }
+                                >
+                                        Reset
+                                </button>
+                        </div>
+                </div>
+                <div
+                        class="flex-1 overflow-hidden"
+                        bind:this={imagePreviewViewport}
+                        onwheel={handlePreviewWheel}
+                >
+                        <div class="flex h-full w-full items-center justify-center p-6">
+                                <img
+                                        src={imagePreview.url}
+                                        alt={imagePreview.title}
+                                        class={`max-h-none max-w-none select-none shadow-2xl transition-transform duration-100 ${
+                                                imagePreviewDragging ? 'cursor-grabbing' : 'cursor-grab'
+                                        }`}
+                                        style={`transform: translate(${imagePreviewOffsetX}px, ${imagePreviewOffsetY}px) scale(${imagePreviewZoom}); transform-origin: center center;`}
+                                        draggable="false"
+                                        onload={handleImagePreviewLoad}
+                                        onpointerdown={handleImagePreviewPointerDown}
+                                        onpointermove={handleImagePreviewPointerMove}
+                                        onpointerup={handleImagePreviewPointerUp}
+                                        onpointercancel={handleImagePreviewPointerCancel}
+                                />
+                        </div>
+                </div>
+        </div>
+{/if}
