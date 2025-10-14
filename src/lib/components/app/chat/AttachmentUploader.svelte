@@ -4,14 +4,74 @@
         import { createEventDispatcher } from 'svelte';
         import { LoaderCircle, Paperclip } from 'lucide-svelte';
         import { tooltip } from '$lib/actions/tooltip';
+        import type { PendingAttachment } from '$lib/stores/pendingMessages';
 
-	let { attachments, inline = false } = $props<{
-		attachments: (number | string)[];
-		inline?: boolean;
-	}>();
+        let { attachments, inline = false } = $props<{
+                attachments: PendingAttachment[];
+                inline?: boolean;
+        }>();
 	let loading = $state(false);
 	let error: string | null = $state(null);
 	const dispatch = createEventDispatcher<{ updated: void }>();
+
+        function normalizeUploadHeaders(input: unknown): Record<string, string> {
+                if (!input || typeof input !== 'object') {
+                        return {};
+                }
+
+                const entries: Array<[string, string]> = [];
+                const pushEntry = (key: unknown, value: unknown) => {
+                        if (typeof key !== 'string') return;
+                        const trimmedKey = key.trim();
+                        if (!trimmedKey) return;
+                        if (value == null) return;
+                        let normalizedValue: string | null = null;
+                        if (typeof value === 'string') {
+                                normalizedValue = value;
+                        } else if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+                                normalizedValue = value.toString();
+                        } else if (Array.isArray(value)) {
+                                normalizedValue = value.filter((item) => item != null).map((item) => String(item)).join(', ');
+                        } else if (typeof value === 'object') {
+                                const maybeValue =
+                                        (value as Record<string, unknown>).value ??
+                                        (value as Record<string, unknown>).val ??
+                                        (value as Record<string, unknown>).headerValue;
+                                if (maybeValue != null) {
+                                        normalizedValue = String(maybeValue);
+                                }
+                        }
+
+                        if (normalizedValue == null) return;
+                        entries.push([trimmedKey, normalizedValue]);
+                };
+
+                if (Array.isArray(input)) {
+                        for (const item of input) {
+                                if (!item) continue;
+                                if (Array.isArray(item) && item.length >= 2) {
+                                        pushEntry(item[0], item[1]);
+                                        continue;
+                                }
+                                if (typeof item === 'object') {
+                                        const record = item as Record<string, unknown>;
+                                        const key = record.name ?? record.key ?? record.header ?? record.headerName;
+                                        const value =
+                                                record.value ??
+                                                record.val ??
+                                                record.headerValue ??
+                                                (Array.isArray(record.values) ? record.values.join(', ') : undefined);
+                                        pushEntry(typeof key === 'string' ? key : '', value);
+                                }
+                        }
+                } else {
+                        for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+                                pushEntry(key, value);
+                        }
+                }
+
+                return Object.fromEntries(entries);
+        }
 
         async function pickFiles(e: Event) {
                 const target = e.target as HTMLInputElement | { files: FileList | null };
@@ -41,20 +101,64 @@
                                                 filename: file.name,
                                                 file_size: file.size,
                                                 width: meta.width ?? undefined,
-						height: meta.height ?? undefined
-					}
-				});
-				const data = res.data as {
-					id?: string | number;
-					attachment_id?: string | number;
-				};
-				const id = data.id ?? data.attachment_id;
-				if (id) {
-					attachments.push(id);
-					// notify parent for re-render/bindings
-					dispatch('updated');
-				}
-			}
+                                                height: meta.height ?? undefined
+                                        }
+                                });
+                                const data = res.data as {
+                                        id?: string | number | bigint;
+                                        attachment_id?: string | number | bigint;
+                                        upload_url?: string | null;
+                                        upload_headers?: unknown;
+                                        headers?: unknown;
+                                };
+                                const rawId = data.id ?? data.attachment_id;
+                                if (rawId == null) {
+                                        error = 'Attachment response missing id';
+                                        continue;
+                                }
+
+                                let snowflake: bigint;
+                                try {
+                                        snowflake =
+                                                typeof rawId === 'bigint'
+                                                        ? rawId
+                                                        : BigInt(rawId);
+                                } catch {
+                                        error = 'Attachment response malformed';
+                                        continue;
+                                }
+
+                                const uploadUrl = typeof data.upload_url === 'string' ? data.upload_url : null;
+                                if (!uploadUrl) {
+                                        error = 'Attachment response missing upload URL';
+                                        continue;
+                                }
+
+                                const uploadHeaders = normalizeUploadHeaders(data.upload_headers ?? data.headers);
+
+                                const previewUrl = createPreviewUrl(file);
+                                const localId = createLocalId();
+                                attachments.push({
+                                        localId,
+                                        attachmentId: snowflake,
+                                        uploadUrl,
+                                        uploadHeaders,
+                                        file,
+                                        filename: file.name,
+                                        size: file.size,
+                                        mimeType: file.type || 'application/octet-stream',
+                                        width: meta.width ?? undefined,
+                                        height: meta.height ?? undefined,
+                                        previewUrl,
+                                        isImage: file.type.startsWith('image/'),
+                                        status: 'queued',
+                                        progress: 0,
+                                        uploadedBytes: 0,
+                                        error: null
+                                });
+                                // notify parent for re-render/bindings
+                                dispatch('updated');
+                        }
                 } catch (e) {
                         const err = e as {
                                 response?: { data?: { message?: string } };
@@ -70,22 +174,50 @@
                 }
         }
 
-	function getFileMeta(file: File): Promise<{ width?: number; height?: number }> {
-		return new Promise((resolve) => {
-			if (!file.type.startsWith('image/')) return resolve({});
-			const img = new Image();
-			const url = URL.createObjectURL(file);
-			img.onload = () => {
-				URL.revokeObjectURL(url);
-				resolve({ width: img.width, height: img.height });
-			};
-			img.onerror = () => {
-				URL.revokeObjectURL(url);
-				resolve({});
-			};
-			img.src = url;
-		});
-	}
+        function getFileMeta(file: File): Promise<{ width?: number; height?: number }> {
+                return new Promise((resolve) => {
+                        if (!file.type.startsWith('image/')) return resolve({});
+                        const url = safeCreateObjectUrl(file);
+                        if (!url) {
+                                resolve({});
+                                return;
+                        }
+                        const img = new Image();
+                        img.onload = () => {
+                                URL.revokeObjectURL(url);
+                                resolve({ width: img.width, height: img.height });
+                        };
+                        img.onerror = () => {
+                                URL.revokeObjectURL(url);
+                                resolve({});
+                        };
+                        img.src = url;
+                });
+        }
+
+        function safeCreateObjectUrl(file: File): string | null {
+                try {
+                        if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+                                return URL.createObjectURL(file);
+                        }
+                        return null;
+                } catch {
+                        return null;
+                }
+        }
+
+        function createPreviewUrl(file: File): string | null {
+                const url = safeCreateObjectUrl(file);
+                if (!url) return null;
+                return url;
+        }
+
+        function createLocalId(): string {
+                if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                        return crypto.randomUUID();
+                }
+                return `attachment-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
 </script>
 
 <div
