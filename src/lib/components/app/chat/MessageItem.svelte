@@ -628,6 +628,295 @@
         const videoPosterTasks = new Map<string, () => void>();
         let componentDestroyed = false;
 
+        function isSameOriginUrl(url: string): boolean {
+                if (typeof window === 'undefined') {
+                        return false;
+                }
+
+                try {
+                        const parsed = new URL(url, window.location.href);
+                        return parsed.origin === window.location.origin;
+                } catch {
+                        return false;
+                }
+        }
+
+        async function capturePosterWithVideo(
+                sourceUrl: string,
+                signal: AbortSignal,
+                options: { crossOrigin?: string | null; revoke?: (() => void) | null } = {}
+        ): Promise<string | null> {
+                if (signal.aborted) {
+                        return null;
+                }
+
+                return new Promise<string | null>((resolve) => {
+                        const video = document.createElement('video');
+                        let settled = false;
+
+                        const cleanup = () => {
+                                video.removeEventListener('loadeddata', handleLoadedData);
+                                video.removeEventListener('error', handleError);
+                                video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                                signal.removeEventListener('abort', handleAbort);
+                                try {
+                                        video.pause();
+                                } catch {
+                                        // noop
+                                }
+                                video.src = '';
+                                try {
+                                        video.load();
+                                } catch {
+                                        // noop
+                                }
+                                options.revoke?.();
+                        };
+
+                        const finalize = (poster: string | null) => {
+                                if (settled) {
+                                        return;
+                                }
+                                settled = true;
+                                cleanup();
+                                resolve(poster);
+                        };
+
+                        const handleAbort = () => finalize(null);
+
+                        const handleLoadedData = () => {
+                                try {
+                                        const width = video.videoWidth;
+                                        const height = video.videoHeight;
+                                        if (!width || !height) {
+                                                throw new Error('missing dimensions');
+                                        }
+
+                                        const maxDimension = 640;
+                                        const scale = Math.min(1, maxDimension / Math.max(width, height));
+                                        const targetWidth = Math.max(1, Math.round(width * scale));
+                                        const targetHeight = Math.max(1, Math.round(height * scale));
+
+                                        const canvas = document.createElement('canvas');
+                                        canvas.width = targetWidth;
+                                        canvas.height = targetHeight;
+                                        const context = canvas.getContext('2d');
+                                        if (!context) {
+                                                throw new Error('no canvas context');
+                                        }
+                                        context.drawImage(video, 0, 0, targetWidth, targetHeight);
+                                        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                                        finalize(dataUrl);
+                                } catch {
+                                        finalize(null);
+                                }
+                        };
+
+                        const handleError = () => finalize(null);
+
+                        const handleLoadedMetadata = () => {
+                                try {
+                                        const hasDuration = Number.isFinite(video.duration) && video.duration > 0;
+                                        const epsilon = 0.001;
+                                        const targetTime = hasDuration
+                                                ? Math.min(Math.max(epsilon, video.duration - epsilon), 0.1)
+                                                : epsilon;
+                                        if (!Number.isNaN(targetTime) && video.currentTime !== targetTime) {
+                                                video.currentTime = targetTime;
+                                        }
+                                } catch {
+                                        // noop — if seeking fails we will rely on the default frame fetch.
+                                }
+                        };
+
+                        signal.addEventListener('abort', handleAbort, { once: true });
+                        video.addEventListener('loadeddata', handleLoadedData, { once: true });
+                        video.addEventListener('error', handleError, { once: true });
+                        video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+
+                        if (options.crossOrigin) {
+                                video.crossOrigin = options.crossOrigin;
+                        } else if (options.crossOrigin === null) {
+                                video.removeAttribute('crossorigin');
+                        }
+
+                        video.preload = 'metadata';
+                        video.muted = true;
+                        video.playsInline = true;
+                        if (signal.aborted) {
+                                finalize(null);
+                                return;
+                        }
+                        video.src = sourceUrl;
+                        try {
+                                video.load();
+                        } catch {
+                                // noop
+                        }
+                });
+        }
+
+        async function capturePosterFromFetch(url: string, signal: AbortSignal): Promise<string | null> {
+                if (signal.aborted || typeof fetch !== 'function' || typeof URL === 'undefined') {
+                        return null;
+                }
+
+                let response: Response;
+                try {
+                        response = await fetch(url, { signal, credentials: 'include' });
+                } catch {
+                        return null;
+                }
+
+                if (!response.ok || signal.aborted) {
+                        return null;
+                }
+
+                const contentType = response.headers.get('Content-Type') ?? 'video/mp4';
+
+                try {
+                        const reader = response.body?.getReader();
+                        if (reader) {
+                                const chunks: Uint8Array[] = [];
+                                const limit = 1024 * 1024; // 1 MiB
+                                let received = 0;
+                                let done = false;
+
+                                while (!done && received < limit) {
+                                        const { value, done: chunkDone } = await reader.read();
+                                        done = chunkDone;
+                                        if (signal.aborted) {
+                                                try {
+                                                        await reader.cancel();
+                                                } catch {
+                                                        // noop
+                                                }
+                                                return null;
+                                        }
+                                        if (value && value.length) {
+                                                chunks.push(value);
+                                                received += value.length;
+                                        }
+                                }
+
+                                if (!chunks.length) {
+                                        return null;
+                                }
+
+                                const partialBlob = new Blob(chunks, { type: contentType });
+                                if (signal.aborted) {
+                                        return null;
+                                }
+                                const partialUrl = URL.createObjectURL(partialBlob);
+                                const partialPoster = await capturePosterWithVideo(partialUrl, signal, {
+                                        crossOrigin: null,
+                                        revoke: () => URL.revokeObjectURL(partialUrl),
+                                });
+                                if (signal.aborted) {
+                                        try {
+                                                await reader.cancel();
+                                        } catch {
+                                                // noop
+                                        }
+                                        return null;
+                                }
+                                if (partialPoster !== null) {
+                                        try {
+                                                await reader.cancel();
+                                        } catch {
+                                                // noop
+                                        }
+                                        return partialPoster;
+                                }
+                                if (done) {
+                                        return null;
+                                }
+
+                                while (!done) {
+                                        const { value, done: chunkDone } = await reader.read();
+                                        done = chunkDone;
+                                        if (signal.aborted) {
+                                                try {
+                                                        await reader.cancel();
+                                                } catch {
+                                                        // noop
+                                                }
+                                                return null;
+                                        }
+                                        if (value && value.length) {
+                                                chunks.push(value);
+                                        }
+                                }
+
+                                try {
+                                        await reader.cancel();
+                                } catch {
+                                        // noop
+                                }
+
+                                const blob = new Blob(chunks, { type: contentType });
+                                if (signal.aborted) {
+                                        return null;
+                                }
+                                const objectUrl = URL.createObjectURL(blob);
+                                return capturePosterWithVideo(objectUrl, signal, {
+                                        crossOrigin: null,
+                                        revoke: () => URL.revokeObjectURL(objectUrl),
+                                });
+                        }
+                } catch {
+                        // noop — fall back to reading the full blob below.
+                }
+
+                if (signal.aborted) {
+                        return null;
+                }
+
+                let blob: Blob;
+                try {
+                        blob = await response.blob();
+                } catch {
+                        return null;
+                }
+
+                if (signal.aborted) {
+                        return null;
+                }
+
+                const objectUrl = URL.createObjectURL(blob);
+                return capturePosterWithVideo(objectUrl, signal, {
+                        crossOrigin: null,
+                        revoke: () => URL.revokeObjectURL(objectUrl),
+                });
+        }
+
+        async function generateVideoPoster(url: string, signal: AbortSignal): Promise<string | null> {
+                const sameOrigin = isSameOriginUrl(url);
+                const crossOrigin = sameOrigin ? null : 'anonymous';
+
+                try {
+                        const directPoster = await capturePosterWithVideo(url, signal, { crossOrigin });
+                        if (signal.aborted) {
+                                return null;
+                        }
+                        if (directPoster !== null) {
+                                return directPoster;
+                        }
+                } catch {
+                        // noop — fall back to fetch approach.
+                }
+
+                if (signal.aborted) {
+                        return null;
+                }
+
+                try {
+                        return await capturePosterFromFetch(url, signal);
+                } catch {
+                        return null;
+                }
+        }
+
         function attachmentStableKey(
                 attachment: MessageAttachment | undefined,
                 index: number
@@ -710,104 +999,28 @@
                         return;
                 }
 
-                let resolved = false;
-                const video = document.createElement('video');
+                const controller = new AbortController();
+                const { signal } = controller;
 
-                const handleLoadedData = () => {
+                const run = async () => {
                         try {
-                                const width = video.videoWidth;
-                                const height = video.videoHeight;
-                                if (!width || !height) {
-                                        throw new Error('missing dimensions');
+                                const poster = await generateVideoPoster(url, signal);
+                                if (signal.aborted || componentDestroyed) {
+                                        return;
                                 }
-
-                                const maxDimension = 640;
-                                const scale = Math.min(1, maxDimension / Math.max(width, height));
-                                const targetWidth = Math.max(1, Math.round(width * scale));
-                                const targetHeight = Math.max(1, Math.round(height * scale));
-
-                                const canvas = document.createElement('canvas');
-                                canvas.width = targetWidth;
-                                canvas.height = targetHeight;
-                                const context = canvas.getContext('2d');
-                                if (!context) {
-                                        throw new Error('no canvas context');
-                                }
-                                context.drawImage(video, 0, 0, targetWidth, targetHeight);
-                                const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-                                finalize(dataUrl);
-                        } catch {
-                                finalize(null);
-                        }
-                };
-
-                const handleError = () => finalize(null);
-
-                const handleLoadedMetadata = () => {
-                        try {
-                                // Request a frame without downloading the entire video by seeking to a
-                                // small offset. Browsers will fetch just enough data to render the frame.
-                                const hasDuration = Number.isFinite(video.duration) && video.duration > 0;
-                                const epsilon = 0.001;
-                                const targetTime = hasDuration
-                                        ? Math.min(Math.max(epsilon, video.duration - epsilon), 0.1)
-                                        : epsilon;
-                                if (video.currentTime !== targetTime) {
-                                        video.currentTime = targetTime;
-                                }
-                        } catch {
-                                // noop — if seeking fails we will rely on the default frame fetch.
-                        }
-                };
-
-                const cleanup = () => {
-                        video.removeEventListener('loadeddata', handleLoadedData);
-                        video.removeEventListener('error', handleError);
-                        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                        try {
-                                video.pause();
+                                storeVideoPoster(key, poster);
                         } catch {
                                 // noop
-                        }
-                        video.src = '';
-                        try {
-                                video.load();
-                        } catch {
-                                // noop
+                        } finally {
+                                videoPosterTasks.delete(key);
                         }
                 };
-
-                const finalize = (poster: string | null) => {
-                        if (resolved) {
-                                return;
-                        }
-                        resolved = true;
-                        cleanup();
-                        videoPosterTasks.delete(key);
-                        if (componentDestroyed) {
-                                return;
-                        }
-                        storeVideoPoster(key, poster);
-                };
-
-                video.addEventListener('loadeddata', handleLoadedData, { once: true });
-                video.addEventListener('error', handleError, { once: true });
-                video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
-                video.crossOrigin = 'anonymous';
-                video.preload = 'metadata';
-                video.muted = true;
-                video.playsInline = true;
-                video.src = url;
-                try {
-                        video.load();
-                } catch {
-                        // noop
-                }
 
                 videoPosterTasks.set(key, () => {
-                        resolved = true;
-                        cleanup();
+                        controller.abort();
                 });
+
+                void run();
         }
 
         function resolveChannelPermissions(): number {
