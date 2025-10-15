@@ -12,7 +12,7 @@
         }>();
 	let loading = $state(false);
 	let error: string | null = $state(null);
-	const dispatch = createEventDispatcher<{ updated: void }>();
+        const dispatch = createEventDispatcher<{ updated: PendingAttachment[] }>();
 
         function normalizeUploadHeaders(input: unknown): Record<string, string> {
                 if (!input || typeof input !== 'object') {
@@ -73,27 +73,31 @@
                 return Object.fromEntries(entries);
         }
 
-        async function pickFiles(e: Event) {
-                const target = e.target as HTMLInputElement | { files: FileList | null };
-                const files = target.files;
+        function toFileArray(input: FileList | File[] | null | undefined): File[] {
+                if (!input) return [];
+                return Array.from(input as FileList | File[]);
+        }
+
+        export async function addFiles(
+                filesInput: FileList | File[] | null | undefined
+        ): Promise<PendingAttachment[] | void> {
+                const files = toFileArray(filesInput);
                 const selected = $selectedChannelId;
-                if (!files || !selected) return;
+                if (!files.length || !selected) return [];
 
                 let channelSnowflake: bigint;
                 try {
                         channelSnowflake = BigInt(selected);
                 } catch (err) {
                         error = 'Invalid channel selected';
-                        if ('value' in target) {
-                                target.value = '';
-                        }
-                        return;
+                        return [];
                 }
 
                 loading = true;
                 error = null;
+                const createdAttachments: PendingAttachment[] = [];
                 try {
-                        for (const file of Array.from(files)) {
+                        for (const file of files) {
                                 const meta = await getFileMeta(file);
                                 const res = await auth.api.message.messageChannelChannelIdAttachmentPost({
                                         channelId: channelSnowflake as any,
@@ -139,7 +143,7 @@
 
                                 const previewUrl = createPreviewUrl(file);
                                 const localId = createLocalId();
-                                attachments.push({
+                                const pendingAttachment: PendingAttachment = {
                                         localId,
                                         attachmentId: snowflake,
                                         uploadUrl,
@@ -156,9 +160,9 @@
                                         progress: 0,
                                         uploadedBytes: 0,
                                         error: null
-                                });
-                                // notify parent for re-render/bindings
-                                dispatch('updated');
+                                };
+                                createdAttachments.push(pendingAttachment);
+                                attachments.push(pendingAttachment);
                         }
                 } catch (e) {
                         const err = e as {
@@ -168,7 +172,20 @@
                         error = err.response?.data?.message ?? err.message ?? 'Attachment failed';
                 } finally {
                         loading = false;
-                        // reset input value
+                }
+
+                if (createdAttachments.length) {
+                        dispatch('updated', createdAttachments);
+                }
+
+                return createdAttachments;
+        }
+
+        async function pickFiles(e: Event) {
+                const target = e.target as HTMLInputElement | { files: FileList | null };
+                try {
+                        await addFiles(target.files ?? null);
+                } finally {
                         if ('value' in target) {
                                 target.value = '';
                         }
