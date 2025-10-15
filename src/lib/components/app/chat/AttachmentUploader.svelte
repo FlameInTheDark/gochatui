@@ -177,22 +177,89 @@
 
         function getFileMeta(file: File): Promise<{ width?: number; height?: number }> {
                 return new Promise((resolve) => {
-                        if (!file.type.startsWith('image/')) return resolve({});
+                        const type = file.type || '';
+                        if (!type.startsWith('image/') && !type.startsWith('video/')) {
+                                resolve({});
+                                return;
+                        }
+
                         const url = safeCreateObjectUrl(file);
                         if (!url) {
                                 resolve({});
                                 return;
                         }
-                        const img = new Image();
-                        img.onload = () => {
+
+                        if (type.startsWith('image/')) {
+                                const img = new Image();
+                                const cleanup = () => {
+                                        URL.revokeObjectURL(url);
+                                };
+                                img.onload = () => {
+                                        const width = img.naturalWidth || img.width || 0;
+                                        const height = img.naturalHeight || img.height || 0;
+                                        cleanup();
+                                        resolve(width > 0 && height > 0 ? { width, height } : {});
+                                };
+                                img.onerror = () => {
+                                        cleanup();
+                                        resolve({});
+                                };
+                                img.src = url;
+                                return;
+                        }
+
+                        const video = document.createElement('video');
+                        let settled = false;
+                        const cleanup = () => {
+                                video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                                video.removeEventListener('error', handleError);
+                                try {
+                                        video.pause();
+                                } catch {
+                                        // noop
+                                }
+                                video.src = '';
+                                video.removeAttribute('src');
+                                try {
+                                        video.load();
+                                } catch {
+                                        // noop
+                                }
                                 URL.revokeObjectURL(url);
-                                resolve({ width: img.width, height: img.height });
                         };
-                        img.onerror = () => {
-                                URL.revokeObjectURL(url);
-                                resolve({});
+
+                        const finalize = (width?: number, height?: number) => {
+                                if (settled) {
+                                        return;
+                                }
+                                settled = true;
+                                cleanup();
+                                if (width && height && width > 0 && height > 0) {
+                                        resolve({ width, height });
+                                } else {
+                                        resolve({});
+                                }
                         };
-                        img.src = url;
+
+                        const handleLoadedMetadata = () => {
+                                const width = video.videoWidth || video.width;
+                                const height = video.videoHeight || video.height;
+                                finalize(width, height);
+                        };
+
+                        const handleError = () => finalize();
+
+                        video.preload = 'metadata';
+                        video.muted = true;
+                        video.playsInline = true;
+                        video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+                        video.addEventListener('error', handleError, { once: true });
+                        video.src = url;
+                        try {
+                                video.load();
+                        } catch {
+                                // noop
+                        }
                 });
         }
 
