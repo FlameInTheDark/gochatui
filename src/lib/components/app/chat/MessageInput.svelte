@@ -14,9 +14,9 @@
                 type PendingMessage
         } from '$lib/stores/pendingMessages';
 
-        let content = '';
-        let attachments: PendingAttachment[] = [];
-        let sending = false;
+        let content = $state('');
+        let attachments = $state<PendingAttachment[]>([]);
+        let sending = $state(false);
         const dispatch = createEventDispatcher<{ sent: void }>();
 
         let ta: HTMLTextAreaElement | null = null;
@@ -52,9 +52,7 @@
                         existing.add(attachment.localId);
                         next.push(attachment);
                 }
-                if (next.length !== attachments.length) {
-                        attachments = next;
-                }
+                attachments = next;
         }
 
         async function handleDroppedFiles(files: FileList | null | undefined) {
