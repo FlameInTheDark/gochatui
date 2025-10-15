@@ -27,7 +27,7 @@
                           ) => Promise<PendingAttachment[] | void>;
                   }
                 | null = null;
-        let dropActive = $state(false);
+        let dropActive = false;
         let dragCounter = 0;
         let removeGlobalDragListeners: (() => void) | null = null;
 
@@ -44,7 +44,7 @@
                         return;
                 }
                 const existing = new Set(attachments.map((attachment) => attachment.localId));
-                const next = [...attachments];
+                const next: PendingAttachment[] = attachments.slice();
                 for (const attachment of added) {
                         if (existing.has(attachment.localId)) {
                                 continue;
@@ -156,24 +156,39 @@
         });
 
         onDestroy(() => {
+                clearLocalAttachments({ releasePreviews: true });
                 if (removeGlobalDragListeners) {
                         removeGlobalDragListeners();
                         removeGlobalDragListeners = null;
                 }
         });
 
+        function releasePreviewUrl(attachment: PendingAttachment | undefined) {
+                if (!attachment?.previewUrl) return;
+                if (!attachment.previewUrl.startsWith('blob:')) return;
+                try {
+                        URL.revokeObjectURL(attachment.previewUrl);
+                } catch {
+                        /* ignore */
+                }
+        }
+
+        function clearLocalAttachments(options?: { releasePreviews?: boolean }) {
+                const shouldRelease = options?.releasePreviews ?? false;
+                if (shouldRelease) {
+                        for (const attachment of attachments) {
+                                releasePreviewUrl(attachment);
+                        }
+                }
+                attachments = [];
+        }
+
         function removeAttachment(localId: string) {
                 const index = attachments.findIndex((attachment) => attachment.localId === localId);
                 if (index === -1) return;
                 const [removed] = attachments.splice(index, 1);
                 attachments = [...attachments];
-                if (removed?.previewUrl && removed.previewUrl.startsWith('blob:')) {
-                        try {
-                                URL.revokeObjectURL(removed.previewUrl);
-                        } catch {
-                                /* ignore */
-                        }
-                }
+                releasePreviewUrl(removed);
         }
 
         function createLocalMessageId(): string {
@@ -184,8 +199,17 @@
         }
 
         function cloneAttachmentForSend(attachment: PendingAttachment): PendingAttachment {
+                let previewUrl = attachment.previewUrl;
+                if (previewUrl && previewUrl.startsWith('blob:')) {
+                        try {
+                                previewUrl = URL.createObjectURL(attachment.file);
+                        } catch {
+                                previewUrl = attachment.previewUrl;
+                        }
+                }
                 return {
                         ...attachment,
+                        previewUrl,
                         status: 'queued',
                         progress: 0,
                         uploadedBytes: 0,
@@ -214,7 +238,7 @@
                 addPendingMessage(pendingMessage);
 
                 content = '';
-                attachments = [];
+                clearLocalAttachments({ releasePreviews: true });
                 // wait for DOM to reflect cleared content, then collapse height
                 await tick();
                 if (ta) {
