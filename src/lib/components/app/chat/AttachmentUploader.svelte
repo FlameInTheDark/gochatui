@@ -162,6 +162,7 @@
                                         error: null
                                 };
                                 createdAttachments.push(pendingAttachment);
+                                attachments.push(pendingAttachment);
                         }
                 } catch (e) {
                         const err = e as {

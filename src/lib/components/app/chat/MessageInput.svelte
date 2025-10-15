@@ -518,7 +518,7 @@
                                 if (!added.length) {
                                         return;
                                 }
-                                attachments = [...attachments, ...added];
+                                attachments = [...attachments];
                         }}
                 />
                 <textarea
