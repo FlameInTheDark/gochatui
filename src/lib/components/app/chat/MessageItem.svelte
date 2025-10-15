@@ -609,6 +609,7 @@
         let imagePreviewDragDistance = 0;
         let imagePreviewDidPan = false;
         let detachPreviewResize: (() => void) | null = null;
+        let suppressNextPointerUp = $state(false);
         let activeVideoAttachments = $state<Record<string, boolean>>({});
         let videoPreviewPosters = $state<Record<string, string | null>>({});
         const videoPosterTasks = new Map<string, () => void>();
@@ -1250,9 +1251,14 @@
 		);
 	}
 
-	function handleRootPointerUp(event: PointerEvent) {
-		if (event.button !== 0) return;
-		if (event.defaultPrevented || isEditing) return;
+        function handleRootPointerUp(event: PointerEvent) {
+                if (suppressNextPointerUp) {
+                        suppressNextPointerUp = false;
+                        event.preventDefault();
+                        return;
+                }
+                if (event.button !== 0) return;
+                if (event.defaultPrevented || isEditing) return;
 		if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
 		const target = event.target as HTMLElement | null;
 		if (
@@ -1457,8 +1463,14 @@
 
         function handlePreviewOverlayClick(event: MouseEvent | PointerEvent) {
                 if (event.target === event.currentTarget) {
+                        suppressNextPointerUp = true;
+                        event.preventDefault();
+                        event.stopPropagation();
                         closeImagePreview();
+                        return;
                 }
+
+                event.stopPropagation();
         }
 
         function handleImagePreviewLoad(event: Event) {
