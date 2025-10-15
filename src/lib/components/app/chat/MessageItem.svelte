@@ -607,6 +607,7 @@
         let imagePreviewLastPointerX = 0;
         let imagePreviewLastPointerY = 0;
         let imagePreviewDragDistance = 0;
+        let imagePreviewDidPan = false;
         let detachPreviewResize: (() => void) | null = null;
         let activeVideoAttachments = $state<Record<string, boolean>>({});
         let videoPreviewPosters = $state<Record<string, string | null>>({});
@@ -1374,6 +1375,7 @@
                 imagePreviewDragging = false;
                 imagePreviewPointerId = null;
                 imagePreviewDragDistance = 0;
+                imagePreviewDidPan = false;
                 attachImagePreviewResize();
         }
 
@@ -1388,6 +1390,7 @@
                 imagePreviewDragging = false;
                 imagePreviewPointerId = null;
                 imagePreviewDragDistance = 0;
+                imagePreviewDidPan = false;
                 detachImagePreviewResize();
         }
 
@@ -1496,6 +1499,7 @@
                 imagePreviewLastPointerY = event.clientY;
                 imagePreviewDragDistance = 0;
                 imagePreviewDragging = true;
+                imagePreviewDidPan = false;
                 target.setPointerCapture(event.pointerId);
         }
 
@@ -1516,6 +1520,9 @@
                 }
                 imagePreviewOffsetX += dx;
                 imagePreviewOffsetY += dy;
+                if (imagePreviewDragDistance > 3) {
+                        imagePreviewDidPan = true;
+                }
         }
 
         function finishImagePreviewDrag(event: PointerEvent) {
@@ -1526,9 +1533,10 @@
                 target.releasePointerCapture(event.pointerId);
                 imagePreviewDragging = false;
                 imagePreviewPointerId = null;
-                const wasClick = imagePreviewDragDistance < 4;
+                const shouldToggleZoom = !imagePreviewDidPan && imagePreviewDragDistance < 4;
                 imagePreviewDragDistance = 0;
-                if (wasClick) {
+                imagePreviewDidPan = false;
+                if (shouldToggleZoom) {
                         toggleImagePreviewZoom({ x: event.clientX, y: event.clientY });
                 }
         }
@@ -1549,6 +1557,16 @@
                 imagePreviewDragging = false;
                 imagePreviewPointerId = null;
                 imagePreviewDragDistance = 0;
+                imagePreviewDidPan = false;
+        }
+
+        function handlePreviewViewportPointerDown(event: PointerEvent) {
+                if (!imagePreview) {
+                        return;
+                }
+                if (event.target === event.currentTarget) {
+                        closeImagePreview();
+                }
         }
 
         $effect(() => {
@@ -2010,7 +2028,10 @@
                         bind:this={imagePreviewViewport}
                         onwheel={handlePreviewWheel}
                 >
-                        <div class="flex h-full w-full items-center justify-center p-6">
+                        <div
+                                class="flex h-full w-full items-center justify-center p-6"
+                                onpointerdown={handlePreviewViewportPointerDown}
+                        >
                                 <img
                                         src={imagePreview.url}
                                         alt={imagePreview.title}
