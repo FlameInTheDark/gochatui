@@ -2,7 +2,7 @@
         import { auth } from '$lib/stores/auth';
         import { selectedChannelId, selectedGuildId, channelsByGuild } from '$lib/stores/appState';
         import AttachmentUploader from './AttachmentUploader.svelte';
-        import { createEventDispatcher, onMount, tick } from 'svelte';
+        import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
         import { m } from '$lib/paraglide/messages.js';
         import { Send, X, Paperclip } from 'lucide-svelte';
         import {
@@ -20,6 +20,92 @@
         const dispatch = createEventDispatcher<{ sent: void }>();
 
         let ta: HTMLTextAreaElement | null = null;
+        let uploaderRef:
+                | {
+                          addFiles?: (
+                                  files: FileList | File[] | null | undefined
+                          ) => Promise<PendingAttachment[] | void>;
+                  }
+                | null = null;
+        let dropActive = $state(false);
+        let dragCounter = 0;
+        let removeGlobalDragListeners: (() => void) | null = null;
+
+        function hasFileTransfer(event: DragEvent): boolean {
+                const dt = event.dataTransfer;
+                if (!dt) return false;
+                if (dt.files && dt.files.length > 0) return true;
+                const types = dt.types ? Array.from(dt.types) : [];
+                return types.includes('Files');
+        }
+
+        function mergeAttachments(added: readonly PendingAttachment[] | null | undefined) {
+                if (!added || added.length === 0) {
+                        return;
+                }
+                const existing = new Set(attachments.map((attachment) => attachment.localId));
+                const next = [...attachments];
+                for (const attachment of added) {
+                        if (existing.has(attachment.localId)) {
+                                continue;
+                        }
+                        existing.add(attachment.localId);
+                        next.push(attachment);
+                }
+                if (next.length !== attachments.length) {
+                        attachments = next;
+                }
+        }
+
+        async function handleDroppedFiles(files: FileList | null | undefined) {
+                if (!files || files.length === 0) return;
+                if (!uploaderRef?.addFiles) return;
+                try {
+                        const added = await uploaderRef.addFiles(files);
+                        mergeAttachments(added ?? []);
+                } catch (err) {
+                        console.error('Failed to add dropped files', err);
+                }
+        }
+
+        function handleDragEnter(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                event.preventDefault();
+                dragCounter += 1;
+                dropActive = true;
+        }
+
+        function handleDragOver(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                event.preventDefault();
+                if (event.dataTransfer) {
+                        event.dataTransfer.dropEffect = 'copy';
+                }
+        }
+
+        function handleDragLeave(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                event.preventDefault();
+                dragCounter = Math.max(0, dragCounter - 1);
+                if (dragCounter === 0) {
+                        dropActive = false;
+                }
+        }
+
+        function handleDragEnd(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                dragCounter = 0;
+                dropActive = false;
+        }
+
+        async function handleDrop(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                event.preventDefault();
+                dragCounter = 0;
+                dropActive = false;
+                await handleDroppedFiles(event.dataTransfer?.files ?? null);
+                event.dataTransfer?.clearData();
+        }
 
         const VISUAL_ATTACHMENT_MAX_DIMENSION = 350;
         const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px);`;
@@ -45,9 +131,38 @@
 		ta.style.overflowY = ta.scrollHeight > next ? 'auto' : 'hidden';
 	}
 
-	onMount(() => {
-		autoResize();
-	});
+        onMount(() => {
+                autoResize();
+
+                if (typeof window === 'undefined') {
+                        return;
+                }
+
+                const win = window;
+                const listeners: Array<[keyof WindowEventMap, (event: DragEvent) => void]> = [
+                        ['dragenter', handleDragEnter],
+                        ['dragover', handleDragOver],
+                        ['dragleave', handleDragLeave],
+                        ['drop', handleDrop],
+                        ['dragend', handleDragEnd]
+                ];
+                const opts: boolean = true;
+                listeners.forEach(([event, handler]) => {
+                        win.addEventListener(event, handler as EventListener, opts);
+                });
+                removeGlobalDragListeners = () => {
+                        listeners.forEach(([event, handler]) => {
+                                win.removeEventListener(event, handler as EventListener, opts);
+                        });
+                };
+        });
+
+        onDestroy(() => {
+                if (removeGlobalDragListeners) {
+                        removeGlobalDragListeners();
+                        removeGlobalDragListeners = null;
+                }
+        });
 
         function removeAttachment(localId: string) {
                 const index = attachments.findIndex((attachment) => attachment.localId === localId);
@@ -362,7 +477,15 @@
         }
 </script>
 
-<div class="border-t border-[var(--stroke)] p-3">
+<div class="relative border-t border-[var(--stroke)] p-3">
+        {#if dropActive}
+                <div
+                        class="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-[var(--brand)]/70 bg-[var(--panel-strong)]/80 text-center text-sm font-semibold text-[var(--fg)]"
+                >
+                        <Paperclip class="h-5 w-5" stroke-width={2} />
+                        <span>{m.chat_drop_to_attach()}</span>
+                </div>
+        {/if}
         {#if attachments.length}
                 <div class="mb-3 flex flex-wrap gap-3">
                         {#each attachments as attachment (attachment.localId)}
@@ -406,10 +529,11 @@
                 class="chat-input flex items-end gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
         >
                 <AttachmentUploader
+                        bind:this={uploaderRef}
                         {attachments}
                         inline
-                        on:updated={() => {
-                                attachments = [...attachments];
+                        on:updated={(event: CustomEvent<PendingAttachment[]>) => {
+                                mergeAttachments(event.detail);
                         }}
                 />
                 <textarea
