@@ -610,6 +610,19 @@
         let imagePreviewDidPan = false;
         let detachPreviewResize: (() => void) | null = null;
         let suppressNextPointerUp = $state(false);
+        let suppressContextMenuUntil = $state(0);
+
+        function nowMs() {
+                if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+                        return performance.now();
+                }
+                return Date.now();
+        }
+
+        function scheduleContextMenuSuppression(durationMs = 250) {
+                suppressNextPointerUp = true;
+                suppressContextMenuUntil = nowMs() + durationMs;
+        }
         let activeVideoAttachments = $state<Record<string, boolean>>({});
         let videoPreviewPosters = $state<Record<string, string | null>>({});
         const videoPosterTasks = new Map<string, () => void>();
@@ -1202,7 +1215,20 @@
 		dispatch('deleted');
 	}
 
+        function shouldSuppressContextMenuEvent(): boolean {
+                if (suppressContextMenuUntil && nowMs() <= suppressContextMenuUntil) {
+                        suppressContextMenuUntil = 0;
+                        return true;
+                }
+                return false;
+        }
+
         function openMessageMenu(e: MouseEvent) {
+                if (shouldSuppressContextMenuEvent()) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 const mid = String((message as any)?.id ?? '');
@@ -1252,7 +1278,7 @@
 	}
 
         function handleRootPointerUp(event: PointerEvent) {
-                if (suppressNextPointerUp) {
+                if (suppressNextPointerUp || shouldSuppressContextMenuEvent()) {
                         suppressNextPointerUp = false;
                         event.preventDefault();
                         return;
@@ -1463,7 +1489,7 @@
 
         function handlePreviewOverlayClick(event: MouseEvent | PointerEvent) {
                 if (event.target === event.currentTarget) {
-                        suppressNextPointerUp = true;
+                        scheduleContextMenuSuppression();
                         event.preventDefault();
                         event.stopPropagation();
                         closeImagePreview();
@@ -1577,6 +1603,7 @@
                         return;
                 }
                 if (event.target === event.currentTarget) {
+                        scheduleContextMenuSuppression();
                         closeImagePreview();
                 }
         }
