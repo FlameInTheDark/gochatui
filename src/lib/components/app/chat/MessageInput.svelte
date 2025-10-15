@@ -14,9 +14,9 @@
                 type PendingMessage
         } from '$lib/stores/pendingMessages';
 
-        let content = '';
-        let attachments: PendingAttachment[] = [];
-        let sending = false;
+        let content = $state('');
+        let attachments = $state<PendingAttachment[]>([]);
+        let sending = $state(false);
         const dispatch = createEventDispatcher<{ sent: void }>();
 
         let ta: HTMLTextAreaElement | null = null;
