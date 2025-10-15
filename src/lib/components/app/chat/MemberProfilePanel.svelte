@@ -206,13 +206,19 @@
         });
 
         const discriminator = $derived.by(() => {
-                const memberDisc = (selectedMember as any)?.user?.discriminator;
-                if (typeof memberDisc === 'string' && memberDisc.trim()) {
-                        return memberDisc.trim();
-                }
-                const userDisc = (selectedUser as any)?.discriminator;
-                if (typeof userDisc === 'string' && userDisc.trim()) {
-                        return userDisc.trim();
+                const candidates = [
+                        (selectedMember as any)?.user?.discriminator,
+                        (selectedUser as any)?.discriminator,
+                        (selectedMember as any)?.relationship?.discriminator,
+                        (selectedUser as any)?.relationship?.discriminator,
+                        (selectedMember as any)?.discriminator
+                ];
+                for (const value of candidates) {
+                        if (typeof value !== 'string') continue;
+                        const trimmed = value.trim();
+                        if (trimmed) {
+                                return trimmed;
+                        }
                 }
                 return '';
         });
@@ -270,21 +276,55 @@
 
         function buildFriendIdentifier(): string | null {
                 const baseUser = (selectedMember as any)?.user ?? (selectedUser as any) ?? null;
-                if (baseUser) {
-                        const discriminatorValue = (baseUser as any)?.discriminator;
-                        const username =
-                                (baseUser as any)?.username ??
-                                (baseUser as any)?.name ??
-                                (baseUser as any)?.display_name ??
-                                (baseUser as any)?.global_name ??
-                                primaryName;
-                        if (typeof discriminatorValue === 'string' && discriminatorValue.trim()) {
-                                const normalizedName =
-                                        typeof username === 'string' && username.trim() ? username.trim() : primaryName;
-                                return `${normalizedName}#${discriminatorValue.trim()}`;
+                const candidateNames = [
+                        (selectedMember as any)?.username,
+                        (selectedMember as any)?.nick,
+                        (selectedMember as any)?.user?.username,
+                        (selectedMember as any)?.user?.name,
+                        (selectedMember as any)?.user?.display_name,
+                        (selectedMember as any)?.user?.global_name,
+                        (selectedUser as any)?.username,
+                        (selectedUser as any)?.name,
+                        (selectedUser as any)?.display_name,
+                        (selectedUser as any)?.global_name,
+                        (selectedUser as any)?.profile?.username,
+                        (selectedUser as any)?.profile?.name,
+                        (baseUser as any)?.username,
+                        (baseUser as any)?.name,
+                        (baseUser as any)?.display_name,
+                        (baseUser as any)?.global_name
+                ];
+                let normalizedName: string | null = null;
+                for (const value of candidateNames) {
+                        if (typeof value !== 'string') continue;
+                        const trimmed = value.trim();
+                        if (trimmed) {
+                                normalizedName = trimmed;
+                                break;
                         }
                 }
-                return userId ?? null;
+
+                const candidateDiscriminators = [
+                        (baseUser as any)?.discriminator,
+                        (selectedMember as any)?.relationship?.discriminator,
+                        (selectedUser as any)?.relationship?.discriminator,
+                        discriminator
+                ];
+                let normalizedDiscriminator: string | null = null;
+                for (const value of candidateDiscriminators) {
+                        if (typeof value !== 'string') continue;
+                        const trimmed = value.trim();
+                        if (trimmed) {
+                                normalizedDiscriminator = trimmed;
+                                break;
+                        }
+                }
+
+                if (normalizedName && normalizedDiscriminator) {
+                        return `${normalizedName}#${normalizedDiscriminator}`;
+                }
+
+                return null;
         }
 
         async function handleAddFriend() {
