@@ -452,6 +452,16 @@
                 aspectRatio: string | null;
         };
 
+        type AttachmentRenderItem = {
+                attachment: MessageAttachment;
+                meta: AttachmentMeta;
+                index: number;
+        };
+
+        type AttachmentRenderGroup =
+                | { type: 'gallery'; items: AttachmentRenderItem[] }
+                | { type: 'single'; item: AttachmentRenderItem };
+
         function formatContentType(value: unknown): string | null {
                 if (typeof value !== 'string') return null;
                 const trimmed = value.trim();
@@ -561,6 +571,42 @@
                         contentType: attachmentContentType(attachment),
                         aspectRatio,
                 };
+        }
+
+        function groupAttachmentsForRender(
+                attachments: MessageAttachment[] | null | undefined
+        ): AttachmentRenderGroup[] {
+                const result: AttachmentRenderGroup[] = [];
+                if (!attachments?.length) {
+                        return result;
+                }
+
+                let pendingGallery: AttachmentRenderItem[] = [];
+
+                const flushPendingGallery = () => {
+                        if (pendingGallery.length > 1) {
+                                result.push({ type: 'gallery', items: pendingGallery });
+                        } else if (pendingGallery.length === 1) {
+                                result.push({ type: 'single', item: pendingGallery[0] });
+                        }
+                        pendingGallery = [];
+                };
+
+                attachments.forEach((attachment, index) => {
+                        const meta = getAttachmentMeta(attachment);
+                        const item: AttachmentRenderItem = { attachment, meta, index };
+                        const eligibleForGallery = meta.kind === 'image' && !!meta.url;
+                        if (eligibleForGallery) {
+                                pendingGallery.push(item);
+                                return;
+                        }
+
+                        flushPendingGallery();
+                        result.push({ type: 'single', item });
+                });
+
+                flushPendingGallery();
+                return result;
         }
 
         type ImagePreviewState = {
@@ -2049,177 +2095,242 @@
 					</div>
 				{/if}
                                 {#if message.attachments?.length}
-                                        <div class={compact ? 'mt-1 flex flex-wrap gap-3' : 'mt-1.5 flex flex-wrap gap-3'}>
-                                                {#each message.attachments as attachment, attachmentIndex (attachmentIndex)}
-                                                        {@const meta = getAttachmentMeta(attachment)}
-{#if meta.kind === 'image' && meta.url}
-<div
-class="group relative inline-flex max-w-full items-center justify-center overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
-style={visualAttachmentWrapperStyle}
->
-<button
-type="button"
-class="flex h-full w-full cursor-zoom-in items-center justify-center bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
-onclick={() => openImagePreview(meta)}
-aria-label={`Open preview for ${meta.name}`}
->
-<img
-src={meta.url}
-alt={meta.name}
-class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
-loading="lazy"
-style={visualAttachmentMediaStyle}
-/>
-</button>
-{#if meta.url}
-<a
-class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full border border-black/20 bg-black/60 text-white shadow transition hover:bg-black/50"
-href={meta.url}
-download={meta.name}
-rel="noopener noreferrer"
-onclick={(event) => event.stopPropagation()}
-aria-label={`Download ${meta.name}`}
->
-<Download class="h-4 w-4" stroke-width={2} />
-</a>
-{/if}
-</div>
-{:else if meta.kind === 'video' && meta.url}
-{@const attachmentKey = attachmentStableKey(attachment, attachmentIndex)}
-{@const previewPoster = videoPreviewPosters[attachmentKey] ?? null}
-{@const previewAspectRatio = meta.aspectRatio ?? '16 / 9'}
-{#if isVideoAttachmentActive(attachmentKey)}
-<div
-class="relative inline-flex max-w-full overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
-style={visualAttachmentWrapperStyle}
->
-<div class="relative w-full bg-black" style={visualAttachmentMediaStyle}>
-<!-- svelte-ignore a11y_media_has_caption -->
-<video
-class="bg-black"
-src={meta.url}
-controls
-preload="metadata"
-playsinline
-style={`${visualAttachmentMediaStyle} display: block;`}
-></video>
-<div class="absolute right-2 top-2 flex gap-2">
-{#if meta.url}
-<a
-class="grid h-8 w-8 place-items-center rounded-full border border-white/30 bg-black/60 text-white transition hover:bg-black/45"
-href={meta.url}
-download={meta.name}
-rel="noopener noreferrer"
-onclick={(event) => event.stopPropagation()}
-aria-label={`Download ${meta.name}`}
->
-<Download class="h-4 w-4" stroke-width={2} />
-</a>
-{/if}
-<button
-type="button"
-class="grid h-8 w-8 place-items-center rounded-full border border-white/40 bg-black/60 text-white transition hover:bg-black/40"
-onclick={() => deactivateVideoAttachment(attachmentKey)}
-aria-label="Close video preview"
->
-<X class="h-4 w-4" stroke-width={2} />
-</button>
-</div>
-</div>
-</div>
-{:else}
-<div
-class="group relative inline-flex max-w-full overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
-style={visualAttachmentWrapperStyle}
->
-<button
-type="button"
-class="flex w-full cursor-pointer flex-col bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
-onclick={() => activateVideoAttachment(attachmentKey)}
-aria-label={`Play video ${meta.name}`}
->
-<div
-class="relative w-full overflow-hidden bg-black"
-style:aspect-ratio={previewAspectRatio}
-style={visualAttachmentMediaStyle}
->
-{#if previewPoster}
-<img
-src={previewPoster}
-alt={`Preview frame for ${meta.name}`}
-class="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-loading="lazy"
-/>
-<div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/40"></div>
-{:else}
-<div class="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900"></div>
-{/if}
-<div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 text-white transition group-hover:bg-black/40">
-<span class="rounded-full border border-white/60 bg-black/40 p-3">
-<Play class="h-6 w-6" stroke-width={2} />
-</span>
-<span class="text-sm font-medium">Play video</span>
-</div>
-</div>
-</button>
-{#if meta.url}
-<a
-class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full border border-black/20 bg-black/60 text-white shadow transition hover:bg-black/50"
-href={meta.url}
-download={meta.name}
-rel="noopener noreferrer"
-onclick={(event) => event.stopPropagation()}
-aria-label={`Download ${meta.name}`}
->
-<Download class="h-4 w-4" stroke-width={2} />
-</a>
-{/if}
-</div>
-{/if}
-                                                        {:else if meta.kind === 'audio' && meta.url}
-                                                                <div class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
-                                                                        <div class="truncate font-medium" title={meta.name}>
-                                                                                {meta.name}
-                                                                        </div>
-                                                                        <audio class="w-full" controls preload="metadata" src={meta.url}></audio>
-                                                                        {#if meta.sizeLabel || meta.contentType}
-                                                                                <div class="flex items-center justify-between text-[var(--muted)]">
-                                                                                        {#if meta.sizeLabel}
-                                                                                                <span>{meta.sizeLabel}</span>
+                                        {@const attachmentGroups = groupAttachmentsForRender(
+                                                (message.attachments ?? []) as MessageAttachment[]
+                                        )}
+                                        <div class={compact ? 'mt-1 flex flex-col gap-3' : 'mt-1.5 flex flex-col gap-3'}>
+                                                {#each attachmentGroups as group, groupIndex (
+                                                        group.type === 'gallery'
+                                                                ? group.items
+                                                                                .map((item) =>
+                                                                                        attachmentStableKey(
+                                                                                                item.attachment,
+                                                                                                item.index
+                                                                                        )
+                                                                                )
+                                                                                .join('|')
+                                                                : attachmentStableKey(
+                                                                                group.item.attachment,
+                                                                                group.item.index
+                                                                        )
+                                                )}
+                                                        {#if group.type === 'gallery'}
+                                                                <div class="grid max-w-[350px] grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">
+                                                                        {#each group.items as item, tileIndex (
+                                                                                attachmentStableKey(item.attachment, item.index)
+                                                                        )}
+                                                                                <div class="group relative aspect-square overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]">
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="flex h-full w-full cursor-zoom-in items-center justify-center bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
+                                                                                                onclick={() => openImagePreview(item.meta)}
+                                                                                                aria-label={`Open preview for ${item.meta.name}`}
+                                                                                        >
+                                                                                                {#if item.meta.url}
+                                                                                                        <img
+                                                                                                                src={item.meta.url}
+                                                                                                                alt={item.meta.name}
+                                                                                                                class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
+                                                                                                                loading="lazy"
+                                                                                                        />
+                                                                                                {/if}
+                                                                                        </button>
+                                                                                        {#if item.meta.url}
+                                                                                                <a
+                                                                                                        class="pointer-events-none absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full border border-black/20 bg-black/60 text-white opacity-0 shadow transition group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-black/50"
+                                                                                                        href={item.meta.url}
+                                                                                                        download={item.meta.name}
+                                                                                                        rel="noopener noreferrer"
+                                                                                                        onclick={(event) => event.stopPropagation()}
+                                                                                                        aria-label={`Download ${item.meta.name}`}
+                                                                                                >
+                                                                                                        <Download class="h-4 w-4" stroke-width={2} />
+                                                                                                </a>
                                                                                         {/if}
-                                                                                        {#if meta.contentType}
-                                                                                                <span>{meta.contentType}</span>
+                                                                                </div>
+                                                                        {/each}
+                                                                </div>
+                                                        {:else}
+                                                                {@const { attachment, meta, index } = group.item}
+                                                                {#if meta.kind === 'image' && meta.url}
+                                                                        <div
+                                                                                class="group relative inline-flex max-w-full items-center justify-center overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                                                                style={visualAttachmentWrapperStyle}
+                                                                        >
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class="flex h-full w-full cursor-zoom-in items-center justify-center bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
+                                                                                        onclick={() => openImagePreview(meta)}
+                                                                                        aria-label={`Open preview for ${meta.name}`}
+                                                                                >
+                                                                                        <img
+                                                                                                src={meta.url}
+                                                                                                alt={meta.name}
+                                                                                                class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
+                                                                                                loading="lazy"
+                                                                                                style={visualAttachmentMediaStyle}
+                                                                                        />
+                                                                                </button>
+                                                                                {#if meta.url}
+                                                                                        <a
+                                                                                                class="pointer-events-none absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full border border-black/20 bg-black/60 text-white opacity-0 shadow transition group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-black/50"
+                                                                                                href={meta.url}
+                                                                                                download={meta.name}
+                                                                                                rel="noopener noreferrer"
+                                                                                                onclick={(event) => event.stopPropagation()}
+                                                                                                aria-label={`Download ${meta.name}`}
+                                                                                        >
+                                                                                                <Download class="h-4 w-4" stroke-width={2} />
+                                                                                        </a>
+                                                                                {/if}
+                                                                        </div>
+                                                                {:else if meta.kind === 'video' && meta.url}
+                                                                        {@const attachmentKey = attachmentStableKey(attachment, index)}
+                                                                        {@const previewPoster = videoPreviewPosters[attachmentKey] ?? null}
+                                                                        {@const videoHasExplicitDimensions = meta.aspectRatio != null}
+                                                                        {@const previewAspectRatio =
+                                                                                        meta.aspectRatio ?? `${VISUAL_ATTACHMENT_MAX_DIMENSION} / ${VISUAL_ATTACHMENT_MAX_DIMENSION}`}
+                                                                        {#if isVideoAttachmentActive(attachmentKey)}
+                                                                                <div
+                                                                                        class="group relative inline-flex max-w-full overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                                                                        style={visualAttachmentWrapperStyle}
+                                                                                        style:width={videoHasExplicitDimensions ? undefined : `${VISUAL_ATTACHMENT_MAX_DIMENSION}px`}
+                                                                                        style:height={videoHasExplicitDimensions ? undefined : `${VISUAL_ATTACHMENT_MAX_DIMENSION}px`}
+                                                                                >
+                                                                                        <div
+                                                                                                class="relative h-full w-full bg-black"
+                                                                                                style={visualAttachmentMediaStyle}
+                                                                                                style:aspect-ratio={previewAspectRatio}
+                                                                                        >
+                                                                                                <!-- svelte-ignore a11y_media_has_caption -->
+                                                                                                <video
+                                                                                                        class="bg-black"
+                                                                                                        src={meta.url}
+                                                                                                        controls
+                                                                                                        preload="metadata"
+                                                                                                        playsinline
+                                                                                                        style={`${visualAttachmentMediaStyle} display: block;${videoHasExplicitDimensions ? '' : ' width: 100%; height: 100%;'}`}
+                                                                                                ></video>
+                                                                                                <div class="absolute right-2 top-2 flex gap-2">
+                                                                                                        {#if meta.url}
+                                                                                                                <a
+                                                                                                                        class="pointer-events-none grid h-8 w-8 place-items-center rounded-full border border-white/30 bg-black/60 text-white opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-black/45"
+                                                                                                                        href={meta.url}
+                                                                                                                        download={meta.name}
+                                                                                                                        rel="noopener noreferrer"
+                                                                                                                        onclick={(event) => event.stopPropagation()}
+                                                                                                                        aria-label={`Download ${meta.name}`}
+                                                                                                                >
+                                                                                                                        <Download class="h-4 w-4" stroke-width={2} />
+                                                                                                                </a>
+                                                                                                        {/if}
+                                                                                                        <button
+                                                                                                                type="button"
+                                                                                                                class="grid h-8 w-8 place-items-center rounded-full border border-white/40 bg-black/60 text-white transition hover:bg-black/40"
+                                                                                                                onclick={() => deactivateVideoAttachment(attachmentKey)}
+                                                                                                                aria-label="Close video preview"
+                                                                                                        >
+                                                                                                                <X class="h-4 w-4" stroke-width={2} />
+                                                                                                        </button>
+                                                                                                </div>
+                                                                                        </div>
+                                                                                </div>
+                                                                        {:else}
+                                                                                <div
+                                                                                        class="group relative inline-flex max-w-full overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                                                                        style={visualAttachmentWrapperStyle}
+                                                                                        style:width={videoHasExplicitDimensions ? undefined : `${VISUAL_ATTACHMENT_MAX_DIMENSION}px`}
+                                                                                        style:height={videoHasExplicitDimensions ? undefined : `${VISUAL_ATTACHMENT_MAX_DIMENSION}px`}
+                                                                                >
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="flex w-full cursor-pointer flex-col bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
+                                                                                                onclick={() => activateVideoAttachment(attachmentKey)}
+                                                                                                aria-label={`Play video ${meta.name}`}
+                                                                                        >
+                                                                                                <div
+                                                                                                        class="relative h-full w-full overflow-hidden bg-black"
+                                                                                                        style:aspect-ratio={previewAspectRatio}
+                                                                                                        style={visualAttachmentMediaStyle}
+                                                                                                >
+                                                                                                        {#if previewPoster}
+                                                                                                                <img
+                                                                                                                        src={previewPoster}
+                                                                                                                        alt={`Preview frame for ${meta.name}`}
+                                                                                                                        class="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                                                                                                                        loading="lazy"
+                                                                                                                />
+                                                                                                                <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/40"></div>
+                                                                                                        {:else}
+                                                                                                                <div class="absolute inset-0 bg-black"></div>
+                                                                                                        {/if}
+                                                                                                        <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 text-white transition group-hover:bg-black/40">
+                                                                                                                <span class="rounded-full border border-white/60 bg-black/40 p-3">
+                                                                                                                        <Play class="h-6 w-6" stroke-width={2} />
+                                                                                                                </span>
+                                                                                                                <span class="text-sm font-medium">Play video</span>
+                                                                                                        </div>
+                                                                                                </div>
+                                                                                        </button>
+                                                                                        {#if meta.url}
+                                                                                                <a
+                                                                                                        class="pointer-events-none absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full border border-black/20 bg-black/60 text-white opacity-0 shadow transition group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-black/50"
+                                                                                                        href={meta.url}
+                                                                                                        download={meta.name}
+                                                                                                        rel="noopener noreferrer"
+                                                                                                        onclick={(event) => event.stopPropagation()}
+                                                                                                        aria-label={`Download ${meta.name}`}
+                                                                                                >
+                                                                                                        <Download class="h-4 w-4" stroke-width={2} />
+                                                                                                </a>
                                                                                         {/if}
                                                                                 </div>
                                                                         {/if}
-                                                                        <div class="text-right">
-                                                                                <a
-                                                                                        class="text-[var(--brand)] hover:underline"
-                                                                                        href={meta.url}
-                                                                                        rel="noopener noreferrer"
-                                                                                        target="_blank"
-                                                                                >
-                                                                                        Open original
-                                                                                </a>
+                                                                {:else if meta.kind === 'audio' && meta.url}
+                                                                        <div class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
+                                                                                <div class="truncate font-medium" title={meta.name}>
+                                                                                        {meta.name}
+                                                                                </div>
+                                                                                <audio class="w-full" controls preload="metadata" src={meta.url}></audio>
+                                                                                {#if meta.sizeLabel || meta.contentType}
+                                                                                        <div class="flex items-center justify-between text-[var(--muted)]">
+                                                                                                {#if meta.sizeLabel}
+                                                                                                        <span>{meta.sizeLabel}</span>
+                                                                                                {/if}
+                                                                                                {#if meta.contentType}
+                                                                                                        <span>{meta.contentType}</span>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                {/if}
+                                                                                <div class="text-right">
+                                                                                        <a
+                                                                                                class="text-[var(--brand)] hover:underline"
+                                                                                                href={meta.url}
+                                                                                                rel="noopener noreferrer"
+                                                                                                target="_blank"
+                                                                                        >
+                                                                                                Open original
+                                                                                        </a>
+                                                                                </div>
                                                                         </div>
-                                                                </div>
-                                                        {:else}
-                                                                <a
-                                                                        class="flex max-w-[18rem] items-center gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
-                                                                        href={meta.url ?? undefined}
-                                                                        rel={meta.url ? 'noopener noreferrer' : undefined}
-                                                                        target={meta.url ? '_blank' : undefined}
-                                                                >
-                                                                        <Paperclip class="h-3.5 w-3.5 text-[var(--muted)]" stroke-width={2} />
-                                                                        <span class="truncate" title={meta.name}>
-                                                                                {meta.name}
-                                                                        </span>
-                                                                        {#if meta.sizeLabel}
-                                                                                <span class="ml-auto whitespace-nowrap text-[var(--muted)]">
-                                                                                        {meta.sizeLabel}
+                                                                {:else}
+                                                                        <a
+                                                                                class="flex max-w-[18rem] items-center gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                                href={meta.url ?? undefined}
+                                                                                rel={meta.url ? 'noopener noreferrer' : undefined}
+                                                                                target={meta.url ? '_blank' : undefined}
+                                                                        >
+                                                                                <Paperclip class="h-3.5 w-3.5 text-[var(--muted)]" stroke-width={2} />
+                                                                                <span class="truncate" title={meta.name}>
+                                                                                        {meta.name}
                                                                                 </span>
-                                                                        {/if}
-                                                                </a>
+                                                                                {#if meta.sizeLabel}
+                                                                                        <span class="ml-auto whitespace-nowrap text-[var(--muted)]">
+                                                                                                {meta.sizeLabel}
+                                                                                        </span>
+                                                                                {/if}
+                                                                        </a>
+                                                                {/if}
                                                         {/if}
                                                 {/each}
                                         </div>
