@@ -112,11 +112,15 @@
                                 const data = res.data as {
                                         id?: string | number | bigint;
                                         attachment_id?: string | number | bigint;
+                                        attachmentId?: string | number | bigint;
                                         upload_url?: string | null;
+                                        uploadUrl?: string | null;
                                         upload_headers?: unknown;
+                                        uploadHeaders?: unknown;
                                         headers?: unknown;
                                 };
-                                const rawId = data.id ?? data.attachment_id;
+                                const rawId =
+                                        data.id ?? data.attachment_id ?? data.attachmentId;
                                 if (rawId == null) {
                                         error = 'Attachment response missing id';
                                         continue;
@@ -133,13 +137,23 @@
                                         continue;
                                 }
 
-                                const uploadUrl = typeof data.upload_url === 'string' ? data.upload_url : null;
+                                const uploadUrlCandidate =
+                                        typeof data.upload_url === 'string'
+                                                ? data.upload_url
+                                                : typeof data.uploadUrl === 'string'
+                                                  ? data.uploadUrl
+                                                  : null;
+                                const uploadUrl = uploadUrlCandidate && uploadUrlCandidate.trim()
+                                        ? uploadUrlCandidate
+                                        : null;
                                 if (!uploadUrl) {
                                         error = 'Attachment response missing upload URL';
                                         continue;
                                 }
 
-                                const uploadHeaders = normalizeUploadHeaders(data.upload_headers ?? data.headers);
+                                const uploadHeaders = normalizeUploadHeaders(
+                                        data.upload_headers ?? data.uploadHeaders ?? data.headers
+                                );
 
                                 const previewUrl = createPreviewUrl(file);
                                 const localId = createLocalId();
