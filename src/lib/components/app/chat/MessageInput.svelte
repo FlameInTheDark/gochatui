@@ -39,11 +39,30 @@
                 return types.includes('Files');
         }
 
+        function mergeAttachments(added: readonly PendingAttachment[] | null | undefined) {
+                if (!added || added.length === 0) {
+                        return;
+                }
+                const existing = new Set(attachments.map((attachment) => attachment.localId));
+                const next = [...attachments];
+                for (const attachment of added) {
+                        if (existing.has(attachment.localId)) {
+                                continue;
+                        }
+                        existing.add(attachment.localId);
+                        next.push(attachment);
+                }
+                if (next.length !== attachments.length) {
+                        attachments = next;
+                }
+        }
+
         async function handleDroppedFiles(files: FileList | null | undefined) {
                 if (!files || files.length === 0) return;
                 if (!uploaderRef?.addFiles) return;
                 try {
-                        await uploaderRef.addFiles(files);
+                        const added = await uploaderRef.addFiles(files);
+                        mergeAttachments(added ?? []);
                 } catch (err) {
                         console.error('Failed to add dropped files', err);
                 }
@@ -514,11 +533,7 @@
                         {attachments}
                         inline
                         on:updated={(event: CustomEvent<PendingAttachment[]>) => {
-                                const added = event.detail ?? [];
-                                if (!added.length) {
-                                        return;
-                                }
-                                attachments = [...attachments];
+                                mergeAttachments(event.detail);
                         }}
                 />
                 <textarea
