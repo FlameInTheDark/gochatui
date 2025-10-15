@@ -658,6 +658,7 @@
                                 video.removeEventListener('loadeddata', handleLoadedData);
                                 video.removeEventListener('error', handleError);
                                 video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                                video.removeEventListener('seeked', handleSeeked);
                                 signal.removeEventListener('abort', handleAbort);
                                 try {
                                         video.pause();
@@ -682,9 +683,10 @@
                                 resolve(poster);
                         };
 
-                        const handleAbort = () => finalize(null);
-
-                        const handleLoadedData = () => {
+                        const tryCaptureFrame = () => {
+                                if (settled) {
+                                        return;
+                                }
                                 try {
                                         const width = video.videoWidth;
                                         const height = video.videoHeight;
@@ -712,15 +714,34 @@
                                 }
                         };
 
+                        const handleAbort = () => finalize(null);
+
+                        const handleLoadedData = () => tryCaptureFrame();
+
+                        const handleSeeked = () => tryCaptureFrame();
+
                         const handleError = () => finalize(null);
 
                         const handleLoadedMetadata = () => {
                                 try {
                                         const hasDuration = Number.isFinite(video.duration) && video.duration > 0;
                                         const epsilon = 0.001;
+                                        const safeDuration = hasDuration ? Math.max(video.duration, epsilon) : epsilon;
+                                        const preferredTime = Math.min(Math.max(epsilon, safeDuration / 2), 1);
                                         const targetTime = hasDuration
-                                                ? Math.min(Math.max(epsilon, video.duration - epsilon), 0.1)
+                                                ? Math.min(Math.max(epsilon, Math.min(safeDuration - epsilon, preferredTime)), safeDuration)
                                                 : epsilon;
+                                        const haveCurrentData =
+                                                typeof HTMLMediaElement !== 'undefined'
+                                                        ? HTMLMediaElement.HAVE_CURRENT_DATA
+                                                        : 2;
+                                        if (
+                                                video.readyState >= haveCurrentData &&
+                                                Math.abs(video.currentTime - targetTime) < epsilon
+                                        ) {
+                                                tryCaptureFrame();
+                                                return;
+                                        }
                                         if (!Number.isNaN(targetTime) && video.currentTime !== targetTime) {
                                                 video.currentTime = targetTime;
                                         }
@@ -731,6 +752,7 @@
 
                         signal.addEventListener('abort', handleAbort, { once: true });
                         video.addEventListener('loadeddata', handleLoadedData, { once: true });
+                        video.addEventListener('seeked', handleSeeked, { once: true });
                         video.addEventListener('error', handleError, { once: true });
                         video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
 
@@ -756,14 +778,21 @@
                 });
         }
 
-        async function capturePosterFromFetch(url: string, signal: AbortSignal): Promise<string | null> {
+        async function capturePosterFromFetch(
+                url: string,
+                signal: AbortSignal,
+                sameOrigin: boolean
+        ): Promise<string | null> {
                 if (signal.aborted || typeof fetch !== 'function' || typeof URL === 'undefined') {
                         return null;
                 }
 
                 let response: Response;
                 try {
-                        response = await fetch(url, { signal, credentials: 'include' });
+                        response = await fetch(url, {
+                                signal,
+                                credentials: sameOrigin ? 'include' : 'omit',
+                        });
                 } catch {
                         return null;
                 }
@@ -911,7 +940,7 @@
                 }
 
                 try {
-                        return await capturePosterFromFetch(url, signal);
+                        return await capturePosterFromFetch(url, signal, sameOrigin);
                 } catch {
                         return null;
                 }
