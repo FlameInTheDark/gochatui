@@ -452,6 +452,7 @@
                 aspectRatio: string | null;
                 width: number | null;
                 height: number | null;
+                isGif: boolean;
         };
 
         type AttachmentRenderItem = {
@@ -564,16 +565,25 @@
                 const height = parseAttachmentDimension((attachment as any)?.height);
                 const aspectRatio =
                         width != null && height != null ? `${width} / ${height}` : null;
+                const kind = detectAttachmentKind(attachment);
+                const name = attachmentFilename(attachment);
+                const contentType = attachmentContentType(attachment);
+                const lowerContentType = contentType?.toLowerCase() ?? null;
+                const lowerName = name.toLowerCase();
+                const isGif =
+                        kind === 'image' &&
+                        (lowerContentType === 'image/gif' || lowerName.endsWith('.gif'));
 
                 return {
                         url: attachmentUrl(attachment),
-                        kind: detectAttachmentKind(attachment),
+                        kind,
                         sizeLabel: formatAttachmentSize((attachment as any)?.size),
-                        name: attachmentFilename(attachment),
-                        contentType: attachmentContentType(attachment),
+                        name,
+                        contentType,
                         aspectRatio,
                         width,
                         height,
+                        isGif,
                 };
         }
 
@@ -627,6 +637,76 @@
         const VISUAL_ATTACHMENT_MAX_DIMENSION = 350;
         const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px);`;
         const visualAttachmentMediaStyle = `max-width: 100%; max-height: ${VISUAL_ATTACHMENT_MAX_DIMENSION}px; width: auto; height: auto;`;
+        const GIF_PLACEHOLDER_SRC =
+                'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+        type GifPlaybackParams = {
+                enabled: boolean;
+                src: string | null;
+        };
+
+        function gifPlayback(node: HTMLImageElement, params: GifPlaybackParams) {
+                let currentParams = params;
+                let currentSrc = currentParams?.src ?? null;
+                let enabled = Boolean(currentParams?.enabled && currentSrc);
+                let observer: IntersectionObserver | null = null;
+
+                const cleanupObserver = () => {
+                        observer?.disconnect();
+                        observer = null;
+                };
+
+                const setPlaying = (shouldPlay: boolean) => {
+                        if (!enabled) {
+                                return;
+                        }
+
+                        const target = shouldPlay && currentSrc ? currentSrc : GIF_PLACEHOLDER_SRC;
+                        if (node.src !== target) {
+                                node.src = target;
+                        }
+                };
+
+                const handleIntersect = (entries: IntersectionObserverEntry[]) => {
+                        for (const entry of entries) {
+                                if (entry.target === node) {
+                                        const shouldPlay = entry.isIntersecting && entry.intersectionRatio > 0;
+                                        setPlaying(shouldPlay);
+                                }
+                        }
+                };
+
+                const initObserver = () => {
+                        cleanupObserver();
+                        currentSrc = currentParams?.src ?? null;
+                        enabled = Boolean(currentParams?.enabled && currentSrc);
+
+                        if (!enabled) {
+                                return;
+                        }
+
+                        observer = new IntersectionObserver(handleIntersect, {
+                                threshold: [0, 0.1, 0.25, 0.5, 0.75, 1],
+                        });
+                        observer.observe(node);
+                        setPlaying(false);
+                };
+
+                initObserver();
+
+                return {
+                        update(nextParams: GifPlaybackParams) {
+                                currentParams = nextParams;
+                                initObserver();
+                        },
+                        destroy() {
+                                cleanupObserver();
+                                if (enabled && currentSrc) {
+                                        node.src = currentSrc;
+                                }
+                        },
+                };
+        }
 
         function computeVisualAttachmentBounds(
                 meta: Pick<AttachmentMeta, 'width' | 'height'>
@@ -2171,12 +2251,16 @@
                                                                                                 aria-label={`Open preview for ${item.meta.name}`}
                                                                                         >
                                                                                                 {#if item.meta.url}
-                                                                                                        <img
-                                                                                                                src={item.meta.url}
-                                                                                                                alt={item.meta.name}
-                                                                                                                class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
-                                                                                                                loading="lazy"
-                                                                                                        />
+                                                                                                <img
+                                                                                                        src={item.meta.isGif ? GIF_PLACEHOLDER_SRC : item.meta.url}
+                                                                                                        alt={item.meta.name}
+                                                                                                        class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
+                                                                                                        loading="lazy"
+                                                                                                        use:gifPlayback={{
+                                                                                                                enabled: item.meta.isGif,
+                                                                                                                src: item.meta.url,
+                                                                                                        }}
+                                                                                                />
                                                                                                 {/if}
                                                                                         </button>
                                                                                         {#if item.meta.url}
@@ -2211,11 +2295,15 @@
                                                                                         aria-label={`Open preview for ${meta.name}`}
                                                                                 >
                                                                                         <img
-                                                                                                src={meta.url}
+                                                                                                src={meta.isGif ? GIF_PLACEHOLDER_SRC : meta.url}
                                                                                                 alt={meta.name}
                                                                                                 class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
                                                                                                 loading="lazy"
                                                                                                 style={visualAttachmentMediaStyle}
+                                                                                                use:gifPlayback={{
+                                                                                                        enabled: meta.isGif,
+                                                                                                        src: meta.url,
+                                                                                                }}
                                                                                         />
                                                                                 </button>
                                                                                 {#if meta.url}
