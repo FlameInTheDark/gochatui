@@ -450,6 +450,8 @@
                 name: string;
                 contentType: string | null;
                 aspectRatio: string | null;
+                width: number | null;
+                height: number | null;
         };
 
         type AttachmentRenderItem = {
@@ -570,6 +572,8 @@
                         name: attachmentFilename(attachment),
                         contentType: attachmentContentType(attachment),
                         aspectRatio,
+                        width,
+                        height,
                 };
         }
 
@@ -623,6 +627,43 @@
         const VISUAL_ATTACHMENT_MAX_DIMENSION = 350;
         const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px);`;
         const visualAttachmentMediaStyle = `max-width: 100%; max-height: ${VISUAL_ATTACHMENT_MAX_DIMENSION}px; width: auto; height: auto;`;
+
+        function computeVisualAttachmentBounds(
+                meta: Pick<AttachmentMeta, 'width' | 'height'>
+        ): { width: number; height: number } {
+                const { width, height } = meta;
+                if (width != null && height != null) {
+                        const scale = Math.min(
+                                VISUAL_ATTACHMENT_MAX_DIMENSION / width,
+                                VISUAL_ATTACHMENT_MAX_DIMENSION / height,
+                                1
+                        );
+                        const scaledWidth = Math.max(1, Math.round(width * scale));
+                        const scaledHeight = Math.max(1, Math.round(height * scale));
+                        return { width: scaledWidth, height: scaledHeight };
+                }
+
+                return {
+                        width: VISUAL_ATTACHMENT_MAX_DIMENSION,
+                        height: VISUAL_ATTACHMENT_MAX_DIMENSION,
+                };
+        }
+
+        function galleryGridTemplate(itemCount: number): string {
+                if (itemCount <= 1) {
+                        return 'grid-template-columns: repeat(1, minmax(0, 1fr));';
+                }
+
+                if (itemCount === 2) {
+                        return 'grid-template-columns: repeat(2, minmax(0, 1fr));';
+                }
+
+                if (itemCount === 3 || itemCount === 4) {
+                        return 'grid-template-columns: repeat(2, minmax(0, 1fr));';
+                }
+
+                return 'grid-template-columns: repeat(3, minmax(0, 1fr));';
+        }
 
         function clamp(value: number, min: number, max: number): number {
                 return Math.min(Math.max(value, min), max);
@@ -2115,7 +2156,10 @@
                                                                         )
                                                 )}
                                                         {#if group.type === 'gallery'}
-                                                                <div class="grid max-w-[350px] grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">
+                                                                <div
+                                                                        class="grid max-w-[350px] gap-2"
+                                                                        style={galleryGridTemplate(group.items.length)}
+                                                                >
                                                                         {#each group.items as item, tileIndex (
                                                                                 attachmentStableKey(item.attachment, item.index)
                                                                         )}
@@ -2153,9 +2197,12 @@
                                                         {:else}
                                                                 {@const { attachment, meta, index } = group.item}
                                                                 {#if meta.kind === 'image' && meta.url}
+                                                                        {@const imageBounds = computeVisualAttachmentBounds(meta)}
                                                                         <div
                                                                                 class="group relative inline-flex max-w-full items-center justify-center overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
                                                                                 style={visualAttachmentWrapperStyle}
+                                                                                style:width={`${imageBounds.width}px`}
+                                                                                style:height={`${imageBounds.height}px`}
                                                                         >
                                                                                 <button
                                                                                         type="button"
@@ -2190,12 +2237,13 @@
                                                                         {@const videoHasExplicitDimensions = meta.aspectRatio != null}
                                                                         {@const previewAspectRatio =
                                                                                         meta.aspectRatio ?? `${VISUAL_ATTACHMENT_MAX_DIMENSION} / ${VISUAL_ATTACHMENT_MAX_DIMENSION}`}
+                                                                        {@const videoBounds = computeVisualAttachmentBounds(meta)}
                                                                         {#if isVideoAttachmentActive(attachmentKey)}
                                                                                 <div
                                                                                         class="group relative inline-flex max-w-full overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
                                                                                         style={visualAttachmentWrapperStyle}
-                                                                                        style:width={videoHasExplicitDimensions ? undefined : `${VISUAL_ATTACHMENT_MAX_DIMENSION}px`}
-                                                                                        style:height={videoHasExplicitDimensions ? undefined : `${VISUAL_ATTACHMENT_MAX_DIMENSION}px`}
+                                                                                        style:width={`${videoBounds.width}px`}
+                                                                                        style:height={`${videoBounds.height}px`}
                                                                                 >
                                                                                         <div
                                                                                                 class="relative h-full w-full bg-black"
@@ -2239,8 +2287,8 @@
                                                                                 <div
                                                                                         class="group relative inline-flex max-w-full overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
                                                                                         style={visualAttachmentWrapperStyle}
-                                                                                        style:width={videoHasExplicitDimensions ? undefined : `${VISUAL_ATTACHMENT_MAX_DIMENSION}px`}
-                                                                                        style:height={videoHasExplicitDimensions ? undefined : `${VISUAL_ATTACHMENT_MAX_DIMENSION}px`}
+                                                                                        style:width={`${videoBounds.width}px`}
+                                                                                        style:height={`${videoBounds.height}px`}
                                                                                 >
                                                                                         <button
                                                                                                 type="button"
