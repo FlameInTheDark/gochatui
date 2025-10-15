@@ -574,7 +574,7 @@
         const IMAGE_ZOOM_MAX = 6;
         const IMAGE_ZOOM_STEP = 0.25;
 
-        const VISUAL_ATTACHMENT_MAX_DIMENSION = 550;
+        const VISUAL_ATTACHMENT_MAX_DIMENSION = 350;
         const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px); width: fit-content;`;
         const visualAttachmentMediaStyle = `max-width: 100%; max-height: ${VISUAL_ATTACHMENT_MAX_DIMENSION}px; width: auto; height: auto;`;
 

@@ -53,7 +53,7 @@
                 }
         }
 
-        const VISUAL_ATTACHMENT_MAX_DIMENSION = 550;
+        const VISUAL_ATTACHMENT_MAX_DIMENSION = 350;
         const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px); width: fit-content;`;
         const visualAttachmentMediaStyle = `max-width: 100%; max-height: ${VISUAL_ATTACHMENT_MAX_DIMENSION}px; width: auto; height: auto;`;
         const visualAttachmentPlaceholderStyle = `min-height: min(${VISUAL_ATTACHMENT_MAX_DIMENSION}px, 8rem);`;
