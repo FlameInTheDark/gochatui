@@ -52,6 +52,11 @@
                                 return '';
                 }
         }
+
+        const VISUAL_ATTACHMENT_MAX_DIMENSION = 550;
+        const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px); width: fit-content;`;
+        const visualAttachmentMediaStyle = `max-width: 100%; max-height: ${VISUAL_ATTACHMENT_MAX_DIMENSION}px; width: auto; height: auto;`;
+        const visualAttachmentPlaceholderStyle = `min-height: min(${VISUAL_ATTACHMENT_MAX_DIMENSION}px, 8rem);`;
 </script>
 
 <div class="flex gap-3 px-3 py-2 opacity-90" data-pending-message>
@@ -77,15 +82,22 @@
                 {#if message.attachments.length}
                         <div class="mt-2 flex flex-wrap gap-3">
                                 {#each message.attachments as attachment (attachment.localId)}
-                                        <div class="relative w-40 overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs">
+                                        <div
+                                                class="relative inline-flex max-w-full flex-col overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs"
+                                                style={visualAttachmentWrapperStyle}
+                                        >
                                                 {#if attachment.isImage && attachment.previewUrl}
                                                         <img
                                                                 src={attachment.previewUrl}
                                                                 alt={attachment.filename}
-                                                                class="h-32 w-full object-cover"
+                                                                class="block select-none"
+                                                                style={visualAttachmentMediaStyle}
                                                         />
                                                 {:else}
-                                                        <div class="grid h-32 place-items-center bg-[var(--panel-strong)] text-[var(--muted)]">
+                                                        <div
+                                                                class="grid place-items-center bg-[var(--panel-strong)] text-[var(--muted)]"
+                                                                style={`${visualAttachmentMediaStyle} ${visualAttachmentPlaceholderStyle}`}
+                                                        >
                                                                 <Paperclip class="h-6 w-6" stroke-width={2} />
                                                         </div>
                                                 {/if}

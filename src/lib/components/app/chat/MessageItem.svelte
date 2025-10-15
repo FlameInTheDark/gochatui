@@ -574,6 +574,10 @@
         const IMAGE_ZOOM_MAX = 6;
         const IMAGE_ZOOM_STEP = 0.25;
 
+        const VISUAL_ATTACHMENT_MAX_DIMENSION = 550;
+        const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px); width: fit-content;`;
+        const visualAttachmentMediaStyle = `max-width: 100%; max-height: ${VISUAL_ATTACHMENT_MAX_DIMENSION}px; width: auto; height: auto;`;
+
         function clamp(value: number, min: number, max: number): number {
                 return Math.min(Math.max(value, min), max);
         }
@@ -2049,17 +2053,19 @@
                                                 {#each message.attachments as attachment, attachmentIndex (attachmentIndex)}
                                                         {@const meta = getAttachmentMeta(attachment)}
                                                         {#if meta.kind === 'image' && meta.url}
-                                                                <button
-                                                                        type="button"
-                                                                        class="group block max-w-xs overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
-                                                                        onclick={() => openImagePreview(meta)}
-                                                                >
-                                                                        <img
-                                                                                src={meta.url}
-                                                                                alt={meta.name}
-                                                                                class="max-h-64 w-full object-cover transition group-hover:brightness-110"
-                                                                                loading="lazy"
-                                                                        />
+                                                        <button
+                                                                type="button"
+                                                                class="group inline-flex max-w-full flex-col overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                style={visualAttachmentWrapperStyle}
+                                                                onclick={() => openImagePreview(meta)}
+                                                        >
+                                                                <img
+                                                                        src={meta.url}
+                                                                        alt={meta.name}
+                                                                        class="block select-none transition group-hover:brightness-110"
+                                                                        loading="lazy"
+                                                                        style={visualAttachmentMediaStyle}
+                                                                />
                                                                         <div class="border-t border-[var(--stroke)] px-2 py-1">
                                                                                 <div class="truncate font-medium" title={meta.name}>
                                                                                         {meta.name}
@@ -2082,15 +2088,19 @@
                                                                 {@const previewPoster = videoPreviewPosters[attachmentKey] ?? null}
                                                                 {@const previewAspectRatio = meta.aspectRatio ?? '16 / 9'}
                                                                 {#if isVideoAttachmentActive(attachmentKey)}
-                                                                        <div class="w-full max-w-xl overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]">
-                                                                                <div class="relative bg-black">
+                                                                        <div
+                                                                                class="inline-flex max-w-full flex-col overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-xs text-[var(--fg)]"
+                                                                                style={visualAttachmentWrapperStyle}
+                                                                        >
+                                                                                <div class="relative bg-black" style={visualAttachmentMediaStyle}>
                                                                                         <!-- svelte-ignore a11y_media_has_caption -->
                                                                                         <video
-                                                                                                class="max-h-80 w-full bg-black"
+                                                                                                class="bg-black"
                                                                                                 src={meta.url}
                                                                                                 controls
                                                                                                 preload="metadata"
                                                                                                 playsinline
+                                                                                                style={`${visualAttachmentMediaStyle} display: block;`}
                                                                                         ></video>
                                                                                         <button
                                                                                                 type="button"
@@ -2132,12 +2142,14 @@
                                                                 {:else}
                                                                         <button
                                                                                 type="button"
-                                                                                class="group block w-full max-w-xl overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                                class="group inline-flex max-w-full flex-col overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] text-left text-xs text-[var(--fg)]"
+                                                                                style={visualAttachmentWrapperStyle}
                                                                                 onclick={() => activateVideoAttachment(attachmentKey)}
                                                                         >
                                                                                 <div
-                                                                                        class="relative w-full overflow-hidden bg-black"
+                                                                                        class="relative overflow-hidden bg-black"
                                                                                         style:aspect-ratio={previewAspectRatio}
+                                                                                        style={visualAttachmentMediaStyle}
                                                                                 >
                                                                                         {#if previewPoster}
                                                                                                 <img
