@@ -609,6 +609,20 @@
         let imagePreviewDragDistance = 0;
         let imagePreviewDidPan = false;
         let detachPreviewResize: (() => void) | null = null;
+        let suppressNextPointerUp = $state(false);
+        let suppressContextMenuUntil = $state(0);
+
+        function nowMs() {
+                if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+                        return performance.now();
+                }
+                return Date.now();
+        }
+
+        function scheduleContextMenuSuppression(durationMs = 250) {
+                suppressNextPointerUp = true;
+                suppressContextMenuUntil = nowMs() + durationMs;
+        }
         let activeVideoAttachments = $state<Record<string, boolean>>({});
         let videoPreviewPosters = $state<Record<string, string | null>>({});
         const videoPosterTasks = new Map<string, () => void>();
@@ -1201,7 +1215,20 @@
 		dispatch('deleted');
 	}
 
+        function shouldSuppressContextMenuEvent(): boolean {
+                if (suppressContextMenuUntil && nowMs() <= suppressContextMenuUntil) {
+                        suppressContextMenuUntil = 0;
+                        return true;
+                }
+                return false;
+        }
+
         function openMessageMenu(e: MouseEvent) {
+                if (shouldSuppressContextMenuEvent()) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 const mid = String((message as any)?.id ?? '');
@@ -1250,9 +1277,14 @@
 		);
 	}
 
-	function handleRootPointerUp(event: PointerEvent) {
-		if (event.button !== 0) return;
-		if (event.defaultPrevented || isEditing) return;
+        function handleRootPointerUp(event: PointerEvent) {
+                if (suppressNextPointerUp || shouldSuppressContextMenuEvent()) {
+                        suppressNextPointerUp = false;
+                        event.preventDefault();
+                        return;
+                }
+                if (event.button !== 0) return;
+                if (event.defaultPrevented || isEditing) return;
 		if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
 		const target = event.target as HTMLElement | null;
 		if (
@@ -1457,8 +1489,14 @@
 
         function handlePreviewOverlayClick(event: MouseEvent | PointerEvent) {
                 if (event.target === event.currentTarget) {
+                        scheduleContextMenuSuppression();
+                        event.preventDefault();
+                        event.stopPropagation();
                         closeImagePreview();
+                        return;
                 }
+
+                event.stopPropagation();
         }
 
         function handleImagePreviewLoad(event: Event) {
@@ -1565,6 +1603,7 @@
                         return;
                 }
                 if (event.target === event.currentTarget) {
+                        scheduleContextMenuSuppression();
                         closeImagePreview();
                 }
         }
