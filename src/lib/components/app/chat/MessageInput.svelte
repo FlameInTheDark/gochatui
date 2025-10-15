@@ -20,7 +20,13 @@
         const dispatch = createEventDispatcher<{ sent: void }>();
 
         let ta: HTMLTextAreaElement | null = null;
-        let uploaderRef: { addFiles?: (files: FileList | File[] | null | undefined) => Promise<void> } | null = null;
+        let uploaderRef:
+                | {
+                          addFiles?: (
+                                  files: FileList | File[] | null | undefined
+                          ) => Promise<PendingAttachment[] | void>;
+                  }
+                | null = null;
         let dropActive = $state(false);
         let dragCounter = 0;
         let removeGlobalDragListeners: (() => void) | null = null;
@@ -507,8 +513,12 @@
                         bind:this={uploaderRef}
                         {attachments}
                         inline
-                        on:updated={() => {
-                                attachments = [...attachments];
+                        on:updated={(event: CustomEvent<PendingAttachment[]>) => {
+                                const added = event.detail ?? [];
+                                if (!added.length) {
+                                        return;
+                                }
+                                attachments = [...attachments, ...added];
                         }}
                 />
                 <textarea
