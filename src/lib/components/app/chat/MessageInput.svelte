@@ -19,7 +19,12 @@
         let sending = false;
         const dispatch = createEventDispatcher<{ sent: void }>();
 
-	let ta: HTMLTextAreaElement | null = null;
+        let ta: HTMLTextAreaElement | null = null;
+
+        const VISUAL_ATTACHMENT_MAX_DIMENSION = 350;
+        const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px); width: fit-content;`;
+        const visualAttachmentMediaStyle = `max-width: 100%; max-height: ${VISUAL_ATTACHMENT_MAX_DIMENSION}px; width: auto; height: auto;`;
+        const visualAttachmentPlaceholderStyle = `min-height: min(${VISUAL_ATTACHMENT_MAX_DIMENSION}px, 8rem);`;
 
 	// Derive current channel name to show in placeholder
 	function currentChannel() {
@@ -361,15 +366,22 @@
         {#if attachments.length}
                 <div class="mb-3 flex flex-wrap gap-3">
                         {#each attachments as attachment (attachment.localId)}
-                                <div class="relative w-40 overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]">
+                                <div
+                                        class="relative inline-flex max-w-full flex-col overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                        style={visualAttachmentWrapperStyle}
+                                >
                                         {#if attachment.isImage && attachment.previewUrl}
                                                 <img
                                                         src={attachment.previewUrl}
                                                         alt={attachment.filename}
-                                                        class="h-32 w-full object-cover"
+                                                        class="block select-none"
+                                                        style={visualAttachmentMediaStyle}
                                                 />
                                         {:else}
-                                                <div class="grid h-32 place-items-center bg-[var(--panel-strong)] text-[var(--muted)]">
+                                                <div
+                                                        class="grid place-items-center bg-[var(--panel-strong)] text-[var(--muted)]"
+                                                        style={`${visualAttachmentMediaStyle} ${visualAttachmentPlaceholderStyle}`}
+                                                >
                                                         <Paperclip class="h-6 w-6" stroke-width={2} />
                                                 </div>
                                         {/if}
