@@ -245,6 +245,25 @@ export interface DtoAttachmentUpload {
 /**
  * 
  * @export
+ * @interface DtoAvatarUpload
+ */
+export interface DtoAvatarUpload {
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatarUpload
+     */
+    'id'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatarUpload
+     */
+    'user_id'?: number;
+}
+/**
+ * 
+ * @export
  * @interface DtoChannel
  */
 export interface DtoChannel {
@@ -591,6 +610,12 @@ export interface DtoUser {
      * @memberof DtoUser
      */
     'avatar'?: number;
+    /**
+     * 
+     * @type {string}
+     * @memberof DtoUser
+     */
+    'avatar_url'?: string;
     /**
      * 
      * @type {string}
@@ -1267,6 +1292,25 @@ export interface SearchMessageSearchResponse {
      * @memberof SearchMessageSearchResponse
      */
     'pages'?: number;
+}
+/**
+ * 
+ * @export
+ * @interface UserCreateAvatarRequest
+ */
+export interface UserCreateAvatarRequest {
+    /**
+     * 
+     * @type {string}
+     * @memberof UserCreateAvatarRequest
+     */
+    'content_type'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof UserCreateAvatarRequest
+     */
+    'file_size'?: number;
 }
 /**
  * 
@@ -2428,6 +2472,172 @@ export class AuthApi extends BaseAPI implements AuthApiInterface {
      */
     public authResetPost(requestParameters: AuthApiAuthResetPostRequest, options?: RawAxiosRequestConfig) {
         return AuthApiFp(this.configuration).authResetPost(requestParameters.authPasswordResetRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+}
+
+
+
+/**
+ * AvatarsApi - axios parameter creator
+ * @export
+ */
+export const AvatarsApiAxiosParamCreator = function (configuration?: Configuration) {
+    return {
+        /**
+         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+         * @summary Upload user avatar
+         * @param {number} userId User ID
+         * @param {number} avatarId Avatar ID
+         * @param {Array<number>} requestBody Binary image payload
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        avatarsUserIdAvatarIdPost: async (userId: number, avatarId: number, requestBody: Array<number>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'userId' is not null or undefined
+            assertParamExists('avatarsUserIdAvatarIdPost', 'userId', userId)
+            // verify required parameter 'avatarId' is not null or undefined
+            assertParamExists('avatarsUserIdAvatarIdPost', 'avatarId', avatarId)
+            // verify required parameter 'requestBody' is not null or undefined
+            assertParamExists('avatarsUserIdAvatarIdPost', 'requestBody', requestBody)
+            const localVarPath = `/avatars/{user_id}/{avatar_id}`
+                .replace(`{${"user_id"}}`, encodeURIComponent(String(userId)))
+                .replace(`{${"avatar_id"}}`, encodeURIComponent(String(avatarId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/octet-stream';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(requestBody, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+    }
+};
+
+/**
+ * AvatarsApi - functional programming interface
+ * @export
+ */
+export const AvatarsApiFp = function(configuration?: Configuration) {
+    const localVarAxiosParamCreator = AvatarsApiAxiosParamCreator(configuration)
+    return {
+        /**
+         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+         * @summary Upload user avatar
+         * @param {number} userId User ID
+         * @param {number} avatarId Avatar ID
+         * @param {Array<number>} requestBody Binary image payload
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async avatarsUserIdAvatarIdPost(userId: number, avatarId: number, requestBody: Array<number>, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.avatarsUserIdAvatarIdPost(userId, avatarId, requestBody, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['AvatarsApi.avatarsUserIdAvatarIdPost']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+    }
+};
+
+/**
+ * AvatarsApi - factory interface
+ * @export
+ */
+export const AvatarsApiFactory = function (configuration?: Configuration, basePath?: string, axios?: AxiosInstance) {
+    const localVarFp = AvatarsApiFp(configuration)
+    return {
+        /**
+         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+         * @summary Upload user avatar
+         * @param {AvatarsApiAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        avatarsUserIdAvatarIdPost(requestParameters: AvatarsApiAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.avatarsUserIdAvatarIdPost(requestParameters.userId, requestParameters.avatarId, requestParameters.requestBody, options).then((request) => request(axios, basePath));
+        },
+    };
+};
+
+/**
+ * AvatarsApi - interface
+ * @export
+ * @interface AvatarsApi
+ */
+export interface AvatarsApiInterface {
+    /**
+     * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+     * @summary Upload user avatar
+     * @param {AvatarsApiAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof AvatarsApiInterface
+     */
+    avatarsUserIdAvatarIdPost(requestParameters: AvatarsApiAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
+
+}
+
+/**
+ * Request parameters for avatarsUserIdAvatarIdPost operation in AvatarsApi.
+ * @export
+ * @interface AvatarsApiAvatarsUserIdAvatarIdPostRequest
+ */
+export interface AvatarsApiAvatarsUserIdAvatarIdPostRequest {
+    /**
+     * User ID
+     * @type {number}
+     * @memberof AvatarsApiAvatarsUserIdAvatarIdPost
+     */
+    readonly userId: number
+
+    /**
+     * Avatar ID
+     * @type {number}
+     * @memberof AvatarsApiAvatarsUserIdAvatarIdPost
+     */
+    readonly avatarId: number
+
+    /**
+     * Binary image payload
+     * @type {Array<number>}
+     * @memberof AvatarsApiAvatarsUserIdAvatarIdPost
+     */
+    readonly requestBody: Array<number>
+}
+
+/**
+ * AvatarsApi - object-oriented interface
+ * @export
+ * @class AvatarsApi
+ * @extends {BaseAPI}
+ */
+export class AvatarsApi extends BaseAPI implements AvatarsApiInterface {
+    /**
+     * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+     * @summary Upload user avatar
+     * @param {AvatarsApiAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof AvatarsApi
+     */
+    public avatarsUserIdAvatarIdPost(requestParameters: AvatarsApiAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig) {
+        return AvatarsApiFp(this.configuration).avatarsUserIdAvatarIdPost(requestParameters.userId, requestParameters.avatarId, requestParameters.requestBody, options).then((request) => request(this.axios, this.basePath));
     }
 }
 
@@ -6557,6 +6767,42 @@ export class SearchApi extends BaseAPI implements SearchApiInterface {
 export const UserApiAxiosParamCreator = function (configuration?: Configuration) {
     return {
         /**
+         * Creates an avatar placeholder and returns upload info. Upload the binary to attachments service.
+         * @summary Create avatar metadata
+         * @param {UserCreateAvatarRequest} userCreateAvatarRequest Avatar creation request
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        userMeAvatarPost: async (userCreateAvatarRequest: UserCreateAvatarRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'userCreateAvatarRequest' is not null or undefined
+            assertParamExists('userMeAvatarPost', 'userCreateAvatarRequest', userCreateAvatarRequest)
+            const localVarPath = `/user/me/avatar`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(userCreateAvatarRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary List all DM and Group DM channels for current user
          * @param {*} [options] Override http request option.
@@ -7146,6 +7392,19 @@ export const UserApiFp = function(configuration?: Configuration) {
     const localVarAxiosParamCreator = UserApiAxiosParamCreator(configuration)
     return {
         /**
+         * Creates an avatar placeholder and returns upload info. Upload the binary to attachments service.
+         * @summary Create avatar metadata
+         * @param {UserCreateAvatarRequest} userCreateAvatarRequest Avatar creation request
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async userMeAvatarPost(userCreateAvatarRequest: UserCreateAvatarRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DtoAvatarUpload>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.userMeAvatarPost(userCreateAvatarRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['UserApi.userMeAvatarPost']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary List all DM and Group DM channels for current user
          * @param {*} [options] Override http request option.
@@ -7373,6 +7632,16 @@ export const UserApiFactory = function (configuration?: Configuration, basePath?
     const localVarFp = UserApiFp(configuration)
     return {
         /**
+         * Creates an avatar placeholder and returns upload info. Upload the binary to attachments service.
+         * @summary Create avatar metadata
+         * @param {UserApiUserMeAvatarPostRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        userMeAvatarPost(requestParameters: UserApiUserMeAvatarPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoAvatarUpload> {
+            return localVarFp.userMeAvatarPost(requestParameters.userCreateAvatarRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary List all DM and Group DM channels for current user
          * @param {*} [options] Override http request option.
@@ -7548,6 +7817,16 @@ export const UserApiFactory = function (configuration?: Configuration, basePath?
  */
 export interface UserApiInterface {
     /**
+     * Creates an avatar placeholder and returns upload info. Upload the binary to attachments service.
+     * @summary Create avatar metadata
+     * @param {UserApiUserMeAvatarPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserApiInterface
+     */
+    userMeAvatarPost(requestParameters: UserApiUserMeAvatarPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoAvatarUpload>;
+
+    /**
      * 
      * @summary List all DM and Group DM channels for current user
      * @param {*} [options] Override http request option.
@@ -7713,6 +7992,20 @@ export interface UserApiInterface {
      */
     userUserIdGet(requestParameters: UserApiUserUserIdGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoUser>;
 
+}
+
+/**
+ * Request parameters for userMeAvatarPost operation in UserApi.
+ * @export
+ * @interface UserApiUserMeAvatarPostRequest
+ */
+export interface UserApiUserMeAvatarPostRequest {
+    /**
+     * Avatar creation request
+     * @type {UserCreateAvatarRequest}
+     * @memberof UserApiUserMeAvatarPost
+     */
+    readonly userCreateAvatarRequest: UserCreateAvatarRequest
 }
 
 /**
@@ -7904,6 +8197,18 @@ export interface UserApiUserUserIdGetRequest {
  * @extends {BaseAPI}
  */
 export class UserApi extends BaseAPI implements UserApiInterface {
+    /**
+     * Creates an avatar placeholder and returns upload info. Upload the binary to attachments service.
+     * @summary Create avatar metadata
+     * @param {UserApiUserMeAvatarPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserApi
+     */
+    public userMeAvatarPost(requestParameters: UserApiUserMeAvatarPostRequest, options?: RawAxiosRequestConfig) {
+        return UserApiFp(this.configuration).userMeAvatarPost(requestParameters.userCreateAvatarRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
     /**
      * 
      * @summary List all DM and Group DM channels for current user
