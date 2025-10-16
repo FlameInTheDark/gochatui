@@ -2498,7 +2498,12 @@
                                                                                 <div class="truncate font-medium">
                                                                                         {meta.name}
                                                                                 </div>
-                                                                                <AudioAttachmentPlayer preload="metadata" src={meta.url} />
+                                                                                <AudioAttachmentPlayer
+                                                                                        preload="metadata"
+                                                                                        src={meta.url}
+                                                                                        name={meta.name ?? undefined}
+                                                                                        sizeLabel={meta.sizeLabel ?? undefined}
+                                                                                />
                                                                                 <div class="text-right">
                                                                                         <a
                                                                                                 class="text-[var(--brand)] hover:underline"
