@@ -1,5 +1,6 @@
 import { Configuration } from '$lib/api';
 import {
+        AttachmentsApi,
         AuthApi,
         GuildApi,
         GuildInvitesApi,
@@ -24,6 +25,7 @@ function stringifyBigInt(data: unknown): string {
 // Injects the bearer token dynamically via configuration.accessToken.
 
 export type ApiGroup = {
+        attachments: AttachmentsApi;
         auth: AuthApi;
         guild: GuildApi;
         guildInvites: GuildInvitesApi;
@@ -50,16 +52,38 @@ export function createApi(
 	config.isJsonMime = () => false;
 
 	// Create a dedicated axios instance with an auth interceptor
-	const ax: AxiosInstance = axios.create();
-	ax.defaults.transformRequest = [
-		(data, headers) => {
-			if (data != null && typeof data === 'object') {
-				(headers as any)['Content-Type'] = 'application/json';
-				return stringifyBigInt(data);
-			}
-			return data;
-		}
-	];
+        const ax: AxiosInstance = axios.create();
+
+        function isFormData(value: unknown): value is FormData {
+                return typeof FormData !== 'undefined' && value instanceof FormData;
+        }
+
+        function isBlob(value: unknown): value is Blob {
+                return typeof Blob !== 'undefined' && value instanceof Blob;
+        }
+
+        function isFile(value: unknown): value is File {
+                return typeof File !== 'undefined' && value instanceof File;
+        }
+
+        function isArrayBufferLike(value: unknown): value is ArrayBuffer | ArrayBufferView {
+                if (typeof ArrayBuffer === 'undefined') return false;
+                if (value instanceof ArrayBuffer) return true;
+                return ArrayBuffer.isView(value as any);
+        }
+
+        ax.defaults.transformRequest = [
+                (data, headers) => {
+                        if (data != null && typeof data === 'object') {
+                                if (isFormData(data) || isBlob(data) || isFile(data) || isArrayBufferLike(data)) {
+                                        return data;
+                                }
+                                (headers as any)['Content-Type'] = 'application/json';
+                                return stringifyBigInt(data);
+                        }
+                        return data;
+                }
+        ];
 
 	// Preserve large int64 values as strings to avoid precision loss
 	function parseJSONPreserveLargeInts(data: string) {
@@ -202,6 +226,7 @@ export function createApi(
 	const search = SearchApiFactory(config, base, ax);
 
         return {
+                attachments: new AttachmentsApi(config, base, ax),
                 auth: new AuthApi(config, base, ax),
                 guild: new GuildApi(config, base, ax),
                 guildInvites: new GuildInvitesApi(config, base, ax),

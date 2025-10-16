@@ -14,65 +14,6 @@
 	let error: string | null = $state(null);
         const dispatch = createEventDispatcher<{ updated: PendingAttachment[] }>();
 
-        function normalizeUploadHeaders(input: unknown): Record<string, string> {
-                if (!input || typeof input !== 'object') {
-                        return {};
-                }
-
-                const entries: Array<[string, string]> = [];
-                const pushEntry = (key: unknown, value: unknown) => {
-                        if (typeof key !== 'string') return;
-                        const trimmedKey = key.trim();
-                        if (!trimmedKey) return;
-                        if (value == null) return;
-                        let normalizedValue: string | null = null;
-                        if (typeof value === 'string') {
-                                normalizedValue = value;
-                        } else if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-                                normalizedValue = value.toString();
-                        } else if (Array.isArray(value)) {
-                                normalizedValue = value.filter((item) => item != null).map((item) => String(item)).join(', ');
-                        } else if (typeof value === 'object') {
-                                const maybeValue =
-                                        (value as Record<string, unknown>).value ??
-                                        (value as Record<string, unknown>).val ??
-                                        (value as Record<string, unknown>).headerValue;
-                                if (maybeValue != null) {
-                                        normalizedValue = String(maybeValue);
-                                }
-                        }
-
-                        if (normalizedValue == null) return;
-                        entries.push([trimmedKey, normalizedValue]);
-                };
-
-                if (Array.isArray(input)) {
-                        for (const item of input) {
-                                if (!item) continue;
-                                if (Array.isArray(item) && item.length >= 2) {
-                                        pushEntry(item[0], item[1]);
-                                        continue;
-                                }
-                                if (typeof item === 'object') {
-                                        const record = item as Record<string, unknown>;
-                                        const key = record.name ?? record.key ?? record.header ?? record.headerName;
-                                        const value =
-                                                record.value ??
-                                                record.val ??
-                                                record.headerValue ??
-                                                (Array.isArray(record.values) ? record.values.join(', ') : undefined);
-                                        pushEntry(typeof key === 'string' ? key : '', value);
-                                }
-                        }
-                } else {
-                        for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-                                pushEntry(key, value);
-                        }
-                }
-
-                return Object.fromEntries(entries);
-        }
-
         function toFileArray(input: FileList | File[] | null | undefined): File[] {
                 if (!input) return [];
                 return Array.from(input as FileList | File[]);
@@ -99,8 +40,6 @@
                 const placeholders: PendingAttachment[] = files.map((file) => ({
                         localId: createLocalId(),
                         attachmentId: null,
-                        uploadUrl: null,
-                        uploadHeaders: {},
                         file,
                         filename: file.name,
                         size: file.size,
@@ -177,36 +116,9 @@
                                                 continue;
                                         }
 
-                                        const uploadUrlCandidate =
-                                                typeof data.upload_url === 'string'
-                                                        ? data.upload_url
-                                                        : typeof data.uploadUrl === 'string'
-                                                          ? data.uploadUrl
-                                                          : null;
-                                        const uploadUrl = uploadUrlCandidate && uploadUrlCandidate.trim()
-                                                ? uploadUrlCandidate
-                                                : null;
-                                        if (!uploadUrl) {
-                                                error = 'Attachment response missing upload URL';
-                                                dispatch('updated', [
-                                                        {
-                                                                ...placeholder,
-                                                                status: 'error',
-                                                                error: 'Attachment response missing upload URL'
-                                                        }
-                                                ]);
-                                                continue;
-                                        }
-
-                                        const uploadHeaders = normalizeUploadHeaders(
-                                                data.upload_headers ?? data.uploadHeaders ?? data.headers
-                                        );
-
                                         const updated: PendingAttachment = {
                                                 ...placeholder,
                                                 attachmentId: snowflake,
-                                                uploadUrl,
-                                                uploadHeaders,
                                                 width: meta.width ?? placeholder.width,
                                                 height: meta.height ?? placeholder.height,
                                                 error: null
