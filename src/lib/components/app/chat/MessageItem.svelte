@@ -17,6 +17,7 @@
 	import InvitePreview from './InvitePreview.svelte';
 	import YoutubeEmbed from './YoutubeEmbed.svelte';
 	import VideoAttachmentPlayer from './VideoAttachmentPlayer.svelte';
+	import AudioAttachmentPlayer from './AudioAttachmentPlayer.svelte';
 	import { extractInvite } from './extractInvite';
         import { Download, ImageOff, Paperclip, Pencil, Play, Trash2, X } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
@@ -2327,6 +2328,10 @@
                                                                 </div>
                                                         {:else}
                                                                 {@const { attachment, meta, index } = group.item}
+                                                                {@const lowerContentType = meta.contentType?.toLowerCase() ?? null}
+                                                                {@const isAudioAttachment =
+                                                                        meta.kind === 'audio' ||
+                                                                        (lowerContentType?.startsWith('audio/') ?? false)}
                                                                 {#if meta.kind === 'image' && (meta.previewUrl || meta.url)}
                                                                         {@const previewKey = attachmentStableKey(attachment, index)}
                                                                         {@const displaySrc =
@@ -2488,22 +2493,12 @@
                                                                                         {/if}
                                                                                 </div>
                                                                         {/if}
-                                                                {:else if meta.kind === 'audio' && meta.url}
-                                                                        <div class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
+                                                                {:else if meta.url && isAudioAttachment}
+                                                                        <div class="flex min-w-[16rem] max-w-sm flex-col gap-3 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
                                                                                 <div class="truncate font-medium">
                                                                                         {meta.name}
                                                                                 </div>
-                                                                                <audio class="w-full" controls preload="metadata" src={meta.url}></audio>
-                                                                                {#if meta.sizeLabel || meta.contentType}
-                                                                                        <div class="flex items-center justify-between text-[var(--muted)]">
-                                                                                                {#if meta.sizeLabel}
-                                                                                                        <span>{meta.sizeLabel}</span>
-                                                                                                {/if}
-                                                                                                {#if meta.contentType}
-                                                                                                        <span>{meta.contentType}</span>
-                                                                                                {/if}
-                                                                                        </div>
-                                                                                {/if}
+                                                                                <AudioAttachmentPlayer preload="metadata" src={meta.url} />
                                                                                 <div class="text-right">
                                                                                         <a
                                                                                                 class="text-[var(--brand)] hover:underline"
