@@ -17,7 +17,7 @@
 	import InvitePreview from './InvitePreview.svelte';
 	import YoutubeEmbed from './YoutubeEmbed.svelte';
 	import { extractInvite } from './extractInvite';
-        import { Download, Paperclip, Pencil, Play, Trash2, X } from 'lucide-svelte';
+        import { Download, ImageOff, Paperclip, Pencil, Play, Trash2, X } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
@@ -445,6 +445,7 @@
 
         type AttachmentMeta = {
                 url: string | null;
+                previewUrl: string | null;
                 kind: AttachmentKind;
                 sizeLabel: string | null;
                 name: string;
@@ -473,6 +474,13 @@
 
         function attachmentUrl(attachment: MessageAttachment | undefined): string | null {
                 const raw = (attachment as any)?.url;
+                if (typeof raw !== 'string') return null;
+                const trimmed = raw.trim();
+                return trimmed ? trimmed : null;
+        }
+
+        function attachmentPreviewUrl(attachment: MessageAttachment | undefined): string | null {
+                const raw = (attachment as any)?.preview_url;
                 if (typeof raw !== 'string') return null;
                 const trimmed = raw.trim();
                 return trimmed ? trimmed : null;
@@ -574,8 +582,12 @@
                         kind === 'image' &&
                         (lowerContentType === 'image/gif' || lowerName.endsWith('.gif'));
 
+                const url = attachmentUrl(attachment);
+                const previewUrl = attachmentPreviewUrl(attachment) ?? url;
+
                 return {
-                        url: attachmentUrl(attachment),
+                        url,
+                        previewUrl,
                         kind,
                         sizeLabel: formatAttachmentSize((attachment as any)?.size),
                         name,
@@ -609,7 +621,7 @@
                 attachments.forEach((attachment, index) => {
                         const meta = getAttachmentMeta(attachment);
                         const item: AttachmentRenderItem = { attachment, meta, index };
-                        const eligibleForGallery = meta.kind === 'image' && !!meta.url;
+                        const eligibleForGallery = meta.kind === 'image' && !!meta.previewUrl;
                         if (eligibleForGallery) {
                                 pendingGallery.push(item);
                                 return;
@@ -643,12 +655,14 @@
         type GifPlaybackParams = {
                 enabled: boolean;
                 src: string | null;
+                previewSrc: string | null;
         };
 
         function gifPlayback(node: HTMLImageElement, params: GifPlaybackParams) {
                 let currentParams = params;
                 let currentSrc = currentParams?.src ?? null;
                 let enabled = Boolean(currentParams?.enabled && currentSrc);
+                let previewSrc = currentParams?.previewSrc ?? null;
                 let observer: IntersectionObserver | null = null;
 
                 const cleanupObserver = () => {
@@ -658,10 +672,14 @@
 
                 const setPlaying = (shouldPlay: boolean) => {
                         if (!enabled) {
+                                const target = previewSrc ?? GIF_PLACEHOLDER_SRC;
+                                if (node.src !== target) {
+                                        node.src = target;
+                                }
                                 return;
                         }
 
-                        const target = shouldPlay && currentSrc ? currentSrc : GIF_PLACEHOLDER_SRC;
+                        const target = shouldPlay && currentSrc ? currentSrc : previewSrc ?? GIF_PLACEHOLDER_SRC;
                         if (node.src !== target) {
                                 node.src = target;
                         }
@@ -680,8 +698,10 @@
                         cleanupObserver();
                         currentSrc = currentParams?.src ?? null;
                         enabled = Boolean(currentParams?.enabled && currentSrc);
+                        previewSrc = currentParams?.previewSrc ?? null;
 
                         if (!enabled) {
+                                setPlaying(false);
                                 return;
                         }
 
@@ -701,8 +721,9 @@
                         },
                         destroy() {
                                 cleanupObserver();
-                                if (enabled && currentSrc) {
-                                        node.src = currentSrc;
+                                const target = previewSrc ?? (enabled && currentSrc ? currentSrc : GIF_PLACEHOLDER_SRC);
+                                if (target) {
+                                        node.src = target;
                                 }
                         },
                 };
@@ -796,6 +817,15 @@
         }
         let activeVideoAttachments = $state<Record<string, boolean>>({});
         let videoPreviewPosters = $state<Record<string, string | null>>({});
+        let failedPreviewKeys = $state<Record<string, true>>({});
+
+        function markPreviewFailure(key: string) {
+                if (failedPreviewKeys[key]) {
+                        return;
+                }
+
+                failedPreviewKeys = { ...failedPreviewKeys, [key]: true };
+        }
         const videoPosterTasks = new Map<string, () => void>();
         let componentDestroyed = false;
 
@@ -1390,7 +1420,9 @@
                         }
                         const key = attachmentStableKey(attachment, index);
                         videoKeys.add(key);
-                        requestVideoPoster(key, meta.url);
+                        if (!meta.previewUrl) {
+                                requestVideoPoster(key, meta.url);
+                        }
                 });
 
                 for (const key of Array.from(videoPosterTasks.keys())) {
@@ -2243,6 +2275,12 @@
                                                                         {#each group.items as item, tileIndex (
                                                                                 attachmentStableKey(item.attachment, item.index)
                                                                         )}
+                                                                                {@const tileKey = attachmentStableKey(item.attachment, item.index)}
+                                                                                {@const galleryDisplaySrc =
+                                                                                        item.meta.isGif
+                                                                                                ? item.meta.previewUrl ?? GIF_PLACEHOLDER_SRC
+                                                                                                : item.meta.previewUrl ?? item.meta.url}
+                                                                                {@const galleryPreviewFailed = Boolean(failedPreviewKeys[tileKey])}
                                                                                 <div class="group relative aspect-square overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]">
                                                                                         <button
                                                                                                 type="button"
@@ -2250,17 +2288,24 @@
                                                                                                 onclick={() => openImagePreview(item.meta)}
                                                                                                 aria-label={`Open preview for ${item.meta.name}`}
                                                                                         >
-                                                                                                {#if item.meta.url}
-                                                                                                <img
-                                                                                                        src={item.meta.isGif ? GIF_PLACEHOLDER_SRC : item.meta.url}
-                                                                                                        alt={item.meta.name}
-                                                                                                        class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
-                                                                                                        loading="lazy"
-                                                                                                        use:gifPlayback={{
-                                                                                                                enabled: item.meta.isGif,
-                                                                                                                src: item.meta.url,
-                                                                                                        }}
-                                                                                                />
+                                                                                                {#if galleryDisplaySrc && !galleryPreviewFailed}
+                                                                                                        <img
+                                                                                                                src={galleryDisplaySrc}
+                                                                                                                alt={item.meta.name}
+                                                                                                                class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
+                                                                                                                loading="lazy"
+                                                                                                                onerror={() => markPreviewFailure(tileKey)}
+                                                                                                                use:gifPlayback={{
+                                                                                                                        enabled: item.meta.isGif,
+                                                                                                                        src: item.meta.url,
+                                                                                                                        previewSrc: item.meta.previewUrl,
+                                                                                                                }}
+                                                                                                        />
+                                                                                                {:else}
+                                                                                                        <div class="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-xs text-[var(--muted)]">
+                                                                                                                <ImageOff class="h-6 w-6" stroke-width={2} aria-hidden="true" />
+                                                                                                                <span class="font-medium">Preview unavailable</span>
+                                                                                                        </div>
                                                                                                 {/if}
                                                                                         </button>
                                                                                         {#if item.meta.url}
@@ -2280,7 +2325,13 @@
                                                                 </div>
                                                         {:else}
                                                                 {@const { attachment, meta, index } = group.item}
-                                                                {#if meta.kind === 'image' && meta.url}
+                                                                {#if meta.kind === 'image' && (meta.previewUrl || meta.url)}
+                                                                        {@const previewKey = attachmentStableKey(attachment, index)}
+                                                                        {@const displaySrc =
+                                                                                meta.isGif
+                                                                                        ? meta.previewUrl ?? GIF_PLACEHOLDER_SRC
+                                                                                        : meta.previewUrl ?? meta.url}
+                                                                        {@const previewFailed = Boolean(failedPreviewKeys[previewKey])}
                                                                         {@const imageBounds = computeVisualAttachmentBounds(meta)}
                                                                         <div
                                                                                 class="group relative inline-flex max-w-full items-center justify-center overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
@@ -2294,17 +2345,29 @@
                                                                                         onclick={() => openImagePreview(meta)}
                                                                                         aria-label={`Open preview for ${meta.name}`}
                                                                                 >
-                                                                                        <img
-                                                                                                src={meta.isGif ? GIF_PLACEHOLDER_SRC : meta.url}
-                                                                                                alt={meta.name}
-                                                                                                class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
-                                                                                                loading="lazy"
-                                                                                                style={visualAttachmentMediaStyle}
-                                                                                                use:gifPlayback={{
-                                                                                                        enabled: meta.isGif,
-                                                                                                        src: meta.url,
-                                                                                                }}
-                                                                                        />
+                                                                                        {#if displaySrc && !previewFailed}
+                                                                                                <img
+                                                                                                        src={displaySrc}
+                                                                                                        alt={meta.name}
+                                                                                                        class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
+                                                                                                        loading="lazy"
+                                                                                                        style={visualAttachmentMediaStyle}
+                                                                                                        onerror={() => markPreviewFailure(previewKey)}
+                                                                                                        use:gifPlayback={{
+                                                                                                                enabled: meta.isGif,
+                                                                                                                src: meta.url,
+                                                                                                                previewSrc: meta.previewUrl,
+                                                                                                        }}
+                                                                                                />
+                                                                                        {:else}
+                                                                                                <div
+                                                                                                        class="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-[var(--muted)]"
+                                                                                                        style={visualAttachmentMediaStyle}
+                                                                                                >
+                                                                                                        <ImageOff class="h-7 w-7" stroke-width={2} aria-hidden="true" />
+                                                                                                        <span class="font-medium">Preview unavailable</span>
+                                                                                                </div>
+                                                                                        {/if}
                                                                                 </button>
                                                                                 {#if meta.url}
                                                                                         <a
@@ -2321,7 +2384,7 @@
                                                                         </div>
                                                                 {:else if meta.kind === 'video' && meta.url}
                                                                         {@const attachmentKey = attachmentStableKey(attachment, index)}
-                                                                        {@const previewPoster = videoPreviewPosters[attachmentKey] ?? null}
+                                                                        {@const previewPoster = meta.previewUrl ?? videoPreviewPosters[attachmentKey] ?? null}
                                                                         {@const videoHasExplicitDimensions = meta.aspectRatio != null}
                                                                         {@const previewAspectRatio =
                                                                                         meta.aspectRatio ?? `${VISUAL_ATTACHMENT_MAX_DIMENSION} / ${VISUAL_ATTACHMENT_MAX_DIMENSION}`}
