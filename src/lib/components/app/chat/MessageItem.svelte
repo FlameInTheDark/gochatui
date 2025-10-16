@@ -2431,7 +2431,7 @@
                                                                                                         {/if}
                                                                                                         <button
                                                                                                                 type="button"
-                                                                                                                class="grid h-8 w-8 place-items-center rounded-full border border-white/40 bg-black/60 text-white transition hover:bg-black/40"
+                                                                                                                class="pointer-events-none grid h-8 w-8 place-items-center rounded-full border border-white/40 bg-black/60 text-white opacity-0 transition hover:bg-black/40 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
                                                                                                                 onclick={() => deactivateVideoAttachment(attachmentKey)}
                                                                                                                 data-tooltip-disabled
                                                                                                         >
