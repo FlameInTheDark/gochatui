@@ -473,8 +473,8 @@
 
         :global(.video-player-container:fullscreen video),
         :global(.video-player-container:-webkit-full-screen video) {
-                width: auto !important;
-                height: auto !important;
+                width: 100% !important;
+                height: 100% !important;
                 max-width: 100vw;
                 max-height: 100vh;
                 object-fit: contain;
