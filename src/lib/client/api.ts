@@ -1,15 +1,13 @@
 import { Configuration } from '$lib/api';
 import {
-        AttachmentsApi,
         AuthApi,
-        AvatarsApi,
         GuildApi,
         GuildInvitesApi,
         GuildRolesApi,
         MessageApi,
         SearchApi,
+        UploadApi,
         UserApi,
-        WebhookApi,
         SearchApiFactory
 } from '$lib/api';
 import axios, { type AxiosInstance } from 'axios';
@@ -26,16 +24,14 @@ function stringifyBigInt(data: unknown): string {
 // Injects the bearer token dynamically via configuration.accessToken.
 
 export type ApiGroup = {
-        attachments: AttachmentsApi;
         auth: AuthApi;
-        avatars: AvatarsApi;
         guild: GuildApi;
         guildInvites: GuildInvitesApi;
         guildRoles: GuildRolesApi;
         message: MessageApi;
         search: ReturnType<typeof SearchApiFactory>;
+        upload: UploadApi;
         user: UserApi;
-        webhook: WebhookApi;
 };
 
 export function createApi(
@@ -228,15 +224,13 @@ export function createApi(
 	const search = SearchApiFactory(config, base, ax);
 
         return {
-                attachments: new AttachmentsApi(config, base, ax),
                 auth: new AuthApi(config, base, ax),
-                avatars: new AvatarsApi(config, base, ax),
                 guild: new GuildApi(config, base, ax),
                 guildInvites: new GuildInvitesApi(config, base, ax),
                 guildRoles: new GuildRolesApi(config, base, ax),
                 message: new MessageApi(config, base, ax),
                 search,
-                user: new UserApi(config, base, ax),
-                webhook: new WebhookApi(config, base, ax)
+                upload: new UploadApi(config, base, ax),
+                user: new UserApi(config, base, ax)
         };
 }
