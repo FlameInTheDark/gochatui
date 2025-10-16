@@ -12,21 +12,39 @@
         let imageReady = false;
 
         const cropSize = 256;
-        let minScale = 1;
-        let scale = 1;
         let zoom = 1;
-        let offset = { x: 0, y: 0 };
-        let dragging = false;
+        let maskSize = cropSize;
+        let maskPosition = { x: 0, y: 0 };
+        let maskDragging = false;
         let dragPointerId: number | null = null;
         let dragOrigin = { x: 0, y: 0 };
-        let dragOffsetStart = { x: 0, y: 0 };
+        let dragMaskStart = { x: 0, y: 0 };
+
+        let imageFitScale = 1;
+        let imageDisplayWidth = 0;
+        let imageDisplayHeight = 0;
+        let imageOffset = { x: 0, y: 0 };
 
         let previewCanvas: HTMLCanvasElement | null = null;
+
+        $: maskRadius = maskSize / 2;
+        $: maskCenter = { x: maskPosition.x + maskRadius, y: maskPosition.y + maskRadius };
+        $: overlayBackground = `radial-gradient(circle at ${maskCenter.x}px ${maskCenter.y}px, transparent ${Math.max(
+                maskRadius - 1,
+                0
+        )}px, rgba(0, 0, 0, 0.45) ${maskRadius}px)`;
 
         $: displayAvatarUrl = croppedDataUrl ?? initialAvatarUrl;
 
         $: if (imageReady && imageElement && previewCanvas) {
-                drawPreview(imageElement, previewCanvas, scale, offset.x, offset.y);
+                drawPreview(
+                        imageElement,
+                        previewCanvas,
+                        maskPosition,
+                        maskSize,
+                        imageFitScale,
+                        imageOffset
+                );
         }
 
         function handleAvatarSelection(event: Event) {
@@ -45,10 +63,14 @@
                 croppedDataUrl = null;
                 imageReady = false;
                 imageElement = null;
-                offset = { x: 0, y: 0 };
                 zoom = 1;
-                scale = 1;
-                dragging = false;
+                maskSize = cropSize;
+                maskPosition = centerMask(maskSize);
+                maskDragging = false;
+                imageFitScale = 1;
+                imageDisplayWidth = 0;
+                imageDisplayHeight = 0;
+                imageOffset = { x: 0, y: 0 };
 
                 if (imageObjectUrl) {
                         URL.revokeObjectURL(imageObjectUrl);
@@ -73,55 +95,79 @@
                 }
 
                 imageElement = element;
-                const baseScale = cropSize / Math.min(naturalWidth, naturalHeight);
-                minScale = baseScale;
-                scale = baseScale;
-                zoom = 1;
+                imageFitScale = Math.max(cropSize / naturalWidth, cropSize / naturalHeight);
+                imageDisplayWidth = naturalWidth * imageFitScale;
+                imageDisplayHeight = naturalHeight * imageFitScale;
+                imageOffset = {
+                        x: (cropSize - imageDisplayWidth) / 2,
+                        y: (cropSize - imageDisplayHeight) / 2
+                };
 
-                const scaledWidth = naturalWidth * scale;
-                const scaledHeight = naturalHeight * scale;
-                const initialX = (cropSize - scaledWidth) / 2;
-                const initialY = (cropSize - scaledHeight) / 2;
-                offset = clampOffset(initialX, initialY, scale);
+                zoom = 1;
+                maskSize = cropSize;
+                maskPosition = centerMask(maskSize);
+                maskDragging = false;
 
                 imageReady = true;
         }
 
-        function clampOffset(x: number, y: number, currentScale: number) {
-                if (!imageElement) return { x, y };
-                const width = imageElement.naturalWidth * currentScale;
-                const height = imageElement.naturalHeight * currentScale;
-                const minX = cropSize - width;
-                const minY = cropSize - height;
-                const clampedX = Math.min(Math.max(x, minX), 0);
-                const clampedY = Math.min(Math.max(y, minY), 0);
-                return { x: clampedX, y: clampedY };
+        function centerMask(size: number) {
+                const start = (cropSize - size) / 2;
+                return { x: start, y: start };
         }
 
-        function startDrag(event: PointerEvent) {
+        function clampMaskPosition(x: number, y: number, size: number) {
+                const max = Math.max(cropSize - size, 0);
+                return {
+                        x: Math.min(Math.max(x, 0), max),
+                        y: Math.min(Math.max(y, 0), max)
+                };
+        }
+
+        function startMaskDrag(event: PointerEvent) {
                 if (!imageReady || !event.currentTarget) return;
-                if (event.currentTarget instanceof HTMLElement) {
-                        dragging = true;
-                        dragPointerId = event.pointerId;
-                        dragOrigin = { x: event.clientX, y: event.clientY };
-                        dragOffsetStart = { ...offset };
-                        event.currentTarget.setPointerCapture(dragPointerId);
+                if (!(event.currentTarget instanceof HTMLElement)) return;
+
+                const rect = event.currentTarget.getBoundingClientRect();
+                const pointerX = event.clientX - rect.left;
+                const pointerY = event.clientY - rect.top;
+                const radius = maskSize / 2;
+                const maskCenterX = maskPosition.x + radius;
+                const maskCenterY = maskPosition.y + radius;
+                const distanceSq =
+                        (pointerX - maskCenterX) * (pointerX - maskCenterX) +
+                        (pointerY - maskCenterY) * (pointerY - maskCenterY);
+
+                if (distanceSq > radius * radius) {
+                        const recentered = clampMaskPosition(pointerX - radius, pointerY - radius, maskSize);
+                        maskPosition = recentered;
+                }
+
+                maskDragging = true;
+                dragPointerId = event.pointerId;
+                dragOrigin = { x: pointerX, y: pointerY };
+                dragMaskStart = { ...maskPosition };
+                event.currentTarget.setPointerCapture(dragPointerId);
+        }
+
+        function handleMaskDrag(event: PointerEvent) {
+                if (!maskDragging || dragPointerId !== event.pointerId) return;
+                if (!(event.currentTarget instanceof HTMLElement)) return;
+
+                const rect = event.currentTarget.getBoundingClientRect();
+                const pointerX = event.clientX - rect.left;
+                const pointerY = event.clientY - rect.top;
+                const dx = pointerX - dragOrigin.x;
+                const dy = pointerY - dragOrigin.y;
+                const next = clampMaskPosition(dragMaskStart.x + dx, dragMaskStart.y + dy, maskSize);
+                if (next.x !== maskPosition.x || next.y !== maskPosition.y) {
+                        maskPosition = next;
                 }
         }
 
-        function handleDrag(event: PointerEvent) {
-                if (!dragging) return;
-                const dx = event.clientX - dragOrigin.x;
-                const dy = event.clientY - dragOrigin.y;
-                const next = clampOffset(dragOffsetStart.x + dx, dragOffsetStart.y + dy, scale);
-                if (next.x !== offset.x || next.y !== offset.y) {
-                        offset = next;
-                }
-        }
-
-        function endDrag(event: PointerEvent) {
-                if (!dragging) return;
-                dragging = false;
+        function endMaskDrag(event: PointerEvent) {
+                if (!maskDragging || dragPointerId !== event.pointerId) return;
+                maskDragging = false;
                 if (dragPointerId != null && event.currentTarget instanceof HTMLElement) {
                         event.currentTarget.releasePointerCapture(dragPointerId);
                 }
@@ -135,37 +181,57 @@
                 const newZoom = Number(input.value);
                 if (!Number.isFinite(newZoom) || newZoom <= 0) return;
 
-                const previousScale = scale;
-                const nextScale = minScale * newZoom;
-                if (!Number.isFinite(nextScale) || nextScale <= 0) return;
+                const nextSize = cropSize / newZoom;
+                const previousCenter = {
+                        x: maskPosition.x + maskSize / 2,
+                        y: maskPosition.y + maskSize / 2
+                };
 
-                const centerX = (cropSize / 2 - offset.x) / previousScale;
-                const centerY = (cropSize / 2 - offset.y) / previousScale;
+                const nextPosition = clampMaskPosition(
+                        previousCenter.x - nextSize / 2,
+                        previousCenter.y - nextSize / 2,
+                        nextSize
+                );
 
-                const nextX = cropSize / 2 - centerX * nextScale;
-                const nextY = cropSize / 2 - centerY * nextScale;
-
-                const clamped = clampOffset(nextX, nextY, nextScale);
-                offset = clamped;
-                scale = nextScale;
+                maskSize = nextSize;
+                maskPosition = nextPosition;
                 zoom = newZoom;
         }
 
         function drawPreview(
                 image: HTMLImageElement,
                 canvas: HTMLCanvasElement,
-                currentScale: number,
-                offsetX: number,
-                offsetY: number
+                mask: { x: number; y: number },
+                size: number,
+                fitScale: number,
+                displayOffset: { x: number; y: number }
         ) {
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return;
-                const sampleSize = cropSize / currentScale;
-                const sx = Math.max(0, -offsetX / currentScale);
-                const sy = Math.max(0, -offsetY / currentScale);
+                const sampleSize = size / fitScale;
+                const sx = (mask.x - displayOffset.x) / fitScale;
+                const sy = (mask.y - displayOffset.y) / fitScale;
+                const clampedSx = Math.min(
+                        Math.max(sx, 0),
+                        Math.max(image.naturalWidth - sampleSize, 0)
+                );
+                const clampedSy = Math.min(
+                        Math.max(sy, 0),
+                        Math.max(image.naturalHeight - sampleSize, 0)
+                );
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(image, sx, sy, sampleSize, sampleSize, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(
+                        image,
+                        clampedSx,
+                        clampedSy,
+                        sampleSize,
+                        sampleSize,
+                        0,
+                        0,
+                        canvas.width,
+                        canvas.height
+                );
                 croppedDataUrl = canvas.toDataURL('image/png');
         }
 
@@ -174,10 +240,14 @@
                 avatarError = null;
                 imageReady = false;
                 imageElement = null;
-                offset = { x: 0, y: 0 };
                 zoom = 1;
-                scale = 1;
-                dragging = false;
+                maskSize = cropSize;
+                maskPosition = centerMask(maskSize);
+                maskDragging = false;
+                imageFitScale = 1;
+                imageDisplayWidth = 0;
+                imageDisplayHeight = 0;
+                imageOffset = { x: 0, y: 0 };
                 if (previewCanvas) {
                         const ctx = previewCanvas.getContext('2d');
                         ctx?.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -227,22 +297,28 @@
         {#if imageObjectUrl}
                 <div class="flex flex-col gap-3 md:flex-row md:items-start">
                         <div class="avatar-crop-container">
-                                <div
-                                        class={`avatar-crop-area ${dragging ? 'is-dragging' : ''}`}
-                                        onpointerdown={startDrag}
-                                        onpointermove={handleDrag}
-                                        onpointerup={endDrag}
-                                        onpointercancel={endDrag}
-                                        onpointerleave={endDrag}
-                                >
+                                <div class="avatar-crop-area">
                                         <img
                                                 alt="Crop source"
                                                 class="avatar-source"
                                                 onload={handleImageLoad}
                                                 src={imageObjectUrl}
-                                                style={`transform: translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale});`}
+                                                style={`width: ${imageDisplayWidth}px; height: ${imageDisplayHeight}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0);`}
                                         />
-                                        <div class="avatar-crop-overlay" aria-hidden="true"></div>
+                                        <div
+                                                aria-hidden="true"
+                                                class={`avatar-crop-overlay ${maskDragging ? 'is-dragging' : ''}`}
+                                                style={`background: ${overlayBackground};`}
+                                                onpointerdown={startMaskDrag}
+                                                onpointermove={handleMaskDrag}
+                                                onpointerup={endMaskDrag}
+                                                onpointercancel={endMaskDrag}
+                                        >
+                                                <div
+                                                        class="avatar-crop-ring"
+                                                        style={`width: ${maskSize}px; height: ${maskSize}px; transform: translate(${maskPosition.x}px, ${maskPosition.y}px);`}
+                                                ></div>
+                                        </div>
                                 </div>
                         </div>
                         <div class="flex flex-1 flex-col gap-3">
@@ -308,12 +384,6 @@
                 border-radius: 16px;
                 border: 1px solid var(--stroke);
                 background: var(--panel-strong);
-                cursor: grab;
-                touch-action: none;
-        }
-
-        .avatar-crop-area.is-dragging {
-                cursor: grabbing;
         }
 
         .avatar-source {
@@ -323,35 +393,29 @@
                 transform-origin: top left;
                 user-select: none;
                 pointer-events: none;
+                will-change: transform;
         }
 
         .avatar-crop-overlay {
                 position: absolute;
                 inset: 0;
-                pointer-events: none;
+                cursor: grab;
+                touch-action: none;
         }
 
-        .avatar-crop-overlay::before,
-        .avatar-crop-overlay::after {
-                content: '';
+        .avatar-crop-overlay.is-dragging {
+                cursor: grabbing;
+        }
+
+        .avatar-crop-ring {
                 position: absolute;
-                top: 50%;
-                left: 50%;
-                width: 100%;
-                height: 100%;
-                transform: translate(-50%, -50%);
+                top: 0;
+                left: 0;
                 border-radius: 50%;
-                pointer-events: none;
-        }
-
-        .avatar-crop-overlay::before {
-                box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
-        }
-
-        .avatar-crop-overlay::after {
                 box-shadow:
                         inset 0 0 0 2px rgba(255, 255, 255, 0.85),
                         0 0 0 1px rgba(0, 0, 0, 0.55);
+                pointer-events: none;
         }
 
         @media (max-width: 640px) {
