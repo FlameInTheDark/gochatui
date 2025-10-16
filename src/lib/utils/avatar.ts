@@ -17,24 +17,34 @@ function normalizeAvatarValue(value: unknown, visited = new Set<unknown>()): str
 			return normalizeAvatarValue(record.url, visited);
 		}
 
-		const directKeys = [
-			'id',
-			'avatar',
-			'avatarId',
-			'avatar_id',
-			'avatarUrl',
-			'avatar_url'
-		] as const;
+        const directKeys = [
+                'avatar',
+                'avatarId',
+                'avatar_id',
+                'avatarUrl',
+                'avatar_url'
+        ] as const;
 
-		for (const key of directKeys) {
-			if (key in record) {
-				const resolved = normalizeAvatarValue(record[key], visited);
-				if (resolved) {
-					return resolved;
-				}
-			}
-		}
-	}
+        for (const key of directKeys) {
+                if (key in record) {
+                        const resolved = normalizeAvatarValue(record[key], visited);
+                        if (resolved) {
+                                return resolved;
+                        }
+                }
+        }
+
+        if ('id' in record) {
+                const avatarLikeKeys = ['content_type', 'contentType', 'width', 'height', 'size'] as const;
+                const looksLikeAvatar = avatarLikeKeys.some((key) => key in record);
+                if (looksLikeAvatar) {
+                        const resolved = normalizeAvatarValue(record.id, visited);
+                        if (resolved) {
+                                return resolved;
+                        }
+                }
+        }
+}
 
 	if (typeof value === 'string') {
 		const trimmed = value.trim();
