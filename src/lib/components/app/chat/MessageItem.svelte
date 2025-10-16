@@ -23,6 +23,7 @@
 	import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
+        import { resolveAvatarUrl } from '$lib/utils/avatar';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
 	import {
 		collectMemberRoleIds,
@@ -779,9 +780,17 @@
 	let saving = $state(false);
 	let editTextarea = $state<HTMLTextAreaElement | null>(null);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
-	const segments = $derived(parseMessageContent(message.content ?? ''));
+        const segments = $derived(parseMessageContent(message.content ?? ''));
+        const authorAvatarUrl = $derived.by(() =>
+                resolveAvatarUrl(
+                        (message as any)?.author,
+                        (message as any)?.author?.profile,
+                        (message as any)?.member,
+                        (message as any)?.member?.user
+                )
+        );
 
-	const PERMISSION_MANAGE_MESSAGES = 1 << 17;
+        const PERMISSION_MANAGE_MESSAGES = 1 << 17;
 
         let canDeleteMessage = $state(false);
 	let canEditMessage = $state(false);
@@ -2082,17 +2091,26 @@
 		>
 			{fmtMsgTime(message)}
 		</div>
-	{:else}
+        {:else}
                 <button
                         type="button"
-                        class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
+                        class="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
                         data-user-menu="true"
                         data-tooltip-disabled
                         aria-label={message.author?.name ?? 'User'}
                         oncontextmenu={openUserMenu}
                         onclick={openAuthorProfile}
                 >
-                        {(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
+                        {#if authorAvatarUrl}
+                                <img
+                                        alt=""
+                                        aria-hidden="true"
+                                        class="h-full w-full object-cover"
+                                        src={authorAvatarUrl}
+                                />
+                        {:else}
+                                {(message.author?.name ?? '?').slice(0, 2).toUpperCase()}
+                        {/if}
                 </button>
         {/if}
 	<div class="relative min-w-0 flex-1">
