@@ -2287,6 +2287,7 @@
                                                                                                 type="button"
                                                                                                 class="flex h-full w-full cursor-zoom-in items-center justify-center bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
                                                                                                 onclick={() => openImagePreview(item.meta)}
+                                                                                                data-tooltip-disabled
                                                                                                 aria-label={`Open preview for ${item.meta.name}`}
                                                                                         >
                                                                                                 {#if galleryDisplaySrc && !galleryPreviewFailed}
@@ -2344,6 +2345,7 @@
                                                                                         type="button"
                                                                                         class="flex h-full w-full cursor-zoom-in items-center justify-center bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
                                                                                         onclick={() => openImagePreview(meta)}
+                                                                                        data-tooltip-disabled
                                                                                         aria-label={`Open preview for ${meta.name}`}
                                                                                 >
                                                                                         {#if displaySrc && !previewFailed}
@@ -2426,6 +2428,7 @@
                                                                                                                 type="button"
                                                                                                                 class="grid h-8 w-8 place-items-center rounded-full border border-white/40 bg-black/60 text-white transition hover:bg-black/40"
                                                                                                                 onclick={() => deactivateVideoAttachment(attachmentKey)}
+                                                                                                                data-tooltip-disabled
                                                                                                                 aria-label="Close video preview"
                                                                                                         >
                                                                                                                 <X class="h-4 w-4" stroke-width={2} />
@@ -2444,6 +2447,7 @@
                                                                                                 type="button"
                                                                                                 class="flex w-full cursor-pointer flex-col bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
                                                                                                 onclick={() => activateVideoAttachment(attachmentKey)}
+                                                                                                data-tooltip-disabled
                                                                                                 aria-label={`Play video ${meta.name}`}
                                                                                         >
                                                                                                 <div

@@ -381,6 +381,7 @@
                                                         class="grid h-7 w-7 flex-none place-items-center rounded-lg bg-white/15 transition hover:bg-white/25"
                                                         type="button"
                                                         on:click|stopPropagation={togglePlayback}
+                                                        data-tooltip-disabled
                                                         aria-label={isPlaying ? 'Pause video' : 'Play video'}
                                                 >
                                                         {#if isPlaying}
@@ -403,6 +404,7 @@
                                                                 class="grid h-7 w-7 place-items-center rounded-lg bg-white/15 transition hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                                                                 type="button"
                                                                 on:click|stopPropagation={toggleMute}
+                                                                data-tooltip-disabled
                                                                 aria-label={isMuted ? 'Unmute video' : 'Mute video'}
                                                         >
                                                                 {#if isMuted}
@@ -436,6 +438,7 @@
                                                         class="grid h-7 w-7 place-items-center rounded-lg bg-white/15 transition hover:bg-white/25"
                                                         type="button"
                                                         on:click|stopPropagation={toggleFullscreen}
+                                                        data-tooltip-disabled
                                                         aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                                                 >
                                                         {#if isFullscreen}
