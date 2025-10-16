@@ -22,6 +22,7 @@
         } from '$lib/utils/members';
         import { presenceStatusLabel } from '$lib/utils/presenceLabels';
         import { buildAttachmentUrl } from '$lib/utils/cdn';
+        import { resolveAvatarUrl } from '$lib/utils/avatar';
         import { m } from '$lib/paraglide/messages.js';
         import { tick } from 'svelte';
         import { Loader2, UserMinus, UserPlus } from 'lucide-svelte';
@@ -228,6 +229,9 @@
                 toSnowflakeString((selectedMember as any)?.user?.avatar) ??
                 toSnowflakeString((selectedUser as any)?.avatar)
         );
+        const resolvedAvatarUrl = $derived.by(() =>
+                resolveAvatarUrl(selectedMember, (selectedMember as any)?.user, selectedUser)
+        );
 
         function resolveFallbackAvatarUrl(): string | null {
                 const member = selectedMember;
@@ -255,6 +259,9 @@
         }
 
         const avatarUrl = $derived.by(() => {
+                if (resolvedAvatarUrl) {
+                        return resolvedAvatarUrl;
+                }
                 const id = avatarId;
                 if (id) {
                         const built = buildAttachmentUrl(id);

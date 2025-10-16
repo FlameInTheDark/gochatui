@@ -25,6 +25,7 @@ import {
         markFriendRemoved,
         triggerFriendDataRefresh
 } from '$lib/stores/friends';
+import { resolveAvatarUrl } from '$lib/utils/avatar';
 
 type AnyRecord = Record<string, any>;
 
@@ -603,12 +604,18 @@ function buildDmRecipientFromUser(user: AnyRecord | null | undefined, fallbackId
                                 : username;
         if (!base.display_name && displayName) base.display_name = displayName;
         if (!base.global_name && displayName) base.global_name = displayName;
-        const avatarUrl =
-                base.avatarUrl ?? base.avatar_url ?? base.avatar ?? base.avatarId ?? base.avatar_id ?? null;
-        if (!base.avatarUrl && avatarUrl) base.avatarUrl = avatarUrl;
-        if (!base.avatar && avatarUrl) base.avatar = avatarUrl;
-        if (!base.avatar_id && avatarUrl) base.avatar_id = avatarUrl;
-        if (!base.avatarId && avatarUrl) base.avatarId = avatarUrl;
+        const avatarUrl = resolveAvatarUrl(base);
+        if (avatarUrl) {
+                if (typeof base.avatarUrl !== 'string') base.avatarUrl = avatarUrl;
+                if (typeof base.avatar_url !== 'string') base.avatar_url = avatarUrl;
+                if (!base.avatar) {
+                        base.avatar = { url: avatarUrl };
+                } else if (typeof base.avatar === 'string') {
+                        base.avatar = { id: base.avatar, url: avatarUrl };
+                } else if (typeof base.avatar === 'object' && base.avatar !== null) {
+                        base.avatar = { ...base.avatar, url: (base.avatar as AnyRecord).url ?? avatarUrl };
+                }
+        }
         return base;
 }
 
@@ -932,6 +939,46 @@ export function connectWS() {
                                 if (senderId) {
                                         minimalMessage.author_id = senderId;
                                         minimalMessage.authorId = senderId;
+                                }
+
+                                const rawMessage = (payload?.message as AnyRecord | undefined) ?? null;
+                                if (rawMessage && typeof rawMessage === 'object') {
+                                        if (rawMessage.content != null && minimalMessage.content == null) {
+                                                minimalMessage.content = rawMessage.content;
+                                        }
+                                }
+
+                                const rawAuthor =
+                                        (rawMessage?.author as AnyRecord | undefined) ??
+                                        (payload?.from as AnyRecord | undefined);
+                                if (rawAuthor && typeof rawAuthor === 'object') {
+                                        const author: AnyRecord = { ...rawAuthor };
+                                        if (!author.id && senderId) {
+                                                author.id = senderId;
+                                        }
+                                        if (!senderId && author.id != null) {
+                                                const normalized = normalizeSnowflake(author.id);
+                                                if (normalized) {
+                                                        minimalMessage.author_id = normalized;
+                                                        minimalMessage.authorId = normalized;
+                                                }
+                                        }
+                                        const avatarUrl = resolveAvatarUrl(author);
+                                        if (avatarUrl) {
+                                                if (typeof author.avatarUrl !== 'string') author.avatarUrl = avatarUrl;
+                                                if (typeof author.avatar_url !== 'string') author.avatar_url = avatarUrl;
+                                                if (!author.avatar) {
+                                                        author.avatar = { url: avatarUrl };
+                                                } else if (typeof author.avatar === 'string') {
+                                                        author.avatar = { id: author.avatar, url: avatarUrl };
+                                                } else if (typeof author.avatar === 'object' && author.avatar !== null) {
+                                                        author.avatar = {
+                                                                ...(author.avatar as AnyRecord),
+                                                                url: (author.avatar as AnyRecord).url ?? avatarUrl
+                                                        };
+                                                }
+                                        }
+                                        minimalMessage.author = author;
                                 }
 
                                 let shouldFetchDmMetadata = false;
