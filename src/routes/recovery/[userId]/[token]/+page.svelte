@@ -1,24 +1,20 @@
 <script lang="ts">
-        import AuthGate from '$lib/components/app/auth/AuthGate.svelte';
-        import type { PageData } from './$types';
+	import AuthGate from '$lib/components/app/auth/AuthGate.svelte';
+	import type { PageData } from './$types';
 
-        let { data } = $props<{ data: PageData }>();
+	let { data } = $props<{ data: PageData }>();
 
-        let resetDefaults = $state({
-                id: data.userId,
-                token: data.token
-        });
+	let resetDefaults = $state({
+		id: data.userId,
+		token: data.token
+	});
 
-        $effect(() => {
-                resetDefaults = {
-                        id: data.userId,
-                        token: data.token
-                };
-        });
+	$effect(() => {
+		resetDefaults = {
+			id: data.userId,
+			token: data.token
+		};
+	});
 </script>
 
-<AuthGate
-        initialMode="reset"
-        resetDefaults={resetDefaults}
-        forceAuthFlow
-/>
+<AuthGate initialMode="reset" {resetDefaults} forceAuthFlow />

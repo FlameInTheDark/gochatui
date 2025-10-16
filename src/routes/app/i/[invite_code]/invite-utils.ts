@@ -40,30 +40,32 @@ export function getInviteUnavailableMessage(state: InviteState): string | null {
 }
 
 export type JoinGuildDeps = {
-        acceptInvite: (params: { inviteCode: string }) => Promise<unknown>;
-        loadGuilds: () => Promise<unknown>;
-        goto: (path: string) => Promise<unknown> | unknown;
-        onSuccess?: (context: { guildId: string | null; guild: DtoGuild | null }) =>
-                Promise<unknown> | unknown;
+	acceptInvite: (params: { inviteCode: string }) => Promise<unknown>;
+	loadGuilds: () => Promise<unknown>;
+	goto: (path: string) => Promise<unknown> | unknown;
+	onSuccess?: (context: {
+		guildId: string | null;
+		guild: DtoGuild | null;
+	}) => Promise<unknown> | unknown;
 };
 
 type AcceptInviteResponse = { data?: DtoGuild | null };
 
 export async function joinGuild(
-        inviteCode: string,
-        destination: string,
-        deps: JoinGuildDeps
+	inviteCode: string,
+	destination: string,
+	deps: JoinGuildDeps
 ): Promise<{ success: true } | { success: false; message: string }> {
-        try {
-                const response = (await deps.acceptInvite({ inviteCode })) as AcceptInviteResponse;
-                const guild = response?.data ?? null;
-                const guildId = guild?.id != null ? String(guild.id) : null;
-                await deps.loadGuilds().catch(() => {});
-                if (deps.onSuccess) {
-                        await deps.onSuccess({ guildId, guild });
-                }
-                await deps.goto(destination);
-                return { success: true };
+	try {
+		const response = (await deps.acceptInvite({ inviteCode })) as AcceptInviteResponse;
+		const guild = response?.data ?? null;
+		const guildId = guild?.id != null ? String(guild.id) : null;
+		await deps.loadGuilds().catch(() => {});
+		if (deps.onSuccess) {
+			await deps.onSuccess({ guildId, guild });
+		}
+		await deps.goto(destination);
+		return { success: true };
 	} catch (error) {
 		const err = error as {
 			response?: { data?: { message?: string } };

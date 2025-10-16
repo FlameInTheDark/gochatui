@@ -10,11 +10,11 @@ export default defineConfig({
 		globals: true
 	},
 	resolve: {
-                alias: {
-                        $lib: resolve(rootDir, 'src/lib'),
-                        '$env/dynamic/public': resolve(rootDir, 'src/tests/mocks/env-dynamic-public.ts'),
-                        '$app/environment': resolve(rootDir, 'src/tests/mocks/app-environment.ts'),
-                        '$lib/paraglide/runtime': resolve(rootDir, 'src/tests/mocks/paraglide-runtime.ts')
-                }
-        }
+		alias: {
+			$lib: resolve(rootDir, 'src/lib'),
+			'$env/dynamic/public': resolve(rootDir, 'src/tests/mocks/env-dynamic-public.ts'),
+			'$app/environment': resolve(rootDir, 'src/tests/mocks/app-environment.ts'),
+			'$lib/paraglide/runtime': resolve(rootDir, 'src/tests/mocks/paraglide-runtime.ts')
+		}
+	}
 });

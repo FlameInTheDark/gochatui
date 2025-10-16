@@ -21,4 +21,5 @@
 	$: highlighted = highlight(code, language);
 </script>
 
-<pre class="hljs m-0 overflow-x-auto rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm">{@html highlighted}</pre>
+<pre
+	class="hljs m-0 overflow-x-auto rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm">{@html highlighted}</pre>

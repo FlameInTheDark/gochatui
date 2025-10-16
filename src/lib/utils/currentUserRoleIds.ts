@@ -27,36 +27,36 @@ export function memberUserId(member: DtoMember | undefined): string | null {
 }
 
 export function collectMemberRoleIds(member: DtoMember | undefined): string[] {
-        if (!member) return [];
-        const roles = (member as any)?.roles;
-        const list = Array.isArray(roles) ? roles : [];
-        const seen = new Set<string>();
-        const result: string[] = [];
-        for (const entry of list) {
-                const candidates: unknown[] = [];
+	if (!member) return [];
+	const roles = (member as any)?.roles;
+	const list = Array.isArray(roles) ? roles : [];
+	const seen = new Set<string>();
+	const result: string[] = [];
+	for (const entry of list) {
+		const candidates: unknown[] = [];
 
-                if (entry && typeof entry === 'object') {
-                        const obj = entry as any;
-                        candidates.push(obj?.role?.id, obj?.id, obj?.role_id, obj?.roleId);
-                }
+		if (entry && typeof entry === 'object') {
+			const obj = entry as any;
+			candidates.push(obj?.role?.id, obj?.id, obj?.role_id, obj?.roleId);
+		}
 
-                candidates.push(entry);
+		candidates.push(entry);
 
-                for (const candidate of candidates) {
-                        const id = toSnowflakeString(candidate);
-                        if (!id) {
-                                continue;
-                        }
+		for (const candidate of candidates) {
+			const id = toSnowflakeString(candidate);
+			if (!id) {
+				continue;
+			}
 
-                        if (!seen.has(id)) {
-                                seen.add(id);
-                                result.push(id);
-                        }
+			if (!seen.has(id)) {
+				seen.add(id);
+				result.push(id);
+			}
 
-                        break;
-                }
-        }
-        return result;
+			break;
+		}
+	}
+	return result;
 }
 
 export type ResolveCurrentUserRoleIdsParams = {

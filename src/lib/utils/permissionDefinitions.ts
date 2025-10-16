@@ -181,28 +181,28 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
 ];
 
 const CHANNEL_PERMISSION_ALLOW_LIST: Partial<Record<PermissionCategory['id'], number[]>> = {
-        server: [1 << 0, 1 << 1, 1 << 2],
-        membership: [1 << 5]
+	server: [1 << 0, 1 << 1, 1 << 2],
+	membership: [1 << 5]
 };
 
 export const CHANNEL_PERMISSION_CATEGORIES: PermissionCategory[] = PERMISSION_CATEGORIES.map(
-        (category) => {
-                if (category.id === 'advanced') {
-                        return null;
-                }
+	(category) => {
+		if (category.id === 'advanced') {
+			return null;
+		}
 
-                const allowedValues = CHANNEL_PERMISSION_ALLOW_LIST[category.id];
-                const permissions = allowedValues
-                        ? category.permissions.filter((perm) => allowedValues.includes(perm.value))
-                        : category.permissions;
+		const allowedValues = CHANNEL_PERMISSION_ALLOW_LIST[category.id];
+		const permissions = allowedValues
+			? category.permissions.filter((perm) => allowedValues.includes(perm.value))
+			: category.permissions;
 
-                if (permissions.length === 0) {
-                        return null;
-                }
+		if (permissions.length === 0) {
+			return null;
+		}
 
-                return {
-                        ...category,
-                        permissions
-                } satisfies PermissionCategory;
-        }
+		return {
+			...category,
+			permissions
+		} satisfies PermissionCategory;
+	}
 ).filter((category): category is PermissionCategory => category !== null);

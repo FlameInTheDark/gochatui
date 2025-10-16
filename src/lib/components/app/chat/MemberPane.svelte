@@ -8,32 +8,32 @@
 		selectedChannelId,
 		selectedGuildId
 	} from '$lib/stores/appState';
-        import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
-        import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
-        import { m } from '$lib/paraglide/messages.js';
-        import { openUserContextMenu } from '$lib/utils/userContextMenu';
-        import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
-        import {
-                memberHasChannelAccess as resolveMemberChannelAccess,
-                describeMemberChannelAccess as describeMemberChannelAccessDev,
-                type MemberChannelAccessDescription
-        } from '$lib/utils/memberChannelAccess';
-        import {
-                buildRoleMap,
-                collectMemberRoleIds,
-                memberInitial,
-                memberPrimaryName,
-                resolveMemberRoleColor,
-                toSnowflakeString
-        } from '$lib/utils/members';
-        import {
-                createPresenceSubscription,
-                presenceByUser,
-                presenceIndicatorClass,
-                type PresenceStatus
-        } from '$lib/stores/presence';
-        import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
-        import { onDestroy } from 'svelte';
+	import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
+	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
+	import { m } from '$lib/paraglide/messages.js';
+	import { openUserContextMenu } from '$lib/utils/userContextMenu';
+	import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
+	import {
+		memberHasChannelAccess as resolveMemberChannelAccess,
+		describeMemberChannelAccess as describeMemberChannelAccessDev,
+		type MemberChannelAccessDescription
+	} from '$lib/utils/memberChannelAccess';
+	import {
+		buildRoleMap,
+		collectMemberRoleIds,
+		memberInitial,
+		memberPrimaryName,
+		resolveMemberRoleColor,
+		toSnowflakeString
+	} from '$lib/utils/members';
+	import {
+		createPresenceSubscription,
+		presenceByUser,
+		presenceIndicatorClass,
+		type PresenceStatus
+	} from '$lib/stores/presence';
+	import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
+	import { onDestroy } from 'svelte';
 
 	const guilds = auth.guilds;
 	const presenceMap = presenceByUser;
@@ -59,7 +59,7 @@
 	let membersError = $state<string | null>(null);
 	let roleMap = $state<Record<string, DtoRole>>({});
 
-        let membersLoadToken = 0;
+	let membersLoadToken = 0;
 
 	const describeMemberChannelAccess = import.meta.env.DEV
 		? describeMemberChannelAccessDev
@@ -270,123 +270,123 @@
 		};
 	});
 
-        type PresenceBucket = 'online' | 'offline';
+	type PresenceBucket = 'online' | 'offline';
 
-        type DecoratedMember = {
-                member: DtoMember;
-                hasAccess: boolean;
-                name: string;
-                color: string | null;
-                userId: string | null;
-                presenceStatus: PresenceStatus | null;
-                presenceSince: number | null;
-                hasPresence: boolean;
-                customStatusText: string | null;
-                presenceBucket: PresenceBucket;
-        };
+	type DecoratedMember = {
+		member: DtoMember;
+		hasAccess: boolean;
+		name: string;
+		color: string | null;
+		userId: string | null;
+		presenceStatus: PresenceStatus | null;
+		presenceSince: number | null;
+		hasPresence: boolean;
+		customStatusText: string | null;
+		presenceBucket: PresenceBucket;
+	};
 
-        const decoratedMembers = $derived.by(() => {
-                const channel = currentChannel;
-                const guild = currentGuild;
+	const decoratedMembers = $derived.by(() => {
+		const channel = currentChannel;
+		const guild = currentGuild;
 		const list = currentMembers ?? [];
 		if (!channel) {
 			applyTrackedUserIds([]);
 			return [] as DecoratedMember[];
 		}
 		const lookup = $presenceMap;
-                const entries = list.map<DecoratedMember>((member) => {
-                        const hasAccess = memberHasChannelAccess(member, channel, guild);
-                        const guildId = toSnowflakeString((guild as any)?.id) ?? null;
-                        const userId =
-                                toSnowflakeString((member as any)?.user?.id) ?? toSnowflakeString((member as any)?.id);
-                        const info = userId ? (lookup[userId] ?? null) : null;
-                        const presenceStatus = info?.status ?? null;
-                        const hasPresence = Boolean(info);
-                        const rawCustomStatus = info?.customStatusText;
-                        const customStatusText =
-                                typeof rawCustomStatus === 'string' && rawCustomStatus.trim().length > 0
-                                        ? rawCustomStatus
-                                        : null;
-                        const presenceBucket: PresenceBucket =
-                                hasPresence && presenceStatus && presenceStatus !== 'offline' ? 'online' : 'offline';
-                        return {
-                                member,
-                                hasAccess,
-                                name: memberPrimaryName(member),
-                                color: resolveMemberRoleColor(member, guildId, roleMap),
-                                userId,
-                                presenceStatus,
-                                presenceSince: info?.since ?? null,
-                                hasPresence,
-                                customStatusText,
-                                presenceBucket
-                        };
-                });
-                const hideWithoutAccess = Boolean((channel as any)?.private);
-                const filtered = hideWithoutAccess ? entries.filter((entry) => entry.hasAccess) : entries;
-                const tracked = filtered.map((entry) => entry.userId).filter((id): id is string => Boolean(id));
-                applyTrackedUserIds(tracked);
-                return filtered;
-        });
+		const entries = list.map<DecoratedMember>((member) => {
+			const hasAccess = memberHasChannelAccess(member, channel, guild);
+			const guildId = toSnowflakeString((guild as any)?.id) ?? null;
+			const userId =
+				toSnowflakeString((member as any)?.user?.id) ?? toSnowflakeString((member as any)?.id);
+			const info = userId ? (lookup[userId] ?? null) : null;
+			const presenceStatus = info?.status ?? null;
+			const hasPresence = Boolean(info);
+			const rawCustomStatus = info?.customStatusText;
+			const customStatusText =
+				typeof rawCustomStatus === 'string' && rawCustomStatus.trim().length > 0
+					? rawCustomStatus
+					: null;
+			const presenceBucket: PresenceBucket =
+				hasPresence && presenceStatus && presenceStatus !== 'offline' ? 'online' : 'offline';
+			return {
+				member,
+				hasAccess,
+				name: memberPrimaryName(member),
+				color: resolveMemberRoleColor(member, guildId, roleMap),
+				userId,
+				presenceStatus,
+				presenceSince: info?.since ?? null,
+				hasPresence,
+				customStatusText,
+				presenceBucket
+			};
+		});
+		const hideWithoutAccess = Boolean((channel as any)?.private);
+		const filtered = hideWithoutAccess ? entries.filter((entry) => entry.hasAccess) : entries;
+		const tracked = filtered.map((entry) => entry.userId).filter((id): id is string => Boolean(id));
+		applyTrackedUserIds(tracked);
+		return filtered;
+	});
 
-        type MemberGroup = {
-                id: PresenceBucket;
-                members: DecoratedMember[];
-        };
+	type MemberGroup = {
+		id: PresenceBucket;
+		members: DecoratedMember[];
+	};
 
-        function compareMemberEntries(a: DecoratedMember, b: DecoratedMember): number {
-                if (a.hasAccess !== b.hasAccess) return a.hasAccess ? -1 : 1;
-                return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-        }
+	function compareMemberEntries(a: DecoratedMember, b: DecoratedMember): number {
+		if (a.hasAccess !== b.hasAccess) return a.hasAccess ? -1 : 1;
+		return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+	}
 
-        const memberGroups = $derived.by(() => {
-                const online: DecoratedMember[] = [];
-                const offline: DecoratedMember[] = [];
-                for (const entry of decoratedMembers) {
-                        if (entry.presenceBucket === 'online') {
-                                online.push(entry);
-                        } else {
-                                offline.push(entry);
-                        }
-                }
-                online.sort(compareMemberEntries);
-                offline.sort(compareMemberEntries);
-                return [
-                        { id: 'online', members: online },
-                        { id: 'offline', members: offline }
-                ] satisfies MemberGroup[];
-        });
+	const memberGroups = $derived.by(() => {
+		const online: DecoratedMember[] = [];
+		const offline: DecoratedMember[] = [];
+		for (const entry of decoratedMembers) {
+			if (entry.presenceBucket === 'online') {
+				online.push(entry);
+			} else {
+				offline.push(entry);
+			}
+		}
+		online.sort(compareMemberEntries);
+		offline.sort(compareMemberEntries);
+		return [
+			{ id: 'online', members: online },
+			{ id: 'offline', members: offline }
+		] satisfies MemberGroup[];
+	});
 
-        function openMemberPanel(event: MouseEvent, entry: DecoratedMember) {
-                const target = event.currentTarget as HTMLElement | null;
-                let anchor: { x: number; y: number; width: number; height: number } | null = null;
-                if (target && typeof window !== 'undefined') {
-                        const rect = target.getBoundingClientRect();
-                        anchor = {
-                                x: rect.left,
-                                y: rect.top,
-                                width: rect.width,
-                                height: rect.height
-                        };
-                }
+	function openMemberPanel(event: MouseEvent, entry: DecoratedMember) {
+		const target = event.currentTarget as HTMLElement | null;
+		let anchor: { x: number; y: number; width: number; height: number } | null = null;
+		if (target && typeof window !== 'undefined') {
+			const rect = target.getBoundingClientRect();
+			anchor = {
+				x: rect.left,
+				y: rect.top,
+				width: rect.width,
+				height: rect.height
+			};
+		}
 
-                memberProfilePanel.open({
-                        member: entry.member,
-                        user: (entry.member as any)?.user ?? null,
-                        guildId: $selectedGuildId,
-                        anchor
-                });
-        }
+		memberProfilePanel.open({
+			member: entry.member,
+			user: (entry.member as any)?.user ?? null,
+			guildId: $selectedGuildId,
+			anchor
+		});
+	}
 
-        $effect(() => {
-                const panelState = $memberProfilePanel;
-                const gid = $selectedGuildId;
-                if (panelState.open && panelState.guildId && panelState.guildId !== gid) {
-                        memberProfilePanel.close();
-                }
-        });
+	$effect(() => {
+		const panelState = $memberProfilePanel;
+		const gid = $selectedGuildId;
+		if (panelState.open && panelState.guildId && panelState.guildId !== gid) {
+			memberProfilePanel.close();
+		}
+	});
 
-        const displayCount = $derived.by(() => decoratedMembers.length);
+	const displayCount = $derived.by(() => decoratedMembers.length);
 </script>
 
 <div
@@ -407,60 +407,62 @@
 			<div class="px-4 py-6 text-sm text-red-400">{membersError}</div>
 		{:else if decoratedMembers.length === 0}
 			<div class="px-4 py-6 text-sm text-[var(--muted)]">{m.channel_members_empty()}</div>
-                {:else}
-                        <div class="space-y-4 py-2">
-                                {#each memberGroups as group (group.id)}
-                                        {#if group.members.length}
-                                                <div class="space-y-1">
-                                                        <div class="px-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                                                                {group.id === 'online'
-                                                                        ? m.channel_members_group_online({ count: group.members.length })
-                                                                        : m.channel_members_group_offline({ count: group.members.length })}
-                                                        </div>
-                                                        {#each group.members as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
-                                                                <button
-                                                                        type="button"
-                                                                        class="group/member flex w-full select-none items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-                                                                        onclick={(event) => openMemberPanel(event, entry)}
-                                                                        oncontextmenu={(event) =>
-                                                                                openUserContextMenu(
-                                                                                        event,
-                                                                                        { member: entry.member },
-                                                                                        {
-                                                                                                guildId: $selectedGuildId,
-                                                                                                channelId: $selectedChannelId
-                                                                                        }
-                                                                                )}
-                                                                        data-tooltip-disabled
-                                                                >
-                                                                        <div class="relative h-8 w-8 flex-shrink-0">
-                                                                                <div
-                                                                                        class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
-                                                                                >
-                                                                                        {memberInitial(entry.member)}
-                                                                                </div>
-                                                                                <span
-                                                                                        class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
-                                                                                        class:opacity-0={!entry.hasPresence}
-                                                                                ></span>
-                                                                        </div>
-                                                                        <div class="min-w-0 flex-1">
-                                                                                <div class="truncate font-medium" style:color={entry.color ?? null}>
-                                                                                        {entry.name}
-                                                                                </div>
-                                                                                {#if entry.customStatusText}
-                                                                                        <div class="truncate text-xs text-[var(--muted)]">{entry.customStatusText}</div>
-                                                                                {/if}
-                                                                                {#if !entry.hasAccess}
-                                                                                        <div class="text-xs text-[var(--muted)]">{m.channel_members_no_access()}</div>
-                                                                                {/if}
-                                                                        </div>
-                                                                </button>
-                                                        {/each}
-                                                </div>
-                                        {/if}
-                                {/each}
-                        </div>
-                {/if}
-        </div>
+		{:else}
+			<div class="space-y-4 py-2">
+				{#each memberGroups as group (group.id)}
+					{#if group.members.length}
+						<div class="space-y-1">
+							<div class="px-3 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
+								{group.id === 'online'
+									? m.channel_members_group_online({ count: group.members.length })
+									: m.channel_members_group_offline({ count: group.members.length })}
+							</div>
+							{#each group.members as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
+								<button
+									type="button"
+									class="group/member flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition select-none hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+									onclick={(event) => openMemberPanel(event, entry)}
+									oncontextmenu={(event) =>
+										openUserContextMenu(
+											event,
+											{ member: entry.member },
+											{
+												guildId: $selectedGuildId,
+												channelId: $selectedChannelId
+											}
+										)}
+									data-tooltip-disabled
+								>
+									<div class="relative h-8 w-8 flex-shrink-0">
+										<div
+											class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
+										>
+											{memberInitial(entry.member)}
+										</div>
+										<span
+											class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
+											class:opacity-0={!entry.hasPresence}
+										></span>
+									</div>
+									<div class="min-w-0 flex-1">
+										<div class="truncate font-medium" style:color={entry.color ?? null}>
+											{entry.name}
+										</div>
+										{#if entry.customStatusText}
+											<div class="truncate text-xs text-[var(--muted)]">
+												{entry.customStatusText}
+											</div>
+										{/if}
+										{#if !entry.hasAccess}
+											<div class="text-xs text-[var(--muted)]">{m.channel_members_no_access()}</div>
+										{/if}
+									</div>
+								</button>
+							{/each}
+						</div>
+					{/if}
+				{/each}
+			</div>
+		{/if}
+	</div>
 </div>

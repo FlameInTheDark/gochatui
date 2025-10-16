@@ -341,12 +341,12 @@
 </script>
 
 <svelte:window
-        onkeydown={onGlobalKey}
-        onclick={() => contextMenu.close()}
-        onresize={() => {
-                updatePosition();
-                updateSubmenuPosition();
-        }}
+	onkeydown={onGlobalKey}
+	onclick={() => contextMenu.close()}
+	onresize={() => {
+		updatePosition();
+		updateSubmenuPosition();
+	}}
 />
 
 {#if $contextMenu.open}

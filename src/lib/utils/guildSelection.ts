@@ -1,12 +1,12 @@
 import { get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import {
-        activeView,
-        channelReady,
-        channelsByGuild,
-        lastChannelByGuild,
-        selectedChannelId,
-        selectedGuildId
+	activeView,
+	channelReady,
+	channelsByGuild,
+	lastChannelByGuild,
+	selectedChannelId,
+	selectedGuildId
 } from '$lib/stores/appState';
 import { appSettings, updateGuildSelectedChannel, type AppSettings } from '$lib/stores/settings';
 import { subscribeWS } from '$lib/client/ws';
@@ -27,10 +27,10 @@ function toApiSnowflake(value: string): any {
 }
 
 function findGuildSelectedChannel(settings: AppSettings, guildId: string): string | null {
-        for (const item of settings.guildLayout) {
-                if (item.kind === 'guild') {
-                        if (item.guildId === guildId) {
-                                return item.selectedChannelId ?? null;
+	for (const item of settings.guildLayout) {
+		if (item.kind === 'guild') {
+			if (item.guildId === guildId) {
+				return item.selectedChannelId ?? null;
 			}
 			continue;
 		}
@@ -39,7 +39,7 @@ function findGuildSelectedChannel(settings: AppSettings, guildId: string): strin
 			return match.selectedChannelId ?? null;
 		}
 	}
-        return null;
+	return null;
 }
 
 let switchToken = 0;
@@ -51,12 +51,12 @@ export async function selectGuild(guildId: string | number | bigint | null | und
 
 	const myToken = ++switchToken;
 
-        selectedGuildId.set(gid);
-        activeView.set('guild');
-        channelReady.set(false);
-        selectedChannelId.set(null);
+	selectedGuildId.set(gid);
+	activeView.set('guild');
+	channelReady.set(false);
+	selectedChannelId.set(null);
 
-        try {
+	try {
 		const channelRequest = auth.api.guild.guildGuildIdChannelGet({
 			guildId: toApiSnowflake(gid)
 		});

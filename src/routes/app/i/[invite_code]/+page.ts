@@ -42,38 +42,38 @@ export const prerender = false;
 export const ssr = false;
 
 export const load: PageLoad = async ({ params }) => {
-        const inviteCode = params.invite_code;
+	const inviteCode = params.invite_code;
 
-        let invite: DtoInvitePreview | null = null;
-        let inviteState: 'ok' | 'not-found' | 'error' = 'error';
+	let invite: DtoInvitePreview | null = null;
+	let inviteState: 'ok' | 'not-found' | 'error' = 'error';
 
-        await waitForRuntimeApiBase();
-        try {
-                const response = await auth.api.guildInvites.guildInvitesReceiveInviteCodeGet({
-                        inviteCode
-                });
+	await waitForRuntimeApiBase();
+	try {
+		const response = await auth.api.guildInvites.guildInvitesReceiveInviteCodeGet({
+			inviteCode
+		});
 
-                const inviteData = response.data ?? null;
+		const inviteData = response.data ?? null;
 
-                if (inviteData) {
-                        invite = inviteData;
-                        inviteState = 'ok';
-                } else {
-                        console.error('Invite preview response did not include a payload');
-                        inviteState = 'error';
-                }
-        } catch (error) {
-                if (isAxiosError(error) && error.response?.status === 404) {
-                        inviteState = 'not-found';
-                } else {
-                        console.error('Failed to load invite preview', error);
-                        inviteState = 'error';
-                }
-        }
+		if (inviteData) {
+			invite = inviteData;
+			inviteState = 'ok';
+		} else {
+			console.error('Invite preview response did not include a payload');
+			inviteState = 'error';
+		}
+	} catch (error) {
+		if (isAxiosError(error) && error.response?.status === 404) {
+			inviteState = 'not-found';
+		} else {
+			console.error('Failed to load invite preview', error);
+			inviteState = 'error';
+		}
+	}
 
-        return {
-                inviteCode,
-                invite,
+	return {
+		inviteCode,
+		invite,
 		inviteState
 	};
 };

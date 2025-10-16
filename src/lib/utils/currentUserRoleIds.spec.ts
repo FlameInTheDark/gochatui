@@ -39,11 +39,11 @@ describe('resolveCurrentUserRoleIds', () => {
 		expect(Array.from(result).sort()).toEqual(['1111', '1234', '2222', '3333']);
 	});
 
-        it('normalizes mixed identifier types and removes duplicates', () => {
-                const fallbackRoles = new Set<unknown>(['4444', 5555, 6666n]);
-                const members = [
-                        {
-                                user: { id: currentUserId },
+	it('normalizes mixed identifier types and removes duplicates', () => {
+		const fallbackRoles = new Set<unknown>(['4444', 5555, 6666n]);
+		const members = [
+			{
+				user: { id: currentUserId },
 				roles: ['4444', { id: 5555 }, { role_id: 7777n }]
 			}
 		] as any;
@@ -55,58 +55,50 @@ describe('resolveCurrentUserRoleIds', () => {
 			fallbackRoleIds: fallbackRoles
 		});
 
-                expect(Array.from(result).sort()).toEqual(['1234', '4444', '5555', '6666', '7777']);
-        });
+		expect(Array.from(result).sort()).toEqual(['1234', '4444', '5555', '6666', '7777']);
+	});
 
-        it('collectMemberRoleIds handles roleId properties on role objects', () => {
-                const member = {
-                        user: { id: currentUserId },
-                        roles: [
-                                { roleId: '8888' },
-                                { id: '9999' },
-                                { role_id: '7777' },
-                                '6666'
-                        ]
-                } as any;
+	it('collectMemberRoleIds handles roleId properties on role objects', () => {
+		const member = {
+			user: { id: currentUserId },
+			roles: [{ roleId: '8888' }, { id: '9999' }, { role_id: '7777' }, '6666']
+		} as any;
 
-                const result = collectMemberRoleIds(member);
+		const result = collectMemberRoleIds(member);
 
-                expect(result.sort()).toEqual(['6666', '7777', '8888', '9999']);
-        });
+		expect(result.sort()).toEqual(['6666', '7777', '8888', '9999']);
+	});
 
-        it('collectMemberRoleIds includes nested role identifiers', () => {
-                const member = {
-                        user: { id: currentUserId },
-                        roles: [{ role: { id: '5005' } }]
-                } as any;
+	it('collectMemberRoleIds includes nested role identifiers', () => {
+		const member = {
+			user: { id: currentUserId },
+			roles: [{ role: { id: '5005' } }]
+		} as any;
 
-                const result = collectMemberRoleIds(member);
+		const result = collectMemberRoleIds(member);
 
-                expect(result).toEqual(['5005']);
-        });
+		expect(result).toEqual(['5005']);
+	});
 
-        it('collectMemberRoleIds prioritizes nested role identifiers over fallback properties', () => {
-                const member = {
-                        user: { id: currentUserId },
-                        roles: [
-                                { role: { id: '5005' }, id: '9999', role_id: '8888', roleId: '7777' },
-                                { id: '6006' }
-                        ]
-                } as any;
+	it('collectMemberRoleIds prioritizes nested role identifiers over fallback properties', () => {
+		const member = {
+			user: { id: currentUserId },
+			roles: [{ role: { id: '5005' }, id: '9999', role_id: '8888', roleId: '7777' }, { id: '6006' }]
+		} as any;
 
-                const result = collectMemberRoleIds(member);
+		const result = collectMemberRoleIds(member);
 
-                expect(result).toEqual(['5005', '6006']);
-        });
+		expect(result).toEqual(['5005', '6006']);
+	});
 
-        it('collectMemberRoleIds picks nested role identifiers before raw entries', () => {
-                const member = {
-                        user: { id: currentUserId },
-                        roles: [{ role: { id: '5005' } }, '5005']
-                } as any;
+	it('collectMemberRoleIds picks nested role identifiers before raw entries', () => {
+		const member = {
+			user: { id: currentUserId },
+			roles: [{ role: { id: '5005' } }, '5005']
+		} as any;
 
-                const result = collectMemberRoleIds(member);
+		const result = collectMemberRoleIds(member);
 
-                expect(result).toEqual(['5005']);
-        });
+		expect(result).toEqual(['5005']);
+	});
 });

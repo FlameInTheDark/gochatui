@@ -1,13 +1,13 @@
 import { browser } from '$app/environment';
 import { writable, derived, get } from 'svelte/store';
 import type {
-        AuthLoginRequest,
-        AuthRegisterRequest,
-        AuthConfirmationRequest,
-        AuthPasswordRecoveryRequest,
-        AuthPasswordResetRequest,
-        DtoUser,
-        DtoGuild
+	AuthLoginRequest,
+	AuthRegisterRequest,
+	AuthConfirmationRequest,
+	AuthPasswordRecoveryRequest,
+	AuthPasswordResetRequest,
+	DtoUser,
+	DtoGuild
 } from '$lib/api';
 import { createApi } from '$lib/client/api';
 import { normalizePermissionValue } from '$lib/utils/permissions';
@@ -20,69 +20,67 @@ const REFRESH_LEEWAY_MS = 30_000;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 function decodeTokenExpiry(token: string): number | null {
-        try {
-                const part = token.split('.')[1] || '';
-                const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
-                const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-                const json =
-                        typeof atob === 'function'
-                                ? atob(padded)
-                                : Buffer.from(padded, 'base64').toString('utf8');
-                const payload = JSON.parse(json) as { exp?: number };
-                return typeof payload.exp === 'number' ? payload.exp : null;
-        } catch {
-                return null;
-        }
+	try {
+		const part = token.split('.')[1] || '';
+		const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
+		const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+		const json =
+			typeof atob === 'function' ? atob(padded) : Buffer.from(padded, 'base64').toString('utf8');
+		const payload = JSON.parse(json) as { exp?: number };
+		return typeof payload.exp === 'number' ? payload.exp : null;
+	} catch {
+		return null;
+	}
 }
 
 function computeRefreshLeadTime(token: string): number | null {
-        const exp = decodeTokenExpiry(token);
-        if (!exp) return null;
-        const expiresAt = exp * 1000;
-        const msUntilExpiry = expiresAt - Date.now();
-        if (!Number.isFinite(msUntilExpiry)) return null;
-        if (msUntilExpiry <= 0) return 0;
-        const delay = Math.max(0, msUntilExpiry - REFRESH_LEEWAY_MS);
-        return Math.min(delay, MAX_TIMEOUT_MS);
+	const exp = decodeTokenExpiry(token);
+	if (!exp) return null;
+	const expiresAt = exp * 1000;
+	const msUntilExpiry = expiresAt - Date.now();
+	if (!Number.isFinite(msUntilExpiry)) return null;
+	if (msUntilExpiry <= 0) return 0;
+	const delay = Math.max(0, msUntilExpiry - REFRESH_LEEWAY_MS);
+	return Math.min(delay, MAX_TIMEOUT_MS);
 }
 
 function toSnowflakeString(value: unknown): string | null {
-        if (value == null) return null;
-        try {
-                if (typeof value === 'string') return value;
-                if (typeof value === 'bigint') return value.toString();
-                if (typeof value === 'number') return BigInt(value).toString();
-                return String(value);
-        } catch {
-                try {
-                        return String(value);
-                } catch {
-                        return null;
-                }
-        }
+	if (value == null) return null;
+	try {
+		if (typeof value === 'string') return value;
+		if (typeof value === 'bigint') return value.toString();
+		if (typeof value === 'number') return BigInt(value).toString();
+		return String(value);
+	} catch {
+		try {
+			return String(value);
+		} catch {
+			return null;
+		}
+	}
 }
 
 function normalizeRefreshToken(value: string | null | undefined): string | null {
-        if (!value) return null;
-        const trimmed = value.trim();
-        if (!trimmed) return null;
-        const bearerMatch = trimmed.match(/^bearer\s+/i);
-        if (bearerMatch) {
-                const token = trimmed.slice(bearerMatch[0].length).trim();
-                return token ? `Bearer ${token}` : null;
-        }
-        return `Bearer ${trimmed}`;
+	if (!value) return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	const bearerMatch = trimmed.match(/^bearer\s+/i);
+	if (bearerMatch) {
+		const token = trimmed.slice(bearerMatch[0].length).trim();
+		return token ? `Bearer ${token}` : null;
+	}
+	return `Bearer ${trimmed}`;
 }
 
 function createAuthStore() {
-        const token = writable<string | null>(
-                typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
-        );
-        const refreshToken = writable<string | null>(
-                typeof localStorage !== 'undefined'
-                        ? normalizeRefreshToken(localStorage.getItem(REFRESH_KEY))
-                        : null
-        );
+	const token = writable<string | null>(
+		typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
+	);
+	const refreshToken = writable<string | null>(
+		typeof localStorage !== 'undefined'
+			? normalizeRefreshToken(localStorage.getItem(REFRESH_KEY))
+			: null
+	);
 
 	let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -110,20 +108,20 @@ function createAuthStore() {
 		}, delay);
 	}
 
-        async function refresh(): Promise<boolean> {
-                const rt = get(refreshToken);
-                if (!rt) return false;
-                try {
-                        const res = await refreshApi.auth.authRefreshGet({
-                                authorization: rt
-                        });
-                        const t = res.data.token ?? '';
-                        const r = normalizeRefreshToken(res.data.refresh_token);
-                        if (t) token.set(t);
-                        if (r) refreshToken.set(r);
-                        scheduleTokenRefresh(t || get(token));
-                        return true;
-                } catch {
+	async function refresh(): Promise<boolean> {
+		const rt = get(refreshToken);
+		if (!rt) return false;
+		try {
+			const res = await refreshApi.auth.authRefreshGet({
+				authorization: rt
+			});
+			const t = res.data.token ?? '';
+			const r = normalizeRefreshToken(res.data.refresh_token);
+			if (t) token.set(t);
+			if (r) refreshToken.set(r);
+			scheduleTokenRefresh(t || get(token));
+			return true;
+		} catch {
 			logout();
 			return false;
 		}
@@ -156,12 +154,12 @@ function createAuthStore() {
 
 	async function login(data: AuthLoginRequest) {
 		const res = await api.auth.authLoginPost({ authLoginRequest: data });
-                const t = res.data.token ?? '';
-                const r = normalizeRefreshToken(res.data.refresh_token);
-                token.set(t);
-                refreshToken.set(r);
-                return t;
-        }
+		const t = res.data.token ?? '';
+		const r = normalizeRefreshToken(res.data.refresh_token);
+		token.set(t);
+		refreshToken.set(r);
+		return t;
+	}
 
 	function logout() {
 		clearRefreshTimer();
@@ -209,75 +207,73 @@ function createAuthStore() {
 		}
 	}
 
-        function ingestGuilds(list: unknown): DtoGuild[] {
-                const incoming = Array.isArray(list) ? (list as DtoGuild[]) : [];
-                const previous = get(guilds);
-                const previousMap = new Map<string, any>();
-                for (const guild of previous) {
-                        const id = toSnowflakeString((guild as any)?.id);
-                        if (id) {
-                                previousMap.set(id, guild as any);
-                        }
-                }
-                const nextList = incoming.map((guild) => {
-                        const id = toSnowflakeString((guild as any)?.id);
-                        const base = normalizePermissionValue((guild as any)?.permissions);
-                        const prev = id ? previousMap.get(id) : undefined;
-                        const prevEffectiveRaw = prev?.__effectivePermissions;
-                        const effective =
-                                prevEffectiveRaw != null
-                                        ? normalizePermissionValue(prevEffectiveRaw)
-                                        : base;
-                        return {
-                                ...guild,
-                                __basePermissions: base,
-                                __effectivePermissions: effective
-                        } as any;
-                });
-                guilds.set(nextList);
-                return nextList;
-        }
+	function ingestGuilds(list: unknown): DtoGuild[] {
+		const incoming = Array.isArray(list) ? (list as DtoGuild[]) : [];
+		const previous = get(guilds);
+		const previousMap = new Map<string, any>();
+		for (const guild of previous) {
+			const id = toSnowflakeString((guild as any)?.id);
+			if (id) {
+				previousMap.set(id, guild as any);
+			}
+		}
+		const nextList = incoming.map((guild) => {
+			const id = toSnowflakeString((guild as any)?.id);
+			const base = normalizePermissionValue((guild as any)?.permissions);
+			const prev = id ? previousMap.get(id) : undefined;
+			const prevEffectiveRaw = prev?.__effectivePermissions;
+			const effective =
+				prevEffectiveRaw != null ? normalizePermissionValue(prevEffectiveRaw) : base;
+			return {
+				...guild,
+				__basePermissions: base,
+				__effectivePermissions: effective
+			} as any;
+		});
+		guilds.set(nextList);
+		return nextList;
+	}
 
-        async function loadGuilds() {
-                if (!get(token)) return [];
-                const res = await api.user.userMeGuildsGet();
-                return ingestGuilds(res.data ?? []);
-        }
+	async function loadGuilds() {
+		if (!get(token)) return [];
+		const res = await api.user.userMeGuildsGet();
+		return ingestGuilds(res.data ?? []);
+	}
 
 	const isAuthenticated = derived(token, (t) => Boolean(t));
 
-        let hasFetchedMeForSession = false;
+	let hasFetchedMeForSession = false;
 
-        user.subscribe((value) => {
-                if (!value) {
-                        hasFetchedMeForSession = false;
-                }
-        });
+	user.subscribe((value) => {
+		if (!value) {
+			hasFetchedMeForSession = false;
+		}
+	});
 
-        token.subscribe(async (t) => {
-                try {
-                        if (typeof localStorage !== 'undefined') {
-                                if (t) localStorage.setItem(TOKEN_KEY, t);
-                                else localStorage.removeItem(TOKEN_KEY);
-                        }
-                } catch {
-                        // ignore
-                }
-                scheduleTokenRefresh(t);
-                if (t) {
-                        if (!hasFetchedMeForSession) {
-                                hasFetchedMeForSession = true;
-                                const me = await loadMe();
-                                if (!me) {
-                                        hasFetchedMeForSession = false;
-                                }
-                        }
-                } else {
-                        user.set(null);
-                        guilds.set([]);
-                        hasFetchedMeForSession = false;
-                }
-        });
+	token.subscribe(async (t) => {
+		try {
+			if (typeof localStorage !== 'undefined') {
+				if (t) localStorage.setItem(TOKEN_KEY, t);
+				else localStorage.removeItem(TOKEN_KEY);
+			}
+		} catch {
+			// ignore
+		}
+		scheduleTokenRefresh(t);
+		if (t) {
+			if (!hasFetchedMeForSession) {
+				hasFetchedMeForSession = true;
+				const me = await loadMe();
+				if (!me) {
+					hasFetchedMeForSession = false;
+				}
+			}
+		} else {
+			user.set(null);
+			guilds.set([]);
+			hasFetchedMeForSession = false;
+		}
+	});
 
 	refreshToken.subscribe((t) => {
 		try {
@@ -303,17 +299,17 @@ function createAuthStore() {
 		user,
 		guilds,
 		isAuthenticated,
-                api,
-                login,
-                logout,
-                register,
-                confirm,
-                recover,
-                reset,
-                loadMe,
-                loadGuilds,
-                ingestGuilds
-        };
+		api,
+		login,
+		logout,
+		register,
+		confirm,
+		recover,
+		reset,
+		loadMe,
+		loadGuilds,
+		ingestGuilds
+	};
 }
 
 export const auth = createAuthStore();

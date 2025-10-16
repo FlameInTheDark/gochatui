@@ -3,15 +3,15 @@ import type { Writable } from 'svelte/store';
 import type { DtoChannel } from '$lib/api';
 import { auth } from '$lib/stores/auth';
 import {
-        channelRolesByGuild,
-        channelsByGuild,
-        lastChannelByGuild,
-        membersByGuild,
-        messagesByChannel,
-        myGuildRoleIdsByGuild,
-        appHasFocus,
-        selectedChannelId,
-        selectedGuildId
+	channelRolesByGuild,
+	channelsByGuild,
+	lastChannelByGuild,
+	membersByGuild,
+	messagesByChannel,
+	myGuildRoleIdsByGuild,
+	appHasFocus,
+	selectedChannelId,
+	selectedGuildId
 } from '$lib/stores/appState';
 import { markChannelUnread } from '$lib/stores/unread';
 import { browser } from '$app/environment';
@@ -20,67 +20,67 @@ import { getRuntimeConfig } from '$lib/runtime/config';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 import { addVisibleDmChannel } from '$lib/stores/settings';
 import {
-        isFriendId,
-        markFriendAdded,
-        markFriendRemoved,
-        triggerFriendDataRefresh
+	isFriendId,
+	markFriendAdded,
+	markFriendRemoved,
+	triggerFriendDataRefresh
 } from '$lib/stores/friends';
 
 type AnyRecord = Record<string, any>;
 
 interface WSGlobalState {
-        wsConnected: Writable<boolean>;
-        wsConnectionLost: Writable<boolean>;
-        wsEvent: Writable<AnyRecord | null>;
-        wsAuthenticated: Writable<boolean>;
-        socket: WebSocket | null;
-        hbTimer: ReturnType<typeof setInterval> | null;
-        hbWorker: Worker | null;
-        hbWorkerActive: boolean;
-        heartbeatMs: number;
-        lastT: number;
-        authed: boolean;
-        lastHeartbeatE: number;
-        reconnectTimer: ReturnType<typeof setTimeout> | null;
-        shouldReconnect: boolean;
-        latestToken: string | null;
-        heartbeatSessionId: string | null;
-        subscriptionsRegistered: boolean;
-        cleanupSubscribers: (() => void) | null;
+	wsConnected: Writable<boolean>;
+	wsConnectionLost: Writable<boolean>;
+	wsEvent: Writable<AnyRecord | null>;
+	wsAuthenticated: Writable<boolean>;
+	socket: WebSocket | null;
+	hbTimer: ReturnType<typeof setInterval> | null;
+	hbWorker: Worker | null;
+	hbWorkerActive: boolean;
+	heartbeatMs: number;
+	lastT: number;
+	authed: boolean;
+	lastHeartbeatE: number;
+	reconnectTimer: ReturnType<typeof setTimeout> | null;
+	shouldReconnect: boolean;
+	latestToken: string | null;
+	heartbeatSessionId: string | null;
+	subscriptionsRegistered: boolean;
+	cleanupSubscribers: (() => void) | null;
 }
 
 declare global {
-        // eslint-disable-next-line no-var
-        var __GOCHAT_WS_STATE__: WSGlobalState | undefined;
-        interface Window {
-                __GOCHAT_WS_STATE__?: WSGlobalState;
-        }
+	// eslint-disable-next-line no-var
+	var __GOCHAT_WS_STATE__: WSGlobalState | undefined;
+	interface Window {
+		__GOCHAT_WS_STATE__?: WSGlobalState;
+	}
 }
 
 const globalScope = globalThis as typeof globalThis & { __GOCHAT_WS_STATE__?: WSGlobalState };
 
 const wsState: WSGlobalState =
-        globalScope.__GOCHAT_WS_STATE__ ??
-        (globalScope.__GOCHAT_WS_STATE__ = {
-                wsConnected: writable(false),
-                wsConnectionLost: writable(false),
-                wsEvent: writable<AnyRecord | null>(null),
-                wsAuthenticated: writable(false),
-                socket: null,
-                hbTimer: null,
-                hbWorker: null,
-                hbWorkerActive: false,
-                heartbeatMs: 15000,
-                lastT: 0,
-                authed: false,
-                lastHeartbeatE: 0,
-                reconnectTimer: null,
-                shouldReconnect: true,
-                latestToken: get(auth.token),
-                heartbeatSessionId: null,
-                subscriptionsRegistered: false,
-                cleanupSubscribers: null
-        });
+	globalScope.__GOCHAT_WS_STATE__ ??
+	(globalScope.__GOCHAT_WS_STATE__ = {
+		wsConnected: writable(false),
+		wsConnectionLost: writable(false),
+		wsEvent: writable<AnyRecord | null>(null),
+		wsAuthenticated: writable(false),
+		socket: null,
+		hbTimer: null,
+		hbWorker: null,
+		hbWorkerActive: false,
+		heartbeatMs: 15000,
+		lastT: 0,
+		authed: false,
+		lastHeartbeatE: 0,
+		reconnectTimer: null,
+		shouldReconnect: true,
+		latestToken: get(auth.token),
+		heartbeatSessionId: null,
+		subscriptionsRegistered: false,
+		cleanupSubscribers: null
+	});
 
 export const wsConnected = wsState.wsConnected;
 export const wsConnectionLost = wsState.wsConnectionLost;
@@ -110,16 +110,16 @@ const WS_EVENT_DM_MESSAGE = 405;
 const pendingDmUserFetches = new Map<string, Promise<void>>();
 
 function nextT() {
-        lastT += 1;
-        wsState.lastT = lastT;
-        return lastT;
+	lastT += 1;
+	wsState.lastT = lastT;
+	return lastT;
 }
 
 function updateLastT(t?: number) {
-        if (typeof t === 'number' && t > lastT) {
-                lastT = t;
-                wsState.lastT = lastT;
-        }
+	if (typeof t === 'number' && t > lastT) {
+		lastT = t;
+		wsState.lastT = lastT;
+	}
 }
 
 function wsUrl(): string {
@@ -340,9 +340,9 @@ async function refreshGuildsAfterMembershipChange(prevGuildIds: string[]) {
 }
 
 function handleGuildMembershipEvent(data: AnyRecord) {
-        if (!data || data.op !== 0) return;
-        const eventType = typeof data?.t === 'number' ? data.t : null;
-        if (eventType !== WS_EVENT_MEMBER_JOIN && eventType !== WS_EVENT_MEMBER_LEAVE) return;
+	if (!data || data.op !== 0) return;
+	const eventType = typeof data?.t === 'number' ? data.t : null;
+	if (eventType !== WS_EVENT_MEMBER_JOIN && eventType !== WS_EVENT_MEMBER_LEAVE) return;
 
 	const payload = data?.d ?? {};
 	const eventUserId =
@@ -505,9 +505,9 @@ function parseJSONPreserveLargeInts(data: string) {
 }
 
 function nextHeartbeatE(): number {
-        lastHeartbeatE += 1;
-        wsState.lastHeartbeatE = lastHeartbeatE;
-        return lastHeartbeatE;
+	lastHeartbeatE += 1;
+	wsState.lastHeartbeatE = lastHeartbeatE;
+	return lastHeartbeatE;
 }
 
 function sendHeartbeatFrame() {
@@ -523,282 +523,285 @@ function sendHeartbeatFrame() {
 function ensureHeartbeatWorker(): Worker | null {
 	if (!browser) return null;
 	if (typeof Worker === 'undefined') return null;
-        if (!hbWorker) {
-                try {
-                        hbWorker = new Worker(new URL('./heartbeatWorker.ts', import.meta.url), {
-                                type: 'module'
-                        });
-                        wsState.hbWorker = hbWorker;
-                        hbWorker.onmessage = (event: MessageEvent<any>) => {
-                                const payload = event?.data;
-                                if (!payload || typeof payload !== 'object') return;
-                                if (payload.type === 'beat') {
-                                        sendHeartbeatFrame();
+	if (!hbWorker) {
+		try {
+			hbWorker = new Worker(new URL('./heartbeatWorker.ts', import.meta.url), {
+				type: 'module'
+			});
+			wsState.hbWorker = hbWorker;
+			hbWorker.onmessage = (event: MessageEvent<any>) => {
+				const payload = event?.data;
+				if (!payload || typeof payload !== 'object') return;
+				if (payload.type === 'beat') {
+					sendHeartbeatFrame();
 				} else if (payload.type === 'dispose') {
-                                        try {
-                                                hbWorker?.terminate();
-                                        } catch {}
-                                        hbWorker = null;
-                                        hbWorkerActive = false;
-                                        wsState.hbWorker = null;
-                                        wsState.hbWorkerActive = false;
-                                }
-                        };
-                        hbWorker.onerror = () => {
-                                try {
-                                        hbWorker?.terminate();
-                                } catch {}
-                                hbWorker = null;
-                                hbWorkerActive = false;
-                                wsState.hbWorker = null;
-                                wsState.hbWorkerActive = false;
-                        };
-                } catch {
-                        hbWorker = null;
-                        hbWorkerActive = false;
-                        wsState.hbWorker = null;
-                        wsState.hbWorkerActive = false;
-                        return null;
-                }
-        }
-        return hbWorker;
+					try {
+						hbWorker?.terminate();
+					} catch {}
+					hbWorker = null;
+					hbWorkerActive = false;
+					wsState.hbWorker = null;
+					wsState.hbWorkerActive = false;
+				}
+			};
+			hbWorker.onerror = () => {
+				try {
+					hbWorker?.terminate();
+				} catch {}
+				hbWorker = null;
+				hbWorkerActive = false;
+				wsState.hbWorker = null;
+				wsState.hbWorkerActive = false;
+			};
+		} catch {
+			hbWorker = null;
+			hbWorkerActive = false;
+			wsState.hbWorker = null;
+			wsState.hbWorkerActive = false;
+			return null;
+		}
+	}
+	return hbWorker;
 }
 
 function startHeartbeatWorker(interval: number): boolean {
 	const worker = ensureHeartbeatWorker();
 	if (!worker) return false;
-        try {
-                worker.postMessage({ type: 'start', interval });
-                hbWorkerActive = true;
-                wsState.hbWorkerActive = true;
-                return true;
-        } catch {
-                try {
-                        worker.terminate();
-                } catch {}
-                if (hbWorker === worker) hbWorker = null;
-                hbWorkerActive = false;
-                if (hbWorker === null) wsState.hbWorker = null;
-                wsState.hbWorkerActive = false;
-                return false;
-        }
+	try {
+		worker.postMessage({ type: 'start', interval });
+		hbWorkerActive = true;
+		wsState.hbWorkerActive = true;
+		return true;
+	} catch {
+		try {
+			worker.terminate();
+		} catch {}
+		if (hbWorker === worker) hbWorker = null;
+		hbWorkerActive = false;
+		if (hbWorker === null) wsState.hbWorker = null;
+		wsState.hbWorkerActive = false;
+		return false;
+	}
 }
 
-function buildDmRecipientFromUser(user: AnyRecord | null | undefined, fallbackId: string): AnyRecord {
-        const base: AnyRecord = user && typeof user === 'object' ? { ...user } : {};
-        if (!base.id) base.id = fallbackId;
-        const username =
-                (typeof base.username === 'string' && base.username.trim())
-                        ? base.username.trim()
-                        : (typeof base.name === 'string' && base.name.trim())
-                                ? base.name.trim()
-                                : null;
-        if (!base.username && username) base.username = username;
-        if (!base.name && username) base.name = username;
-        const displayName =
-                (typeof base.display_name === 'string' && base.display_name.trim())
-                        ? base.display_name.trim()
-                        : (typeof base.global_name === 'string' && base.global_name.trim())
-                                ? base.global_name.trim()
-                                : username;
-        if (!base.display_name && displayName) base.display_name = displayName;
-        if (!base.global_name && displayName) base.global_name = displayName;
-        const avatarUrl =
-                base.avatarUrl ?? base.avatar_url ?? base.avatar ?? base.avatarId ?? base.avatar_id ?? null;
-        if (!base.avatarUrl && avatarUrl) base.avatarUrl = avatarUrl;
-        if (!base.avatar && avatarUrl) base.avatar = avatarUrl;
-        if (!base.avatar_id && avatarUrl) base.avatar_id = avatarUrl;
-        if (!base.avatarId && avatarUrl) base.avatarId = avatarUrl;
-        return base;
+function buildDmRecipientFromUser(
+	user: AnyRecord | null | undefined,
+	fallbackId: string
+): AnyRecord {
+	const base: AnyRecord = user && typeof user === 'object' ? { ...user } : {};
+	if (!base.id) base.id = fallbackId;
+	const username =
+		typeof base.username === 'string' && base.username.trim()
+			? base.username.trim()
+			: typeof base.name === 'string' && base.name.trim()
+				? base.name.trim()
+				: null;
+	if (!base.username && username) base.username = username;
+	if (!base.name && username) base.name = username;
+	const displayName =
+		typeof base.display_name === 'string' && base.display_name.trim()
+			? base.display_name.trim()
+			: typeof base.global_name === 'string' && base.global_name.trim()
+				? base.global_name.trim()
+				: username;
+	if (!base.display_name && displayName) base.display_name = displayName;
+	if (!base.global_name && displayName) base.global_name = displayName;
+	const avatarUrl =
+		base.avatarUrl ?? base.avatar_url ?? base.avatar ?? base.avatarId ?? base.avatar_id ?? null;
+	if (!base.avatarUrl && avatarUrl) base.avatarUrl = avatarUrl;
+	if (!base.avatar && avatarUrl) base.avatar = avatarUrl;
+	if (!base.avatar_id && avatarUrl) base.avatar_id = avatarUrl;
+	if (!base.avatarId && avatarUrl) base.avatarId = avatarUrl;
+	return base;
 }
 
 function ensureDmChannelUserMetadata(channelId: string, userId: string) {
-        const normalizedChannelId = normalizeSnowflake(channelId);
-        const normalizedUserId = normalizeSnowflake(userId);
-        if (!normalizedChannelId || !normalizedUserId) return;
+	const normalizedChannelId = normalizeSnowflake(channelId);
+	const normalizedUserId = normalizeSnowflake(userId);
+	if (!normalizedChannelId || !normalizedUserId) return;
 
-        const key = `${normalizedChannelId}:${normalizedUserId}`;
-        if (pendingDmUserFetches.has(key)) {
-                return;
-        }
+	const key = `${normalizedChannelId}:${normalizedUserId}`;
+	if (pendingDmUserFetches.has(key)) {
+		return;
+	}
 
-        const promise = (async () => {
-                try {
-                        const response = await auth.api.user.userUserIdGet({ userId: normalizedUserId });
-                        const user = (response?.data as AnyRecord) ?? null;
-                        if (!user) return;
+	const promise = (async () => {
+		try {
+			const response = await auth.api.user.userUserIdGet({ userId: normalizedUserId });
+			const user = (response?.data as AnyRecord) ?? null;
+			if (!user) return;
 
-                        const candidateName =
-                                (typeof user.display_name === 'string' && user.display_name.trim())
-                                        ? user.display_name.trim()
-                                        : (typeof user.global_name === 'string' && user.global_name.trim())
-                                                ? user.global_name.trim()
-                                                : (typeof user.username === 'string' && user.username.trim())
-                                                        ? user.username.trim()
-                                                        : (typeof user.name === 'string' && user.name.trim())
-                                                                ? user.name.trim()
-                                                                : null;
+			const candidateName =
+				typeof user.display_name === 'string' && user.display_name.trim()
+					? user.display_name.trim()
+					: typeof user.global_name === 'string' && user.global_name.trim()
+						? user.global_name.trim()
+						: typeof user.username === 'string' && user.username.trim()
+							? user.username.trim()
+							: typeof user.name === 'string' && user.name.trim()
+								? user.name.trim()
+								: null;
 
-                        channelsByGuild.update((map) => {
-                                const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
-                                const idx = existingList.findIndex((entry) => {
-                                        const cid = normalizeSnowflake((entry as AnyRecord)?.id);
-                                        return cid === normalizedChannelId;
-                                });
-                                if (idx === -1) return map;
+			channelsByGuild.update((map) => {
+				const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
+				const idx = existingList.findIndex((entry) => {
+					const cid = normalizeSnowflake((entry as AnyRecord)?.id);
+					return cid === normalizedChannelId;
+				});
+				if (idx === -1) return map;
 
-                                const nextChannel: AnyRecord = { ...(existingList[idx] as AnyRecord) };
-                                let shouldUpdate = false;
+				const nextChannel: AnyRecord = { ...(existingList[idx] as AnyRecord) };
+				let shouldUpdate = false;
 
-                                const existingUserId =
-                                        normalizeSnowflake(nextChannel.user_id) ??
-                                        normalizeSnowflake(nextChannel.userId) ??
-                                        normalizeSnowflake(nextChannel.recipient_id) ??
-                                        normalizeSnowflake(nextChannel.recipientId);
-                                if (existingUserId !== normalizedUserId) {
-                                        nextChannel.user_id = normalizedUserId;
-                                        nextChannel.userId = normalizedUserId;
-                                        nextChannel.recipient_id = normalizedUserId;
-                                        nextChannel.recipientId = normalizedUserId;
-                                        shouldUpdate = true;
-                                }
+				const existingUserId =
+					normalizeSnowflake(nextChannel.user_id) ??
+					normalizeSnowflake(nextChannel.userId) ??
+					normalizeSnowflake(nextChannel.recipient_id) ??
+					normalizeSnowflake(nextChannel.recipientId);
+				if (existingUserId !== normalizedUserId) {
+					nextChannel.user_id = normalizedUserId;
+					nextChannel.userId = normalizedUserId;
+					nextChannel.recipient_id = normalizedUserId;
+					nextChannel.recipientId = normalizedUserId;
+					shouldUpdate = true;
+				}
 
-                                const fallbackLabel = `Channel ${normalizedChannelId}`;
-                                const existingName = typeof nextChannel.name === 'string' ? nextChannel.name.trim() : '';
-                                if (candidateName && (!existingName || existingName === fallbackLabel)) {
-                                        nextChannel.name = candidateName;
-                                        nextChannel.label = candidateName;
-                                        shouldUpdate = true;
-                                }
+				const fallbackLabel = `Channel ${normalizedChannelId}`;
+				const existingName = typeof nextChannel.name === 'string' ? nextChannel.name.trim() : '';
+				if (candidateName && (!existingName || existingName === fallbackLabel)) {
+					nextChannel.name = candidateName;
+					nextChannel.label = candidateName;
+					shouldUpdate = true;
+				}
 
-                                const existingTopic = typeof nextChannel.topic === 'string' ? nextChannel.topic.trim() : '';
-                                if (candidateName && (!existingTopic || existingTopic === fallbackLabel)) {
-                                        nextChannel.topic = candidateName;
-                                        shouldUpdate = true;
-                                }
+				const existingTopic = typeof nextChannel.topic === 'string' ? nextChannel.topic.trim() : '';
+				if (candidateName && (!existingTopic || existingTopic === fallbackLabel)) {
+					nextChannel.topic = candidateName;
+					shouldUpdate = true;
+				}
 
-                                const recipients = Array.isArray(nextChannel.recipients)
-                                        ? [...(nextChannel.recipients as AnyRecord[])]
-                                        : [];
-                                const hasRecipient = recipients.some((entry) => {
-                                        const rid = normalizeSnowflake((entry as AnyRecord)?.id);
-                                        return rid === normalizedUserId;
-                                });
-                                if (!hasRecipient) {
-                                        recipients.push(buildDmRecipientFromUser(user, normalizedUserId));
-                                        nextChannel.recipients = recipients;
-                                        shouldUpdate = true;
-                                }
+				const recipients = Array.isArray(nextChannel.recipients)
+					? [...(nextChannel.recipients as AnyRecord[])]
+					: [];
+				const hasRecipient = recipients.some((entry) => {
+					const rid = normalizeSnowflake((entry as AnyRecord)?.id);
+					return rid === normalizedUserId;
+				});
+				if (!hasRecipient) {
+					recipients.push(buildDmRecipientFromUser(user, normalizedUserId));
+					nextChannel.recipients = recipients;
+					shouldUpdate = true;
+				}
 
-                                if (!shouldUpdate) return map;
+				if (!shouldUpdate) return map;
 
-                                const nextList = [...existingList];
-                                nextList[idx] = nextChannel as DtoChannel;
-                                return { ...map, ['@me']: nextList };
-                        });
-                } catch (error) {
-                        console.error('Failed to fetch DM user metadata', error);
-                } finally {
-                        pendingDmUserFetches.delete(key);
-                }
-        })();
+				const nextList = [...existingList];
+				nextList[idx] = nextChannel as DtoChannel;
+				return { ...map, ['@me']: nextList };
+			});
+		} catch (error) {
+			console.error('Failed to fetch DM user metadata', error);
+		} finally {
+			pendingDmUserFetches.delete(key);
+		}
+	})();
 
-        pendingDmUserFetches.set(key, promise);
+	pendingDmUserFetches.set(key, promise);
 }
 
 function stopHeartbeatWorker() {
-        if (!hbWorker || !hbWorkerActive) return;
-        try {
-                hbWorker.postMessage({ type: 'stop' });
-        } catch {}
-        hbWorkerActive = false;
-        wsState.hbWorkerActive = false;
+	if (!hbWorker || !hbWorkerActive) return;
+	try {
+		hbWorker.postMessage({ type: 'stop' });
+	} catch {}
+	hbWorkerActive = false;
+	wsState.hbWorkerActive = false;
 }
 
 function startHeartbeat() {
-        stopHeartbeat();
-        if (heartbeatMs <= 0) return;
-        const started = startHeartbeatWorker(heartbeatMs);
-        if (!started) {
-                hbTimer = setInterval(() => {
-                        sendHeartbeatFrame();
-                }, heartbeatMs);
-                wsState.hbTimer = hbTimer;
-        }
-        // Send an initial heartbeat immediately so the server does not need to wait
-        sendHeartbeatFrame();
+	stopHeartbeat();
+	if (heartbeatMs <= 0) return;
+	const started = startHeartbeatWorker(heartbeatMs);
+	if (!started) {
+		hbTimer = setInterval(() => {
+			sendHeartbeatFrame();
+		}, heartbeatMs);
+		wsState.hbTimer = hbTimer;
+	}
+	// Send an initial heartbeat immediately so the server does not need to wait
+	sendHeartbeatFrame();
 }
 
 function stopHeartbeat() {
-        if (hbTimer) clearInterval(hbTimer);
-        hbTimer = null;
-        wsState.hbTimer = null;
-        stopHeartbeatWorker();
+	if (hbTimer) clearInterval(hbTimer);
+	hbTimer = null;
+	wsState.hbTimer = null;
+	stopHeartbeatWorker();
 }
 
 export function disconnectWS() {
-        shouldReconnect = false;
-        wsState.shouldReconnect = false;
-        stopHeartbeat();
-        if (reconnectTimer) {
-                clearTimeout(reconnectTimer);
-                reconnectTimer = null;
-                wsState.reconnectTimer = null;
-        }
-        if (socket) {
-                try {
-                        socket.close();
-                } catch {}
-        }
-        socket = null;
-        wsState.socket = null;
-        authed = false;
-        wsState.authed = false;
-        lastHeartbeatE = 0;
-        wsState.lastHeartbeatE = 0;
-        wsConnected.set(false);
-        wsConnectionLost.set(false);
-        wsAuthenticated.set(false);
-        heartbeatSessionId = null;
-        wsState.heartbeatSessionId = null;
+	shouldReconnect = false;
+	wsState.shouldReconnect = false;
+	stopHeartbeat();
+	if (reconnectTimer) {
+		clearTimeout(reconnectTimer);
+		reconnectTimer = null;
+		wsState.reconnectTimer = null;
+	}
+	if (socket) {
+		try {
+			socket.close();
+		} catch {}
+	}
+	socket = null;
+	wsState.socket = null;
+	authed = false;
+	wsState.authed = false;
+	lastHeartbeatE = 0;
+	wsState.lastHeartbeatE = 0;
+	wsConnected.set(false);
+	wsConnectionLost.set(false);
+	wsAuthenticated.set(false);
+	heartbeatSessionId = null;
+	wsState.heartbeatSessionId = null;
 }
 
 export function connectWS() {
-        if (!browser) return;
-        shouldReconnect = true;
-        wsState.shouldReconnect = true;
-        if (reconnectTimer) {
-                clearTimeout(reconnectTimer);
-                reconnectTimer = null;
-                wsState.reconnectTimer = null;
-        }
-        if (
-                socket &&
-                (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
-        )
-                return;
-        const url = wsUrl();
-        socket = new WebSocket(url);
-        wsState.socket = socket;
-        authed = false;
-        wsState.authed = false;
-        wsAuthenticated.set(false);
+	if (!browser) return;
+	shouldReconnect = true;
+	wsState.shouldReconnect = true;
+	if (reconnectTimer) {
+		clearTimeout(reconnectTimer);
+		reconnectTimer = null;
+		wsState.reconnectTimer = null;
+	}
+	if (
+		socket &&
+		(socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+	)
+		return;
+	const url = wsUrl();
+	socket = new WebSocket(url);
+	wsState.socket = socket;
+	authed = false;
+	wsState.authed = false;
+	wsAuthenticated.set(false);
 
-        socket.onopen = () => {
-                wsConnected.set(true);
-                wsConnectionLost.set(false);
-                // Send auth (hello) immediately: op=1 with token and t
-                const token = latestToken ?? get(auth.token);
-                if (token) {
-                        const t = nextT();
-                        const tok = JSON.stringify(token);
-                        const resumeFragment =
-                                heartbeatSessionId && heartbeatSessionId.length
-                                        ? `,"heartbeat_session_id":${JSON.stringify(heartbeatSessionId)}`
-                                        : '';
-                        sendRaw(`{"op":1,"d":{"token":${tok}${resumeFragment}},"t":${t}}`);
-                }
-        };
+	socket.onopen = () => {
+		wsConnected.set(true);
+		wsConnectionLost.set(false);
+		// Send auth (hello) immediately: op=1 with token and t
+		const token = latestToken ?? get(auth.token);
+		if (token) {
+			const t = nextT();
+			const tok = JSON.stringify(token);
+			const resumeFragment =
+				heartbeatSessionId && heartbeatSessionId.length
+					? `,"heartbeat_session_id":${JSON.stringify(heartbeatSessionId)}`
+					: '';
+			sendRaw(`{"op":1,"d":{"token":${tok}${resumeFragment}},"t":${t}}`);
+		}
+	};
 
 	socket.onmessage = (ev) => {
 		let data: any;
@@ -809,44 +812,43 @@ export function connectWS() {
 		}
 
 		// Handshake: server sends op=1 with d.heartbeat_interval (some servers may send root-level heartbeat_interval)
-                if (
-                        (data?.op === 1 && typeof data?.d?.heartbeat_interval === 'number') ||
-                        typeof data?.heartbeat_interval === 'number'
-                ) {
-                        const interval = (data?.d?.heartbeat_interval ?? data?.heartbeat_interval) as number;
-                        heartbeatMs = interval;
-                        wsState.heartbeatMs = heartbeatMs;
-                        const sessionId =
-                                (data?.d?.session_id ?? data?.session_id ?? null) as string | null;
-                        if (typeof sessionId === 'string' && sessionId) {
-                                heartbeatSessionId = sessionId;
-                                wsState.heartbeatSessionId = heartbeatSessionId;
-                        }
-                        startHeartbeat();
-                        // Mark authed and subscribe to current selections
-                        const alreadyAuthed = authed;
-                        authed = true;
-                        wsState.authed = true;
-                        if (!alreadyAuthed) {
-                                wsAuthenticated.set(true);
-                                // After auth, (re)subscribe to current selections
-                                resubscribe();
-                        }
-                        return;
-                }
+		if (
+			(data?.op === 1 && typeof data?.d?.heartbeat_interval === 'number') ||
+			typeof data?.heartbeat_interval === 'number'
+		) {
+			const interval = (data?.d?.heartbeat_interval ?? data?.heartbeat_interval) as number;
+			heartbeatMs = interval;
+			wsState.heartbeatMs = heartbeatMs;
+			const sessionId = (data?.d?.session_id ?? data?.session_id ?? null) as string | null;
+			if (typeof sessionId === 'string' && sessionId) {
+				heartbeatSessionId = sessionId;
+				wsState.heartbeatSessionId = heartbeatSessionId;
+			}
+			startHeartbeat();
+			// Mark authed and subscribe to current selections
+			const alreadyAuthed = authed;
+			authed = true;
+			wsState.authed = true;
+			if (!alreadyAuthed) {
+				wsAuthenticated.set(true);
+				// After auth, (re)subscribe to current selections
+				resubscribe();
+			}
+			return;
+		}
 
 		updateLastT(data?.t);
 		wsEvent.set(data);
 
 		handleGuildMembershipEvent(data);
 
-                if (data?.op === 0 && typeof data?.t === 'number') {
-                        if (data.t === 300) {
-                                const payload = (data?.d as AnyRecord) ?? {};
-                                const message = (payload?.message as AnyRecord) ?? payload;
-                                const guildId =
-                                        normalizeSnowflake(payload?.guild_id) ??
-                                        normalizeSnowflake(message?.guild_id) ??
+		if (data?.op === 0 && typeof data?.t === 'number') {
+			if (data.t === 300) {
+				const payload = (data?.d as AnyRecord) ?? {};
+				const message = (payload?.message as AnyRecord) ?? payload;
+				const guildId =
+					normalizeSnowflake(payload?.guild_id) ??
+					normalizeSnowflake(message?.guild_id) ??
 					normalizeSnowflake(payload?.guild?.id) ??
 					normalizeSnowflake(message?.guild?.id);
 				const channelId =
@@ -876,174 +878,174 @@ export function connectWS() {
 						markChannelUnread(guildId, channelId, messageId);
 					}
 
-                                        updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
-                                }
-                        } else if (data.t === WS_EVENT_FRIEND_REQUEST) {
-                                const payload = (data?.d as AnyRecord) ?? {};
-                                const requesterId =
-                                        normalizeSnowflake(payload?.from?.id) ??
-                                        normalizeSnowflake(payload?.user?.id) ??
-                                        normalizeSnowflake(payload?.friend?.id) ??
-                                        normalizeSnowflake(payload?.relationship?.user_id) ??
-                                        normalizeSnowflake(payload?.relationship?.target_id);
-                                if (requesterId) {
-                                        triggerFriendDataRefresh();
-                                }
-                        } else if (data.t === WS_EVENT_FRIEND_ADDED) {
-                                const payload = (data?.d as AnyRecord) ?? {};
-                                const friendId =
-                                        normalizeSnowflake(payload?.friend?.id) ??
-                                        normalizeSnowflake(payload?.relationship?.user_id) ??
-                                        normalizeSnowflake(payload?.relationship?.target_id) ??
-                                        normalizeSnowflake(payload?.from?.id) ??
-                                        normalizeSnowflake(payload?.user?.id);
-                                if (friendId) {
-                                        markFriendAdded(friendId);
-                                        triggerFriendDataRefresh();
-                                }
-                        } else if (data.t === WS_EVENT_FRIEND_REMOVED) {
-                                const payload = (data?.d as AnyRecord) ?? {};
-                                const friendId =
-                                        normalizeSnowflake(payload?.friend?.id) ??
-                                        normalizeSnowflake(payload?.relationship?.user_id) ??
-                                        normalizeSnowflake(payload?.relationship?.target_id) ??
-                                        normalizeSnowflake(payload?.from?.id) ??
-                                        normalizeSnowflake(payload?.user?.id);
-                                if (friendId) {
-                                        markFriendRemoved(friendId);
-                                        triggerFriendDataRefresh();
-                                }
-                        } else if (data.t === WS_EVENT_DM_MESSAGE) {
-                                const payload = (data?.d as AnyRecord) ?? {};
-                                const channelId = normalizeSnowflake(payload?.channel_id);
-                                const messageId = normalizeSnowflake(payload?.message_id);
-                                if (!channelId || !messageId) {
-                                        return;
-                                }
+					updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
+				}
+			} else if (data.t === WS_EVENT_FRIEND_REQUEST) {
+				const payload = (data?.d as AnyRecord) ?? {};
+				const requesterId =
+					normalizeSnowflake(payload?.from?.id) ??
+					normalizeSnowflake(payload?.user?.id) ??
+					normalizeSnowflake(payload?.friend?.id) ??
+					normalizeSnowflake(payload?.relationship?.user_id) ??
+					normalizeSnowflake(payload?.relationship?.target_id);
+				if (requesterId) {
+					triggerFriendDataRefresh();
+				}
+			} else if (data.t === WS_EVENT_FRIEND_ADDED) {
+				const payload = (data?.d as AnyRecord) ?? {};
+				const friendId =
+					normalizeSnowflake(payload?.friend?.id) ??
+					normalizeSnowflake(payload?.relationship?.user_id) ??
+					normalizeSnowflake(payload?.relationship?.target_id) ??
+					normalizeSnowflake(payload?.from?.id) ??
+					normalizeSnowflake(payload?.user?.id);
+				if (friendId) {
+					markFriendAdded(friendId);
+					triggerFriendDataRefresh();
+				}
+			} else if (data.t === WS_EVENT_FRIEND_REMOVED) {
+				const payload = (data?.d as AnyRecord) ?? {};
+				const friendId =
+					normalizeSnowflake(payload?.friend?.id) ??
+					normalizeSnowflake(payload?.relationship?.user_id) ??
+					normalizeSnowflake(payload?.relationship?.target_id) ??
+					normalizeSnowflake(payload?.from?.id) ??
+					normalizeSnowflake(payload?.user?.id);
+				if (friendId) {
+					markFriendRemoved(friendId);
+					triggerFriendDataRefresh();
+				}
+			} else if (data.t === WS_EVENT_DM_MESSAGE) {
+				const payload = (data?.d as AnyRecord) ?? {};
+				const channelId = normalizeSnowflake(payload?.channel_id);
+				const messageId = normalizeSnowflake(payload?.message_id);
+				if (!channelId || !messageId) {
+					return;
+				}
 
-                                const senderId = normalizeSnowflake(payload?.from?.id);
-                                if (senderId) {
-                                        addVisibleDmChannel(channelId, senderId);
-                                } else {
-                                        addVisibleDmChannel(channelId);
-                                }
+				const senderId = normalizeSnowflake(payload?.from?.id);
+				if (senderId) {
+					addVisibleDmChannel(channelId, senderId);
+				} else {
+					addVisibleDmChannel(channelId);
+				}
 
-                                const minimalMessage: AnyRecord = { id: messageId };
-                                if (senderId) {
-                                        minimalMessage.author_id = senderId;
-                                        minimalMessage.authorId = senderId;
-                                }
+				const minimalMessage: AnyRecord = { id: messageId };
+				if (senderId) {
+					minimalMessage.author_id = senderId;
+					minimalMessage.authorId = senderId;
+				}
 
-                                let shouldFetchDmMetadata = false;
+				let shouldFetchDmMetadata = false;
 
-                                channelsByGuild.update((map) => {
-                                        const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
-                                        const idx = existingList.findIndex((entry) => {
-                                                const id = normalizeSnowflake((entry as AnyRecord)?.id);
-                                                return id === channelId;
-                                        });
-                                        let nextList = existingList;
-                                        let shouldUpdate = false;
-                                        let target: AnyRecord;
-                                        if (idx >= 0) {
-                                                target = { ...(existingList[idx] as AnyRecord) };
-                                                nextList = [...existingList];
-                                        } else {
-                                                target = { id: channelId };
-                                                nextList = [...existingList, target as DtoChannel];
-                                                shouldUpdate = true;
-                                        }
+				channelsByGuild.update((map) => {
+					const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
+					const idx = existingList.findIndex((entry) => {
+						const id = normalizeSnowflake((entry as AnyRecord)?.id);
+						return id === channelId;
+					});
+					let nextList = existingList;
+					let shouldUpdate = false;
+					let target: AnyRecord;
+					if (idx >= 0) {
+						target = { ...(existingList[idx] as AnyRecord) };
+						nextList = [...existingList];
+					} else {
+						target = { id: channelId };
+						nextList = [...existingList, target as DtoChannel];
+						shouldUpdate = true;
+					}
 
-                                        if (senderId && target.user_id !== senderId) {
-                                                target.user_id = senderId;
-                                                target.userId = senderId;
-                                                shouldUpdate = true;
-                                        }
+					if (senderId && target.user_id !== senderId) {
+						target.user_id = senderId;
+						target.userId = senderId;
+						shouldUpdate = true;
+					}
 
-                                        if (target.last_message_id !== messageId) {
-                                                target.last_message_id = messageId;
-                                                shouldUpdate = true;
-                                        }
-                                        if (target.lastMessageId !== messageId) {
-                                                target.lastMessageId = messageId;
-                                                shouldUpdate = true;
-                                        }
+					if (target.last_message_id !== messageId) {
+						target.last_message_id = messageId;
+						shouldUpdate = true;
+					}
+					if (target.lastMessageId !== messageId) {
+						target.lastMessageId = messageId;
+						shouldUpdate = true;
+					}
 
-                                        if (minimalMessage) {
-                                                target.last_message = minimalMessage;
-                                                target.lastMessage = minimalMessage;
-                                                shouldUpdate = true;
-                                        }
+					if (minimalMessage) {
+						target.last_message = minimalMessage;
+						target.lastMessage = minimalMessage;
+						shouldUpdate = true;
+					}
 
-                                        if (!shouldUpdate && idx >= 0) {
-                                                return map;
-                                        }
+					if (!shouldUpdate && idx >= 0) {
+						return map;
+					}
 
-                                        if (senderId && !isFriendId(senderId)) {
-                                                const fallbackLabel = `Channel ${channelId}`;
-                                                const existingLabel = (() => {
-                                                        if (typeof target.name === 'string') return target.name.trim();
-                                                        if (typeof target.label === 'string') return target.label.trim();
-                                                        return '';
-                                                })();
-                                                const recipients = Array.isArray(target.recipients)
-                                                        ? (target.recipients as AnyRecord[])
-                                                        : [];
-                                                const hasRecipient = recipients.some((entry) => {
-                                                        const rid = normalizeSnowflake((entry as AnyRecord)?.id);
-                                                        return rid === senderId;
-                                                });
-                                                if (!hasRecipient || !existingLabel || existingLabel === fallbackLabel) {
-                                                        shouldFetchDmMetadata = true;
-                                                }
-                                        }
+					if (senderId && !isFriendId(senderId)) {
+						const fallbackLabel = `Channel ${channelId}`;
+						const existingLabel = (() => {
+							if (typeof target.name === 'string') return target.name.trim();
+							if (typeof target.label === 'string') return target.label.trim();
+							return '';
+						})();
+						const recipients = Array.isArray(target.recipients)
+							? (target.recipients as AnyRecord[])
+							: [];
+						const hasRecipient = recipients.some((entry) => {
+							const rid = normalizeSnowflake((entry as AnyRecord)?.id);
+							return rid === senderId;
+						});
+						if (!hasRecipient || !existingLabel || existingLabel === fallbackLabel) {
+							shouldFetchDmMetadata = true;
+						}
+					}
 
-                                        if (idx >= 0) {
-                                                nextList[idx] = target as DtoChannel;
-                                        } else {
-                                                nextList[nextList.length - 1] = target as DtoChannel;
-                                        }
+					if (idx >= 0) {
+						nextList[idx] = target as DtoChannel;
+					} else {
+						nextList[nextList.length - 1] = target as DtoChannel;
+					}
 
-                                        return { ...map, ['@me']: nextList };
-                                });
+					return { ...map, ['@me']: nextList };
+				});
 
-                                const activeGuildId = normalizeSnowflake(get(selectedGuildId));
-                                const activeChannelId = normalizeSnowflake(get(selectedChannelId));
-                                const isActiveDm = activeGuildId === '@me' && activeChannelId === channelId;
-                                if (!isActiveDm) {
-                                        markChannelUnread('@me', channelId, messageId);
-                                }
+				const activeGuildId = normalizeSnowflake(get(selectedGuildId));
+				const activeChannelId = normalizeSnowflake(get(selectedChannelId));
+				const isActiveDm = activeGuildId === '@me' && activeChannelId === channelId;
+				if (!isActiveDm) {
+					markChannelUnread('@me', channelId, messageId);
+				}
 
-                                if (shouldFetchDmMetadata && senderId) {
-                                        ensureDmChannelUserMetadata(channelId, senderId);
-                                }
-                        }
+				if (shouldFetchDmMetadata && senderId) {
+					ensureDmChannelUserMetadata(channelId, senderId);
+				}
+			}
 
-                        if (data?.d?.message) {
-                                // nothing here; consumers react via wsEvent
-                        }
-                }
+			if (data?.d?.message) {
+				// nothing here; consumers react via wsEvent
+			}
+		}
 	};
 
-        socket.onclose = () => {
-                wsConnected.set(false);
-                wsAuthenticated.set(false);
-                stopHeartbeat();
-                authed = false;
-                wsState.authed = false;
-                socket = null;
-                wsState.socket = null;
-                if (!shouldReconnect) return;
-                wsConnectionLost.set(true);
-                if (!reconnectTimer) {
-                        reconnectTimer = setTimeout(() => {
-                                reconnectTimer = null;
-                                wsState.reconnectTimer = null;
-                                connectWS();
-                        }, 1000);
-                        wsState.reconnectTimer = reconnectTimer;
-                }
-        };
+	socket.onclose = () => {
+		wsConnected.set(false);
+		wsAuthenticated.set(false);
+		stopHeartbeat();
+		authed = false;
+		wsState.authed = false;
+		socket = null;
+		wsState.socket = null;
+		if (!shouldReconnect) return;
+		wsConnectionLost.set(true);
+		if (!reconnectTimer) {
+			reconnectTimer = setTimeout(() => {
+				reconnectTimer = null;
+				wsState.reconnectTimer = null;
+				connectWS();
+			}, 1000);
+			wsState.reconnectTimer = reconnectTimer;
+		}
+	};
 
 	socket.onerror = () => {
 		// handled by onclose
@@ -1065,66 +1067,66 @@ export function subscribeWS(guilds: (number | string)[] = [], channel?: number |
 
 // React to auth & selection changes (browser only)
 if (browser && !wsState.subscriptionsRegistered) {
-        const unsubscribers: (() => void)[] = [];
+	const unsubscribers: (() => void)[] = [];
 
-        unsubscribers.push(
-                auth.token.subscribe((value) => {
-                        latestToken = value;
-                        wsState.latestToken = value;
-                })
-        );
+	unsubscribers.push(
+		auth.token.subscribe((value) => {
+			latestToken = value;
+			wsState.latestToken = value;
+		})
+	);
 
-        unsubscribers.push(
-                auth.isAuthenticated.subscribe((ok) => {
-                        if (ok) connectWS();
-                        else disconnectWS();
-                })
-        );
+	unsubscribers.push(
+		auth.isAuthenticated.subscribe((ok) => {
+			if (ok) connectWS();
+			else disconnectWS();
+		})
+	);
 
-        unsubscribers.push(
-                selectedChannelId.subscribe((ch) => {
-                        const channelId = normalizeSnowflake(ch);
-                        resubscribe(channelId);
-                })
-        );
+	unsubscribers.push(
+		selectedChannelId.subscribe((ch) => {
+			const channelId = normalizeSnowflake(ch);
+			resubscribe(channelId);
+		})
+	);
 
-        unsubscribers.push(
-                selectedGuildId.subscribe(() => {
-                        resubscribe();
-                })
-        );
+	unsubscribers.push(
+		selectedGuildId.subscribe(() => {
+			resubscribe();
+		})
+	);
 
-        unsubscribers.push(
-                auth.guilds.subscribe(() => {
-                        resubscribe();
-                })
-        );
+	unsubscribers.push(
+		auth.guilds.subscribe(() => {
+			resubscribe();
+		})
+	);
 
-        wsState.cleanupSubscribers = () => {
-                for (const unsubscribe of unsubscribers.splice(0, unsubscribers.length)) {
-                        try {
-                                unsubscribe();
-                        } catch {}
-                }
-                wsState.subscriptionsRegistered = false;
-                wsState.cleanupSubscribers = null;
-        };
+	wsState.cleanupSubscribers = () => {
+		for (const unsubscribe of unsubscribers.splice(0, unsubscribers.length)) {
+			try {
+				unsubscribe();
+			} catch {}
+		}
+		wsState.subscriptionsRegistered = false;
+		wsState.cleanupSubscribers = null;
+	};
 
-        wsState.subscriptionsRegistered = true;
+	wsState.subscriptionsRegistered = true;
 
-        if (import.meta.hot) {
-                import.meta.hot.dispose(() => {
-                        wsState.cleanupSubscribers?.();
-                        disconnectWS();
-                        if (hbWorker) {
-                                try {
-                                        hbWorker.terminate();
-                                } catch {}
-                        }
-                        hbWorker = null;
-                        wsState.hbWorker = null;
-                        hbWorkerActive = false;
-                        wsState.hbWorkerActive = false;
-                });
-        }
+	if (import.meta.hot) {
+		import.meta.hot.dispose(() => {
+			wsState.cleanupSubscribers?.();
+			disconnectWS();
+			if (hbWorker) {
+				try {
+					hbWorker.terminate();
+				} catch {}
+			}
+			hbWorker = null;
+			wsState.hbWorker = null;
+			hbWorkerActive = false;
+			wsState.hbWorkerActive = false;
+		});
+	}
 }

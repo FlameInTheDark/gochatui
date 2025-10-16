@@ -15,7 +15,7 @@
 	import { Search } from 'lucide-svelte';
 	import MemberPane from './MemberPane.svelte';
 	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
-        let listRef: any = $state(null);
+	let listRef: any = $state(null);
 
 	function currentChannel() {
 		const gid = $selectedGuildId ?? '';
@@ -57,10 +57,10 @@
 				{/if}
 			</div>
 			<div class="flex items-center gap-2">
-                                <button
-                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                                        aria-label="Search"
-                                        onclick={(e) => {
+				<button
+					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+					aria-label="Search"
+					onclick={(e) => {
 						e.stopPropagation();
 						const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
 						searchAnchor.set({ x: r.right, y: r.bottom });

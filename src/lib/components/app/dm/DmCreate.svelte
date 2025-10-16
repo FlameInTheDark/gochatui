@@ -1,9 +1,9 @@
 <script lang="ts">
-        import { auth } from '$lib/stores/auth';
-        import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
-        import { subscribeWS } from '$lib/client/ws';
-        import { m } from '$lib/paraglide/messages.js';
-        import { MessageCirclePlus } from 'lucide-svelte';
+	import { auth } from '$lib/stores/auth';
+	import { selectedChannelId, selectedGuildId } from '$lib/stores/appState';
+	import { subscribeWS } from '$lib/client/ws';
+	import { m } from '$lib/paraglide/messages.js';
+	import { MessageCirclePlus } from 'lucide-svelte';
 	let open = $state(false);
 	let singleId = $state('');
 	let groupIds = $state('');
@@ -64,13 +64,13 @@
 </script>
 
 <div>
-        <button
-                class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                onclick={() => (open = true)}
-                aria-label={m.new_dm()}
-        >
-                <MessageCirclePlus class="h-4 w-4" stroke-width={2} />
-        </button>
+	<button
+		class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+		onclick={() => (open = true)}
+		aria-label={m.new_dm()}
+	>
+		<MessageCirclePlus class="h-4 w-4" stroke-width={2} />
+	</button>
 	{#if open}
 		<div
 			class="fixed inset-0 z-40 grid place-items-center bg-black/40"

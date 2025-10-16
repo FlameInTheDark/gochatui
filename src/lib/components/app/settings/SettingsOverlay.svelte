@@ -1,17 +1,17 @@
 <script lang="ts">
-        import { settingsOpen, theme, locale } from '$lib/stores/settings';
-        import { m } from '$lib/paraglide/messages.js';
-        import ProfileEdit from '$lib/components/app/user/ProfileEdit.svelte';
-        import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
-        import type { Theme, Locale } from '$lib/stores/settings';
-        import { localeOptions, type LocaleOption } from '$lib/i18n/locales';
+	import { settingsOpen, theme, locale } from '$lib/stores/settings';
+	import { m } from '$lib/paraglide/messages.js';
+	import ProfileEdit from '$lib/components/app/user/ProfileEdit.svelte';
+	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
+	import type { Theme, Locale } from '$lib/stores/settings';
+	import { localeOptions, type LocaleOption } from '$lib/i18n/locales';
 
-        type ThemeOption = {
-                value: Theme;
-                label: () => string;
-        };
+	type ThemeOption = {
+		value: Theme;
+		label: () => string;
+	};
 
-        const languages: LocaleOption[] = localeOptions;
+	const languages: LocaleOption[] = localeOptions;
 
 	const themeOptions: ThemeOption[] = [
 		{ value: 'system', label: () => m.system() },
@@ -19,11 +19,11 @@
 		{ value: 'dark', label: () => m.dark() }
 	];
 
-        let category = $state<'profile' | 'general' | 'appearance' | 'other'>('profile');
+	let category = $state<'profile' | 'general' | 'appearance' | 'other'>('profile');
 
-        function closeOverlay() {
-                settingsOpen.set(false);
-        }
+	function closeOverlay() {
+		settingsOpen.set(false);
+	}
 </script>
 
 <SettingsPanel bind:open={$settingsOpen} on:close={closeOverlay}>
@@ -89,7 +89,7 @@
 									: 'border-[var(--stroke)] bg-[var(--panel)] hover:border-[var(--brand)]/60 hover:bg-[var(--panel-strong)]'
 							}`}
 						>
-                                                        <span class="text-base font-medium">{lang.label()}</span>
+							<span class="text-base font-medium">{lang.label()}</span>
 							<span
 								class={`ml-4 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors duration-150 ${
 									$locale === lang.code ? 'border-[var(--success)]' : 'border-[var(--stroke-2)]'
@@ -148,7 +148,7 @@
 				{/each}
 			</div>
 		</div>
-        {:else}
-                <p>{m.other()}...</p>
-        {/if}
+	{:else}
+		<p>{m.other()}...</p>
+	{/if}
 </SettingsPanel>

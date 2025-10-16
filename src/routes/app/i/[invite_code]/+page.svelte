@@ -1,10 +1,10 @@
 <script lang="ts">
-        import AuthGate from '$lib/components/app/auth/AuthGate.svelte';
-        import { goto } from '$app/navigation';
-        import type { PageData } from './$types';
-        import type { DtoInvitePreview } from '$lib/api';
-        import { auth } from '$lib/stores/auth';
-        import { channelReady, selectedChannelId, selectedGuildId } from '$lib/stores/appState';
+	import AuthGate from '$lib/components/app/auth/AuthGate.svelte';
+	import { goto } from '$app/navigation';
+	import type { PageData } from './$types';
+	import type { DtoInvitePreview } from '$lib/api';
+	import { auth } from '$lib/stores/auth';
+	import { channelReady, selectedChannelId, selectedGuildId } from '$lib/stores/appState';
 	import {
 		buildGuildIconUrl,
 		getGuildInitials,
@@ -38,24 +38,24 @@
 	const memberCountLabel = $derived.by(() => getMemberCountLabel(invite));
 	const inviteMessage = $derived.by(() => getInviteUnavailableMessage(inviteState));
 
-        async function handleJoin() {
-                if (!inviteCodeValue || inviteState !== 'ok' || joining) return;
-                joining = true;
-                joinError = null;
-                const result = await joinGuildAction(inviteCodeValue, '/app', {
-                        acceptInvite: (params) => auth.api.guildInvites.guildInvitesAcceptInviteCodePost(params),
-                        loadGuilds: () => auth.loadGuilds(),
-                        goto,
-                        onSuccess: () => {
-                                selectedGuildId.set(null);
-                                selectedChannelId.set(null);
-                                channelReady.set(false);
-                        }
-                });
-                if (!result.success) {
-                        joinError = result.message;
-                }
-                joining = false;
+	async function handleJoin() {
+		if (!inviteCodeValue || inviteState !== 'ok' || joining) return;
+		joining = true;
+		joinError = null;
+		const result = await joinGuildAction(inviteCodeValue, '/app', {
+			acceptInvite: (params) => auth.api.guildInvites.guildInvitesAcceptInviteCodePost(params),
+			loadGuilds: () => auth.loadGuilds(),
+			goto,
+			onSuccess: () => {
+				selectedGuildId.set(null);
+				selectedChannelId.set(null);
+				channelReady.set(false);
+			}
+		});
+		if (!result.success) {
+			joinError = result.message;
+		}
+		joining = false;
 	}
 
 	$effect(() => {
