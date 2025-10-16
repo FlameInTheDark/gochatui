@@ -1439,426 +1439,6 @@ export interface UserUserSettingsResponse {
      */
     'version'?: number;
 }
-/**
- * 
- * @export
- * @interface WebhookS3Bucket
- */
-export interface WebhookS3Bucket {
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Bucket
-     */
-    'arn'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Bucket
-     */
-    'name'?: string;
-    /**
-     * 
-     * @type {WebhookS3Identity}
-     * @memberof WebhookS3Bucket
-     */
-    'ownerIdentity'?: WebhookS3Identity;
-}
-/**
- * 
- * @export
- * @interface WebhookS3Element
- */
-export interface WebhookS3Element {
-    /**
-     * 
-     * @type {WebhookS3Bucket}
-     * @memberof WebhookS3Element
-     */
-    'bucket'?: WebhookS3Bucket;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Element
-     */
-    'configurationId'?: string;
-    /**
-     * 
-     * @type {WebhookS3Object}
-     * @memberof WebhookS3Element
-     */
-    'object'?: WebhookS3Object;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Element
-     */
-    's3SchemaVersion'?: string;
-}
-/**
- * 
- * @export
- * @interface WebhookS3Event
- */
-export interface WebhookS3Event {
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Event
-     */
-    'EventName'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Event
-     */
-    'Key'?: string;
-    /**
-     * 
-     * @type {Array<WebhookS3EventRecord>}
-     * @memberof WebhookS3Event
-     */
-    'Records'?: Array<WebhookS3EventRecord>;
-}
-/**
- * 
- * @export
- * @interface WebhookS3EventRecord
- */
-export interface WebhookS3EventRecord {
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3EventRecord
-     */
-    'awsRegion'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3EventRecord
-     */
-    'eventName'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3EventRecord
-     */
-    'eventSource'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3EventRecord
-     */
-    'eventTime'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3EventRecord
-     */
-    'eventVersion'?: string;
-    /**
-     * 
-     * @type {WebhookS3RequestParameters}
-     * @memberof WebhookS3EventRecord
-     */
-    'requestParameters'?: WebhookS3RequestParameters;
-    /**
-     * 
-     * @type {{ [key: string]: string; }}
-     * @memberof WebhookS3EventRecord
-     */
-    'responseElements'?: { [key: string]: string; };
-    /**
-     * 
-     * @type {WebhookS3Element}
-     * @memberof WebhookS3EventRecord
-     */
-    's3'?: WebhookS3Element;
-    /**
-     * 
-     * @type {WebhookS3Source}
-     * @memberof WebhookS3EventRecord
-     */
-    'source'?: WebhookS3Source;
-    /**
-     * 
-     * @type {WebhookS3Identity}
-     * @memberof WebhookS3EventRecord
-     */
-    'userIdentity'?: WebhookS3Identity;
-}
-/**
- * 
- * @export
- * @interface WebhookS3Identity
- */
-export interface WebhookS3Identity {
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Identity
-     */
-    'principalId'?: string;
-}
-/**
- * 
- * @export
- * @interface WebhookS3Object
- */
-export interface WebhookS3Object {
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Object
-     */
-    'contentType'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Object
-     */
-    'eTag'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Object
-     */
-    'key'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Object
-     */
-    'sequencer'?: string;
-    /**
-     * 
-     * @type {number}
-     * @memberof WebhookS3Object
-     */
-    'size'?: number;
-    /**
-     * 
-     * @type {{ [key: string]: string; }}
-     * @memberof WebhookS3Object
-     */
-    'userMetadata'?: { [key: string]: string; };
-}
-/**
- * 
- * @export
- * @interface WebhookS3RequestParameters
- */
-export interface WebhookS3RequestParameters {
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3RequestParameters
-     */
-    'principalId'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3RequestParameters
-     */
-    'region'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3RequestParameters
-     */
-    'sourceIPAddress'?: string;
-}
-/**
- * 
- * @export
- * @interface WebhookS3Source
- */
-export interface WebhookS3Source {
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Source
-     */
-    'host'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Source
-     */
-    'port'?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof WebhookS3Source
-     */
-    'userAgent'?: string;
-}
-
-/**
- * AttachmentsApi - axios parameter creator
- * @export
- */
-export const AttachmentsApiAxiosParamCreator = function (configuration?: Configuration) {
-    return {
-        /**
-         * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
-         * @summary Upload attachment
-         * @param {number} channelId Channel ID
-         * @param {number} attachmentId Attachment ID
-         * @param {Array<number>} requestBody Binary file to upload
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        attachmentsChannelIdAttachmentIdPost: async (channelId: number, attachmentId: number, requestBody: Array<number>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'channelId' is not null or undefined
-            assertParamExists('attachmentsChannelIdAttachmentIdPost', 'channelId', channelId)
-            // verify required parameter 'attachmentId' is not null or undefined
-            assertParamExists('attachmentsChannelIdAttachmentIdPost', 'attachmentId', attachmentId)
-            // verify required parameter 'requestBody' is not null or undefined
-            assertParamExists('attachmentsChannelIdAttachmentIdPost', 'requestBody', requestBody)
-            const localVarPath = `/attachments/{channel_id}/{attachment_id}`
-                .replace(`{${"channel_id"}}`, encodeURIComponent(String(channelId)))
-                .replace(`{${"attachment_id"}}`, encodeURIComponent(String(attachmentId)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-
-    
-            localVarHeaderParameter['Content-Type'] = 'application/octet-stream';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(requestBody, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-    }
-};
-
-/**
- * AttachmentsApi - functional programming interface
- * @export
- */
-export const AttachmentsApiFp = function(configuration?: Configuration) {
-    const localVarAxiosParamCreator = AttachmentsApiAxiosParamCreator(configuration)
-    return {
-        /**
-         * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
-         * @summary Upload attachment
-         * @param {number} channelId Channel ID
-         * @param {number} attachmentId Attachment ID
-         * @param {Array<number>} requestBody Binary file to upload
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async attachmentsChannelIdAttachmentIdPost(channelId: number, attachmentId: number, requestBody: Array<number>, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.attachmentsChannelIdAttachmentIdPost(channelId, attachmentId, requestBody, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['AttachmentsApi.attachmentsChannelIdAttachmentIdPost']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-    }
-};
-
-/**
- * AttachmentsApi - factory interface
- * @export
- */
-export const AttachmentsApiFactory = function (configuration?: Configuration, basePath?: string, axios?: AxiosInstance) {
-    const localVarFp = AttachmentsApiFp(configuration)
-    return {
-        /**
-         * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
-         * @summary Upload attachment
-         * @param {AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest} requestParameters Request parameters.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        attachmentsChannelIdAttachmentIdPost(requestParameters: AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.attachmentsChannelIdAttachmentIdPost(requestParameters.channelId, requestParameters.attachmentId, requestParameters.requestBody, options).then((request) => request(axios, basePath));
-        },
-    };
-};
-
-/**
- * AttachmentsApi - interface
- * @export
- * @interface AttachmentsApi
- */
-export interface AttachmentsApiInterface {
-    /**
-     * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
-     * @summary Upload attachment
-     * @param {AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest} requestParameters Request parameters.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof AttachmentsApiInterface
-     */
-    attachmentsChannelIdAttachmentIdPost(requestParameters: AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
-
-}
-
-/**
- * Request parameters for attachmentsChannelIdAttachmentIdPost operation in AttachmentsApi.
- * @export
- * @interface AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest
- */
-export interface AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest {
-    /**
-     * Channel ID
-     * @type {number}
-     * @memberof AttachmentsApiAttachmentsChannelIdAttachmentIdPost
-     */
-    readonly channelId: number
-
-    /**
-     * Attachment ID
-     * @type {number}
-     * @memberof AttachmentsApiAttachmentsChannelIdAttachmentIdPost
-     */
-    readonly attachmentId: number
-
-    /**
-     * Binary file to upload
-     * @type {Array<number>}
-     * @memberof AttachmentsApiAttachmentsChannelIdAttachmentIdPost
-     */
-    readonly requestBody: Array<number>
-}
-
-/**
- * AttachmentsApi - object-oriented interface
- * @export
- * @class AttachmentsApi
- * @extends {BaseAPI}
- */
-export class AttachmentsApi extends BaseAPI implements AttachmentsApiInterface {
-    /**
-     * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
-     * @summary Upload attachment
-     * @param {AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest} requestParameters Request parameters.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof AttachmentsApi
-     */
-    public attachmentsChannelIdAttachmentIdPost(requestParameters: AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest, options?: RawAxiosRequestConfig) {
-        return AttachmentsApiFp(this.configuration).attachmentsChannelIdAttachmentIdPost(requestParameters.channelId, requestParameters.attachmentId, requestParameters.requestBody, options).then((request) => request(this.axios, this.basePath));
-    }
-}
-
-
 
 /**
  * AuthApi - axios parameter creator
@@ -2472,172 +2052,6 @@ export class AuthApi extends BaseAPI implements AuthApiInterface {
      */
     public authResetPost(requestParameters: AuthApiAuthResetPostRequest, options?: RawAxiosRequestConfig) {
         return AuthApiFp(this.configuration).authResetPost(requestParameters.authPasswordResetRequest, options).then((request) => request(this.axios, this.basePath));
-    }
-}
-
-
-
-/**
- * AvatarsApi - axios parameter creator
- * @export
- */
-export const AvatarsApiAxiosParamCreator = function (configuration?: Configuration) {
-    return {
-        /**
-         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
-         * @summary Upload user avatar
-         * @param {number} userId User ID
-         * @param {number} avatarId Avatar ID
-         * @param {Array<number>} requestBody Binary image payload
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        avatarsUserIdAvatarIdPost: async (userId: number, avatarId: number, requestBody: Array<number>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'userId' is not null or undefined
-            assertParamExists('avatarsUserIdAvatarIdPost', 'userId', userId)
-            // verify required parameter 'avatarId' is not null or undefined
-            assertParamExists('avatarsUserIdAvatarIdPost', 'avatarId', avatarId)
-            // verify required parameter 'requestBody' is not null or undefined
-            assertParamExists('avatarsUserIdAvatarIdPost', 'requestBody', requestBody)
-            const localVarPath = `/avatars/{user_id}/{avatar_id}`
-                .replace(`{${"user_id"}}`, encodeURIComponent(String(userId)))
-                .replace(`{${"avatar_id"}}`, encodeURIComponent(String(avatarId)));
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-
-    
-            localVarHeaderParameter['Content-Type'] = 'application/octet-stream';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(requestBody, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-    }
-};
-
-/**
- * AvatarsApi - functional programming interface
- * @export
- */
-export const AvatarsApiFp = function(configuration?: Configuration) {
-    const localVarAxiosParamCreator = AvatarsApiAxiosParamCreator(configuration)
-    return {
-        /**
-         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
-         * @summary Upload user avatar
-         * @param {number} userId User ID
-         * @param {number} avatarId Avatar ID
-         * @param {Array<number>} requestBody Binary image payload
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async avatarsUserIdAvatarIdPost(userId: number, avatarId: number, requestBody: Array<number>, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.avatarsUserIdAvatarIdPost(userId, avatarId, requestBody, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['AvatarsApi.avatarsUserIdAvatarIdPost']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-    }
-};
-
-/**
- * AvatarsApi - factory interface
- * @export
- */
-export const AvatarsApiFactory = function (configuration?: Configuration, basePath?: string, axios?: AxiosInstance) {
-    const localVarFp = AvatarsApiFp(configuration)
-    return {
-        /**
-         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
-         * @summary Upload user avatar
-         * @param {AvatarsApiAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        avatarsUserIdAvatarIdPost(requestParameters: AvatarsApiAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.avatarsUserIdAvatarIdPost(requestParameters.userId, requestParameters.avatarId, requestParameters.requestBody, options).then((request) => request(axios, basePath));
-        },
-    };
-};
-
-/**
- * AvatarsApi - interface
- * @export
- * @interface AvatarsApi
- */
-export interface AvatarsApiInterface {
-    /**
-     * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
-     * @summary Upload user avatar
-     * @param {AvatarsApiAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof AvatarsApiInterface
-     */
-    avatarsUserIdAvatarIdPost(requestParameters: AvatarsApiAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
-
-}
-
-/**
- * Request parameters for avatarsUserIdAvatarIdPost operation in AvatarsApi.
- * @export
- * @interface AvatarsApiAvatarsUserIdAvatarIdPostRequest
- */
-export interface AvatarsApiAvatarsUserIdAvatarIdPostRequest {
-    /**
-     * User ID
-     * @type {number}
-     * @memberof AvatarsApiAvatarsUserIdAvatarIdPost
-     */
-    readonly userId: number
-
-    /**
-     * Avatar ID
-     * @type {number}
-     * @memberof AvatarsApiAvatarsUserIdAvatarIdPost
-     */
-    readonly avatarId: number
-
-    /**
-     * Binary image payload
-     * @type {Array<number>}
-     * @memberof AvatarsApiAvatarsUserIdAvatarIdPost
-     */
-    readonly requestBody: Array<number>
-}
-
-/**
- * AvatarsApi - object-oriented interface
- * @export
- * @class AvatarsApi
- * @extends {BaseAPI}
- */
-export class AvatarsApi extends BaseAPI implements AvatarsApiInterface {
-    /**
-     * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
-     * @summary Upload user avatar
-     * @param {AvatarsApiAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof AvatarsApi
-     */
-    public avatarsUserIdAvatarIdPost(requestParameters: AvatarsApiAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig) {
-        return AvatarsApiFp(this.configuration).avatarsUserIdAvatarIdPost(requestParameters.userId, requestParameters.avatarId, requestParameters.requestBody, options).then((request) => request(this.axios, this.basePath));
     }
 }
 
@@ -6761,6 +6175,291 @@ export class SearchApi extends BaseAPI implements SearchApiInterface {
 
 
 /**
+ * UploadApi - axios parameter creator
+ * @export
+ */
+export const UploadApiAxiosParamCreator = function (configuration?: Configuration) {
+    return {
+        /**
+         * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
+         * @summary Upload attachment
+         * @param {number} channelId Channel ID
+         * @param {number} attachmentId Attachment ID
+         * @param {Array<number>} requestBody Binary file to upload
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        uploadAttachmentsChannelIdAttachmentIdPost: async (channelId: number, attachmentId: number, requestBody: Array<number>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'channelId' is not null or undefined
+            assertParamExists('uploadAttachmentsChannelIdAttachmentIdPost', 'channelId', channelId)
+            // verify required parameter 'attachmentId' is not null or undefined
+            assertParamExists('uploadAttachmentsChannelIdAttachmentIdPost', 'attachmentId', attachmentId)
+            // verify required parameter 'requestBody' is not null or undefined
+            assertParamExists('uploadAttachmentsChannelIdAttachmentIdPost', 'requestBody', requestBody)
+            const localVarPath = `/upload/attachments/{channel_id}/{attachment_id}`
+                .replace(`{${"channel_id"}}`, encodeURIComponent(String(channelId)))
+                .replace(`{${"attachment_id"}}`, encodeURIComponent(String(attachmentId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/octet-stream';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(requestBody, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+         * @summary Upload user avatar
+         * @param {number} userId User ID
+         * @param {number} avatarId Avatar ID
+         * @param {Array<number>} requestBody Binary image payload
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        uploadAvatarsUserIdAvatarIdPost: async (userId: number, avatarId: number, requestBody: Array<number>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'userId' is not null or undefined
+            assertParamExists('uploadAvatarsUserIdAvatarIdPost', 'userId', userId)
+            // verify required parameter 'avatarId' is not null or undefined
+            assertParamExists('uploadAvatarsUserIdAvatarIdPost', 'avatarId', avatarId)
+            // verify required parameter 'requestBody' is not null or undefined
+            assertParamExists('uploadAvatarsUserIdAvatarIdPost', 'requestBody', requestBody)
+            const localVarPath = `/upload/avatars/{user_id}/{avatar_id}`
+                .replace(`{${"user_id"}}`, encodeURIComponent(String(userId)))
+                .replace(`{${"avatar_id"}}`, encodeURIComponent(String(avatarId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/octet-stream';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(requestBody, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+    }
+};
+
+/**
+ * UploadApi - functional programming interface
+ * @export
+ */
+export const UploadApiFp = function(configuration?: Configuration) {
+    const localVarAxiosParamCreator = UploadApiAxiosParamCreator(configuration)
+    return {
+        /**
+         * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
+         * @summary Upload attachment
+         * @param {number} channelId Channel ID
+         * @param {number} attachmentId Attachment ID
+         * @param {Array<number>} requestBody Binary file to upload
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async uploadAttachmentsChannelIdAttachmentIdPost(channelId: number, attachmentId: number, requestBody: Array<number>, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.uploadAttachmentsChannelIdAttachmentIdPost(channelId, attachmentId, requestBody, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['UploadApi.uploadAttachmentsChannelIdAttachmentIdPost']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+         * @summary Upload user avatar
+         * @param {number} userId User ID
+         * @param {number} avatarId Avatar ID
+         * @param {Array<number>} requestBody Binary image payload
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async uploadAvatarsUserIdAvatarIdPost(userId: number, avatarId: number, requestBody: Array<number>, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.uploadAvatarsUserIdAvatarIdPost(userId, avatarId, requestBody, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['UploadApi.uploadAvatarsUserIdAvatarIdPost']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+    }
+};
+
+/**
+ * UploadApi - factory interface
+ * @export
+ */
+export const UploadApiFactory = function (configuration?: Configuration, basePath?: string, axios?: AxiosInstance) {
+    const localVarFp = UploadApiFp(configuration)
+    return {
+        /**
+         * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
+         * @summary Upload attachment
+         * @param {UploadApiUploadAttachmentsChannelIdAttachmentIdPostRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        uploadAttachmentsChannelIdAttachmentIdPost(requestParameters: UploadApiUploadAttachmentsChannelIdAttachmentIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.uploadAttachmentsChannelIdAttachmentIdPost(requestParameters.channelId, requestParameters.attachmentId, requestParameters.requestBody, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+         * @summary Upload user avatar
+         * @param {UploadApiUploadAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        uploadAvatarsUserIdAvatarIdPost(requestParameters: UploadApiUploadAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.uploadAvatarsUserIdAvatarIdPost(requestParameters.userId, requestParameters.avatarId, requestParameters.requestBody, options).then((request) => request(axios, basePath));
+        },
+    };
+};
+
+/**
+ * UploadApi - interface
+ * @export
+ * @interface UploadApi
+ */
+export interface UploadApiInterface {
+    /**
+     * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
+     * @summary Upload attachment
+     * @param {UploadApiUploadAttachmentsChannelIdAttachmentIdPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UploadApiInterface
+     */
+    uploadAttachmentsChannelIdAttachmentIdPost(requestParameters: UploadApiUploadAttachmentsChannelIdAttachmentIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
+
+    /**
+     * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+     * @summary Upload user avatar
+     * @param {UploadApiUploadAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UploadApiInterface
+     */
+    uploadAvatarsUserIdAvatarIdPost(requestParameters: UploadApiUploadAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
+
+}
+
+/**
+ * Request parameters for uploadAttachmentsChannelIdAttachmentIdPost operation in UploadApi.
+ * @export
+ * @interface UploadApiUploadAttachmentsChannelIdAttachmentIdPostRequest
+ */
+export interface UploadApiUploadAttachmentsChannelIdAttachmentIdPostRequest {
+    /**
+     * Channel ID
+     * @type {number}
+     * @memberof UploadApiUploadAttachmentsChannelIdAttachmentIdPost
+     */
+    readonly channelId: number
+
+    /**
+     * Attachment ID
+     * @type {number}
+     * @memberof UploadApiUploadAttachmentsChannelIdAttachmentIdPost
+     */
+    readonly attachmentId: number
+
+    /**
+     * Binary file to upload
+     * @type {Array<number>}
+     * @memberof UploadApiUploadAttachmentsChannelIdAttachmentIdPost
+     */
+    readonly requestBody: Array<number>
+}
+
+/**
+ * Request parameters for uploadAvatarsUserIdAvatarIdPost operation in UploadApi.
+ * @export
+ * @interface UploadApiUploadAvatarsUserIdAvatarIdPostRequest
+ */
+export interface UploadApiUploadAvatarsUserIdAvatarIdPostRequest {
+    /**
+     * User ID
+     * @type {number}
+     * @memberof UploadApiUploadAvatarsUserIdAvatarIdPost
+     */
+    readonly userId: number
+
+    /**
+     * Avatar ID
+     * @type {number}
+     * @memberof UploadApiUploadAvatarsUserIdAvatarIdPost
+     */
+    readonly avatarId: number
+
+    /**
+     * Binary image payload
+     * @type {Array<number>}
+     * @memberof UploadApiUploadAvatarsUserIdAvatarIdPost
+     */
+    readonly requestBody: Array<number>
+}
+
+/**
+ * UploadApi - object-oriented interface
+ * @export
+ * @class UploadApi
+ * @extends {BaseAPI}
+ */
+export class UploadApi extends BaseAPI implements UploadApiInterface {
+    /**
+     * Uploads a file for an existing attachment. Stores the original as-is and generates a WebP preview for images/videos. Finalizes the attachment metadata.
+     * @summary Upload attachment
+     * @param {UploadApiUploadAttachmentsChannelIdAttachmentIdPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UploadApi
+     */
+    public uploadAttachmentsChannelIdAttachmentIdPost(requestParameters: UploadApiUploadAttachmentsChannelIdAttachmentIdPostRequest, options?: RawAxiosRequestConfig) {
+        return UploadApiFp(this.configuration).uploadAttachmentsChannelIdAttachmentIdPost(requestParameters.channelId, requestParameters.attachmentId, requestParameters.requestBody, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Uploads an avatar image. Resizes to max 128x128 and converts to WebP <= 250KB. Finalizes avatar metadata.
+     * @summary Upload user avatar
+     * @param {UploadApiUploadAvatarsUserIdAvatarIdPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UploadApi
+     */
+    public uploadAvatarsUserIdAvatarIdPost(requestParameters: UploadApiUploadAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig) {
+        return UploadApiFp(this.configuration).uploadAvatarsUserIdAvatarIdPost(requestParameters.userId, requestParameters.avatarId, requestParameters.requestBody, options).then((request) => request(this.axios, this.basePath));
+    }
+}
+
+
+
+/**
  * UserApi - axios parameter creator
  * @export
  */
@@ -8407,148 +8106,6 @@ export class UserApi extends BaseAPI implements UserApiInterface {
      */
     public userUserIdGet(requestParameters: UserApiUserUserIdGetRequest, options?: RawAxiosRequestConfig) {
         return UserApiFp(this.configuration).userUserIdGet(requestParameters.userId, options).then((request) => request(this.axios, this.basePath));
-    }
-}
-
-
-
-/**
- * WebhookApi - axios parameter creator
- * @export
- */
-export const WebhookApiAxiosParamCreator = function (configuration?: Configuration) {
-    return {
-        /**
-         * 
-         * @summary Storage event
-         * @param {WebhookS3Event} webhookS3Event S3 event
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        webhookStorageEventsPost: async (webhookS3Event: WebhookS3Event, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'webhookS3Event' is not null or undefined
-            assertParamExists('webhookStorageEventsPost', 'webhookS3Event', webhookS3Event)
-            const localVarPath = `/webhook/storage/events`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-
-    
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(webhookS3Event, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-    }
-};
-
-/**
- * WebhookApi - functional programming interface
- * @export
- */
-export const WebhookApiFp = function(configuration?: Configuration) {
-    const localVarAxiosParamCreator = WebhookApiAxiosParamCreator(configuration)
-    return {
-        /**
-         * 
-         * @summary Storage event
-         * @param {WebhookS3Event} webhookS3Event S3 event
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async webhookStorageEventsPost(webhookS3Event: WebhookS3Event, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.webhookStorageEventsPost(webhookS3Event, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['WebhookApi.webhookStorageEventsPost']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-    }
-};
-
-/**
- * WebhookApi - factory interface
- * @export
- */
-export const WebhookApiFactory = function (configuration?: Configuration, basePath?: string, axios?: AxiosInstance) {
-    const localVarFp = WebhookApiFp(configuration)
-    return {
-        /**
-         * 
-         * @summary Storage event
-         * @param {WebhookApiWebhookStorageEventsPostRequest} requestParameters Request parameters.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        webhookStorageEventsPost(requestParameters: WebhookApiWebhookStorageEventsPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.webhookStorageEventsPost(requestParameters.webhookS3Event, options).then((request) => request(axios, basePath));
-        },
-    };
-};
-
-/**
- * WebhookApi - interface
- * @export
- * @interface WebhookApi
- */
-export interface WebhookApiInterface {
-    /**
-     * 
-     * @summary Storage event
-     * @param {WebhookApiWebhookStorageEventsPostRequest} requestParameters Request parameters.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof WebhookApiInterface
-     */
-    webhookStorageEventsPost(requestParameters: WebhookApiWebhookStorageEventsPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
-
-}
-
-/**
- * Request parameters for webhookStorageEventsPost operation in WebhookApi.
- * @export
- * @interface WebhookApiWebhookStorageEventsPostRequest
- */
-export interface WebhookApiWebhookStorageEventsPostRequest {
-    /**
-     * S3 event
-     * @type {WebhookS3Event}
-     * @memberof WebhookApiWebhookStorageEventsPost
-     */
-    readonly webhookS3Event: WebhookS3Event
-}
-
-/**
- * WebhookApi - object-oriented interface
- * @export
- * @class WebhookApi
- * @extends {BaseAPI}
- */
-export class WebhookApi extends BaseAPI implements WebhookApiInterface {
-    /**
-     * 
-     * @summary Storage event
-     * @param {WebhookApiWebhookStorageEventsPostRequest} requestParameters Request parameters.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof WebhookApi
-     */
-    public webhookStorageEventsPost(requestParameters: WebhookApiWebhookStorageEventsPostRequest, options?: RawAxiosRequestConfig) {
-        return WebhookApiFp(this.configuration).webhookStorageEventsPost(requestParameters.webhookS3Event, options).then((request) => request(this.axios, this.basePath));
     }
 }
 
