@@ -463,10 +463,15 @@
 		background-color: black;
 	}
 
-	:global(.video-player-container:fullscreen video),
-	:global(.video-player-container:-webkit-full-screen video) {
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-	}
+        :global(.video-player-container:fullscreen video),
+        :global(.video-player-container:-webkit-full-screen video) {
+                width: auto !important;
+                height: auto !important;
+                max-width: 100vw;
+                max-height: 100vh;
+                object-fit: contain;
+                object-position: center;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+        }
 </style>
