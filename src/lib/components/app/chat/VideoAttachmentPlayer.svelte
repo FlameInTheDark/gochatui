@@ -26,9 +26,10 @@
 	let isVolumeSliderVisible = false;
 	let isVolumeSliderLockActive = false;
 	let volumeControlsGroup: HTMLDivElement;
-	let hideVolumeControlsTimeout: ReturnType<typeof setTimeout> | null = null;
+        let hideVolumeControlsTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	const AUTO_HIDE_DELAY = 2500;
+        const AUTO_HIDE_DELAY = 2500;
+        const VOLUME_HIDE_DELAY = 700;
 
 	function clearHideControlsTimeout() {
 		if (hideControlsTimeout) {
@@ -76,23 +77,23 @@
 		hideVolumeControlsTimeout = null;
 	}
 
-	function showVolumeControls({ lock = false } = {}) {
-		clearHideVolumeControlsTimeout();
-		if (!isVolumeSliderVisible) {
-			isVolumeSliderVisible = true;
-		}
-		if (lock) {
+        function showVolumeControls({ lock = false } = {}) {
+                clearHideVolumeControlsTimeout();
+                if (!isVolumeSliderVisible) {
+                        isVolumeSliderVisible = true;
+                }
+                if (lock) {
 			isVolumeSliderLockActive = true;
 			lockControlsVisibility();
 		}
 	}
 
-	function hideVolumeControls({ immediate = false } = {}) {
-		if (!isVolumeSliderVisible) return;
-		const performHide = () => {
-			isVolumeSliderVisible = false;
-			if (isVolumeSliderLockActive) {
-				isVolumeSliderLockActive = false;
+        function hideVolumeControls({ immediate = false, delay = VOLUME_HIDE_DELAY } = {}) {
+                if (!isVolumeSliderVisible) return;
+                const performHide = () => {
+                        isVolumeSliderVisible = false;
+                        if (isVolumeSliderLockActive) {
+                                isVolumeSliderLockActive = false;
 				unlockControlsVisibility();
 			}
 		};
@@ -107,7 +108,7 @@
                 hideVolumeControlsTimeout = setTimeout(() => {
                         performHide();
                         hideVolumeControlsTimeout = null;
-                }, 350);
+                }, delay);
         }
 
 	function handleFocusIn() {
@@ -132,9 +133,9 @@
 		hideVolumeControls({ immediate: true });
 	}
 
-	function handleVolumeGroupPointerLeave() {
-		hideVolumeControls();
-	}
+        function handleVolumeGroupPointerLeave() {
+                hideVolumeControls({ delay: VOLUME_HIDE_DELAY });
+        }
 
 	function formatTime(value: number): string {
 		if (!Number.isFinite(value) || value < 0) {
@@ -345,24 +346,12 @@
                         on:pointerleave={unlockControlsVisibility}
                 >
                         <div class="flex w-full flex-col gap-1.5">
-                                <div class="flex items-center gap-1.5">
-                                        <button
-                                                class="grid h-7 w-7 flex-none place-items-center rounded-lg bg-white/15 transition hover:bg-white/25"
-                                                type="button"
-                                                on:click|stopPropagation={togglePlayback}
-                                                aria-label={isPlaying ? 'Pause video' : 'Play video'}
-                                        >
-                                                {#if isPlaying}
-                                                        <Pause class="h-4 w-4" stroke-width={2} />
-                                                {:else}
-                                                        <Play class="h-4 w-4" stroke-width={2} />
-                                                {/if}
-                                        </button>
+                                <div class="flex w-full items-center gap-1.5">
                                         <span class="flex-none text-[0.65rem] font-medium text-white/80 tabular-nums">
                                                 {formatTime(currentTime)}
                                         </span>
                                         <input
-                                                class="h-1.5 w-full flex-1 cursor-pointer accent-[var(--brand)]"
+                                                class="h-1.5 min-w-0 flex-1 cursor-pointer accent-[var(--brand)]"
                                                 type="range"
                                                 min={0}
                                                 max={duration || 0}
@@ -377,6 +366,22 @@
                                         <span class="flex-none text-[0.65rem] font-medium text-white/80 tabular-nums">
                                                 {formatTime(duration)}
                                         </span>
+                                </div>
+                                <div class="flex w-full items-center justify-between gap-1.5">
+                                        <div class="flex items-center gap-1.5">
+                                                <button
+                                                        class="grid h-7 w-7 flex-none place-items-center rounded-lg bg-white/15 transition hover:bg-white/25"
+                                                        type="button"
+                                                        on:click|stopPropagation={togglePlayback}
+                                                        aria-label={isPlaying ? 'Pause video' : 'Play video'}
+                                                >
+                                                        {#if isPlaying}
+                                                                <Pause class="h-4 w-4" stroke-width={2} />
+                                                        {:else}
+                                                                <Play class="h-4 w-4" stroke-width={2} />
+                                                        {/if}
+                                                </button>
+                                        </div>
                                         <div class="flex flex-none items-center gap-1.5">
                                                 <div
                                                         class="group relative"
@@ -399,7 +404,7 @@
                                                                 {/if}
                                                         </button>
                                                         <div
-                                                                class="pointer-events-none absolute bottom-[calc(100%+0.35rem)] left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-2 opacity-0 shadow-lg transition"
+                                                                class="pointer-events-none absolute bottom-[calc(100%+0.15rem)] left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-2 opacity-0 shadow-lg transition"
                                                                 class:pointer-events-auto={isVolumeSliderVisible}
                                                                 class:opacity-100={isVolumeSliderVisible}
                                                                 on:pointerenter={() => showVolumeControls({ lock: true })}
@@ -413,6 +418,7 @@
                                                                         step="0.05"
                                                                         value={volume}
                                                                         on:input={handleVolumeInput}
+                                                                        on:pointerdown={() => showVolumeControls({ lock: true })}
                                                                         aria-label="Volume"
                                                                 />
                                                         </div>
