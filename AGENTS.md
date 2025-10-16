@@ -27,6 +27,8 @@
 - Formatting: Prettier (incl. `prettier-plugin-svelte`, `prettier-plugin-tailwindcss`). Run `npm run format`.
 - Linting: ESLint with Svelte and TypeScript configs. Run `npm run lint`.
 - Components: PascalCase (`MessageList.svelte`). Stores/utilities: camelCase (`appState.ts`). Routes use SvelteKit conventions (`+page.svelte`).
+- Svelte events follow the latest syntax: use `onclick={...}` rather than legacy `on:click={...}`.
+- Always address Svelte compiler warnings when possible.
 
 ## Testing Guidelines
 
@@ -45,6 +47,7 @@
 - Do not commit secrets. Start from `.env.example` and document new vars.
 - i18n: add keys to `messages/*.json`; generated `src/lib/paraglide` code is derived—don’t edit by hand.
 - Network: REST via `src/lib/api/` (axios) and WS in `src/lib/client/ws.ts`; centralize endpoints/config.
+- Never change files in `src/lib/api`; they are generated and will be overwritten.
 
 ## ID Handling
 
