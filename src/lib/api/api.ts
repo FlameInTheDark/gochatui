@@ -245,6 +245,43 @@ export interface DtoAttachmentUpload {
 /**
  * 
  * @export
+ * @interface DtoAvatarData
+ */
+export interface DtoAvatarData {
+    /**
+     * 
+     * @type {string}
+     * @memberof DtoAvatarData
+     */
+    'content_type'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatarData
+     */
+    'height'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatarData
+     */
+    'size'?: number;
+    /**
+     * 
+     * @type {string}
+     * @memberof DtoAvatarData
+     */
+    'url'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatarData
+     */
+    'width'?: number;
+}
+/**
+ * 
+ * @export
  * @interface DtoAvatarUpload
  */
 export interface DtoAvatarUpload {
@@ -606,16 +643,10 @@ export interface DtoRole {
 export interface DtoUser {
     /**
      * 
-     * @type {number}
+     * @type {DtoAvatarData}
      * @memberof DtoUser
      */
-    'avatar'?: number;
-    /**
-     * 
-     * @type {string}
-     * @memberof DtoUser
-     */
-    'avatar_url'?: string;
+    'avatar'?: DtoAvatarData;
     /**
      * 
      * @type {string}
