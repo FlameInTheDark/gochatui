@@ -2,6 +2,7 @@ import { Configuration } from '$lib/api';
 import {
         AttachmentsApi,
         AuthApi,
+        AvatarsApi,
         GuildApi,
         GuildInvitesApi,
         GuildRolesApi,
@@ -27,6 +28,7 @@ function stringifyBigInt(data: unknown): string {
 export type ApiGroup = {
         attachments: AttachmentsApi;
         auth: AuthApi;
+        avatars: AvatarsApi;
         guild: GuildApi;
         guildInvites: GuildInvitesApi;
         guildRoles: GuildRolesApi;
@@ -228,6 +230,7 @@ export function createApi(
         return {
                 attachments: new AttachmentsApi(config, base, ax),
                 auth: new AuthApi(config, base, ax),
+                avatars: new AvatarsApi(config, base, ax),
                 guild: new GuildApi(config, base, ax),
                 guildInvites: new GuildInvitesApi(config, base, ax),
                 guildRoles: new GuildRolesApi(config, base, ax),
