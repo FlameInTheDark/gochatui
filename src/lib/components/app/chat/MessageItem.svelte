@@ -445,6 +445,7 @@
 
         type AttachmentMeta = {
                 url: string | null;
+                previewUrl: string | null;
                 kind: AttachmentKind;
                 sizeLabel: string | null;
                 name: string;
@@ -473,6 +474,13 @@
 
         function attachmentUrl(attachment: MessageAttachment | undefined): string | null {
                 const raw = (attachment as any)?.url;
+                if (typeof raw !== 'string') return null;
+                const trimmed = raw.trim();
+                return trimmed ? trimmed : null;
+        }
+
+        function attachmentPreviewUrl(attachment: MessageAttachment | undefined): string | null {
+                const raw = (attachment as any)?.preview_url;
                 if (typeof raw !== 'string') return null;
                 const trimmed = raw.trim();
                 return trimmed ? trimmed : null;
@@ -574,8 +582,12 @@
                         kind === 'image' &&
                         (lowerContentType === 'image/gif' || lowerName.endsWith('.gif'));
 
+                const url = attachmentUrl(attachment);
+                const previewUrl = attachmentPreviewUrl(attachment) ?? url;
+
                 return {
-                        url: attachmentUrl(attachment),
+                        url,
+                        previewUrl,
                         kind,
                         sizeLabel: formatAttachmentSize((attachment as any)?.size),
                         name,
@@ -609,7 +621,7 @@
                 attachments.forEach((attachment, index) => {
                         const meta = getAttachmentMeta(attachment);
                         const item: AttachmentRenderItem = { attachment, meta, index };
-                        const eligibleForGallery = meta.kind === 'image' && !!meta.url;
+                        const eligibleForGallery = meta.kind === 'image' && !!meta.previewUrl;
                         if (eligibleForGallery) {
                                 pendingGallery.push(item);
                                 return;
@@ -643,12 +655,14 @@
         type GifPlaybackParams = {
                 enabled: boolean;
                 src: string | null;
+                previewSrc: string | null;
         };
 
         function gifPlayback(node: HTMLImageElement, params: GifPlaybackParams) {
                 let currentParams = params;
                 let currentSrc = currentParams?.src ?? null;
                 let enabled = Boolean(currentParams?.enabled && currentSrc);
+                let previewSrc = currentParams?.previewSrc ?? null;
                 let observer: IntersectionObserver | null = null;
 
                 const cleanupObserver = () => {
@@ -658,10 +672,14 @@
 
                 const setPlaying = (shouldPlay: boolean) => {
                         if (!enabled) {
+                                const target = previewSrc ?? GIF_PLACEHOLDER_SRC;
+                                if (node.src !== target) {
+                                        node.src = target;
+                                }
                                 return;
                         }
 
-                        const target = shouldPlay && currentSrc ? currentSrc : GIF_PLACEHOLDER_SRC;
+                        const target = shouldPlay && currentSrc ? currentSrc : previewSrc ?? GIF_PLACEHOLDER_SRC;
                         if (node.src !== target) {
                                 node.src = target;
                         }
@@ -680,8 +698,10 @@
                         cleanupObserver();
                         currentSrc = currentParams?.src ?? null;
                         enabled = Boolean(currentParams?.enabled && currentSrc);
+                        previewSrc = currentParams?.previewSrc ?? null;
 
                         if (!enabled) {
+                                setPlaying(false);
                                 return;
                         }
 
@@ -701,8 +721,9 @@
                         },
                         destroy() {
                                 cleanupObserver();
-                                if (enabled && currentSrc) {
-                                        node.src = currentSrc;
+                                const target = previewSrc ?? (enabled && currentSrc ? currentSrc : GIF_PLACEHOLDER_SRC);
+                                if (target) {
+                                        node.src = target;
                                 }
                         },
                 };
@@ -1390,7 +1411,9 @@
                         }
                         const key = attachmentStableKey(attachment, index);
                         videoKeys.add(key);
-                        requestVideoPoster(key, meta.url);
+                        if (!meta.previewUrl) {
+                                requestVideoPoster(key, meta.url);
+                        }
                 });
 
                 for (const key of Array.from(videoPosterTasks.keys())) {
@@ -2250,15 +2273,20 @@
                                                                                                 onclick={() => openImagePreview(item.meta)}
                                                                                                 aria-label={`Open preview for ${item.meta.name}`}
                                                                                         >
-                                                                                                {#if item.meta.url}
+                                                                                                {@const galleryDisplaySrc =
+                                                                                                        item.meta.isGif
+                                                                                                                ? item.meta.previewUrl ?? GIF_PLACEHOLDER_SRC
+                                                                                                                : item.meta.previewUrl ?? item.meta.url}
+                                                                                                {#if galleryDisplaySrc}
                                                                                                 <img
-                                                                                                        src={item.meta.isGif ? GIF_PLACEHOLDER_SRC : item.meta.url}
+                                                                                                        src={galleryDisplaySrc}
                                                                                                         alt={item.meta.name}
                                                                                                         class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
                                                                                                         loading="lazy"
                                                                                                         use:gifPlayback={{
                                                                                                                 enabled: item.meta.isGif,
                                                                                                                 src: item.meta.url,
+                                                                                                                previewSrc: item.meta.previewUrl,
                                                                                                         }}
                                                                                                 />
                                                                                                 {/if}
@@ -2280,7 +2308,7 @@
                                                                 </div>
                                                         {:else}
                                                                 {@const { attachment, meta, index } = group.item}
-                                                                {#if meta.kind === 'image' && meta.url}
+                                                                {#if meta.kind === 'image' && (meta.previewUrl || meta.url)}
                                                                         {@const imageBounds = computeVisualAttachmentBounds(meta)}
                                                                         <div
                                                                                 class="group relative inline-flex max-w-full items-center justify-center overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
@@ -2294,8 +2322,13 @@
                                                                                         onclick={() => openImagePreview(meta)}
                                                                                         aria-label={`Open preview for ${meta.name}`}
                                                                                 >
+                                                                                        {@const displaySrc =
+                                                                                                meta.isGif
+                                                                                                        ? meta.previewUrl ?? GIF_PLACEHOLDER_SRC
+                                                                                                        : meta.previewUrl ?? meta.url}
+                                                                                        {#if displaySrc}
                                                                                         <img
-                                                                                                src={meta.isGif ? GIF_PLACEHOLDER_SRC : meta.url}
+                                                                                                src={displaySrc}
                                                                                                 alt={meta.name}
                                                                                                 class="block max-h-full max-w-full select-none object-contain transition group-hover:brightness-110"
                                                                                                 loading="lazy"
@@ -2303,8 +2336,10 @@
                                                                                                 use:gifPlayback={{
                                                                                                         enabled: meta.isGif,
                                                                                                         src: meta.url,
+                                                                                                        previewSrc: meta.previewUrl,
                                                                                                 }}
                                                                                         />
+                                                                                        {/if}
                                                                                 </button>
                                                                                 {#if meta.url}
                                                                                         <a
@@ -2321,7 +2356,7 @@
                                                                         </div>
                                                                 {:else if meta.kind === 'video' && meta.url}
                                                                         {@const attachmentKey = attachmentStableKey(attachment, index)}
-                                                                        {@const previewPoster = videoPreviewPosters[attachmentKey] ?? null}
+                                                                        {@const previewPoster = meta.previewUrl ?? videoPreviewPosters[attachmentKey] ?? null}
                                                                         {@const videoHasExplicitDimensions = meta.aspectRatio != null}
                                                                         {@const previewAspectRatio =
                                                                                         meta.aspectRatio ?? `${VISUAL_ATTACHMENT_MAX_DIMENSION} / ${VISUAL_ATTACHMENT_MAX_DIMENSION}`}
