@@ -7,6 +7,8 @@
 
         let avatarError: string | null = null;
 
+        let fileInput: HTMLInputElement | null = null;
+
         let imageObjectUrl: string | null = null;
         let imageElement: HTMLImageElement | null = null;
         let imageReady = false;
@@ -459,9 +461,20 @@
         </div>
 
         <label class="block text-sm font-medium" for="profile-avatar-upload">Upload image</label>
+        <div class="flex items-center gap-3">
+                <button
+                        class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm"
+                        onclick={() => fileInput?.click()}
+                        type="button"
+                >
+                        Choose image
+                </button>
+                <span class="text-xs text-[var(--muted)]">PNG or JPEG recommended</span>
+        </div>
         <input
                 accept="image/*"
-                class="w-full text-sm"
+                bind:this={fileInput}
+                class="sr-only"
                 id="profile-avatar-upload"
                 type="file"
                 onchange={handleAvatarSelection}
