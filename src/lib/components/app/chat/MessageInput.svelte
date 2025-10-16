@@ -431,7 +431,7 @@
                                                 </div>
                                         {/if}
                                         <div class="flex items-start gap-2 px-2 py-2">
-                                                <div class="flex-1 truncate text-xs text-[var(--fg)]" title={attachment.filename}>
+                                                <div class="flex-1 truncate text-xs text-[var(--fg)]">
                                                         {attachment.filename}
                                                 </div>
                                         </div>
