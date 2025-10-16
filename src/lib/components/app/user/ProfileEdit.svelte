@@ -13,8 +13,9 @@
 
 	let croppedAvatar: string | null = null;
 	let fallbackInitial = '?';
-	const existingAvatarUrl = $derived.by(() => resolveAvatarUrl($me));
+	let existingAvatarUrl: string | null = null;
 
+	$: existingAvatarUrl = resolveAvatarUrl($me);
 	$: if (!nameInitialized && $me) {
 		name = $me.name ?? '';
 		nameInitialized = true;
