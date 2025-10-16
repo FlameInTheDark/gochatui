@@ -20,13 +20,21 @@
 	let volume = 1;
 	let isMuted = false;
 	let previousVolume = 0.5;
-	let areControlsVisible = true;
-	let isAutoHideLocked = false;
-	let hideControlsTimeout: ReturnType<typeof setTimeout> | null = null;
-	let isVolumeSliderVisible = false;
-	let isVolumeSliderLockActive = false;
-	let volumeControlsGroup: HTMLDivElement;
+        let areControlsVisible = true;
+        let isAutoHideLocked = false;
+        let hideControlsTimeout: ReturnType<typeof setTimeout> | null = null;
+        let isVolumeSliderVisible = false;
+        let isVolumeSliderLockActive = false;
+        let volumeControlsGroup: HTMLDivElement;
         let hideVolumeControlsTimeout: ReturnType<typeof setTimeout> | null = null;
+
+        const FULLSCREEN_STYLE_OVERRIDE =
+                'max-width: none; max-height: none; width: 100%; height: 100%; object-fit: contain;';
+
+        $: effectiveMediaStyle =
+                isFullscreen
+                        ? `${mediaStyle}${mediaStyle && !mediaStyle.trim().endsWith(';') ? ';' : ''} ${FULLSCREEN_STYLE_OVERRIDE}`
+                        : mediaStyle;
 
         const AUTO_HIDE_DELAY = 2500;
         const VOLUME_HIDE_DELAY = 700;
@@ -321,15 +329,15 @@
 	on:focusout={handleFocusOut}
 >
 	<!-- svelte-ignore a11y_media_has_caption -->
-	<video
-		bind:this={videoElement}
-		class="block bg-black"
-		{src}
-		{preload}
-		poster={poster ?? undefined}
-		{playsinline}
-		style={mediaStyle}
-		on:click={togglePlayback}
+        <video
+                bind:this={videoElement}
+                class="block bg-black"
+                {src}
+                {preload}
+                poster={poster ?? undefined}
+                {playsinline}
+                style={effectiveMediaStyle}
+                on:click={togglePlayback}
 		on:play={handlePlay}
 		on:pause={handlePause}
 		on:ended={handleEnded}
