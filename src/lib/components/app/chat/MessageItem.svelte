@@ -16,6 +16,7 @@
 	import InlineTokens from './InlineTokens.svelte';
 	import InvitePreview from './InvitePreview.svelte';
 	import YoutubeEmbed from './YoutubeEmbed.svelte';
+	import VideoAttachmentPlayer from './VideoAttachmentPlayer.svelte';
 	import { extractInvite } from './extractInvite';
         import { Download, ImageOff, Paperclip, Pencil, Play, Trash2, X } from 'lucide-svelte';
 	import { colorIntToHex } from '$lib/utils/color';
@@ -2401,15 +2402,13 @@
                                                                                                 style={visualAttachmentMediaStyle}
                                                                                                 style:aspect-ratio={previewAspectRatio}
                                                                                         >
-                                                                                                <!-- svelte-ignore a11y_media_has_caption -->
-                                                                                                <video
-                                                                                                        class="bg-black"
+                                                                                                <VideoAttachmentPlayer
                                                                                                         src={meta.url}
-                                                                                                        controls
+                                                                                                        poster={previewPoster}
+                                                                                                        mediaStyle={`${visualAttachmentMediaStyle} display: block;${videoHasExplicitDimensions ? '' : ' width: 100%; height: 100%;'}`}
                                                                                                         preload="metadata"
                                                                                                         playsinline
-                                                                                                        style={`${visualAttachmentMediaStyle} display: block;${videoHasExplicitDimensions ? '' : ' width: 100%; height: 100%;'}`}
-                                                                                                ></video>
+                                                                                                />
                                                                                                 <div class="absolute right-2 top-2 flex gap-2">
                                                                                                         {#if meta.url}
                                                                                                                 <a
