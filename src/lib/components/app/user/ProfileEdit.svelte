@@ -8,6 +8,7 @@
         let nameInitialized = false;
         let loading = false;
         let message: string | null = null;
+        let messageVariant: 'success' | 'error' | null = null;
 
         let croppedAvatar: string | null = null;
         let existingAvatarUrl: string | null = null;
@@ -21,12 +22,100 @@
         $: existingAvatarUrl = resolveExistingAvatar($me);
         $: fallbackInitial = avatarInitial(name);
 
+        async function uploadCroppedAvatar(dataUrl: string) {
+                const response = await fetch(dataUrl);
+                if (!response.ok) {
+                        throw new Error('Failed to read cropped avatar image.');
+                }
+
+                const blob = await response.blob();
+                if (!blob.size) {
+                        throw new Error('Avatar image appears to be empty.');
+                }
+
+                const contentType = blob.type && blob.type.trim().length > 0 ? blob.type : 'image/png';
+                const metadataResponse = await auth.api.user.userMeAvatarPost({
+                        userCreateAvatarRequest: {
+                                content_type: contentType,
+                                file_size: blob.size
+                        }
+                });
+
+                const metadata = metadataResponse.data ?? null;
+                const avatarIdRaw = metadata?.id;
+                const userIdRaw = metadata?.user_id;
+                if (avatarIdRaw == null || userIdRaw == null) {
+                        throw new Error('Avatar upload metadata did not include identifiers.');
+                }
+
+                const avatarId = BigInt(avatarIdRaw);
+                const userId = BigInt(userIdRaw);
+                const buffer = await blob.arrayBuffer();
+                const bytes = new Uint8Array(buffer);
+
+                await auth.api.avatars.avatarsUserIdAvatarIdPost({
+                        userId: userId as any,
+                        avatarId: avatarId as any,
+                        requestBody: bytes as any
+                });
+        }
+
+        function extractHttpStatus(error: unknown): number | null {
+                if (!error || typeof error !== 'object') return null;
+                const maybeResponse = (error as any).response;
+                if (!maybeResponse || typeof maybeResponse !== 'object') return null;
+                const status = (maybeResponse as any).status;
+                return typeof status === 'number' ? status : null;
+        }
+
         async function save() {
                 loading = true;
                 message = null;
+                messageVariant = null;
+
+                let updated = false;
+                let shouldReloadMe = false;
+
                 try {
-                        await auth.api.user.userMePatch({ userModifyUserRequest: { name } });
-                        message = 'Profile updated';
+                        const currentName = $me?.name ?? '';
+                        const trimmedName = name.trim();
+                        name = trimmedName;
+
+                        if (trimmedName !== currentName) {
+                                await auth.api.user.userMePatch({
+                                        userModifyUserRequest: { name: trimmedName }
+                                });
+                                updated = true;
+                                shouldReloadMe = true;
+                        }
+
+                        if (croppedAvatar) {
+                                await uploadCroppedAvatar(croppedAvatar);
+                                updated = true;
+                                shouldReloadMe = true;
+                        }
+
+                        if (shouldReloadMe) {
+                                await auth.loadMe();
+                                croppedAvatar = null;
+                        }
+
+                        if (updated) {
+                                message = 'Profile updated';
+                                messageVariant = 'success';
+                        } else {
+                                message = 'No changes to save';
+                                messageVariant = 'success';
+                        }
+                } catch (error) {
+                        console.error(error);
+                        const status = extractHttpStatus(error);
+                        if (status === 413) {
+                                message = 'Avatar is too large even after cropping. Please try a smaller image.';
+                        } else {
+                                message = 'Failed to update profile. Please try again.';
+                        }
+                        messageVariant = 'error';
                 } finally {
                         loading = false;
                 }
@@ -75,7 +164,15 @@
                                 onclick={save}>Save</button
                         >
                 </div>
-                {#if message}<div class="text-xs text-green-500">{message}</div>{/if}
+                {#if message}
+                        <div
+                                class={`text-xs ${
+                                        messageVariant === 'error' ? 'text-red-400' : 'text-green-500'
+                                }`}
+                        >
+                                {message}
+                        </div>
+                {/if}
                 <div class="text-xs text-[var(--muted)]">Use logout/login if not reflected immediately.</div>
                 <button class="mt-2 text-sm text-red-400 underline" onclick={() => auth.logout()}>Logout</button>
         </div>
