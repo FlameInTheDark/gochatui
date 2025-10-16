@@ -242,9 +242,7 @@
                                                 src={imageObjectUrl}
                                                 style={`transform: translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale});`}
                                         />
-                                        <div class="avatar-crop-overlay" aria-hidden="true">
-                                                <div class="avatar-crop-circle"></div>
-                                        </div>
+                                        <div class="avatar-crop-overlay" aria-hidden="true"></div>
                                 </div>
                         </div>
                         <div class="flex flex-1 flex-col gap-3">
@@ -331,21 +329,23 @@
                 position: absolute;
                 inset: 0;
                 pointer-events: none;
-                display: flex;
-                align-items: center;
-                justify-content: center;
                 border-radius: 16px;
         }
 
-        .avatar-crop-circle {
-                position: relative;
-                width: 100%;
-                height: 100%;
-                border-radius: 9999px;
-                box-shadow:
-                        0 0 0 1px rgba(0, 0, 0, 0.35) inset,
-                        0 0 0 2px rgba(255, 255, 255, 0.75) inset,
-                        0 0 0 9999px rgba(0, 0, 0, 0.45);
+        .avatar-crop-overlay::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                background: radial-gradient(
+                        circle at center,
+                        transparent calc(50% - 3px),
+                        rgba(0, 0, 0, 0.35) calc(50% - 3px),
+                        rgba(0, 0, 0, 0.35) calc(50% - 2px),
+                        rgba(255, 255, 255, 0.75) calc(50% - 2px),
+                        rgba(255, 255, 255, 0.75) calc(50% + 2px),
+                        rgba(0, 0, 0, 0.45) calc(50% + 2px)
+                );
         }
 
         @media (max-width: 640px) {
