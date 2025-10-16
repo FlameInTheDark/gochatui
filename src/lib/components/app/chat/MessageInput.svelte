@@ -278,10 +278,10 @@
                 await auth.api.attachments.attachmentsChannelIdAttachmentIdPost(
                         {
                                 channelId: channelId as any,
-                                attachmentId: attachment.attachmentId as any
+                                attachmentId: attachment.attachmentId as any,
+                                requestBody: attachment.file as any
                         },
                         {
-                                data: attachment.file,
                                 headers: {
                                         'Content-Type': attachment.mimeType || 'application/octet-stream'
                                 },
