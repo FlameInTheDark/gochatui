@@ -33,6 +33,7 @@
         let imageDisplayWidth = 0;
         let imageDisplayHeight = 0;
         let imageOffset = { x: 0, y: 0 };
+        let maxMaskSize = cropSize;
 
         let previewCanvas: HTMLCanvasElement | null = null;
 
@@ -42,6 +43,8 @@
                 maskRadius - 1,
                 0
         )}px, rgba(0, 0, 0, 0.45) ${maskRadius}px)`;
+        $: minZoom = cropSize / (maxMaskSize || cropSize);
+        $: maxZoom = cropSize / minMaskSize;
 
         $: displayAvatarUrl = croppedDataUrl ?? initialAvatarUrl;
 
@@ -80,6 +83,7 @@
                 imageDisplayWidth = 0;
                 imageDisplayHeight = 0;
                 imageOffset = { x: 0, y: 0 };
+                maxMaskSize = cropSize;
 
                 if (imageObjectUrl) {
                         URL.revokeObjectURL(imageObjectUrl);
@@ -104,7 +108,7 @@
                 }
 
                 imageElement = element;
-                imageFitScale = Math.max(cropSize / naturalWidth, cropSize / naturalHeight);
+                imageFitScale = Math.min(cropSize / naturalWidth, cropSize / naturalHeight);
                 imageDisplayWidth = naturalWidth * imageFitScale;
                 imageDisplayHeight = naturalHeight * imageFitScale;
                 imageOffset = {
@@ -112,9 +116,11 @@
                         y: (cropSize - imageDisplayHeight) / 2
                 };
 
-                zoom = 1;
-                maskSize = cropSize;
-                maskPosition = centerMask(maskSize);
+                const availableMaskSize = Math.min(cropSize, imageDisplayWidth, imageDisplayHeight) || cropSize;
+                maxMaskSize = Math.max(availableMaskSize, minMaskSize);
+                maskSize = clampMaskSize(maxMaskSize);
+                maskPosition = centerMaskWithinImage(maskSize);
+                zoom = cropSize / maskSize;
                 maskDragging = false;
 
                 imageReady = true;
@@ -125,16 +131,65 @@
                 return { x: start, y: start };
         }
 
+        function centerMaskWithinImage(size: number) {
+                const centerX = imageOffset.x + imageDisplayWidth / 2 - size / 2;
+                const centerY = imageOffset.y + imageDisplayHeight / 2 - size / 2;
+                return clampMaskPosition(centerX, centerY, size);
+        }
+
+        function getMaskBounds(size: number) {
+                const containerMax = Math.max(cropSize - size, 0);
+
+                let minX = 0;
+                let maxX = containerMax;
+                let minY = 0;
+                let maxY = containerMax;
+
+                if (imageDisplayWidth && imageDisplayHeight) {
+                        minX = Math.min(Math.max(imageOffset.x, 0), containerMax);
+                        minY = Math.min(Math.max(imageOffset.y, 0), containerMax);
+
+                        const imageMaxX = imageOffset.x + imageDisplayWidth - size;
+                        const imageMaxY = imageOffset.y + imageDisplayHeight - size;
+
+                        if (imageMaxX >= imageOffset.x) {
+                                maxX = Math.min(Math.max(imageMaxX, minX), containerMax);
+                        } else {
+                                const centeredX = imageOffset.x + imageDisplayWidth / 2 - size / 2;
+                                minX = maxX = Math.min(Math.max(centeredX, 0), containerMax);
+                        }
+
+                        if (imageMaxY >= imageOffset.y) {
+                                maxY = Math.min(Math.max(imageMaxY, minY), containerMax);
+                        } else {
+                                const centeredY = imageOffset.y + imageDisplayHeight / 2 - size / 2;
+                                minY = maxY = Math.min(Math.max(centeredY, 0), containerMax);
+                        }
+                }
+
+                if (maxX < minX) {
+                        const middle = (minX + maxX) / 2;
+                        minX = maxX = middle;
+                }
+
+                if (maxY < minY) {
+                        const middle = (minY + maxY) / 2;
+                        minY = maxY = middle;
+                }
+
+                return { minX, maxX, minY, maxY };
+        }
+
         function clampMaskPosition(x: number, y: number, size: number) {
-                const max = Math.max(cropSize - size, 0);
+                const bounds = getMaskBounds(size);
                 return {
-                        x: Math.min(Math.max(x, 0), max),
-                        y: Math.min(Math.max(y, 0), max)
+                        x: Math.min(Math.max(x, bounds.minX), bounds.maxX),
+                        y: Math.min(Math.max(y, bounds.minY), bounds.maxY)
                 };
         }
 
         function clampMaskSize(size: number) {
-                return Math.min(Math.max(size, minMaskSize), cropSize);
+                return Math.min(Math.max(size, minMaskSize), maxMaskSize);
         }
 
         function getPointerWithinOverlay(event: PointerEvent) {
@@ -290,24 +345,28 @@
                 if (!imageReady || !imageElement) return;
                 const input = event.currentTarget as HTMLInputElement | null;
                 if (!input) return;
-                const newZoom = Number(input.value);
-                if (!Number.isFinite(newZoom) || newZoom <= 0) return;
+                const requestedZoom = Number(input.value);
+                if (!Number.isFinite(requestedZoom) || requestedZoom <= 0) return;
 
-                const nextSize = cropSize / newZoom;
+                const lowerBound = minZoom;
+                const upperBound = maxZoom;
+                const clampedZoom = Math.min(Math.max(requestedZoom, lowerBound), upperBound);
+                const targetSize = cropSize / clampedZoom;
+                const constrainedSize = clampMaskSize(targetSize);
                 const previousCenter = {
                         x: maskPosition.x + maskSize / 2,
                         y: maskPosition.y + maskSize / 2
                 };
 
                 const nextPosition = clampMaskPosition(
-                        previousCenter.x - nextSize / 2,
-                        previousCenter.y - nextSize / 2,
-                        nextSize
+                        previousCenter.x - constrainedSize / 2,
+                        previousCenter.y - constrainedSize / 2,
+                        constrainedSize
                 );
 
-                maskSize = nextSize;
+                maskSize = constrainedSize;
                 maskPosition = nextPosition;
-                zoom = newZoom;
+                zoom = cropSize / constrainedSize;
         }
 
         function drawPreview(
@@ -474,8 +533,8 @@
                                         </div>
                                         <input
                                                 class="w-full"
-                                                max="4"
-                                                min="1"
+                                                max={maxZoom}
+                                                min={minZoom}
                                                 step="0.01"
                                                 type="range"
                                                 value={zoom}
