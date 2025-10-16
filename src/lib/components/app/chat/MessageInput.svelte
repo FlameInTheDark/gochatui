@@ -113,10 +113,10 @@
                 event.dataTransfer?.clearData();
         }
 
-        const VISUAL_ATTACHMENT_MAX_DIMENSION = 350;
-        const visualAttachmentWrapperStyle = `max-width: min(100%, ${VISUAL_ATTACHMENT_MAX_DIMENSION}px);`;
-        const visualAttachmentMediaStyle = `max-width: 100%; max-height: ${VISUAL_ATTACHMENT_MAX_DIMENSION}px; width: auto; height: auto;`;
-        const visualAttachmentPlaceholderStyle = `min-height: min(${VISUAL_ATTACHMENT_MAX_DIMENSION}px, 8rem);`;
+        const VISUAL_ATTACHMENT_PREVIEW_SIZE = 218;
+        const visualAttachmentWrapperStyle = `width: min(100%, ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px); max-width: min(100%, ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px);`;
+        const visualAttachmentMediaStyle = `width: 100%; height: ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px; object-fit: contain;`;
+        const visualAttachmentPlaceholderStyle = `height: ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px;`;
 
 	// Derive current channel name to show in placeholder
 	function currentChannel() {
