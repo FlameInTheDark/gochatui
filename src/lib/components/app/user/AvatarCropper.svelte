@@ -329,23 +329,29 @@
                 position: absolute;
                 inset: 0;
                 pointer-events: none;
-                border-radius: 16px;
         }
 
+        .avatar-crop-overlay::before,
         .avatar-crop-overlay::after {
                 content: '';
                 position: absolute;
-                inset: 0;
-                border-radius: inherit;
-                background: radial-gradient(
-                        circle at center,
-                        transparent calc(50% - 3px),
-                        rgba(0, 0, 0, 0.35) calc(50% - 3px),
-                        rgba(0, 0, 0, 0.35) calc(50% - 2px),
-                        rgba(255, 255, 255, 0.75) calc(50% - 2px),
-                        rgba(255, 255, 255, 0.75) calc(50% + 2px),
-                        rgba(0, 0, 0, 0.45) calc(50% + 2px)
-                );
+                top: 50%;
+                left: 50%;
+                width: 100%;
+                height: 100%;
+                transform: translate(-50%, -50%);
+                border-radius: 50%;
+                pointer-events: none;
+        }
+
+        .avatar-crop-overlay::before {
+                box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+        }
+
+        .avatar-crop-overlay::after {
+                box-shadow:
+                        inset 0 0 0 2px rgba(255, 255, 255, 0.85),
+                        0 0 0 1px rgba(0, 0, 0, 0.55);
         }
 
         @media (max-width: 640px) {
