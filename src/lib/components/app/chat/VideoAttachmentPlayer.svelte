@@ -381,8 +381,9 @@
                                                         class="grid h-7 w-7 flex-none place-items-center rounded-lg bg-white/15 transition hover:bg-white/25"
                                                         type="button"
                                                         on:click|stopPropagation={togglePlayback}
-                                                        aria-label={isPlaying ? 'Pause video' : 'Play video'}
+                                                        data-tooltip-disabled
                                                 >
+                                                        <span class="sr-only">{isPlaying ? 'Pause video' : 'Play video'}</span>
                                                         {#if isPlaying}
                                                                 <Pause class="h-4 w-4" stroke-width={2} />
                                                         {:else}
@@ -403,8 +404,9 @@
                                                                 class="grid h-7 w-7 place-items-center rounded-lg bg-white/15 transition hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                                                                 type="button"
                                                                 on:click|stopPropagation={toggleMute}
-                                                                aria-label={isMuted ? 'Unmute video' : 'Mute video'}
+                                                                data-tooltip-disabled
                                                         >
+                                                                <span class="sr-only">{isMuted ? 'Unmute video' : 'Mute video'}</span>
                                                                 {#if isMuted}
                                                                         <VolumeX class="h-4 w-4" stroke-width={2} />
                                                                 {:else}
@@ -436,8 +438,9 @@
                                                         class="grid h-7 w-7 place-items-center rounded-lg bg-white/15 transition hover:bg-white/25"
                                                         type="button"
                                                         on:click|stopPropagation={toggleFullscreen}
-                                                        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                                                        data-tooltip-disabled
                                                 >
+                                                        <span class="sr-only">{isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}</span>
                                                         {#if isFullscreen}
                                                                 <Minimize2 class="h-4 w-4" stroke-width={2} />
                                                         {:else}
