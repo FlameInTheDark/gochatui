@@ -404,8 +404,9 @@
                                                                 {/if}
                                                         </button>
                                                         <div
-                                                                class="pointer-events-none absolute bottom-[calc(100%+0.15rem)] left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-2 opacity-0 shadow-lg transition"
+                                                                class="absolute bottom-[calc(100%+0.15rem)] left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-2 opacity-0 shadow-lg transition"
                                                                 class:pointer-events-auto={isVolumeSliderVisible}
+                                                                class:pointer-events-none={!isVolumeSliderVisible}
                                                                 class:opacity-100={isVolumeSliderVisible}
                                                                 on:pointerenter={() => showVolumeControls({ lock: true })}
                                                                 on:pointerleave={handleVolumeGroupPointerLeave}
