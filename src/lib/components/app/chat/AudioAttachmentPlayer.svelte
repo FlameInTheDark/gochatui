@@ -149,15 +149,17 @@
 
 <!-- svelte-ignore a11y_media_has_caption -->
 <audio
-	bind:this={audioElement}
-	class="hidden"
-	{src}
-	{preload}
-	on:play={handlePlay}
-	on:pause={handlePause}
-	on:ended={handleEnded}
-	on:loadedmetadata={handleLoadedMetadata}
-	on:timeupdate={handleTimeUpdate}
+        bind:this={audioElement}
+        hidden
+        aria-hidden="true"
+        tabindex="-1"
+        {src}
+        {preload}
+        on:play={handlePlay}
+        on:pause={handlePause}
+        on:ended={handleEnded}
+        on:loadedmetadata={handleLoadedMetadata}
+        on:timeupdate={handleTimeUpdate}
 ></audio>
 
 <div

@@ -2328,6 +2328,10 @@
                                                                 </div>
                                                         {:else}
                                                                 {@const { attachment, meta, index } = group.item}
+                                                                {@const lowerContentType = meta.contentType?.toLowerCase() ?? null}
+                                                                {@const isAudioAttachment =
+                                                                        meta.kind === 'audio' ||
+                                                                        (lowerContentType?.startsWith('audio/') ?? false)}
                                                                 {#if meta.kind === 'image' && (meta.previewUrl || meta.url)}
                                                                         {@const previewKey = attachmentStableKey(attachment, index)}
                                                                         {@const displaySrc =
@@ -2489,7 +2493,7 @@
                                                                                         {/if}
                                                                                 </div>
                                                                         {/if}
-                                                                {:else if meta.kind === 'audio' && meta.url}
+                                                                {:else if meta.url && isAudioAttachment}
                                                                         <div class="flex min-w-[16rem] max-w-sm flex-col gap-3 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
                                                                                 <div class="truncate font-medium">
                                                                                         {meta.name}
