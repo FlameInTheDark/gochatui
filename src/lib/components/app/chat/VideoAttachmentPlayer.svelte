@@ -104,11 +104,11 @@
 		}
 
 		clearHideVolumeControlsTimeout();
-		hideVolumeControlsTimeout = setTimeout(() => {
-			performHide();
-			hideVolumeControlsTimeout = null;
-		}, 150);
-	}
+                hideVolumeControlsTimeout = setTimeout(() => {
+                        performHide();
+                        hideVolumeControlsTimeout = null;
+                }, 350);
+        }
 
 	function handleFocusIn() {
 		lockControlsVisibility();
@@ -335,102 +335,105 @@
 		on:loadedmetadata={handleLoadedMetadata}
 		on:timeupdate={handleTimeUpdate}
 	></video>
-	<div
-		class="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 p-3 transition-opacity duration-300"
-		class:opacity-0={!areControlsVisible}
-	>
-		<div
-			class="pointer-events-auto flex flex-col gap-2 rounded-lg border border-white/20 bg-black/60 px-2.5 py-1.5 text-white shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-			on:pointerenter={lockControlsVisibility}
-			on:pointerleave={unlockControlsVisibility}
-		>
-			<div class="flex w-full items-center gap-2 sm:flex-1 sm:gap-3">
-				<button
-					class="grid h-8 w-8 flex-none place-items-center rounded-md bg-white/10 transition hover:bg-white/20"
-					type="button"
-					on:click|stopPropagation={togglePlayback}
-					aria-label={isPlaying ? 'Pause video' : 'Play video'}
-				>
-					{#if isPlaying}
-						<Pause class="h-5 w-5" stroke-width={2} />
-					{:else}
-						<Play class="h-5 w-5" stroke-width={2} />
-					{/if}
-				</button>
-				<div class="flex min-w-0 flex-1 flex-col gap-1">
-					<input
-						class="h-1 w-full cursor-pointer accent-[var(--brand)]"
-						type="range"
-						min={0}
-						max={duration || 0}
-						step="0.1"
-						value={isScrubbing ? seekPosition : currentTime}
-						on:input={handleSeekInput}
-						on:pointerdown={handleSeekPointerDown}
-						on:pointerup={handleSeekPointerUp}
-						aria-label="Video position"
-						disabled={duration === 0}
-					/>
-					<div class="flex items-center justify-between text-[0.65rem] text-white/80">
-						<span class="tabular-nums">{formatTime(currentTime)}</span>
-						<span class="tabular-nums">{formatTime(duration)}</span>
-					</div>
-				</div>
-			</div>
-			<div class="flex w-full items-center justify-end gap-2 sm:w-auto sm:flex-none">
-				<div
-					class="group relative"
-					bind:this={volumeControlsGroup}
-					on:focusin={() => showVolumeControls({ lock: true })}
-					on:focusout={handleVolumeGroupFocusOut}
-					on:pointerenter={() => showVolumeControls()}
-					on:pointerleave={handleVolumeGroupPointerLeave}
-				>
-					<button
-						class="grid h-8 w-8 place-items-center rounded-md bg-white/10 transition hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
-						type="button"
-						on:click|stopPropagation={toggleMute}
-						aria-label={isMuted ? 'Unmute video' : 'Mute video'}
-					>
-						{#if isMuted}
-							<VolumeX class="h-5 w-5" stroke-width={2} />
-						{:else}
-							<Volume2 class="h-5 w-5" stroke-width={2} />
-						{/if}
-					</button>
-					<div
-						class="pointer-events-none absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-3 opacity-0 shadow-lg transition"
-						class:pointer-events-auto={isVolumeSliderVisible}
-						class:opacity-100={isVolumeSliderVisible}
-						on:pointerenter={() => showVolumeControls()}
-					>
-						<input
-							class="volume-slider h-24 w-2 cursor-pointer accent-[var(--brand)]"
-							type="range"
-							min={0}
-							max={1}
-							step="0.05"
-							value={volume}
-							on:input={handleVolumeInput}
-							aria-label="Volume"
-						/>
-					</div>
-				</div>
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md bg-white/10 transition hover:bg-white/20"
-					type="button"
-					on:click|stopPropagation={toggleFullscreen}
-					aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-				>
-					{#if isFullscreen}
-						<Minimize2 class="h-5 w-5" stroke-width={2} />
-					{:else}
-						<Maximize2 class="h-5 w-5" stroke-width={2} />
-					{/if}
-				</button>
-			</div>
-		</div>
-	</div>
+        <div
+                class="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 p-2 transition-opacity duration-300"
+                class:opacity-0={!areControlsVisible}
+        >
+                <div
+                        class="pointer-events-auto flex flex-col gap-1.5 rounded-xl border border-white/15 bg-black/65 px-2.5 py-2 text-white shadow-lg backdrop-blur"
+                        on:pointerenter={lockControlsVisibility}
+                        on:pointerleave={unlockControlsVisibility}
+                >
+                        <div class="flex w-full flex-col gap-1.5">
+                                <div class="flex items-center gap-1.5">
+                                        <button
+                                                class="grid h-7 w-7 flex-none place-items-center rounded-lg bg-white/15 transition hover:bg-white/25"
+                                                type="button"
+                                                on:click|stopPropagation={togglePlayback}
+                                                aria-label={isPlaying ? 'Pause video' : 'Play video'}
+                                        >
+                                                {#if isPlaying}
+                                                        <Pause class="h-4 w-4" stroke-width={2} />
+                                                {:else}
+                                                        <Play class="h-4 w-4" stroke-width={2} />
+                                                {/if}
+                                        </button>
+                                        <span class="flex-none text-[0.65rem] font-medium text-white/80 tabular-nums">
+                                                {formatTime(currentTime)}
+                                        </span>
+                                        <input
+                                                class="h-1.5 w-full flex-1 cursor-pointer accent-[var(--brand)]"
+                                                type="range"
+                                                min={0}
+                                                max={duration || 0}
+                                                step="0.1"
+                                                value={isScrubbing ? seekPosition : currentTime}
+                                                on:input={handleSeekInput}
+                                                on:pointerdown={handleSeekPointerDown}
+                                                on:pointerup={handleSeekPointerUp}
+                                                aria-label="Video position"
+                                                disabled={duration === 0}
+                                        />
+                                        <span class="flex-none text-[0.65rem] font-medium text-white/80 tabular-nums">
+                                                {formatTime(duration)}
+                                        </span>
+                                        <div class="flex flex-none items-center gap-1.5">
+                                                <div
+                                                        class="group relative"
+                                                        bind:this={volumeControlsGroup}
+                                                        on:focusin={() => showVolumeControls({ lock: true })}
+                                                        on:focusout={handleVolumeGroupFocusOut}
+                                                        on:pointerenter={() => showVolumeControls({ lock: true })}
+                                                        on:pointerleave={handleVolumeGroupPointerLeave}
+                                                >
+                                                        <button
+                                                                class="grid h-7 w-7 place-items-center rounded-lg bg-white/15 transition hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                                                type="button"
+                                                                on:click|stopPropagation={toggleMute}
+                                                                aria-label={isMuted ? 'Unmute video' : 'Mute video'}
+                                                        >
+                                                                {#if isMuted}
+                                                                        <VolumeX class="h-4 w-4" stroke-width={2} />
+                                                                {:else}
+                                                                        <Volume2 class="h-4 w-4" stroke-width={2} />
+                                                                {/if}
+                                                        </button>
+                                                        <div
+                                                                class="pointer-events-none absolute bottom-[calc(100%+0.35rem)] left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-2 opacity-0 shadow-lg transition"
+                                                                class:pointer-events-auto={isVolumeSliderVisible}
+                                                                class:opacity-100={isVolumeSliderVisible}
+                                                                on:pointerenter={() => showVolumeControls({ lock: true })}
+                                                                on:pointerleave={handleVolumeGroupPointerLeave}
+                                                        >
+                                                                <input
+                                                                        class="volume-slider h-24 w-2 cursor-pointer accent-[var(--brand)]"
+                                                                        type="range"
+                                                                        min={0}
+                                                                        max={1}
+                                                                        step="0.05"
+                                                                        value={volume}
+                                                                        on:input={handleVolumeInput}
+                                                                        aria-label="Volume"
+                                                                />
+                                                        </div>
+                                                </div>
+                                                <button
+                                                        class="grid h-7 w-7 place-items-center rounded-lg bg-white/15 transition hover:bg-white/25"
+                                                        type="button"
+                                                        on:click|stopPropagation={toggleFullscreen}
+                                                        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                                                >
+                                                        {#if isFullscreen}
+                                                                <Minimize2 class="h-4 w-4" stroke-width={2} />
+                                                        {:else}
+                                                                <Maximize2 class="h-4 w-4" stroke-width={2} />
+                                                        {/if}
+                                                </button>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        </div>
 </div>
 
 <style>
