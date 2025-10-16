@@ -334,16 +334,18 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: radial-gradient(circle at center, transparent 49%, rgba(0, 0, 0, 0.45) 52%);
                 border-radius: 16px;
         }
 
         .avatar-crop-circle {
-                width: calc(100% - 12px);
-                height: calc(100% - 12px);
+                position: relative;
+                width: 100%;
+                height: 100%;
                 border-radius: 9999px;
-                border: 2px solid rgba(255, 255, 255, 0.75);
-                box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+                box-shadow:
+                        0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                        0 0 0 2px rgba(255, 255, 255, 0.75) inset,
+                        0 0 0 9999px rgba(0, 0, 0, 0.45);
         }
 
         @media (max-width: 640px) {
