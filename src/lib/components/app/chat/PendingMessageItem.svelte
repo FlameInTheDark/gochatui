@@ -102,7 +102,7 @@
                                                         </div>
                                                 {/if}
                                                 <div class="space-y-1 px-2 py-2">
-                                                        <div class="truncate font-medium text-[var(--fg)]" title={attachment.filename}>
+                                                        <div class="truncate font-medium text-[var(--fg)]">
                                                                 {attachment.filename}
                                                         </div>
                                                         <div class="flex items-center justify-between text-[var(--muted)]">

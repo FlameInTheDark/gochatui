@@ -2490,7 +2490,7 @@
                                                                         {/if}
                                                                 {:else if meta.kind === 'audio' && meta.url}
                                                                         <div class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
-                                                                                <div class="truncate font-medium" title={meta.name}>
+                                                                                <div class="truncate font-medium">
                                                                                         {meta.name}
                                                                                 </div>
                                                                                 <audio class="w-full" controls preload="metadata" src={meta.url}></audio>
@@ -2523,7 +2523,7 @@
                                                                                 target={meta.url ? '_blank' : undefined}
                                                                         >
                                                                                 <Paperclip class="h-3.5 w-3.5 text-[var(--muted)]" stroke-width={2} />
-                                                                                <span class="truncate" title={meta.name}>
+                                                                                <span class="truncate">
                                                                                         {meta.name}
                                                                                 </span>
                                                                                 {#if meta.sizeLabel}
