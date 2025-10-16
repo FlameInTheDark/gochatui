@@ -596,23 +596,23 @@
         }
 
         .avatar-crop-handle.handle-nw {
-                top: -10px;
-                left: -10px;
+                top: 0;
+                left: 0;
         }
 
         .avatar-crop-handle.handle-ne {
-                top: -10px;
-                right: -10px;
+                top: 0;
+                right: 0;
         }
 
         .avatar-crop-handle.handle-sw {
-                bottom: -10px;
-                left: -10px;
+                bottom: 0;
+                left: 0;
         }
 
         .avatar-crop-handle.handle-se {
-                bottom: -10px;
-                right: -10px;
+                bottom: 0;
+                right: 0;
         }
 
         @media (max-width: 640px) {
