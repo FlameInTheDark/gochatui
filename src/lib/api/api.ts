@@ -1661,14 +1661,17 @@ export const AttachmentsApiAxiosParamCreator = function (configuration?: Configu
          * @summary Upload attachment
          * @param {number} channelId Channel ID
          * @param {number} attachmentId Attachment ID
+         * @param {Array<number>} requestBody Binary file to upload
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        attachmentsChannelIdAttachmentIdPost: async (channelId: number, attachmentId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        attachmentsChannelIdAttachmentIdPost: async (channelId: number, attachmentId: number, requestBody: Array<number>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'channelId' is not null or undefined
             assertParamExists('attachmentsChannelIdAttachmentIdPost', 'channelId', channelId)
             // verify required parameter 'attachmentId' is not null or undefined
             assertParamExists('attachmentsChannelIdAttachmentIdPost', 'attachmentId', attachmentId)
+            // verify required parameter 'requestBody' is not null or undefined
+            assertParamExists('attachmentsChannelIdAttachmentIdPost', 'requestBody', requestBody)
             const localVarPath = `/attachments/{channel_id}/{attachment_id}`
                 .replace(`{${"channel_id"}}`, encodeURIComponent(String(channelId)))
                 .replace(`{${"attachment_id"}}`, encodeURIComponent(String(attachmentId)));
@@ -1685,9 +1688,12 @@ export const AttachmentsApiAxiosParamCreator = function (configuration?: Configu
 
 
     
+            localVarHeaderParameter['Content-Type'] = 'application/octet-stream';
+
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(requestBody, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -1709,11 +1715,12 @@ export const AttachmentsApiFp = function(configuration?: Configuration) {
          * @summary Upload attachment
          * @param {number} channelId Channel ID
          * @param {number} attachmentId Attachment ID
+         * @param {Array<number>} requestBody Binary file to upload
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async attachmentsChannelIdAttachmentIdPost(channelId: number, attachmentId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.attachmentsChannelIdAttachmentIdPost(channelId, attachmentId, options);
+        async attachmentsChannelIdAttachmentIdPost(channelId: number, attachmentId: number, requestBody: Array<number>, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.attachmentsChannelIdAttachmentIdPost(channelId, attachmentId, requestBody, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['AttachmentsApi.attachmentsChannelIdAttachmentIdPost']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -1736,7 +1743,7 @@ export const AttachmentsApiFactory = function (configuration?: Configuration, ba
          * @throws {RequiredError}
          */
         attachmentsChannelIdAttachmentIdPost(requestParameters: AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
-            return localVarFp.attachmentsChannelIdAttachmentIdPost(requestParameters.channelId, requestParameters.attachmentId, options).then((request) => request(axios, basePath));
+            return localVarFp.attachmentsChannelIdAttachmentIdPost(requestParameters.channelId, requestParameters.attachmentId, requestParameters.requestBody, options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -1778,6 +1785,13 @@ export interface AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest {
      * @memberof AttachmentsApiAttachmentsChannelIdAttachmentIdPost
      */
     readonly attachmentId: number
+
+    /**
+     * Binary file to upload
+     * @type {Array<number>}
+     * @memberof AttachmentsApiAttachmentsChannelIdAttachmentIdPost
+     */
+    readonly requestBody: Array<number>
 }
 
 /**
@@ -1796,7 +1810,7 @@ export class AttachmentsApi extends BaseAPI implements AttachmentsApiInterface {
      * @memberof AttachmentsApi
      */
     public attachmentsChannelIdAttachmentIdPost(requestParameters: AttachmentsApiAttachmentsChannelIdAttachmentIdPostRequest, options?: RawAxiosRequestConfig) {
-        return AttachmentsApiFp(this.configuration).attachmentsChannelIdAttachmentIdPost(requestParameters.channelId, requestParameters.attachmentId, options).then((request) => request(this.axios, this.basePath));
+        return AttachmentsApiFp(this.configuration).attachmentsChannelIdAttachmentIdPost(requestParameters.channelId, requestParameters.attachmentId, requestParameters.requestBody, options).then((request) => request(this.axios, this.basePath));
     }
 }
 
