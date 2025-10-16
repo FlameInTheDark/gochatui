@@ -242,7 +242,9 @@
                                                 src={imageObjectUrl}
                                                 style={`transform: translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale});`}
                                         />
-                                        <div class="avatar-crop-overlay" aria-hidden="true"></div>
+                                        <div class="avatar-crop-overlay" aria-hidden="true">
+                                                <div class="avatar-crop-circle"></div>
+                                        </div>
                                 </div>
                         </div>
                         <div class="flex flex-1 flex-col gap-3">
@@ -329,8 +331,19 @@
                 position: absolute;
                 inset: 0;
                 pointer-events: none;
-                background: radial-gradient(circle at center, transparent 45%, rgba(0, 0, 0, 0.35) 70%);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: radial-gradient(circle at center, transparent 49%, rgba(0, 0, 0, 0.45) 52%);
                 border-radius: 16px;
+        }
+
+        .avatar-crop-circle {
+                width: calc(100% - 12px);
+                height: calc(100% - 12px);
+                border-radius: 9999px;
+                border: 2px solid rgba(255, 255, 255, 0.75);
+                box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
         }
 
         @media (max-width: 640px) {
