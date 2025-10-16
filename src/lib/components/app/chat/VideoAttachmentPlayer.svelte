@@ -23,6 +23,9 @@
         let areControlsVisible = true;
         let isAutoHideLocked = false;
         let hideControlsTimeout: ReturnType<typeof setTimeout> | null = null;
+        let isVolumeSliderVisible = false;
+        let isVolumeSliderLockActive = false;
+        let volumeControlsGroup: HTMLDivElement;
 
         const AUTO_HIDE_DELAY = 2500;
 
@@ -66,6 +69,25 @@
                 showControls();
         }
 
+        function showVolumeControls({ lock = false } = {}) {
+                if (!isVolumeSliderVisible) {
+                        isVolumeSliderVisible = true;
+                }
+                if (lock) {
+                        isVolumeSliderLockActive = true;
+                        lockControlsVisibility();
+                }
+        }
+
+        function hideVolumeControls() {
+                if (!isVolumeSliderVisible) return;
+                isVolumeSliderVisible = false;
+                if (isVolumeSliderLockActive) {
+                        isVolumeSliderLockActive = false;
+                        unlockControlsVisibility();
+                }
+        }
+
         function handleFocusIn() {
                 lockControlsVisibility();
         }
@@ -79,10 +101,23 @@
                 unlockControlsVisibility();
         }
 
-	function formatTime(value: number): string {
-		if (!Number.isFinite(value) || value < 0) {
-			return '0:00';
-		}
+        function handleVolumeGroupFocusOut(event: FocusEvent) {
+                if (!volumeControlsGroup) return;
+                const nextTarget = event.relatedTarget as Node | null;
+                if (nextTarget && volumeControlsGroup.contains(nextTarget)) {
+                        return;
+                }
+                hideVolumeControls();
+        }
+
+        function handleVolumeGroupPointerLeave() {
+                hideVolumeControls();
+        }
+
+        function formatTime(value: number): string {
+                if (!Number.isFinite(value) || value < 0) {
+                        return '0:00';
+                }
 
 		const totalSeconds = Math.floor(value);
 		const minutes = Math.floor(totalSeconds / 60);
@@ -247,7 +282,7 @@
 </script>
 
         <div
-                class="relative h-full w-full select-none"
+                class="video-player-container relative h-full w-full select-none"
                 bind:this={container}
                 role="presentation"
                 on:dblclick={toggleFullscreen}
@@ -318,7 +353,14 @@
 				</div>
 			</div>
                         <div class="ml-auto flex items-center gap-2">
-                                <div class="group relative">
+                                <div
+                                        class="group relative"
+                                        bind:this={volumeControlsGroup}
+                                        on:focusin={() => showVolumeControls({ lock: true })}
+                                        on:focusout={handleVolumeGroupFocusOut}
+                                        on:pointerenter={() => showVolumeControls()}
+                                        on:pointerleave={handleVolumeGroupPointerLeave}
+                                >
                                         <button
                                                 class="grid h-9 w-9 place-items-center rounded-md bg-white/10 transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                                                 type="button"
@@ -332,9 +374,9 @@
                                                 {/if}
                                         </button>
                                         <div
-                                                class="pointer-events-none absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-3 opacity-0 shadow-lg transition focus-within:opacity-100 focus-within:pointer-events-auto group-hover:pointer-events-auto group-hover:opacity-100"
-                                                on:pointerenter={lockControlsVisibility}
-                                                on:pointerleave={unlockControlsVisibility}
+                                                class="pointer-events-none absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-3 opacity-0 shadow-lg transition"
+                                                class:pointer-events-auto={isVolumeSliderVisible}
+                                                class:opacity-100={isVolumeSliderVisible}
                                         >
                                                 <input
                                                         class="volume-slider h-24 w-2 cursor-pointer accent-[var(--brand)]"
@@ -373,5 +415,22 @@
         .volume-slider {
                 writing-mode: vertical-lr;
                 direction: rtl;
+        }
+
+        :global(.video-player-container:fullscreen),
+        :global(.video-player-container:-webkit-full-screen) {
+                width: 100vw;
+                height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-color: black;
+        }
+
+        :global(.video-player-container:fullscreen video),
+        :global(.video-player-container:-webkit-full-screen video) {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
         }
 </style>
