@@ -95,103 +95,147 @@
 
                 loading = true;
                 error = null;
-                const createdAttachments: PendingAttachment[] = [];
+
+                const placeholders: PendingAttachment[] = files.map((file) => ({
+                        localId: createLocalId(),
+                        attachmentId: null,
+                        uploadUrl: null,
+                        uploadHeaders: {},
+                        file,
+                        filename: file.name,
+                        size: file.size,
+                        mimeType: file.type || 'application/octet-stream',
+                        width: undefined,
+                        height: undefined,
+                        previewUrl: createPreviewUrl(file),
+                        isImage: file.type.startsWith('image/'),
+                        status: 'queued',
+                        progress: 0,
+                        uploadedBytes: 0,
+                        error: null
+                }));
+
+                if (placeholders.length) {
+                        dispatch('updated', placeholders);
+                }
+
+                const successful: PendingAttachment[] = [];
+
                 try {
-                        for (const file of files) {
-                                const meta = await getFileMeta(file);
-                                const res = await auth.api.message.messageChannelChannelIdAttachmentPost({
-                                        channelId: channelSnowflake as any,
-                                        messageUploadAttachmentRequest: {
-                                                filename: file.name,
-                                                content_type: file.type || 'application/octet-stream',
-                                                file_size: file.size,
-                                                width: meta.width ?? undefined,
-                                                height: meta.height ?? undefined
-                                        }
-                                });
-                                const data = res.data as {
-                                        id?: string | number | bigint;
-                                        attachment_id?: string | number | bigint;
-                                        attachmentId?: string | number | bigint;
-                                        upload_url?: string | null;
-                                        uploadUrl?: string | null;
-                                        upload_headers?: unknown;
-                                        uploadHeaders?: unknown;
-                                        headers?: unknown;
-                                };
-                                const rawId =
-                                        data.id ?? data.attachment_id ?? data.attachmentId;
-                                if (rawId == null) {
-                                        error = 'Attachment response missing id';
-                                        continue;
-                                }
-
-                                let snowflake: bigint;
+                        for (const placeholder of placeholders) {
                                 try {
-                                        snowflake =
-                                                typeof rawId === 'bigint'
-                                                        ? rawId
-                                                        : BigInt(rawId);
-                                } catch {
-                                        error = 'Attachment response malformed';
-                                        continue;
+                                        const meta = await getFileMeta(placeholder.file);
+                                        const res = await auth.api.message.messageChannelChannelIdAttachmentPost({
+                                                channelId: channelSnowflake as any,
+                                                messageUploadAttachmentRequest: {
+                                                        filename: placeholder.filename,
+                                                        content_type: placeholder.mimeType,
+                                                        file_size: placeholder.size,
+                                                        width: meta.width ?? undefined,
+                                                        height: meta.height ?? undefined
+                                                }
+                                        });
+                                        const data = res.data as {
+                                                id?: string | number | bigint;
+                                                attachment_id?: string | number | bigint;
+                                                attachmentId?: string | number | bigint;
+                                                upload_url?: string | null;
+                                                uploadUrl?: string | null;
+                                                upload_headers?: unknown;
+                                                uploadHeaders?: unknown;
+                                                headers?: unknown;
+                                        };
+                                        const rawId =
+                                                data.id ?? data.attachment_id ?? data.attachmentId;
+                                        if (rawId == null) {
+                                                error = 'Attachment response missing id';
+                                                dispatch('updated', [
+                                                        {
+                                                                ...placeholder,
+                                                                status: 'error',
+                                                                error: 'Attachment response missing id'
+                                                        }
+                                                ]);
+                                                continue;
+                                        }
+
+                                        let snowflake: bigint;
+                                        try {
+                                                snowflake =
+                                                        typeof rawId === 'bigint'
+                                                                ? rawId
+                                                                : BigInt(rawId);
+                                        } catch {
+                                                error = 'Attachment response malformed';
+                                                dispatch('updated', [
+                                                        {
+                                                                ...placeholder,
+                                                                status: 'error',
+                                                                error: 'Attachment response malformed'
+                                                        }
+                                                ]);
+                                                continue;
+                                        }
+
+                                        const uploadUrlCandidate =
+                                                typeof data.upload_url === 'string'
+                                                        ? data.upload_url
+                                                        : typeof data.uploadUrl === 'string'
+                                                          ? data.uploadUrl
+                                                          : null;
+                                        const uploadUrl = uploadUrlCandidate && uploadUrlCandidate.trim()
+                                                ? uploadUrlCandidate
+                                                : null;
+                                        if (!uploadUrl) {
+                                                error = 'Attachment response missing upload URL';
+                                                dispatch('updated', [
+                                                        {
+                                                                ...placeholder,
+                                                                status: 'error',
+                                                                error: 'Attachment response missing upload URL'
+                                                        }
+                                                ]);
+                                                continue;
+                                        }
+
+                                        const uploadHeaders = normalizeUploadHeaders(
+                                                data.upload_headers ?? data.uploadHeaders ?? data.headers
+                                        );
+
+                                        const updated: PendingAttachment = {
+                                                ...placeholder,
+                                                attachmentId: snowflake,
+                                                uploadUrl,
+                                                uploadHeaders,
+                                                width: meta.width ?? placeholder.width,
+                                                height: meta.height ?? placeholder.height,
+                                                error: null
+                                        };
+
+                                        successful.push(updated);
+                                        dispatch('updated', [updated]);
+                                } catch (e) {
+                                        const err = e as {
+                                                response?: { data?: { message?: string } };
+                                                message?: string;
+                                        };
+                                        const message =
+                                                err.response?.data?.message ?? err.message ?? 'Attachment failed';
+                                        error = message;
+                                        dispatch('updated', [
+                                                {
+                                                        ...placeholder,
+                                                        status: 'error',
+                                                        error: message
+                                                }
+                                        ]);
                                 }
-
-                                const uploadUrlCandidate =
-                                        typeof data.upload_url === 'string'
-                                                ? data.upload_url
-                                                : typeof data.uploadUrl === 'string'
-                                                  ? data.uploadUrl
-                                                  : null;
-                                const uploadUrl = uploadUrlCandidate && uploadUrlCandidate.trim()
-                                        ? uploadUrlCandidate
-                                        : null;
-                                if (!uploadUrl) {
-                                        error = 'Attachment response missing upload URL';
-                                        continue;
-                                }
-
-                                const uploadHeaders = normalizeUploadHeaders(
-                                        data.upload_headers ?? data.uploadHeaders ?? data.headers
-                                );
-
-                                const previewUrl = createPreviewUrl(file);
-                                const localId = createLocalId();
-                                const pendingAttachment: PendingAttachment = {
-                                        localId,
-                                        attachmentId: snowflake,
-                                        uploadUrl,
-                                        uploadHeaders,
-                                        file,
-                                        filename: file.name,
-                                        size: file.size,
-                                        mimeType: file.type || 'application/octet-stream',
-                                        width: meta.width ?? undefined,
-                                        height: meta.height ?? undefined,
-                                        previewUrl,
-                                        isImage: file.type.startsWith('image/'),
-                                        status: 'queued',
-                                        progress: 0,
-                                        uploadedBytes: 0,
-                                        error: null
-                                };
-                                createdAttachments.push(pendingAttachment);
                         }
-                } catch (e) {
-                        const err = e as {
-                                response?: { data?: { message?: string } };
-                                message?: string;
-                        };
-                        error = err.response?.data?.message ?? err.message ?? 'Attachment failed';
                 } finally {
                         loading = false;
                 }
 
-                if (createdAttachments.length) {
-                        dispatch('updated', createdAttachments);
-                }
-
-                return createdAttachments;
+                return successful;
         }
 
         async function pickFiles(e: Event) {

@@ -43,15 +43,23 @@
                 if (!added || added.length === 0) {
                         return;
                 }
-                const existing = new Set(attachments.map((attachment) => attachment.localId));
+
                 const next: PendingAttachment[] = attachments.slice();
-                for (const attachment of added) {
-                        if (existing.has(attachment.localId)) {
+
+                for (const incoming of added) {
+                        const index = next.findIndex((attachment) => attachment.localId === incoming.localId);
+                        if (index !== -1) {
+                                const previous = next[index];
+                                if (previous.previewUrl && previous.previewUrl !== incoming.previewUrl) {
+                                        releasePreviewUrl(previous);
+                                }
+                                next[index] = incoming;
                                 continue;
                         }
-                        existing.add(attachment.localId);
-                        next.push(attachment);
+
+                        next.push(incoming);
                 }
+
                 attachments = next;
         }
 
