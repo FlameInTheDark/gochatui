@@ -12,6 +12,10 @@
         let imageReady = false;
 
         const cropSize = 256;
+        const minMaskSize = 64;
+
+        type MaskHandle = 'nw' | 'ne' | 'sw' | 'se';
+
         let zoom = 1;
         let maskSize = cropSize;
         let maskPosition = { x: 0, y: 0 };
@@ -19,6 +23,11 @@
         let dragPointerId: number | null = null;
         let dragOrigin = { x: 0, y: 0 };
         let dragMaskStart = { x: 0, y: 0 };
+
+        let overlayElement: HTMLDivElement | null = null;
+        let resizingHandle: MaskHandle | null = null;
+        let resizePointerId: number | null = null;
+        let resizeStart = { position: { x: 0, y: 0 }, size: cropSize };
 
         let imageFitScale = 1;
         let imageDisplayWidth = 0;
@@ -124,8 +133,111 @@
                 };
         }
 
+        function clampMaskSize(size: number) {
+                return Math.min(Math.max(size, minMaskSize), cropSize);
+        }
+
+        function getPointerWithinOverlay(event: PointerEvent) {
+                if (!overlayElement) return null;
+                const rect = overlayElement.getBoundingClientRect();
+                return {
+                        x: Math.min(Math.max(event.clientX - rect.left, 0), cropSize),
+                        y: Math.min(Math.max(event.clientY - rect.top, 0), cropSize)
+                };
+        }
+
+        function startMaskResize(handle: MaskHandle, event: PointerEvent) {
+                if (!imageReady || !overlayElement) return;
+                event.stopPropagation();
+                event.preventDefault();
+
+                const currentTarget = event.currentTarget;
+                if (!(currentTarget instanceof HTMLElement)) return;
+
+                resizingHandle = handle;
+                resizePointerId = event.pointerId;
+                resizeStart = { position: { ...maskPosition }, size: maskSize };
+                maskDragging = false;
+
+                currentTarget.setPointerCapture(resizePointerId);
+        }
+
+        function computeResizedMask(handle: MaskHandle, pointer: { x: number; y: number }) {
+                const startPosition = resizeStart.position;
+                const startSize = resizeStart.size;
+
+                switch (handle) {
+                        case 'se': {
+                                const maxSize = Math.min(cropSize - startPosition.x, cropSize - startPosition.y);
+                                const proposed = Math.max(pointer.x - startPosition.x, pointer.y - startPosition.y);
+                                const size = clampMaskSize(Math.min(proposed, maxSize));
+                                return { position: { ...startPosition }, size };
+                        }
+                        case 'nw': {
+                                const fixed = {
+                                        x: startPosition.x + startSize,
+                                        y: startPosition.y + startSize
+                                };
+                                const maxSize = Math.min(fixed.x, fixed.y);
+                                const proposed = Math.max(fixed.x - pointer.x, fixed.y - pointer.y);
+                                const size = clampMaskSize(Math.min(proposed, maxSize));
+                                const position = clampMaskPosition(fixed.x - size, fixed.y - size, size);
+                                return { position, size };
+                        }
+                        case 'ne': {
+                                const fixed = {
+                                        x: startPosition.x,
+                                        y: startPosition.y + startSize
+                                };
+                                const maxSize = Math.min(cropSize - fixed.x, fixed.y);
+                                const proposed = Math.max(pointer.x - fixed.x, fixed.y - pointer.y);
+                                const size = clampMaskSize(Math.min(proposed, maxSize));
+                                const position = clampMaskPosition(fixed.x, fixed.y - size, size);
+                                return { position, size };
+                        }
+                        case 'sw': {
+                                const fixed = {
+                                        x: startPosition.x + startSize,
+                                        y: startPosition.y
+                                };
+                                const maxSize = Math.min(fixed.x, cropSize - fixed.y);
+                                const proposed = Math.max(fixed.x - pointer.x, pointer.y - fixed.y);
+                                const size = clampMaskSize(Math.min(proposed, maxSize));
+                                const position = clampMaskPosition(fixed.x - size, fixed.y, size);
+                                return { position, size };
+                        }
+                }
+
+                return { position: { ...startPosition }, size: startSize };
+        }
+
+        function handleMaskResize(event: PointerEvent) {
+                if (!resizingHandle || resizePointerId !== event.pointerId) return;
+                const pointer = getPointerWithinOverlay(event);
+                if (!pointer) return;
+
+                const next = computeResizedMask(resizingHandle, pointer);
+                if (!next) return;
+
+                maskSize = next.size;
+                maskPosition = next.position;
+                zoom = cropSize / maskSize;
+        }
+
+        function endMaskResize(event: PointerEvent) {
+                if (!resizingHandle || resizePointerId !== event.pointerId) return;
+
+                const currentTarget = event.currentTarget;
+                if (currentTarget instanceof HTMLElement) {
+                        currentTarget.releasePointerCapture(resizePointerId);
+                }
+
+                resizingHandle = null;
+                resizePointerId = null;
+        }
+
         function startMaskDrag(event: PointerEvent) {
-                if (!imageReady || !event.currentTarget) return;
+                if (!imageReady || !event.currentTarget || resizingHandle) return;
                 if (!(event.currentTarget instanceof HTMLElement)) return;
 
                 const rect = event.currentTarget.getBoundingClientRect();
@@ -151,7 +263,7 @@
         }
 
         function handleMaskDrag(event: PointerEvent) {
-                if (!maskDragging || dragPointerId !== event.pointerId) return;
+                if (!maskDragging || dragPointerId !== event.pointerId || resizingHandle) return;
                 if (!(event.currentTarget instanceof HTMLElement)) return;
 
                 const rect = event.currentTarget.getBoundingClientRect();
@@ -248,6 +360,8 @@
                 imageDisplayWidth = 0;
                 imageDisplayHeight = 0;
                 imageOffset = { x: 0, y: 0 };
+                resizingHandle = null;
+                resizePointerId = null;
                 if (previewCanvas) {
                         const ctx = previewCanvas.getContext('2d');
                         ctx?.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -307,6 +421,7 @@
                                         />
                                         <div
                                                 aria-hidden="true"
+                                                bind:this={overlayElement}
                                                 class={`avatar-crop-overlay ${maskDragging ? 'is-dragging' : ''}`}
                                                 style={`background: ${overlayBackground};`}
                                                 onpointerdown={startMaskDrag}
@@ -315,9 +430,39 @@
                                                 onpointercancel={endMaskDrag}
                                         >
                                                 <div
-                                                        class="avatar-crop-ring"
-                                                        style={`width: ${maskSize}px; height: ${maskSize}px; transform: translate(${maskPosition.x}px, ${maskPosition.y}px);`}
-                                                ></div>
+                                                        class="avatar-crop-mask"
+                                                        style={`width: ${maskSize}px; height: ${maskSize}px; transform: translate3d(${maskPosition.x}px, ${maskPosition.y}px, 0);`}
+                                                >
+                                                        <div class="avatar-crop-ring"></div>
+                                                        <div
+                                                                class="avatar-crop-handle handle-nw"
+                                                                onpointerdown={(event) => startMaskResize('nw', event)}
+                                                                onpointermove={handleMaskResize}
+                                                                onpointerup={endMaskResize}
+                                                                onpointercancel={endMaskResize}
+                                                        ></div>
+                                                        <div
+                                                                class="avatar-crop-handle handle-ne"
+                                                                onpointerdown={(event) => startMaskResize('ne', event)}
+                                                                onpointermove={handleMaskResize}
+                                                                onpointerup={endMaskResize}
+                                                                onpointercancel={endMaskResize}
+                                                        ></div>
+                                                        <div
+                                                                class="avatar-crop-handle handle-sw"
+                                                                onpointerdown={(event) => startMaskResize('sw', event)}
+                                                                onpointermove={handleMaskResize}
+                                                                onpointerup={endMaskResize}
+                                                                onpointercancel={endMaskResize}
+                                                        ></div>
+                                                        <div
+                                                                class="avatar-crop-handle handle-se"
+                                                                onpointerdown={(event) => startMaskResize('se', event)}
+                                                                onpointermove={handleMaskResize}
+                                                                onpointerup={endMaskResize}
+                                                                onpointercancel={endMaskResize}
+                                                        ></div>
+                                                </div>
                                         </div>
                                 </div>
                         </div>
@@ -401,21 +546,73 @@
                 inset: 0;
                 cursor: grab;
                 touch-action: none;
+                display: flex;
+                align-items: stretch;
+                justify-content: stretch;
         }
 
         .avatar-crop-overlay.is-dragging {
                 cursor: grabbing;
         }
 
+        .avatar-crop-mask {
+                position: absolute;
+                top: 0;
+                left: 0;
+        }
+
         .avatar-crop-ring {
                 position: absolute;
                 top: 0;
                 left: 0;
+                width: 100%;
+                height: 100%;
                 border-radius: 50%;
                 box-shadow:
                         inset 0 0 0 2px rgba(255, 255, 255, 0.85),
                         0 0 0 1px rgba(0, 0, 0, 0.55);
                 pointer-events: none;
+        }
+
+        .avatar-crop-handle {
+                position: absolute;
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                border: 2px solid rgba(255, 255, 255, 0.95);
+                background: rgba(15, 23, 42, 0.75);
+                box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+                touch-action: none;
+        }
+
+        .avatar-crop-handle.handle-nw,
+        .avatar-crop-handle.handle-se {
+                cursor: nwse-resize;
+        }
+
+        .avatar-crop-handle.handle-ne,
+        .avatar-crop-handle.handle-sw {
+                cursor: nesw-resize;
+        }
+
+        .avatar-crop-handle.handle-nw {
+                top: -10px;
+                left: -10px;
+        }
+
+        .avatar-crop-handle.handle-ne {
+                top: -10px;
+                right: -10px;
+        }
+
+        .avatar-crop-handle.handle-sw {
+                bottom: -10px;
+                left: -10px;
+        }
+
+        .avatar-crop-handle.handle-se {
+                bottom: -10px;
+                right: -10px;
         }
 
         @media (max-width: 640px) {
