@@ -29,6 +29,7 @@
 - Components: PascalCase (`MessageList.svelte`). Stores/utilities: camelCase (`appState.ts`). Routes use SvelteKit conventions (`+page.svelte`).
 - Svelte events follow the latest syntax: use `onclick={...}` rather than legacy `on:click={...}`.
 - Always address Svelte compiler warnings when possible.
+- Prefer composing UI out of small, focused components. If a component grows large or manages many UI elements, split it into smaller pieces for reuse and clarity.
 
 ## Testing Guidelines
 
