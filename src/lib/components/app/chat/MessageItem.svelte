@@ -2288,8 +2288,8 @@
                                                                                                 class="flex h-full w-full cursor-zoom-in items-center justify-center bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
                                                                                                 onclick={() => openImagePreview(item.meta)}
                                                                                                 data-tooltip-disabled
-                                                                                                aria-label={`Open preview for ${item.meta.name}`}
                                                                                         >
+                                                                                                <span class="sr-only">{`Open preview for ${item.meta.name}`}</span>
                                                                                                 {#if galleryDisplaySrc && !galleryPreviewFailed}
                                                                                                         <img
                                                                                                                 src={galleryDisplaySrc}
@@ -2346,8 +2346,8 @@
                                                                                         class="flex h-full w-full cursor-zoom-in items-center justify-center bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
                                                                                         onclick={() => openImagePreview(meta)}
                                                                                         data-tooltip-disabled
-                                                                                        aria-label={`Open preview for ${meta.name}`}
                                                                                 >
+                                                                                        <span class="sr-only">{`Open preview for ${meta.name}`}</span>
                                                                                         {#if displaySrc && !previewFailed}
                                                                                                 <img
                                                                                                         src={displaySrc}
@@ -2429,8 +2429,8 @@
                                                                                                                 class="grid h-8 w-8 place-items-center rounded-full border border-white/40 bg-black/60 text-white transition hover:bg-black/40"
                                                                                                                 onclick={() => deactivateVideoAttachment(attachmentKey)}
                                                                                                                 data-tooltip-disabled
-                                                                                                                aria-label="Close video preview"
                                                                                                         >
+                                                                                                                <span class="sr-only">Close video preview</span>
                                                                                                                 <X class="h-4 w-4" stroke-width={2} />
                                                                                                         </button>
                                                                                                 </div>
@@ -2448,8 +2448,8 @@
                                                                                                 class="flex w-full cursor-pointer flex-col bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
                                                                                                 onclick={() => activateVideoAttachment(attachmentKey)}
                                                                                                 data-tooltip-disabled
-                                                                                                aria-label={`Play video ${meta.name}`}
                                                                                         >
+                                                                                                <span class="sr-only">{`Play video ${meta.name}`}</span>
                                                                                                 <div
                                                                                                         class="relative h-full w-full overflow-hidden bg-black"
                                                                                                         style:aspect-ratio={previewAspectRatio}

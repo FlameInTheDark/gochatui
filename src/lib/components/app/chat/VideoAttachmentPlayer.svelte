@@ -382,8 +382,8 @@
                                                         type="button"
                                                         on:click|stopPropagation={togglePlayback}
                                                         data-tooltip-disabled
-                                                        aria-label={isPlaying ? 'Pause video' : 'Play video'}
                                                 >
+                                                        <span class="sr-only">{isPlaying ? 'Pause video' : 'Play video'}</span>
                                                         {#if isPlaying}
                                                                 <Pause class="h-4 w-4" stroke-width={2} />
                                                         {:else}
@@ -405,8 +405,8 @@
                                                                 type="button"
                                                                 on:click|stopPropagation={toggleMute}
                                                                 data-tooltip-disabled
-                                                                aria-label={isMuted ? 'Unmute video' : 'Mute video'}
                                                         >
+                                                                <span class="sr-only">{isMuted ? 'Unmute video' : 'Mute video'}</span>
                                                                 {#if isMuted}
                                                                         <VolumeX class="h-4 w-4" stroke-width={2} />
                                                                 {:else}
@@ -439,8 +439,8 @@
                                                         type="button"
                                                         on:click|stopPropagation={toggleFullscreen}
                                                         data-tooltip-disabled
-                                                        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                                                 >
+                                                        <span class="sr-only">{isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}</span>
                                                         {#if isFullscreen}
                                                                 <Minimize2 class="h-4 w-4" stroke-width={2} />
                                                         {:else}
