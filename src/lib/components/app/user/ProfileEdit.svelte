@@ -53,7 +53,7 @@
                 const buffer = await blob.arrayBuffer();
                 const bytes = new Uint8Array(buffer);
 
-                await auth.api.avatars.avatarsUserIdAvatarIdPost({
+                await auth.api.upload.uploadAvatarsUserIdAvatarIdPost({
                         userId: userId as any,
                         avatarId: avatarId as any,
                         requestBody: bytes as any

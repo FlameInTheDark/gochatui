@@ -275,7 +275,7 @@
 
                 const totalBytes = attachment.file.size || 0;
 
-                await auth.api.attachments.attachmentsChannelIdAttachmentIdPost(
+                await auth.api.upload.uploadAttachmentsChannelIdAttachmentIdPost(
                         {
                                 channelId: channelId as any,
                                 attachmentId: attachment.attachmentId as any,
