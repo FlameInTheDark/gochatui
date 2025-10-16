@@ -264,170 +264,63 @@
                 return error.response?.data?.message ?? error.message ?? 'Failed to send message';
         }
 
-        const forbiddenUploadHeaders = new Set([
-                'accept-charset',
-                'accept-encoding',
-                'access-control-request-headers',
-                'access-control-request-method',
-                'connection',
-                'content-length',
-                'cookie',
-                'cookie2',
-                'date',
-                'dnt',
-                'expect',
-                'feature-policy',
-                'host',
-                'keep-alive',
-                'origin',
-                'referer',
-                'te',
-                'trailer',
-                'transfer-encoding',
-                'upgrade',
-                'via'
-        ]);
-
-        function sanitizeHeaderEntries(headers: Record<string, string> | undefined) {
-                const entries: Array<{ name: string; lower: string; value: string }> = [];
-                if (!headers) return entries;
-                for (const [rawName, rawValue] of Object.entries(headers)) {
-                        if (rawName == null) continue;
-                        const trimmedName = rawName.trim();
-                        if (!trimmedName) continue;
-                        if (rawValue == null) continue;
-                        const value = String(rawValue);
-                        entries.push({ name: trimmedName, lower: trimmedName.toLowerCase(), value });
-                }
-                return entries;
-        }
-
-        function buildUploadHeaderEntries(
-                headers: Record<string, string> | undefined,
-                file: File
-        ): Array<{ name: string; lower: string; value: string }> {
-                const entries = sanitizeHeaderEntries(headers);
-                const filtered = entries
-                        .filter((entry) => !forbiddenUploadHeaders.has(entry.lower))
-                        .map((entry) => {
-                                if (entry.lower === 'content-type' && !entry.value && file.type) {
-                                        return { ...entry, value: file.type };
-                                }
-                                return entry;
-                        })
-                        .filter((entry) => entry.value.trim() !== '');
-
-                return filtered;
-        }
-
-        function toHeaders(entries: Array<{ name: string; lower: string; value: string }>): HeadersInit | undefined {
-                if (!entries.length) return undefined;
-                const headers = new Headers();
-                for (const entry of entries) {
-                        headers.set(entry.name, entry.value);
-                }
-                return headers;
-        }
-
-        async function uploadWithXmlHttpRequest(
-                url: string,
-                file: File,
-                headerEntries: Array<{ name: string; lower: string; value: string }>,
-                totalBytes: number,
+        async function uploadAttachmentWithProgress(
+                channelId: bigint,
+                attachment: PendingAttachment,
                 onProgress: (uploaded: number, total: number) => void
         ) {
-                await new Promise<void>((resolve, reject) => {
-                        const xhr = new XMLHttpRequest();
-                        xhr.open('PUT', url, true);
-                        xhr.withCredentials = false;
-
-                        for (const entry of headerEntries) {
-                                try {
-                                        xhr.setRequestHeader(entry.name, entry.value);
-                                } catch (err) {
-                                        console.warn('Unable to set upload header', entry.name, err);
-                                }
-                        }
-
-                        xhr.upload.onprogress = (event) => {
-                                const uploaded = event.loaded;
-                                const total = event.lengthComputable
-                                        ? event.total
-                                        : totalBytes > 0
-                                          ? totalBytes
-                                          : file.size;
-                                onProgress(uploaded, total);
-                        };
-
-                        xhr.onload = () => {
-                                const status = xhr.status === 0 ? 200 : xhr.status;
-                                if (status >= 200 && status < 300) {
-                                        const finalTotal = totalBytes > 0 ? totalBytes : file.size;
-                                        onProgress(finalTotal, finalTotal);
-                                        resolve();
-                                        return;
-                                }
-                                reject(new Error(`Upload failed with status ${status}`));
-                        };
-
-                        xhr.onerror = () => {
-                                reject(new Error('Upload failed'));
-                        };
-
-                        xhr.onabort = () => {
-                                reject(new Error('Upload aborted'));
-                        };
-
-                        try {
-                                xhr.send(file);
-                        } catch (err) {
-                                reject(err instanceof Error ? err : new Error('Upload failed'));
-                        }
-                });
-        }
-
-        async function uploadWithProgress(
-                url: string,
-                file: File,
-                headers: Record<string, string> | undefined,
-                onProgress: (uploaded: number, total: number) => void
-        ) {
-                const headerEntries = buildUploadHeaderEntries(headers, file);
-                const headersInit = toHeaders(headerEntries);
-                const totalBytes = file.size || 0;
-
-                if (typeof XMLHttpRequest !== 'undefined') {
-                        await uploadWithXmlHttpRequest(url, file, headerEntries, totalBytes, onProgress);
-                        return;
+                if (!attachment.attachmentId) {
+                        throw new Error('Missing attachment id');
                 }
 
-                const fallbackInit: RequestInit = {
-                        method: 'PUT',
-                        body: file,
-                        headers: headersInit,
-                        mode: 'cors',
-                        credentials: 'omit'
-                };
-                const res = await fetch(url, fallbackInit);
-                if (!res.ok && res.type !== 'opaque') {
-                        throw new Error(`Upload failed with status ${res.status}`);
-                }
-                const bytesSent = file.size;
-                onProgress(bytesSent, bytesSent);
+                const totalBytes = attachment.file.size || 0;
+
+                await auth.api.attachments.attachmentsChannelIdAttachmentIdPost(
+                        {
+                                channelId: channelId as any,
+                                attachmentId: attachment.attachmentId as any
+                        },
+                        {
+                                data: attachment.file,
+                                headers: {
+                                        'Content-Type': attachment.mimeType || 'application/octet-stream'
+                                },
+                                onUploadProgress: (event) => {
+                                        const uploaded = typeof event.loaded === 'number' ? event.loaded : 0;
+                                        const total =
+                                                typeof event.total === 'number' && event.total > 0
+                                                        ? event.total
+                                                        : totalBytes;
+                                        onProgress(uploaded, total > 0 ? total : totalBytes);
+                                }
+                        }
+                );
         }
 
         async function processPendingMessage(message: PendingMessage) {
                 const { localId, attachments: pendingAttachments, content: messageContent, channelId } = message;
                 const successfulIds: bigint[] = [];
 
+                let channelSnowflake: bigint;
+                try {
+                        channelSnowflake = BigInt(channelId);
+                } catch {
+                        updatePendingMessage(localId, (current) => ({
+                                ...current,
+                                status: 'error',
+                                error: 'Invalid channel id'
+                        }));
+                        return;
+                }
+
                 for (const attachment of pendingAttachments) {
-                        if (!attachment.uploadUrl || attachment.attachmentId == null) {
+                        if (attachment.attachmentId == null) {
                                 updatePendingAttachment(localId, attachment.localId, () => ({
                                         ...attachment,
                                         status: 'error',
                                         progress: 0,
                                         uploadedBytes: 0,
-                                        error: 'Missing upload URL'
+                                        error: 'Missing attachment metadata'
                                 }));
                                 continue;
                         }
@@ -441,10 +334,9 @@
                         }));
 
                         try {
-                                await uploadWithProgress(
-                                        attachment.uploadUrl,
-                                        attachment.file,
-                                        attachment.uploadHeaders,
+                                await uploadAttachmentWithProgress(
+                                        channelSnowflake,
+                                        attachment,
                                         (uploaded, total) => {
                                                 updatePendingAttachment(localId, attachment.localId, (current) => {
                                                         const fallbackTotal = current.size > 0 ? current.size : total;
