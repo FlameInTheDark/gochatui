@@ -11,15 +11,73 @@
 	let container: HTMLDivElement;
 	let videoElement: HTMLVideoElement;
 
-	let isPlaying = false;
-	let isFullscreen = false;
-	let duration = 0;
-	let currentTime = 0;
-	let seekPosition = 0;
-	let isScrubbing = false;
-	let volume = 1;
-	let isMuted = false;
-	let previousVolume = 0.5;
+        let isPlaying = false;
+        let isFullscreen = false;
+        let duration = 0;
+        let currentTime = 0;
+        let seekPosition = 0;
+        let isScrubbing = false;
+        let volume = 1;
+        let isMuted = false;
+        let previousVolume = 0.5;
+        let areControlsVisible = true;
+        let isAutoHideLocked = false;
+        let hideControlsTimeout: ReturnType<typeof setTimeout> | null = null;
+
+        const AUTO_HIDE_DELAY = 2500;
+
+        function clearHideControlsTimeout() {
+                if (hideControlsTimeout) {
+                        clearTimeout(hideControlsTimeout);
+                        hideControlsTimeout = null;
+                }
+        }
+
+        function hideControls() {
+                clearHideControlsTimeout();
+                areControlsVisible = false;
+        }
+
+        function scheduleHideControls() {
+                clearHideControlsTimeout();
+                hideControlsTimeout = setTimeout(() => {
+                        if (!isAutoHideLocked) {
+                                areControlsVisible = false;
+                        }
+                }, AUTO_HIDE_DELAY);
+        }
+
+        function showControls({ autoHide = true } = {}) {
+                areControlsVisible = true;
+                const shouldAutoHide = autoHide && !isAutoHideLocked;
+                clearHideControlsTimeout();
+                if (shouldAutoHide) {
+                        scheduleHideControls();
+                }
+        }
+
+        function lockControlsVisibility() {
+                isAutoHideLocked = true;
+                showControls({ autoHide: false });
+        }
+
+        function unlockControlsVisibility() {
+                isAutoHideLocked = false;
+                showControls();
+        }
+
+        function handleFocusIn() {
+                lockControlsVisibility();
+        }
+
+        function handleFocusOut(event: FocusEvent) {
+                if (!container) return;
+                const nextTarget = event.relatedTarget as Node | null;
+                if (nextTarget && container.contains(nextTarget)) {
+                        return;
+                }
+                unlockControlsVisibility();
+        }
 
 	function formatTime(value: number): string {
 		if (!Number.isFinite(value) || value < 0) {
@@ -45,18 +103,21 @@
 		}
 	}
 
-	function handlePlay() {
-		isPlaying = true;
-	}
+        function handlePlay() {
+                isPlaying = true;
+                showControls();
+        }
 
-	function handlePause() {
-		isPlaying = false;
-	}
+        function handlePause() {
+                isPlaying = false;
+                showControls({ autoHide: false });
+        }
 
-	function handleEnded() {
-		isPlaying = false;
-		currentTime = duration;
-	}
+        function handleEnded() {
+                isPlaying = false;
+                currentTime = duration;
+                showControls({ autoHide: false });
+        }
 
 	function handleLoadedMetadata() {
 		if (!videoElement) return;
@@ -88,42 +149,53 @@
 		isScrubbing = true;
 	}
 
-	function handleSeekPointerUp(event: PointerEvent) {
-		if (!videoElement) return;
-		const target = event.currentTarget as HTMLInputElement;
-		const value = Number(target.value);
-		isScrubbing = false;
-		currentTime = value;
-		videoElement.currentTime = value;
-	}
+        function handleSeekPointerUp(event: PointerEvent) {
+                if (!videoElement) return;
+                const target = event.currentTarget as HTMLInputElement;
+                const value = Number(target.value);
+                isScrubbing = false;
+                currentTime = value;
+                videoElement.currentTime = value;
+                if (isPlaying) {
+                        showControls();
+                }
+        }
 
-	function handleVolumeInput(event: Event) {
-		if (!videoElement) return;
-		const target = event.currentTarget as HTMLInputElement;
-		const value = Number(target.value);
-		volume = value;
-		if (value > 0) {
-			previousVolume = value;
-			videoElement.muted = false;
-		}
-		videoElement.volume = value;
-		if (value === 0) {
-			videoElement.muted = true;
-		}
-	}
+        function handleVolumeInput(event: Event) {
+                if (!videoElement) return;
+                const target = event.currentTarget as HTMLInputElement;
+                const value = Number(target.value);
+                volume = value;
+                if (value > 0) {
+                        previousVolume = value;
+                        videoElement.muted = false;
+                        isMuted = false;
+                        videoElement.volume = value;
+                } else {
+                        videoElement.volume = 0;
+                        videoElement.muted = true;
+                        isMuted = true;
+                }
+                showControls({ autoHide: false });
+        }
 
-	function toggleMute() {
-		if (!videoElement) return;
-		if (videoElement.muted || videoElement.volume === 0) {
-			videoElement.muted = false;
-			const restored = previousVolume > 0 ? previousVolume : 0.5;
-			videoElement.volume = restored;
-			volume = restored;
-		} else {
-			previousVolume = videoElement.volume || previousVolume;
-			videoElement.muted = true;
-		}
-	}
+        function toggleMute() {
+                if (!videoElement) return;
+                if (videoElement.muted || videoElement.volume === 0) {
+                        videoElement.muted = false;
+                        const restored = previousVolume > 0 ? previousVolume : 0.5;
+                        videoElement.volume = restored;
+                        volume = restored;
+                        isMuted = false;
+                } else {
+                        previousVolume = videoElement.volume || previousVolume;
+                        videoElement.muted = true;
+                        videoElement.volume = 0;
+                        volume = 0;
+                        isMuted = true;
+                }
+                showControls({ autoHide: false });
+        }
 
 	function toggleFullscreen() {
 		if (!container) return;
@@ -135,9 +207,9 @@
 	}
 
 	onMount(() => {
-		const handleFullscreenChange = () => {
-			isFullscreen = document.fullscreenElement === container;
-		};
+                const handleFullscreenChange = () => {
+                        isFullscreen = document.fullscreenElement === container;
+                };
 
 		const handleVolumeChange = () => {
 			if (!videoElement) return;
@@ -148,30 +220,47 @@
 			}
 		};
 
-		document.addEventListener('fullscreenchange', handleFullscreenChange);
-		videoElement?.addEventListener('volumechange', handleVolumeChange);
+                const handlePointerMove = () => {
+                        showControls();
+                };
 
-		return () => {
-			document.removeEventListener('fullscreenchange', handleFullscreenChange);
-			videoElement?.removeEventListener('volumechange', handleVolumeChange);
-			if (document.fullscreenElement === container) {
-				void document.exitFullscreen();
-			}
-		};
-	});
+                document.addEventListener('fullscreenchange', handleFullscreenChange);
+                videoElement?.addEventListener('volumechange', handleVolumeChange);
+                container?.addEventListener('pointermove', handlePointerMove);
 
-	onDestroy(() => {
-		if (document.fullscreenElement === container) {
-			void document.exitFullscreen();
-		}
-	});
+                return () => {
+                        document.removeEventListener('fullscreenchange', handleFullscreenChange);
+                        videoElement?.removeEventListener('volumechange', handleVolumeChange);
+                        container?.removeEventListener('pointermove', handlePointerMove);
+                        if (document.fullscreenElement === container) {
+                                void document.exitFullscreen();
+                        }
+                };
+        });
+
+        onDestroy(() => {
+                clearHideControlsTimeout();
+                if (document.fullscreenElement === container) {
+                        void document.exitFullscreen();
+                }
+        });
 </script>
 
-<div
-	class="relative h-full w-full select-none"
-	bind:this={container}
-	on:dblclick={toggleFullscreen}
->
+        <div
+                class="relative h-full w-full select-none"
+                bind:this={container}
+                role="presentation"
+                on:dblclick={toggleFullscreen}
+                on:mouseenter={() => {
+                        showControls();
+                }}
+                on:mouseleave={() => {
+                        isAutoHideLocked = false;
+                        hideControls();
+                }}
+                on:focusin={handleFocusIn}
+                on:focusout={handleFocusOut}
+        >
 	<!-- svelte-ignore a11y_media_has_caption -->
         <video
                 bind:this={videoElement}
@@ -188,10 +277,15 @@
 		on:loadedmetadata={handleLoadedMetadata}
 		on:timeupdate={handleTimeUpdate}
 	></video>
-	<div class="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 p-3">
-		<div
-			class="pointer-events-auto flex items-center gap-3 rounded-lg border border-white/20 bg-black/60 px-3 py-2 text-white shadow-lg backdrop-blur"
-		>
+        <div
+                class="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 p-3 transition-opacity duration-300"
+                class:opacity-0={!areControlsVisible}
+        >
+                <div
+                        class="pointer-events-auto flex flex-wrap items-center gap-3 rounded-lg border border-white/20 bg-black/60 px-3 py-2 text-white shadow-lg backdrop-blur"
+                        on:pointerenter={lockControlsVisibility}
+                        on:pointerleave={unlockControlsVisibility}
+                >
 			<button
 				class="grid h-9 w-9 place-items-center rounded-md bg-white/10 transition hover:bg-white/20"
 				type="button"
@@ -223,32 +317,40 @@
 					<span class="tabular-nums">{formatTime(duration)}</span>
 				</div>
 			</div>
-			<div class="flex items-center gap-2">
-				<button
-					class="grid h-9 w-9 place-items-center rounded-md bg-white/10 transition hover:bg-white/20"
-					type="button"
-					on:click|stopPropagation={toggleMute}
-					aria-label={isMuted ? 'Unmute video' : 'Mute video'}
-				>
-					{#if isMuted}
-						<VolumeX class="h-5 w-5" stroke-width={2} />
-					{:else}
-						<Volume2 class="h-5 w-5" stroke-width={2} />
-					{/if}
-				</button>
-				<input
-					class="h-1 w-20 cursor-pointer accent-[var(--brand)]"
-					type="range"
-					min={0}
-					max={1}
-					step="0.05"
-					value={volume}
-					on:input={handleVolumeInput}
-					aria-label="Volume"
-				/>
-				<button
-					class="grid h-9 w-9 place-items-center rounded-md bg-white/10 transition hover:bg-white/20"
-					type="button"
+                        <div class="ml-auto flex items-center gap-2">
+                                <div class="group relative">
+                                        <button
+                                                class="grid h-9 w-9 place-items-center rounded-md bg-white/10 transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                                type="button"
+                                                on:click|stopPropagation={toggleMute}
+                                                aria-label={isMuted ? 'Unmute video' : 'Mute video'}
+                                        >
+                                                {#if isMuted}
+                                                        <VolumeX class="h-5 w-5" stroke-width={2} />
+                                                {:else}
+                                                        <Volume2 class="h-5 w-5" stroke-width={2} />
+                                                {/if}
+                                        </button>
+                                        <div
+                                                class="pointer-events-none absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center rounded-md border border-white/20 bg-black/80 p-3 opacity-0 shadow-lg transition focus-within:opacity-100 focus-within:pointer-events-auto group-hover:pointer-events-auto group-hover:opacity-100"
+                                                on:pointerenter={lockControlsVisibility}
+                                                on:pointerleave={unlockControlsVisibility}
+                                        >
+                                                <input
+                                                        class="volume-slider h-24 w-2 cursor-pointer accent-[var(--brand)]"
+                                                        type="range"
+                                                        min={0}
+                                                        max={1}
+                                                        step="0.05"
+                                                        value={volume}
+                                                        on:input={handleVolumeInput}
+                                                        aria-label="Volume"
+                                                />
+                                        </div>
+                                </div>
+                                <button
+                                        class="grid h-9 w-9 place-items-center rounded-md bg-white/10 transition hover:bg-white/20"
+                                        type="button"
 					on:click|stopPropagation={toggleFullscreen}
 					aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
 				>
@@ -264,7 +366,12 @@
 </div>
 
 <style>
-	input[type='range']:disabled {
-		opacity: 0.4;
-	}
+        input[type='range']:disabled {
+                opacity: 0.4;
+        }
+
+        .volume-slider {
+                writing-mode: vertical-lr;
+                direction: rtl;
+        }
 </style>
