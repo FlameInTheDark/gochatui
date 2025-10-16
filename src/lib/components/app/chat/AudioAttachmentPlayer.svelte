@@ -2,10 +2,10 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { FileAudio, Pause, Play, Volume2, VolumeX } from 'lucide-svelte';
 
-	export let src: string;
-	export let preload: 'auto' | 'metadata' | 'none' = 'metadata';
-	export let name: string | undefined;
-	export let sizeLabel: string | undefined;
+        export let src: string;
+        export let preload: 'auto' | 'metadata' | 'none' = 'metadata';
+        export let name: string | undefined;
+        export let sizeLabel: string | undefined;
 
 	let audioElement: HTMLAudioElement;
 
@@ -142,11 +142,34 @@
 		};
 	});
 
-	onDestroy(() => {
-		if (audioElement) {
-			audioElement.pause();
-		}
-	});
+        let displayName = '';
+
+        $: displayName = (() => {
+                if (name?.trim()) return name.trim();
+                try {
+                        const parsed = new URL(src, globalThis?.location?.href ?? undefined);
+                        const lastSegment = parsed.pathname.split('/').filter(Boolean).pop();
+                        if (lastSegment) {
+                                return decodeURIComponent(lastSegment);
+                        }
+                } catch {
+                        const fallbackSegment = src.split('/').filter(Boolean).pop();
+                        if (fallbackSegment) {
+                                try {
+                                        return decodeURIComponent(fallbackSegment);
+                                } catch {
+                                        return fallbackSegment;
+                                }
+                        }
+                }
+                return 'Audio file';
+        })();
+
+        onDestroy(() => {
+                if (audioElement) {
+                        audioElement.pause();
+                }
+        });
 </script>
 
 <!-- svelte-ignore a11y_media_has_caption -->
@@ -165,7 +188,7 @@
 ></audio>
 
 <div
-        class="flex flex-col gap-2 rounded-xl border border-white/15 bg-black/65 px-2.5 py-2 text-white shadow-lg backdrop-blur"
+        class="flex min-w-[16rem] max-w-sm flex-col gap-2 rounded-xl border border-white/15 bg-black/65 px-2.5 py-2 text-white shadow-lg backdrop-blur"
 >
         <div class="flex items-center justify-between gap-2">
                 <div class="flex min-w-0 flex-1 items-center gap-2">
@@ -174,7 +197,7 @@
                         >
                                 <FileAudio class="h-4 w-4" stroke-width={2} />
                         </span>
-                        <span class="truncate text-sm font-medium">{name ?? 'Audio file'}</span>
+                        <span class="truncate text-sm font-medium">{displayName}</span>
                 </div>
                 {#if sizeLabel}
                         <span class="flex-none text-[0.7rem] font-medium text-white/70">{sizeLabel}</span>

@@ -2494,27 +2494,12 @@
                                                                                 </div>
                                                                         {/if}
                                                                 {:else if meta.url && isAudioAttachment}
-                                                                        <div class="flex min-w-[16rem] max-w-sm flex-col gap-3 rounded border border-[var(--stroke)] bg-[var(--panel)] p-3 text-xs text-[var(--fg)]">
-                                                                                <div class="truncate font-medium">
-                                                                                        {meta.name}
-                                                                                </div>
-                                                                                <AudioAttachmentPlayer
-                                                                                        preload="metadata"
-                                                                                        src={meta.url}
-                                                                                        name={meta.name ?? undefined}
-                                                                                        sizeLabel={meta.sizeLabel ?? undefined}
-                                                                                />
-                                                                                <div class="text-right">
-                                                                                        <a
-                                                                                                class="text-[var(--brand)] hover:underline"
-                                                                                                href={meta.url}
-                                                                                                rel="noopener noreferrer"
-                                                                                                target="_blank"
-                                                                                        >
-                                                                                                Open original
-                                                                                        </a>
-                                                                                </div>
-                                                                        </div>
+                                                                        <AudioAttachmentPlayer
+                                                                                preload="metadata"
+                                                                                src={meta.url}
+                                                                                name={meta.name ?? undefined}
+                                                                                sizeLabel={meta.sizeLabel ?? undefined}
+                                                                        />
                                                                 {:else}
                                                                         <a
                                                                                 class="flex max-w-[18rem] items-center gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
