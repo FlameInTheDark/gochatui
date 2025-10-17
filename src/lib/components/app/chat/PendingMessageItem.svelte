@@ -1,11 +1,19 @@
 <script lang="ts">
         import { auth } from '$lib/stores/auth';
-        import type { PendingAttachment, PendingMessage } from '$lib/stores/pendingMessages';
+        import {
+                removePendingMessage,
+                type PendingAttachment,
+                type PendingMessage
+        } from '$lib/stores/pendingMessages';
         import { resolveAvatarUrl } from '$lib/utils/avatar';
-        import { Paperclip, AlertCircle } from 'lucide-svelte';
+        import { Paperclip, AlertCircle, X } from 'lucide-svelte';
 
         const me = auth.user;
         const { message } = $props<{ message: PendingMessage }>();
+
+        function handleRemove() {
+                removePendingMessage(message.localId);
+        }
 
         function userDisplayName() {
                 const name = ($me as any)?.global_name ?? ($me as any)?.username ?? 'You';
@@ -69,11 +77,24 @@
                 {/if}
         </div>
         <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-                        <span class="font-semibold text-[var(--fg)]">{userDisplayName()}</span>
-                        <span>{statusLabel(message.status)}</span>
-                        <span>•</span>
-                        <span>{relativeTime(message.createdAt)}</span>
+                <div class="flex items-start justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                                <span class="font-semibold text-[var(--fg)]">{userDisplayName()}</span>
+                                <span>{statusLabel(message.status)}</span>
+                                <span>•</span>
+                                <span>{relativeTime(message.createdAt)}</span>
+                        </div>
+                        {#if message.status === 'error' || message.attachments.some((a) => a.status === 'error')}
+                                <button
+                                        type="button"
+                                        class="rounded-md p-1 text-[var(--muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
+                                        aria-label="Remove failed upload"
+                                        title="Remove failed upload"
+                                        onclick={handleRemove}
+                                >
+                                        <X class="h-4 w-4" stroke-width={2} />
+                                </button>
+                        {/if}
                 </div>
                 {#if message.content}
                         <div class="mt-1 whitespace-pre-wrap text-sm text-[var(--fg)]">{message.content}</div>
