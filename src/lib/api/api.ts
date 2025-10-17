@@ -390,11 +390,11 @@ export interface DtoChannel {
  */
 export interface DtoGuild {
     /**
-     * Icon ID
-     * @type {number}
+     * 
+     * @type {DtoIcon}
      * @memberof DtoGuild
      */
-    'icon'?: number;
+    'icon'?: DtoIcon;
     /**
      * Guild ID
      * @type {number}
@@ -466,6 +466,62 @@ export interface DtoGuildInvite {
      * 
      * @type {number}
      * @memberof DtoGuildInvite
+     */
+    'id'?: number;
+}
+/**
+ * Icon metadata
+ * @export
+ * @interface DtoIcon
+ */
+export interface DtoIcon {
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoIcon
+     */
+    'filesize'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoIcon
+     */
+    'height'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoIcon
+     */
+    'id'?: number;
+    /**
+     * 
+     * @type {string}
+     * @memberof DtoIcon
+     */
+    'url'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoIcon
+     */
+    'width'?: number;
+}
+/**
+ * 
+ * @export
+ * @interface DtoIconUpload
+ */
+export interface DtoIconUpload {
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoIconUpload
+     */
+    'guild_id'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoIconUpload
      */
     'id'?: number;
 }
@@ -840,6 +896,25 @@ export interface GuildCreateGuildRoleRequest {
      * @memberof GuildCreateGuildRoleRequest
      */
     'permissions'?: number;
+}
+/**
+ * 
+ * @export
+ * @interface GuildCreateIconRequest
+ */
+export interface GuildCreateIconRequest {
+    /**
+     * 
+     * @type {string}
+     * @memberof GuildCreateIconRequest
+     */
+    'content_type'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof GuildCreateIconRequest
+     */
+    'file_size'?: number;
 }
 /**
  * 
@@ -2441,6 +2516,46 @@ export const GuildApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
+         * Creates an icon placeholder and returns upload info. Only guild owner may create.
+         * @summary Create guild icon metadata
+         * @param {number} guildId Guild ID
+         * @param {GuildCreateIconRequest} guildCreateIconRequest Icon creation request
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdIconPost: async (guildId: number, guildCreateIconRequest: GuildCreateIconRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'guildId' is not null or undefined
+            assertParamExists('guildGuildIdIconPost', 'guildId', guildId)
+            // verify required parameter 'guildCreateIconRequest' is not null or undefined
+            assertParamExists('guildGuildIdIconPost', 'guildCreateIconRequest', guildCreateIconRequest)
+            const localVarPath = `/guild/{guild_id}/icon`
+                .replace(`{${"guild_id"}}`, encodeURIComponent(String(guildId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(guildCreateIconRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {number} guildId Guild ID
@@ -2686,6 +2801,20 @@ export const GuildApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Creates an icon placeholder and returns upload info. Only guild owner may create.
+         * @summary Create guild icon metadata
+         * @param {number} guildId Guild ID
+         * @param {GuildCreateIconRequest} guildCreateIconRequest Icon creation request
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async guildGuildIdIconPost(guildId: number, guildCreateIconRequest: GuildCreateIconRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DtoIconUpload>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.guildGuildIdIconPost(guildId, guildCreateIconRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['GuildApi.guildGuildIdIconPost']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {number} guildId Guild ID
@@ -2826,6 +2955,16 @@ export const GuildApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.guildGuildIdGet(requestParameters.guildId, options).then((request) => request(axios, basePath));
         },
         /**
+         * Creates an icon placeholder and returns upload info. Only guild owner may create.
+         * @summary Create guild icon metadata
+         * @param {GuildApiGuildGuildIdIconPostRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdIconPost(requestParameters: GuildApiGuildGuildIdIconPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoIconUpload> {
+            return localVarFp.guildGuildIdIconPost(requestParameters.guildId, requestParameters.guildCreateIconRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {GuildApiGuildGuildIdMembersGetRequest} requestParameters Request parameters.
@@ -2953,6 +3092,16 @@ export interface GuildApiInterface {
      * @memberof GuildApiInterface
      */
     guildGuildIdGet(requestParameters: GuildApiGuildGuildIdGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoGuild>;
+
+    /**
+     * Creates an icon placeholder and returns upload info. Only guild owner may create.
+     * @summary Create guild icon metadata
+     * @param {GuildApiGuildGuildIdIconPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApiInterface
+     */
+    guildGuildIdIconPost(requestParameters: GuildApiGuildGuildIdIconPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoIconUpload>;
 
     /**
      * 
@@ -3169,6 +3318,27 @@ export interface GuildApiGuildGuildIdGetRequest {
 }
 
 /**
+ * Request parameters for guildGuildIdIconPost operation in GuildApi.
+ * @export
+ * @interface GuildApiGuildGuildIdIconPostRequest
+ */
+export interface GuildApiGuildGuildIdIconPostRequest {
+    /**
+     * Guild ID
+     * @type {number}
+     * @memberof GuildApiGuildGuildIdIconPost
+     */
+    readonly guildId: number
+
+    /**
+     * Icon creation request
+     * @type {GuildCreateIconRequest}
+     * @memberof GuildApiGuildGuildIdIconPost
+     */
+    readonly guildCreateIconRequest: GuildCreateIconRequest
+}
+
+/**
  * Request parameters for guildGuildIdMembersGet operation in GuildApi.
  * @export
  * @interface GuildApiGuildGuildIdMembersGetRequest
@@ -3330,6 +3500,18 @@ export class GuildApi extends BaseAPI implements GuildApiInterface {
      */
     public guildGuildIdGet(requestParameters: GuildApiGuildGuildIdGetRequest, options?: RawAxiosRequestConfig) {
         return GuildApiFp(this.configuration).guildGuildIdGet(requestParameters.guildId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Creates an icon placeholder and returns upload info. Only guild owner may create.
+     * @summary Create guild icon metadata
+     * @param {GuildApiGuildGuildIdIconPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApi
+     */
+    public guildGuildIdIconPost(requestParameters: GuildApiGuildGuildIdIconPostRequest, options?: RawAxiosRequestConfig) {
+        return GuildApiFp(this.configuration).guildGuildIdIconPost(requestParameters.guildId, requestParameters.guildCreateIconRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -6299,6 +6481,50 @@ export const UploadApiAxiosParamCreator = function (configuration?: Configuratio
                 options: localVarRequestOptions,
             };
         },
+        /**
+         * Uploads a guild icon. Resizes to max 128x128 and converts to WebP <= 250KB. Only guild owner can upload. Sets guild icon and emits update.
+         * @summary Upload guild icon
+         * @param {number} guildId Guild ID
+         * @param {number} iconId Icon ID
+         * @param {Array<number>} requestBody Binary image payload
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        uploadIconsGuildIdIconIdPost: async (guildId: number, iconId: number, requestBody: Array<number>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'guildId' is not null or undefined
+            assertParamExists('uploadIconsGuildIdIconIdPost', 'guildId', guildId)
+            // verify required parameter 'iconId' is not null or undefined
+            assertParamExists('uploadIconsGuildIdIconIdPost', 'iconId', iconId)
+            // verify required parameter 'requestBody' is not null or undefined
+            assertParamExists('uploadIconsGuildIdIconIdPost', 'requestBody', requestBody)
+            const localVarPath = `/upload/icons/{guild_id}/{icon_id}`
+                .replace(`{${"guild_id"}}`, encodeURIComponent(String(guildId)))
+                .replace(`{${"icon_id"}}`, encodeURIComponent(String(iconId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/octet-stream';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(requestBody, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
     }
 };
 
@@ -6339,6 +6565,21 @@ export const UploadApiFp = function(configuration?: Configuration) {
             const localVarOperationServerBasePath = operationServerMap['UploadApi.uploadAvatarsUserIdAvatarIdPost']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
+        /**
+         * Uploads a guild icon. Resizes to max 128x128 and converts to WebP <= 250KB. Only guild owner can upload. Sets guild icon and emits update.
+         * @summary Upload guild icon
+         * @param {number} guildId Guild ID
+         * @param {number} iconId Icon ID
+         * @param {Array<number>} requestBody Binary image payload
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async uploadIconsGuildIdIconIdPost(guildId: number, iconId: number, requestBody: Array<number>, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.uploadIconsGuildIdIconIdPost(guildId, iconId, requestBody, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['UploadApi.uploadIconsGuildIdIconIdPost']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
     }
 };
 
@@ -6369,6 +6610,16 @@ export const UploadApiFactory = function (configuration?: Configuration, basePat
         uploadAvatarsUserIdAvatarIdPost(requestParameters: UploadApiUploadAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
             return localVarFp.uploadAvatarsUserIdAvatarIdPost(requestParameters.userId, requestParameters.avatarId, requestParameters.requestBody, options).then((request) => request(axios, basePath));
         },
+        /**
+         * Uploads a guild icon. Resizes to max 128x128 and converts to WebP <= 250KB. Only guild owner can upload. Sets guild icon and emits update.
+         * @summary Upload guild icon
+         * @param {UploadApiUploadIconsGuildIdIconIdPostRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        uploadIconsGuildIdIconIdPost(requestParameters: UploadApiUploadIconsGuildIdIconIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.uploadIconsGuildIdIconIdPost(requestParameters.guildId, requestParameters.iconId, requestParameters.requestBody, options).then((request) => request(axios, basePath));
+        },
     };
 };
 
@@ -6397,6 +6648,16 @@ export interface UploadApiInterface {
      * @memberof UploadApiInterface
      */
     uploadAvatarsUserIdAvatarIdPost(requestParameters: UploadApiUploadAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
+
+    /**
+     * Uploads a guild icon. Resizes to max 128x128 and converts to WebP <= 250KB. Only guild owner can upload. Sets guild icon and emits update.
+     * @summary Upload guild icon
+     * @param {UploadApiUploadIconsGuildIdIconIdPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UploadApiInterface
+     */
+    uploadIconsGuildIdIconIdPost(requestParameters: UploadApiUploadIconsGuildIdIconIdPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
 
 }
 
@@ -6457,6 +6718,34 @@ export interface UploadApiUploadAvatarsUserIdAvatarIdPostRequest {
 }
 
 /**
+ * Request parameters for uploadIconsGuildIdIconIdPost operation in UploadApi.
+ * @export
+ * @interface UploadApiUploadIconsGuildIdIconIdPostRequest
+ */
+export interface UploadApiUploadIconsGuildIdIconIdPostRequest {
+    /**
+     * Guild ID
+     * @type {number}
+     * @memberof UploadApiUploadIconsGuildIdIconIdPost
+     */
+    readonly guildId: number
+
+    /**
+     * Icon ID
+     * @type {number}
+     * @memberof UploadApiUploadIconsGuildIdIconIdPost
+     */
+    readonly iconId: number
+
+    /**
+     * Binary image payload
+     * @type {Array<number>}
+     * @memberof UploadApiUploadIconsGuildIdIconIdPost
+     */
+    readonly requestBody: Array<number>
+}
+
+/**
  * UploadApi - object-oriented interface
  * @export
  * @class UploadApi
@@ -6485,6 +6774,18 @@ export class UploadApi extends BaseAPI implements UploadApiInterface {
      */
     public uploadAvatarsUserIdAvatarIdPost(requestParameters: UploadApiUploadAvatarsUserIdAvatarIdPostRequest, options?: RawAxiosRequestConfig) {
         return UploadApiFp(this.configuration).uploadAvatarsUserIdAvatarIdPost(requestParameters.userId, requestParameters.avatarId, requestParameters.requestBody, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Uploads a guild icon. Resizes to max 128x128 and converts to WebP <= 250KB. Only guild owner can upload. Sets guild icon and emits update.
+     * @summary Upload guild icon
+     * @param {UploadApiUploadIconsGuildIdIconIdPostRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UploadApi
+     */
+    public uploadIconsGuildIdIconIdPost(requestParameters: UploadApiUploadIconsGuildIdIconIdPostRequest, options?: RawAxiosRequestConfig) {
+        return UploadApiFp(this.configuration).uploadIconsGuildIdIconIdPost(requestParameters.guildId, requestParameters.iconId, requestParameters.requestBody, options).then((request) => request(this.axios, this.basePath));
     }
 }
 
