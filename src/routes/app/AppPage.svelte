@@ -12,6 +12,7 @@
         import ConnectionStatusBar from '$lib/components/app/ConnectionStatusBar.svelte';
         import { activeView, appHasFocus, searchOpen, selectedGuildId, guildSettingsOpen } from '$lib/stores/appState';
         import { auth } from '$lib/stores/auth';
+        import { derived } from 'svelte/store';
         import { m } from '$lib/paraglide/messages.js';
         import { Plus, FolderPlus, Settings } from 'lucide-svelte';
         import {
@@ -27,18 +28,20 @@
         const guilds = auth.guilds;
         const me = auth.user;
 
-        const canAccessSelectedGuildSettings = $derived.by(() => {
-                const gid = $selectedGuildId;
-                if (!gid) return false;
-                const guild = $guilds.find((g) => String((g as any)?.id) === gid) ?? null;
-                return hasAnyGuildPermission(
-                        guild,
-                        $me?.id,
-                        PERMISSION_MANAGE_GUILD,
-                        PERMISSION_MANAGE_ROLES,
-                        PERMISSION_MANAGE_CHANNELS
-                );
-        });
+        const canAccessSelectedGuildSettings = derived(
+                [selectedGuildId, guilds, me],
+                ([$selectedGuildId, $guilds, $me]) => {
+                        if (!$selectedGuildId) return false;
+                        const guild = $guilds.find((g) => String((g as any)?.id) === $selectedGuildId) ?? null;
+                        return hasAnyGuildPermission(
+                                guild,
+                                $me?.id,
+                                PERMISSION_MANAGE_GUILD,
+                                PERMISSION_MANAGE_ROLES,
+                                PERMISSION_MANAGE_CHANNELS
+                        );
+                }
+        );
 
         let channelPaneRef: ChannelPaneHandle | null = null;
 
