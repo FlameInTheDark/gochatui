@@ -2,20 +2,22 @@
 	import { guildSettingsOpen, selectedGuildId } from '$lib/stores/appState';
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages.js';
-	import GuildInvitesManager from './GuildInvitesManager.svelte';
-	import GuildRolesManager from './GuildRolesManager.svelte';
-	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
-	import {
-		PERMISSION_BAN_MEMBERS,
-		PERMISSION_CREATE_INVITES,
-		PERMISSION_KICK_MEMBERS,
-		PERMISSION_MANAGE_CHANNELS,
-		PERMISSION_MANAGE_GUILD,
-		PERMISSION_MANAGE_ROLES,
-		PERMISSION_TIMEOUT_MEMBERS,
-		hasAnyGuildPermission,
-		hasGuildPermission
-	} from '$lib/utils/permissions';
+        import AvatarCropper from '$lib/components/app/user/AvatarCropper.svelte';
+        import GuildInvitesManager from './GuildInvitesManager.svelte';
+        import GuildRolesManager from './GuildRolesManager.svelte';
+        import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
+        import {
+                PERMISSION_BAN_MEMBERS,
+                PERMISSION_CREATE_INVITES,
+                PERMISSION_KICK_MEMBERS,
+                PERMISSION_MANAGE_CHANNELS,
+                PERMISSION_MANAGE_GUILD,
+                PERMISSION_MANAGE_ROLES,
+                PERMISSION_TIMEOUT_MEMBERS,
+                hasAnyGuildPermission,
+                hasGuildPermission
+        } from '$lib/utils/permissions';
+        import { resolveAvatarUrl } from '$lib/utils/avatar';
 
 	type SettingsCategory = 'profile' | 'roles' | 'moderation' | 'integrations' | 'invites';
 
@@ -60,31 +62,36 @@
 	});
 	let category = $state<SettingsCategory>('profile');
 	let name = $state('');
-	let saving = $state(false);
-	let error: string | null = $state(null);
+        let saving = $state(false);
+        let error: string | null = $state(null);
+        let croppedIcon = $state<string | null>(null);
 
-	$effect(() => {
-		if ($guildSettingsOpen) {
-			const current = activeGuild;
-			name = current?.name ?? '';
-			error = null;
-			saving = false;
-			const allowed = accessibleCategories;
-			if (!allowed.length) {
-				guildSettingsOpen.set(false);
-				return;
-			}
-			if (!allowed.includes(category)) {
-				category = allowed[0];
-			}
-		}
-	});
+        const iconFallbackInitial = $derived.by(() => guildInitials(activeGuild));
+        const existingIconUrl = $derived.by(() => resolveAvatarUrl(activeGuild));
 
-	async function save() {
-		const guild = activeGuild;
-		const gid = $selectedGuildId;
-		if (!guild || !gid) return;
-		if (!hasGuildPermission(guild, $me?.id, PERMISSION_MANAGE_GUILD)) return;
+        $effect(() => {
+                if ($guildSettingsOpen) {
+                        const current = activeGuild;
+                        name = current?.name ?? '';
+                        error = null;
+                        saving = false;
+                        croppedIcon = null;
+                        const allowed = accessibleCategories;
+                        if (!allowed.length) {
+                                guildSettingsOpen.set(false);
+                                return;
+                        }
+                        if (!allowed.includes(category)) {
+                                category = allowed[0];
+                        }
+                }
+        });
+
+        async function save() {
+                const guild = activeGuild;
+                const gid = $selectedGuildId;
+                if (!guild || !gid) return;
+                if (!hasGuildPermission(guild, $me?.id, PERMISSION_MANAGE_GUILD)) return;
 		saving = true;
 		error = null;
 		try {
@@ -98,11 +105,16 @@
 		} finally {
 			saving = false;
 		}
-	}
+        }
 
-	function closeOverlay() {
-		guildSettingsOpen.set(false);
-	}
+        function closeOverlay() {
+                guildSettingsOpen.set(false);
+        }
+
+        function guildInitials(guild: any): string {
+                const name = String((guild as any)?.name ?? '?');
+                return name.slice(0, 2).toUpperCase();
+        }
 </script>
 
 <SettingsPanel bind:open={$guildSettingsOpen} on:close={closeOverlay}>
@@ -160,29 +172,51 @@
 		{/if}
 	</svelte:fragment>
 
-	{#if category === 'profile' && accessibleCategories.includes('profile')}
-		<div>
-			<label for="guild-name" class="mb-2 block">{m.server_name()}</label>
-			<input
-				id="guild-name"
-				class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-				bind:value={name}
-			/>
-			<div class="mt-2 flex gap-2">
-				<button
-					class="rounded bg-blue-500 px-3 py-1 text-white hover:bg-blue-600 disabled:opacity-50"
-					onclick={save}
-					disabled={saving}
-				>
-					{saving ? m.saving() : m.save()}
-				</button>
-			</div>
-			{#if error}
-				<p class="mt-2 text-sm text-red-500">{error}</p>
-			{/if}
-		</div>
-	{:else if category === 'roles' && accessibleCategories.includes('roles')}
-		<GuildRolesManager />
+        {#if category === 'profile' && accessibleCategories.includes('profile')}
+                <div class="space-y-4">
+                        <AvatarCropper
+                                bind:croppedDataUrl={croppedIcon}
+                                displayBorderRadiusClass="rounded-xl"
+                                displayImageAlt="Guild icon preview"
+                                fallbackInitial={iconFallbackInitial}
+                                helperText="PNG or JPEG recommended"
+                                initialAvatarUrl={existingIconUrl}
+                                maskCornerRadiusRatio={0.25}
+                                maskShape="rounded"
+                                previewBorderRadiusClass="rounded-xl"
+                                previewImageAlt="Cropped guild icon"
+                                previewLabel="Cropped icon preview (128×128)"
+                                previewPlaceholderBorderRadiusClass="rounded-xl"
+                                previewPlaceholderText="Adjust the crop to see icon preview"
+                                resetButtonLabel="Reset icon selection"
+                                uploadInputId="guild-icon-upload"
+                                uploadLabel="Upload icon"
+                                chooseButtonLabel="Choose icon"
+                        />
+
+                        <div>
+                                <label for="guild-name" class="mb-2 block">{m.server_name()}</label>
+                                <input
+                                        id="guild-name"
+                                        class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        bind:value={name}
+                                />
+                                <div class="mt-2 flex gap-2">
+                                        <button
+                                                class="rounded bg-blue-500 px-3 py-1 text-white hover:bg-blue-600 disabled:opacity-50"
+                                                onclick={save}
+                                                disabled={saving}
+                                        >
+                                                {saving ? m.saving() : m.save()}
+                                        </button>
+                                </div>
+                                {#if error}
+                                        <p class="mt-2 text-sm text-red-500">{error}</p>
+                                {/if}
+                        </div>
+                </div>
+        {:else if category === 'roles' && accessibleCategories.includes('roles')}
+                <GuildRolesManager />
 	{:else if category === 'moderation' && accessibleCategories.includes('moderation')}
 		<p>{m.moderation()}...</p>
 	{:else if category === 'invites' && accessibleCategories.includes('invites')}
