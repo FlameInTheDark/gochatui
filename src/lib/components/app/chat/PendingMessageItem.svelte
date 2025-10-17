@@ -1,6 +1,7 @@
 <script lang="ts">
         import { auth } from '$lib/stores/auth';
         import type { PendingAttachment, PendingMessage } from '$lib/stores/pendingMessages';
+        import { resolveAvatarUrl } from '$lib/utils/avatar';
         import { Paperclip, AlertCircle } from 'lucide-svelte';
 
         const me = auth.user;
@@ -11,12 +12,7 @@
                 return name;
         }
 
-        function avatarUrl() {
-                const avatar = ($me as any)?.avatar as string | undefined;
-                const id = ($me as any)?.id as string | undefined;
-                if (!avatar || !id) return null;
-                return `https://cdn.gochat.gg/avatars/${id}/${avatar}.webp`;
-        }
+        const avatarUrl = $derived.by(() => resolveAvatarUrl($me));
 
         function statusLabel(status: typeof message.status) {
                 if (status === 'error') return 'Failed to send';
@@ -64,8 +60,8 @@
 
 <div class="flex gap-3 px-3 py-2 opacity-90" data-pending-message>
         <div class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-[var(--stroke)] bg-[var(--panel)]">
-                {#if avatarUrl()}
-                        <img src={avatarUrl()!} alt={userDisplayName()} class="h-full w-full object-cover" />
+                {#if avatarUrl}
+                        <img src={avatarUrl} alt={userDisplayName()} class="h-full w-full object-cover" />
                 {:else}
                         <div class="grid h-full w-full place-items-center text-sm font-semibold uppercase text-[var(--brand)]">
                                 {userDisplayName().slice(0, 2)}
