@@ -6,10 +6,9 @@
                 selectedChannelId,
                 channelsByGuild,
                 messagesByChannel,
-		lastChannelByGuild,
-		channelReady,
-		guildSettingsOpen,
-		membersByGuild,
+                lastChannelByGuild,
+                channelReady,
+                membersByGuild,
 		myGuildRoleIdsByGuild,
 		channelRolesByGuild
 	} from '$lib/stores/appState';
@@ -27,7 +26,7 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
-	import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
+        import { Check, Slash, X } from 'lucide-svelte';
 	import {
 		loadGuildRolesCached,
 		loadChannelRoleIds,
@@ -41,9 +40,6 @@
         import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
         import { resolveCurrentUserRoleIds } from '$lib/utils/currentUserRoleIds';
         import {
-                PERMISSION_MANAGE_CHANNELS,
-                PERMISSION_MANAGE_GUILD,
-                PERMISSION_MANAGE_ROLES,
                 PERMISSION_ADMINISTRATOR,
                 hasAnyGuildPermission,
                 normalizePermissionValue
@@ -54,19 +50,6 @@
         const unreadChannels = unreadChannelsByGuild;
 
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
-
-        const canAccessSelectedGuildSettings = $derived.by(() => {
-		const gid = $selectedGuildId;
-		if (!gid) return false;
-		const guild = $guilds.find((g) => String((g as any)?.id) === gid) ?? null;
-		return hasAnyGuildPermission(
-			guild,
-			$me?.id,
-			PERMISSION_MANAGE_GUILD,
-			PERMISSION_MANAGE_ROLES,
-			PERMISSION_MANAGE_CHANNELS
-		);
-	});
 
         let dismissPanel: (() => void) | null = null;
         let creatingChannel = $state(false);
@@ -106,7 +89,23 @@
 		parent: string | null;
 		mode: 'before' | 'inside';
 	} | null>(null);
-	let editChannelPermissionsLoadToken = 0;
+        let editChannelPermissionsLoadToken = 0;
+
+        export type ChannelPaneHandle = {
+                openCreateChannel: (parentId?: string | null) => void;
+                openCreateCategory: () => void;
+        };
+
+        export function openCreateChannel(parentId: string | null = null) {
+                creatingChannel = true;
+                channelError = null;
+                creatingChannelParent = parentId;
+        }
+
+        export function openCreateCategory() {
+                creatingCategory = true;
+                categoryError = null;
+        }
 
 	function toSnowflakeString(value: unknown): string | null {
 		if (value == null) return null;
@@ -1038,53 +1037,9 @@
 <div
 	class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-hidden border-r border-[var(--stroke)]"
 >
-	<div
-		class="box-border flex h-[var(--header-h)] flex-shrink-0 items-center justify-between overflow-hidden border-b border-[var(--stroke)] px-3"
-	>
-		<div class="truncate font-semibold">
-			{$guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name ?? m.select_server()}
-		</div>
-		{#if $selectedGuildId}
-			<div class="flex items-center gap-2">
-                                <button
-                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                                        onclick={() => {
-                                                creatingChannel = true;
-                                                channelError = null;
-                                                creatingChannelParent = null;
-                                        }}
-                                        aria-label={m.new_channel()}
-                                >
-					<Plus class="h-4 w-4" stroke-width={2} />
-				</button>
-                                <button
-                                        class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                                        onclick={() => {
-                                                creatingCategory = true;
-                                                categoryError = null;
-                                        }}
-                                        aria-label={m.new_category()}
-                                >
-					<FolderPlus class="h-4 w-4" stroke-width={2} />
-				</button>
-				{#if canAccessSelectedGuildSettings}
-                                        <button
-                                                class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-                                                onclick={() => {
-                                                        if (!canAccessSelectedGuildSettings) return;
-                                                        guildSettingsOpen.set(true);
-                                                }}
-                                                aria-label={m.server_settings()}
-                                        >
-						<Settings class="h-4 w-4" stroke-width={2} />
-					</button>
-				{/if}
-			</div>
-		{/if}
-	</div>
-	<div class="border-b border-[var(--stroke)] p-2">
-		<input
-			class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm"
+        <div class="border-b border-[var(--stroke)] p-2">
+                <input
+                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm"
 			placeholder={m.filter_channels()}
 			bind:value={filter}
 		/>
