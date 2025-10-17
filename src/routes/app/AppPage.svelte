@@ -101,7 +101,7 @@
                                                         >
                                                                 <FolderPlus class="h-4 w-4" stroke-width={2} />
                                                         </button>
-                                                        {#if canAccessSelectedGuildSettings}
+                                                        {#if $canAccessSelectedGuildSettings}
                                                                 <button
                                                                         class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
                                                                         onclick={triggerOpenGuildSettings}
