@@ -623,14 +623,14 @@
 								<Folder class="h-5 w-5" stroke-width={2} />
 							{:else}
 								<div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
-									{#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
-										{@const previewUnread = guildHasUnread(guildPreview.guildId)}
+                                                                        {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
+                                                                                {@const previewUnread = guildHasUnread(guildPreview.guildId)}
+                                                                                {@const previewIcon = guildIconUrl(guildPreview.guild)}
                                                                                 <div
                                                                                         class={`relative flex items-center justify-center overflow-hidden rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
                                                                                                 guildPreview.guildId === $selectedGuildId ? 'border-[var(--brand)]' : ''
                                                                                         } ${previewUnread ? 'border-[var(--brand)] bg-[var(--brand)]/10' : ''}`}
                                                                                 >
-                                                                                        {@const previewIcon = guildIconUrl(guildPreview.guild)}
                                                                                         {#if previewIcon}
                                                                                                 <img
                                                                                                         src={previewIcon}
@@ -675,8 +675,9 @@
 								ondrop={(event) => onFolderDrop(event, item.folder.id, 0)}
 								role="presentation"
 							></div>
-							{#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
-								{@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
+                                                        {#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
+                                                                {@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
+                                                                {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
                                                                 <div class="group relative flex justify-center">
                                                                   <button
                                                                           class={`relative flex h-12 w-12 transform items-center justify-center overflow-hidden rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
@@ -704,9 +705,8 @@
 											onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
 										ondrop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
                                                                 onclick={() => selectGuildFromSidebar(nestedGuild.guildId)}
-										oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
+                                                                                oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
                                                                           >
-                                                                                  {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
                                                                                   {#if nestedGuildIcon}
                                                                                           <img
                                                                                                   src={nestedGuildIcon}
