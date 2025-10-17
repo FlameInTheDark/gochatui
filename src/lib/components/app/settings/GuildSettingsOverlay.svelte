@@ -66,6 +66,15 @@
         let error: string | null = $state(null);
         let croppedIcon = $state<string | null>(null);
 
+        const isGuildOwner = $derived.by(() => {
+                const guild = activeGuild;
+                if (!guild) return false;
+                const ownerId = toBigInt((guild as any)?.owner);
+                const userId = toBigInt($me?.id);
+                if (ownerId == null || userId == null) return false;
+                return ownerId === userId;
+        });
+
         const iconFallbackInitial = $derived.by(() => guildInitials(activeGuild));
         const existingIconUrl = $derived.by(() => resolveAvatarUrl(activeGuild));
 
@@ -92,19 +101,40 @@
                 const gid = $selectedGuildId;
                 if (!guild || !gid) return;
                 if (!hasGuildPermission(guild, $me?.id, PERMISSION_MANAGE_GUILD)) return;
-		saving = true;
-		error = null;
-		try {
-			await auth.api.guild.guildGuildIdPatch({
-				guildId: BigInt(gid) as any,
-				guildUpdateGuildRequest: { name }
-			});
-			await auth.loadGuilds();
-		} catch (e: any) {
-			error = e?.response?.data?.message ?? e?.message ?? 'Failed to save';
-		} finally {
-			saving = false;
-		}
+                saving = true;
+                error = null;
+                try {
+                        let shouldReloadGuilds = false;
+
+                        const trimmedName = name.trim();
+                        name = trimmedName;
+
+                        if (trimmedName !== (guild?.name ?? '')) {
+                                await auth.api.guild.guildGuildIdPatch({
+                                        guildId: BigInt(gid) as any,
+                                        guildUpdateGuildRequest: { name: trimmedName }
+                                });
+                                shouldReloadGuilds = true;
+                        }
+
+                        if (croppedIcon) {
+                                if (!isGuildOwner) {
+                                        throw new Error('Only the guild owner can change the server icon.');
+                                }
+
+                                await uploadGuildIcon(gid, croppedIcon);
+                                croppedIcon = null;
+                                shouldReloadGuilds = true;
+                        }
+
+                        if (shouldReloadGuilds) {
+                                await auth.loadGuilds();
+                        }
+                } catch (e: any) {
+                        error = formatSaveError(e);
+                } finally {
+                        saving = false;
+                }
         }
 
         function closeOverlay() {
@@ -114,6 +144,90 @@
         function guildInitials(guild: any): string {
                 const name = String((guild as any)?.name ?? '?');
                 return name.slice(0, 2).toUpperCase();
+        }
+
+        async function uploadGuildIcon(guildId: string, dataUrl: string) {
+                const response = await fetch(dataUrl);
+                if (!response.ok) {
+                        throw new Error('Failed to read cropped icon image.');
+                }
+
+                const blob = await response.blob();
+                if (!blob.size) {
+                        throw new Error('Icon image appears to be empty.');
+                }
+
+                const detectedType = (blob.type || '').trim();
+                const contentType = detectedType && detectedType.startsWith('image/') ? detectedType : 'image/png';
+
+                const metadataResponse = await auth.api.guild.guildGuildIdIconPost({
+                        guildId: BigInt(guildId) as any,
+                        guildCreateIconRequest: {
+                                content_type: contentType,
+                                file_size: blob.size
+                        }
+                });
+
+                const metadata = metadataResponse.data ?? null;
+                const iconIdRaw = (metadata as any)?.id;
+                const guildIdRaw = (metadata as any)?.guild_id;
+                if (iconIdRaw == null || guildIdRaw == null) {
+                        throw new Error('Icon upload metadata was missing identifiers.');
+                }
+
+                const iconId = BigInt(iconIdRaw);
+                const confirmedGuildId = BigInt(guildIdRaw);
+
+                const buffer = await blob.arrayBuffer();
+                const bytes = new Uint8Array(buffer);
+
+                await auth.api.upload.uploadIconsGuildIdIconIdPost({
+                        guildId: confirmedGuildId as any,
+                        iconId: iconId as any,
+                        requestBody: bytes as any
+                });
+        }
+
+        function toBigInt(value: unknown): bigint | null {
+                if (value == null) return null;
+                try {
+                        if (typeof value === 'bigint') return value;
+                        if (typeof value === 'number') return BigInt(value);
+                        if (typeof value === 'string' && value.trim().length > 0) {
+                                return BigInt(value.trim());
+                        }
+                } catch {
+                        return null;
+                }
+                return null;
+        }
+
+        function extractHttpStatus(error: unknown): number | null {
+                if (!error || typeof error !== 'object') return null;
+                const maybeResponse = (error as any).response;
+                if (!maybeResponse || typeof maybeResponse !== 'object') return null;
+                const status = (maybeResponse as any).status;
+                return typeof status === 'number' ? status : null;
+        }
+
+        function formatSaveError(error: unknown): string {
+                const status = extractHttpStatus(error);
+                if (status === 403) {
+                        return 'You do not have permission to update this server.';
+                }
+                if (status === 413) {
+                        return 'Icon is too large even after processing. Please choose a smaller image.';
+                }
+                if (error instanceof Error && error.message) {
+                        return error.message;
+                }
+                if (error && typeof error === 'object') {
+                        const message = (error as any)?.response?.data?.message;
+                        if (typeof message === 'string' && message.trim().length > 0) {
+                                return message;
+                        }
+                }
+                return 'Failed to save changes.';
         }
 </script>
 
