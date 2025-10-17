@@ -26,6 +26,7 @@
                 resolveMemberRoleColor,
                 toSnowflakeString
         } from '$lib/utils/members';
+        import { resolveAvatarUrl } from '$lib/utils/avatar';
         import {
                 createPresenceSubscription,
                 presenceByUser,
@@ -278,6 +279,7 @@
                 name: string;
                 color: string | null;
                 userId: string | null;
+                avatarUrl: string | null;
                 presenceStatus: PresenceStatus | null;
                 presenceSince: number | null;
                 hasPresence: boolean;
@@ -299,6 +301,7 @@
                         const guildId = toSnowflakeString((guild as any)?.id) ?? null;
                         const userId =
                                 toSnowflakeString((member as any)?.user?.id) ?? toSnowflakeString((member as any)?.id);
+                        const avatarUrl = resolveAvatarUrl(member, (member as any)?.user);
                         const info = userId ? (lookup[userId] ?? null) : null;
                         const presenceStatus = info?.status ?? null;
                         const hasPresence = Boolean(info);
@@ -315,6 +318,7 @@
                                 name: memberPrimaryName(member),
                                 color: resolveMemberRoleColor(member, guildId, roleMap),
                                 userId,
+                                avatarUrl,
                                 presenceStatus,
                                 presenceSince: info?.since ?? null,
                                 hasPresence,
@@ -435,9 +439,18 @@
                                                                 >
                                                                         <div class="relative h-8 w-8 flex-shrink-0">
                                                                                 <div
-                                                                                        class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
+                                                                                        class="grid h-full w-full place-items-center overflow-hidden rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-xs font-semibold uppercase"
                                                                                 >
-                                                                                        {memberInitial(entry.member)}
+                                                                                        {#if entry.avatarUrl}
+                                                                                                <img
+                                                                                                        alt=""
+                                                                                                        aria-hidden="true"
+                                                                                                        class="h-full w-full object-cover"
+                                                                                                        src={entry.avatarUrl}
+                                                                                                />
+                                                                                        {:else}
+                                                                                                {memberInitial(entry.member)}
+                                                                                        {/if}
                                                                                 </div>
                                                                                 <span
                                                                                         class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
