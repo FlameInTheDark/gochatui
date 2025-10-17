@@ -1,6 +1,6 @@
 <script lang="ts">
         import { auth } from '$lib/stores/auth';
-        import type { PendingMessage } from '$lib/stores/pendingMessages';
+        import type { PendingAttachment, PendingMessage } from '$lib/stores/pendingMessages';
         import { Paperclip, AlertCircle } from 'lucide-svelte';
 
         const me = auth.user;
@@ -38,14 +38,17 @@
                 return `${days} days ago`;
         }
 
-        function attachmentStatusLabel(status: string) {
-                switch (status) {
+        function attachmentStatusLabel(
+                attachment: PendingAttachment,
+                messageStatus: typeof message.status
+        ) {
+                switch (attachment.status) {
                         case 'queued':
                                 return 'Queued';
                         case 'uploading':
                                 return 'Uploading…';
                         case 'success':
-                                return 'Uploaded';
+                                return messageStatus === 'pending' ? 'Processing…' : 'Uploaded';
                         case 'error':
                                 return 'Failed';
                         default:
@@ -106,7 +109,7 @@
                                                                 {attachment.filename}
                                                         </div>
                                                         <div class="flex items-center justify-between text-[var(--muted)]">
-                                                                <span>{attachmentStatusLabel(attachment.status)}</span>
+                                                                <span>{attachmentStatusLabel(attachment, message.status)}</span>
                                                                 <span>{Math.round(attachment.progress * 100)}%</span>
                                                         </div>
                                                 </div>
