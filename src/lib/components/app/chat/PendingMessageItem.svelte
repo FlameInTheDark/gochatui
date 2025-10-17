@@ -12,10 +12,21 @@
         }
 
         function avatarUrl() {
-                const avatar = ($me as any)?.avatar as string | undefined;
-                const id = ($me as any)?.id as string | undefined;
-                if (!avatar || !id) return null;
-                return `https://cdn.gochat.gg/avatars/${id}/${avatar}.webp`;
+                const me = $me as any;
+                const avatar = me?.avatar as any;
+                if (!avatar) return null;
+
+                if (typeof avatar === 'string') {
+                        const id = typeof me?.id === 'string' ? me.id : me?.id != null ? String(me.id) : null;
+                        if (!id) return null;
+                        return `https://cdn.gochat.gg/avatars/${id}/${avatar}.webp`;
+                }
+
+                if (typeof avatar === 'object' && typeof avatar.url === 'string' && avatar.url) {
+                        return avatar.url;
+                }
+
+                return null;
         }
 
         function statusLabel(status: typeof message.status) {
