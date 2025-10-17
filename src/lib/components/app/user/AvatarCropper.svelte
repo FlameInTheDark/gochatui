@@ -4,6 +4,20 @@
         export let initialAvatarUrl: string | null = null;
         export let fallbackInitial = '?';
         export let croppedDataUrl: string | null = null;
+        export let uploadLabel = 'Upload image';
+        export let chooseButtonLabel = 'Choose image';
+        export let helperText = 'PNG or JPEG recommended';
+        export let resetButtonLabel = 'Reset avatar selection';
+        export let previewLabel = 'Cropped preview (128×128)';
+        export let previewPlaceholderText = 'Adjust the crop to see preview';
+        export let previewImageAlt = 'Cropped avatar';
+        export let displayImageAlt = 'Avatar preview';
+        export let uploadInputId = 'profile-avatar-upload';
+        export let maskShape: 'circle' | 'rounded' = 'circle';
+        export let maskCornerRadiusRatio = 0.25;
+        export let displayBorderRadiusClass = 'rounded-full';
+        export let previewBorderRadiusClass = 'rounded-full';
+        export let previewPlaceholderBorderRadiusClass = 'rounded-full';
 
         let avatarError: string | null = null;
 
@@ -41,10 +55,9 @@
 
         $: maskRadius = maskSize / 2;
         $: maskCenter = { x: maskPosition.x + maskRadius, y: maskPosition.y + maskRadius };
-        $: overlayBackground = `radial-gradient(circle at ${maskCenter.x}px ${maskCenter.y}px, transparent ${Math.max(
-                maskRadius - 1,
-                0
-        )}px, rgba(0, 0, 0, 0.45) ${maskRadius}px)`;
+        $: normalizedCornerRatio = maskShape === 'rounded' ? Math.min(Math.max(maskCornerRadiusRatio, 0), 0.5) : 0.5;
+        $: maskBorderRadius =
+                maskShape === 'circle' ? '50%' : `${Math.round(maskSize * normalizedCornerRatio)}px`;
         $: minZoom = cropSize / (maxMaskSize || cropSize);
         $: maxZoom = cropSize / minMaskSize;
 
@@ -449,33 +462,33 @@
                                 Select an image, adjust the crop, and preview how it will look.
                         </p>
                 </div>
-                <div
-                        class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)]"
-                >
-                        {#if displayAvatarUrl}
-                                <img alt="Avatar preview" class="h-full w-full object-cover" src={displayAvatarUrl} />
-                        {:else}
-                                <span class="text-lg font-semibold text-[var(--muted)]">{fallbackInitial}</span>
-                        {/if}
-                </div>
+        <div
+                class={`flex h-16 w-16 items-center justify-center overflow-hidden border border-[var(--stroke)] bg-[var(--panel-strong)] ${displayBorderRadiusClass}`}
+        >
+                {#if displayAvatarUrl}
+                        <img alt={displayImageAlt} class="h-full w-full object-cover" src={displayAvatarUrl} />
+                {:else}
+                        <span class="text-lg font-semibold text-[var(--muted)]">{fallbackInitial}</span>
+                {/if}
+        </div>
         </div>
 
-        <label class="block text-sm font-medium" for="profile-avatar-upload">Upload image</label>
+        <label class="block text-sm font-medium" for={uploadInputId}>{uploadLabel}</label>
         <div class="flex items-center gap-3">
                 <button
                         class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm"
                         onclick={() => fileInput?.click()}
                         type="button"
                 >
-                        Choose image
+                        {chooseButtonLabel}
                 </button>
-                <span class="text-xs text-[var(--muted)]">PNG or JPEG recommended</span>
+                <span class="text-xs text-[var(--muted)]">{helperText}</span>
         </div>
         <input
                 accept="image/*"
                 bind:this={fileInput}
                 class="sr-only"
-                id="profile-avatar-upload"
+                id={uploadInputId}
                 type="file"
                 onchange={handleAvatarSelection}
         />
@@ -495,7 +508,6 @@
                                                 aria-hidden="true"
                                                 bind:this={overlayElement}
                                                 class={`avatar-crop-overlay ${maskDragging ? 'is-dragging' : ''}`}
-                                                style={`background: ${overlayBackground};`}
                                                 onpointerdown={startMaskDrag}
                                                 onpointermove={handleMaskDrag}
                                                 onpointerup={endMaskDrag}
@@ -505,7 +517,8 @@
                                                         class="avatar-crop-mask"
                                                         style={`width: ${maskSize}px; height: ${maskSize}px; transform: translate3d(${maskPosition.x}px, ${maskPosition.y}px, 0);`}
                                                 >
-                                                        <div class="avatar-crop-ring"></div>
+                                                        <div class="avatar-crop-shade" style={`border-radius: ${maskBorderRadius};`}></div>
+                                                        <div class="avatar-crop-ring" style={`border-radius: ${maskBorderRadius};`}></div>
                                                         <div
                                                                 class="avatar-crop-handle handle-nw"
                                                                 onpointerdown={(event) => startMaskResize('nw', event)}
@@ -555,25 +568,25 @@
                                         />
                                 </div>
                                 <div>
-                                        <div class="text-xs font-medium text-[var(--muted)]">Cropped preview (128×128)</div>
+                                        <div class="text-xs font-medium text-[var(--muted)]">{previewLabel}</div>
                                         {#if croppedDataUrl}
                                                 <img
-                                                        alt="Cropped avatar"
-                                                        class="mt-2 h-32 w-32 rounded-full border border-[var(--stroke)]"
+                                                        alt={previewImageAlt}
+                                                        class={`mt-2 h-32 w-32 border border-[var(--stroke)] ${previewBorderRadiusClass}`}
                                                         height="128"
                                                         src={croppedDataUrl}
                                                         width="128"
                                                 />
                                         {:else}
                                                 <div
-                                                        class="mt-2 flex h-32 w-32 items-center justify-center rounded-full border border-dashed border-[var(--stroke)] text-xs text-[var(--muted)]"
+                                                        class={`mt-2 flex h-32 w-32 items-center justify-center border border-dashed border-[var(--stroke)] text-xs text-[var(--muted)] ${previewPlaceholderBorderRadiusClass}`}
                                                 >
-                                                        Adjust the crop to see preview
+                                                        {previewPlaceholderText}
                                                 </div>
                                         {/if}
                                 </div>
                                 <button class="self-start rounded-md border border-[var(--stroke)] px-3 py-1 text-sm" onclick={resetAvatar}>
-                                        Reset avatar selection
+                                        {resetButtonLabel}
                                 </button>
                         </div>
                 </div>
@@ -633,13 +646,19 @@
                 left: 0;
         }
 
+        .avatar-crop-shade {
+                position: absolute;
+                inset: 0;
+                box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+                pointer-events: none;
+        }
+
         .avatar-crop-ring {
                 position: absolute;
                 top: 0;
                 left: 0;
                 width: 100%;
                 height: 100%;
-                border-radius: 50%;
                 box-shadow:
                         inset 0 0 0 2px rgba(255, 255, 255, 0.85),
                         0 0 0 1px rgba(0, 0, 0, 0.55);
