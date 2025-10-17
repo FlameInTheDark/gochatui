@@ -22,7 +22,12 @@ function normalizeAvatarValue(value: unknown, visited = new Set<unknown>()): str
                 'avatarId',
                 'avatar_id',
                 'avatarUrl',
-                'avatar_url'
+                'avatar_url',
+                'icon',
+                'iconId',
+                'icon_id',
+                'iconUrl',
+                'icon_url'
         ] as const;
 
         for (const key of directKeys) {
@@ -88,17 +93,19 @@ export function extractAvatarUrl(source: unknown, visited = new Set<unknown>()):
 	visited.add(source);
 	const record = source as Record<string, unknown>;
 
-	const candidates: unknown[] = [
-		record.avatar,
-		record.avatarUrl,
-		record.avatar_url,
-		record.avatarId,
-		record.avatar_id,
-		record.image,
-		record.icon,
-		record.iconUrl,
-		record.icon_url
-	];
+        const candidates: unknown[] = [
+                record.avatar,
+                record.avatarUrl,
+                record.avatar_url,
+                record.avatarId,
+                record.avatar_id,
+                record.image,
+                record.icon,
+                record.iconId,
+                record.icon_id,
+                record.iconUrl,
+                record.icon_url
+        ];
 
 	for (const candidate of candidates) {
 		const resolved = normalizeAvatarValue(candidate, visited);
