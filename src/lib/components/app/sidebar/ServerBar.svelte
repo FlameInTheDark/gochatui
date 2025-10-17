@@ -101,10 +101,17 @@
 		expandedFolders = next;
 	});
 
-	function guildInitials(guild: DtoGuild | null | undefined): string {
-		const name = String((guild as any)?.name ?? '?');
-		return name.slice(0, 2).toUpperCase();
-	}
+        function guildInitials(guild: DtoGuild | null | undefined): string {
+                const name = String((guild as any)?.name ?? '?');
+                return name.slice(0, 2).toUpperCase();
+        }
+
+        function guildIconUrl(guild: DtoGuild | null | undefined): string | null {
+                const url = (guild as any)?.icon?.url;
+                if (typeof url !== 'string') return null;
+                const trimmed = url.trim();
+                return trimmed.length > 0 ? trimmed : null;
+        }
 
 	function toSnowflakeString(value: unknown): string | null {
 		if (value == null) return null;
@@ -520,11 +527,12 @@
 			role="presentation"
 		></div>
 		{#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
-			{#if item.type === 'guild'}
-				{@const guildUnread = guildHasUnread(item.guildId)}
-				<div class="group relative flex justify-center">
+                        {#if item.type === 'guild'}
+                                {@const guildUnread = guildHasUnread(item.guildId)}
+                                {@const guildIcon = guildIconUrl(item.guild)}
+                                <div class="group relative flex justify-center">
                                         <button
-                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                class={`relative flex h-12 w-12 transform items-center justify-center overflow-hidden rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                                 } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
                                                 data-tooltip-disabled
@@ -543,7 +551,17 @@
                                                 onclick={() => selectGuildFromSidebar(item.guildId)}
                                                 oncontextmenu={(event) => openGuildMenu(event, item.guild)}
                                         >
-						<span class="font-bold">{guildInitials(item.guild)}</span>
+                                                {#if guildIcon}
+                                                        <img
+                                                                src={guildIcon}
+                                                                alt=""
+                                                                aria-hidden="true"
+                                                                class="h-full w-full object-cover"
+                                                                loading="lazy"
+                                                        />
+                                                {:else}
+                                                        <span class="font-bold">{guildInitials(item.guild)}</span>
+                                                {/if}
                                                 {#if guildUnread}
                                                         <span class="sr-only">{m.unread_indicator()}</span>
                                                         <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
@@ -605,16 +623,27 @@
 								<Folder class="h-5 w-5" stroke-width={2} />
 							{:else}
 								<div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
-									{#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
-										{@const previewUnread = guildHasUnread(guildPreview.guildId)}
-										<div
-											class={`relative flex items-center justify-center rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
-												guildPreview.guildId === $selectedGuildId ? 'border-[var(--brand)]' : ''
-											} ${previewUnread ? 'border-[var(--brand)] bg-[var(--brand)]/10' : ''}`}
-										>
-											{guildInitials(guildPreview.guild)}
-										</div>
-									{/each}
+                                                                        {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
+                                                                                {@const previewUnread = guildHasUnread(guildPreview.guildId)}
+                                                                                {@const previewIcon = guildIconUrl(guildPreview.guild)}
+                                                                                <div
+                                                                                        class={`relative flex items-center justify-center overflow-hidden rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
+                                                                                                guildPreview.guildId === $selectedGuildId ? 'border-[var(--brand)]' : ''
+                                                                                        } ${previewUnread ? 'border-[var(--brand)] bg-[var(--brand)]/10' : ''}`}
+                                                                                >
+                                                                                        {#if previewIcon}
+                                                                                                <img
+                                                                                                        src={previewIcon}
+                                                                                                        alt=""
+                                                                                                        aria-hidden="true"
+                                                                                                        class="h-full w-full object-cover"
+                                                                                                        loading="lazy"
+                                                                                                />
+                                                                                        {:else}
+                                                                                                {guildInitials(guildPreview.guild)}
+                                                                                        {/if}
+                                                                                </div>
+                                                                        {/each}
 									{#if item.guilds.length < 4}
 										{#each Array(4 - item.guilds.length) as _, fillerIdx (fillerIdx)}
 											<div class="rounded-lg border border-dashed border-[var(--stroke)]"></div>
@@ -646,16 +675,17 @@
 								ondrop={(event) => onFolderDrop(event, item.folder.id, 0)}
 								role="presentation"
 							></div>
-							{#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
-								{@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
+                                                        {#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
+                                                                {@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
+                                                                {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
                                                                 <div class="group relative flex justify-center">
-                                                                        <button
-                                                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-                                                                                        isGuildSelected(nestedGuild.guildId)
-                                                                                                ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
-                                                                                                : ''
-                                                                                } ${
-                                                                                        folderDropTarget?.folderId === item.folder.id &&
+                                                                  <button
+                                                                          class={`relative flex h-12 w-12 transform items-center justify-center overflow-hidden rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                                         isGuildSelected(nestedGuild.guildId)
+                                                                                                 ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                                                 : ''
+                                                                                 } ${
+                                                                                         folderDropTarget?.folderId === item.folder.id &&
                                                                                         folderDropTarget.index === nestedIndex + 1
                                                                                                 ? 'ring-2 ring-[var(--brand)]'
                                                                                                 : ''
@@ -675,12 +705,22 @@
 											onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
 										ondrop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
                                                                 onclick={() => selectGuildFromSidebar(nestedGuild.guildId)}
-										oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
-									>
-										<span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
-                                                                                {#if nestedGuildUnread}
-                                                                                        <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                                                                                oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
+                                                                          >
+                                                                                  {#if nestedGuildIcon}
+                                                                                          <img
+                                                                                                  src={nestedGuildIcon}
+                                                                                                  alt=""
+                                                                                                  aria-hidden="true"
+                                                                                                  class="h-full w-full object-cover"
+                                                                                                  loading="lazy"
+                                                                                          />
+                                                                                  {:else}
+                                                                                          <span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
+                                                                                  {/if}
+                                                                                  {#if nestedGuildUnread}
+                                                                                          <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                          <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                                                                                 {/if}
 									</button>
 								</div>
