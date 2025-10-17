@@ -827,7 +827,6 @@
                 suppressContextMenuUntil = nowMs() + durationMs;
         }
         let activeVideoAttachments = $state<Record<string, boolean>>({});
-        let videoPreviewPosters = $state<Record<string, string | null>>({});
         let videoPreviewPosterFailures = $state<Record<string, boolean>>({});
         let failedPreviewKeys = $state<Record<string, true>>({});
 
@@ -838,327 +837,6 @@
 
                 failedPreviewKeys = { ...failedPreviewKeys, [key]: true };
         }
-        const videoPosterTasks = new Map<string, () => void>();
-        let componentDestroyed = false;
-
-        function isSameOriginUrl(url: string): boolean {
-                if (typeof window === 'undefined') {
-                        return false;
-                }
-
-                try {
-                        const parsed = new URL(url, window.location.href);
-                        return parsed.origin === window.location.origin;
-                } catch {
-                        return false;
-                }
-        }
-
-        async function capturePosterWithVideo(
-                sourceUrl: string,
-                signal: AbortSignal,
-                options: { crossOrigin?: string | null; revoke?: (() => void) | null } = {}
-        ): Promise<string | null> {
-                if (signal.aborted) {
-                        return null;
-                }
-
-                return new Promise<string | null>((resolve) => {
-                        const video = document.createElement('video');
-                        let settled = false;
-
-                        const cleanup = () => {
-                                video.removeEventListener('loadeddata', handleLoadedData);
-                                video.removeEventListener('error', handleError);
-                                video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                                video.removeEventListener('seeked', handleSeeked);
-                                signal.removeEventListener('abort', handleAbort);
-                                try {
-                                        video.pause();
-                                } catch {
-                                        // noop
-                                }
-                                video.src = '';
-                                try {
-                                        video.load();
-                                } catch {
-                                        // noop
-                                }
-                                options.revoke?.();
-                        };
-
-                        const finalize = (poster: string | null) => {
-                                if (settled) {
-                                        return;
-                                }
-                                settled = true;
-                                cleanup();
-                                resolve(poster);
-                        };
-
-                        const tryCaptureFrame = () => {
-                                if (settled) {
-                                        return;
-                                }
-                                try {
-                                        const width = video.videoWidth;
-                                        const height = video.videoHeight;
-                                        if (!width || !height) {
-                                                throw new Error('missing dimensions');
-                                        }
-
-                                        const maxDimension = 640;
-                                        const scale = Math.min(1, maxDimension / Math.max(width, height));
-                                        const targetWidth = Math.max(1, Math.round(width * scale));
-                                        const targetHeight = Math.max(1, Math.round(height * scale));
-
-                                        const canvas = document.createElement('canvas');
-                                        canvas.width = targetWidth;
-                                        canvas.height = targetHeight;
-                                        const context = canvas.getContext('2d');
-                                        if (!context) {
-                                                throw new Error('no canvas context');
-                                        }
-                                        context.drawImage(video, 0, 0, targetWidth, targetHeight);
-                                        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-                                        finalize(dataUrl);
-                                } catch {
-                                        finalize(null);
-                                }
-                        };
-
-                        const handleAbort = () => finalize(null);
-
-                        const handleLoadedData = () => tryCaptureFrame();
-
-                        const handleSeeked = () => tryCaptureFrame();
-
-                        const handleError = () => finalize(null);
-
-                        const handleLoadedMetadata = () => {
-                                try {
-                                        const hasDuration = Number.isFinite(video.duration) && video.duration > 0;
-                                        const epsilon = 0.001;
-                                        const safeDuration = hasDuration ? Math.max(video.duration, epsilon) : epsilon;
-                                        const preferredTime = Math.min(Math.max(epsilon, safeDuration / 2), 1);
-                                        const targetTime = hasDuration
-                                                ? Math.min(Math.max(epsilon, Math.min(safeDuration - epsilon, preferredTime)), safeDuration)
-                                                : epsilon;
-                                        const haveCurrentData =
-                                                typeof HTMLMediaElement !== 'undefined'
-                                                        ? HTMLMediaElement.HAVE_CURRENT_DATA
-                                                        : 2;
-                                        if (
-                                                video.readyState >= haveCurrentData &&
-                                                Math.abs(video.currentTime - targetTime) < epsilon
-                                        ) {
-                                                tryCaptureFrame();
-                                                return;
-                                        }
-                                        if (!Number.isNaN(targetTime) && video.currentTime !== targetTime) {
-                                                video.currentTime = targetTime;
-                                        }
-                                } catch {
-                                        // noop — if seeking fails we will rely on the default frame fetch.
-                                }
-                        };
-
-                        signal.addEventListener('abort', handleAbort, { once: true });
-                        video.addEventListener('loadeddata', handleLoadedData, { once: true });
-                        video.addEventListener('seeked', handleSeeked, { once: true });
-                        video.addEventListener('error', handleError, { once: true });
-                        video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
-
-                        if (options.crossOrigin) {
-                                video.crossOrigin = options.crossOrigin;
-                        } else if (options.crossOrigin === null) {
-                                video.removeAttribute('crossorigin');
-                        }
-
-                        video.preload = 'metadata';
-                        video.muted = true;
-                        video.playsInline = true;
-                        if (signal.aborted) {
-                                finalize(null);
-                                return;
-                        }
-                        video.src = sourceUrl;
-                        try {
-                                video.load();
-                        } catch {
-                                // noop
-                        }
-                });
-        }
-
-        async function capturePosterFromFetch(
-                url: string,
-                signal: AbortSignal,
-                sameOrigin: boolean
-        ): Promise<string | null> {
-                if (signal.aborted || typeof fetch !== 'function' || typeof URL === 'undefined') {
-                        return null;
-                }
-
-                let response: Response;
-                try {
-                        response = await fetch(url, {
-                                signal,
-                                credentials: sameOrigin ? 'include' : 'omit',
-                        });
-                } catch {
-                        return null;
-                }
-
-                if (!response.ok || signal.aborted) {
-                        return null;
-                }
-
-                const contentType = response.headers.get('Content-Type') ?? 'video/mp4';
-
-                try {
-                        const reader = response.body?.getReader();
-                        if (reader) {
-                                const chunks: Uint8Array[] = [];
-                                const limit = 1024 * 1024; // 1 MiB
-                                let received = 0;
-                                let done = false;
-
-                                while (!done && received < limit) {
-                                        const { value, done: chunkDone } = await reader.read();
-                                        done = chunkDone;
-                                        if (signal.aborted) {
-                                                try {
-                                                        await reader.cancel();
-                                                } catch {
-                                                        // noop
-                                                }
-                                                return null;
-                                        }
-                                        if (value && value.length) {
-                                                chunks.push(value);
-                                                received += value.length;
-                                        }
-                                }
-
-                                if (!chunks.length) {
-                                        return null;
-                                }
-
-                                const partialBlob = new Blob(chunks, { type: contentType });
-                                if (signal.aborted) {
-                                        return null;
-                                }
-                                const partialUrl = URL.createObjectURL(partialBlob);
-                                const partialPoster = await capturePosterWithVideo(partialUrl, signal, {
-                                        crossOrigin: null,
-                                        revoke: () => URL.revokeObjectURL(partialUrl),
-                                });
-                                if (signal.aborted) {
-                                        try {
-                                                await reader.cancel();
-                                        } catch {
-                                                // noop
-                                        }
-                                        return null;
-                                }
-                                if (partialPoster !== null) {
-                                        try {
-                                                await reader.cancel();
-                                        } catch {
-                                                // noop
-                                        }
-                                        return partialPoster;
-                                }
-                                if (done) {
-                                        return null;
-                                }
-
-                                while (!done) {
-                                        const { value, done: chunkDone } = await reader.read();
-                                        done = chunkDone;
-                                        if (signal.aborted) {
-                                                try {
-                                                        await reader.cancel();
-                                                } catch {
-                                                        // noop
-                                                }
-                                                return null;
-                                        }
-                                        if (value && value.length) {
-                                                chunks.push(value);
-                                        }
-                                }
-
-                                try {
-                                        await reader.cancel();
-                                } catch {
-                                        // noop
-                                }
-
-                                const blob = new Blob(chunks, { type: contentType });
-                                if (signal.aborted) {
-                                        return null;
-                                }
-                                const objectUrl = URL.createObjectURL(blob);
-                                return capturePosterWithVideo(objectUrl, signal, {
-                                        crossOrigin: null,
-                                        revoke: () => URL.revokeObjectURL(objectUrl),
-                                });
-                        }
-                } catch {
-                        // noop — fall back to reading the full blob below.
-                }
-
-                if (signal.aborted) {
-                        return null;
-                }
-
-                let blob: Blob;
-                try {
-                        blob = await response.blob();
-                } catch {
-                        return null;
-                }
-
-                if (signal.aborted) {
-                        return null;
-                }
-
-                const objectUrl = URL.createObjectURL(blob);
-                return capturePosterWithVideo(objectUrl, signal, {
-                        crossOrigin: null,
-                        revoke: () => URL.revokeObjectURL(objectUrl),
-                });
-        }
-
-        async function generateVideoPoster(url: string, signal: AbortSignal): Promise<string | null> {
-                const sameOrigin = isSameOriginUrl(url);
-                const crossOrigin = sameOrigin ? null : 'anonymous';
-
-                try {
-                        const directPoster = await capturePosterWithVideo(url, signal, { crossOrigin });
-                        if (signal.aborted) {
-                                return null;
-                        }
-                        if (directPoster !== null) {
-                                return directPoster;
-                        }
-                } catch {
-                        // noop — fall back to fetch approach.
-                }
-
-                if (signal.aborted) {
-                        return null;
-                }
-
-                try {
-                        return await capturePosterFromFetch(url, signal, sameOrigin);
-                } catch {
-                        return null;
-                }
-        }
-
         function createVideoFallbackGradient(key: string): string {
                 if (!key) {
                         key = 'fallback';
@@ -1223,67 +901,6 @@
                 activeVideoAttachments = next;
         }
 
-        function cleanupVideoPosterTasks() {
-                for (const cancel of videoPosterTasks.values()) {
-                        try {
-                                cancel();
-                        } catch {
-                                // noop
-                        }
-                }
-                videoPosterTasks.clear();
-        }
-
-        function stopVideoPosterTask(key: string) {
-                const cancel = videoPosterTasks.get(key);
-                if (!cancel) return;
-                videoPosterTasks.delete(key);
-                try {
-                        cancel();
-                } catch {
-                        // noop
-                }
-        }
-
-        function storeVideoPoster(key: string, value: string | null) {
-                videoPreviewPosters = { ...videoPreviewPosters, [key]: value };
-                if (value) {
-                        clearVideoPosterFailure(key);
-                }
-        }
-
-        function requestVideoPoster(key: string, url: string): void {
-                if (typeof window === 'undefined') {
-                        return;
-                }
-                if (videoPreviewPosters[key] !== undefined || videoPosterTasks.has(key)) {
-                        return;
-                }
-
-                const controller = new AbortController();
-                const { signal } = controller;
-
-                const run = async () => {
-                        try {
-                                const poster = await generateVideoPoster(url, signal);
-                                if (signal.aborted || componentDestroyed) {
-                                        return;
-                                }
-                                storeVideoPoster(key, poster);
-                        } catch {
-                                // noop
-                        } finally {
-                                videoPosterTasks.delete(key);
-                        }
-                };
-
-                videoPosterTasks.set(key, () => {
-                        controller.abort();
-                });
-
-                void run();
-        }
-
         function clearVideoPosterFailure(key: string) {
                 if (!videoPreviewPosterFailures[key]) {
                         return;
@@ -1304,11 +921,8 @@
                 clearVideoPosterFailure(key);
         }
 
-        function handleVideoPosterError(key: string, url?: string | null) {
+        function handleVideoPosterError(key: string) {
                 markVideoPosterFailed(key);
-                if (url) {
-                        requestVideoPoster(key, url);
-                }
         }
 
         function resolveChannelPermissions(): number {
@@ -1478,42 +1092,20 @@
                         }
                         const key = attachmentStableKey(attachment, index);
                         videoKeys.add(key);
-                        if (!meta.previewUrl) {
-                                requestVideoPoster(key, meta.url);
-                        }
                 });
 
-                for (const key of Array.from(videoPosterTasks.keys())) {
-                        if (!videoKeys.has(key)) {
-                                stopVideoPosterTask(key);
-                        }
-                }
-
-                const storedKeys = Object.keys(videoPreviewPosters);
-                if (!storedKeys.length) {
+                if (!videoPreviewPosterFailures || !Object.keys(videoPreviewPosterFailures).length) {
                         return;
                 }
 
-                const next = { ...videoPreviewPosters };
                 const nextFailures = { ...videoPreviewPosterFailures };
-                let changed = false;
                 let failuresChanged = false;
-                for (const key of storedKeys) {
-                        if (!videoKeys.has(key)) {
-                                delete next[key];
-                                changed = true;
-                        }
-                }
 
                 for (const key of Object.keys(nextFailures)) {
                         if (!videoKeys.has(key)) {
                                 delete nextFailures[key];
                                 failuresChanged = true;
                         }
-                }
-
-                if (changed) {
-                        videoPreviewPosters = next;
                 }
 
                 if (failuresChanged) {
@@ -1848,9 +1440,7 @@
         }
 
         onDestroy(() => {
-                componentDestroyed = true;
                 detachImagePreviewResize();
-                cleanupVideoPosterTasks();
         });
 
         function attachImagePreviewResize() {
@@ -2470,8 +2060,7 @@
                                                                         </div>
                                                                 {:else if meta.kind === 'video' && meta.url}
                                                                         {@const attachmentKey = attachmentStableKey(attachment, index)}
-                                                                        {@const storedPreviewPoster = videoPreviewPosters[attachmentKey] ?? null}
-                                                                        {@const previewPoster = storedPreviewPoster ?? meta.previewUrl ?? null}
+                                                                        {@const previewPoster = meta.previewUrl ?? null}
                                                                         {@const previewPosterFailed = Boolean(videoPreviewPosterFailures[attachmentKey])}
                                                                         {@const shouldUseFallbackPoster = !previewPoster || previewPosterFailed}
                                                                         {@const previewFallbackGradient = createVideoFallbackGradient(attachmentKey)}
@@ -2555,7 +2144,7 @@
                                                                                                                         class="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                                                                                                                         loading="lazy"
                                                                                                                         onload={() => handleVideoPosterLoad(attachmentKey)}
-                                                                                                                        onerror={() => handleVideoPosterError(attachmentKey, meta.url)}
+                                                                                                                        onerror={() => handleVideoPosterError(attachmentKey)}
                                                                                                                 />
                                                                                                                 <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/40"></div>
                                                                                                         {:else}
