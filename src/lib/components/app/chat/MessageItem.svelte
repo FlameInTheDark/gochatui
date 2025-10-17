@@ -828,6 +828,7 @@
         }
         let activeVideoAttachments = $state<Record<string, boolean>>({});
         let videoPreviewPosters = $state<Record<string, string | null>>({});
+        let videoPreviewPosterFailures = $state<Record<string, boolean>>({});
         let failedPreviewKeys = $state<Record<string, true>>({});
 
         function markPreviewFailure(key: string) {
@@ -1246,6 +1247,9 @@
 
         function storeVideoPoster(key: string, value: string | null) {
                 videoPreviewPosters = { ...videoPreviewPosters, [key]: value };
+                if (value) {
+                        clearVideoPosterFailure(key);
+                }
         }
 
         function requestVideoPoster(key: string, url: string): void {
@@ -1278,6 +1282,33 @@
                 });
 
                 void run();
+        }
+
+        function clearVideoPosterFailure(key: string) {
+                if (!videoPreviewPosterFailures[key]) {
+                        return;
+                }
+                const next = { ...videoPreviewPosterFailures };
+                delete next[key];
+                videoPreviewPosterFailures = next;
+        }
+
+        function markVideoPosterFailed(key: string) {
+                if (videoPreviewPosterFailures[key]) {
+                        return;
+                }
+                videoPreviewPosterFailures = { ...videoPreviewPosterFailures, [key]: true };
+        }
+
+        function handleVideoPosterLoad(key: string) {
+                clearVideoPosterFailure(key);
+        }
+
+        function handleVideoPosterError(key: string, url?: string | null) {
+                markVideoPosterFailed(key);
+                if (url) {
+                        requestVideoPoster(key, url);
+                }
         }
 
         function resolveChannelPermissions(): number {
@@ -1464,7 +1495,9 @@
                 }
 
                 const next = { ...videoPreviewPosters };
+                const nextFailures = { ...videoPreviewPosterFailures };
                 let changed = false;
+                let failuresChanged = false;
                 for (const key of storedKeys) {
                         if (!videoKeys.has(key)) {
                                 delete next[key];
@@ -1472,8 +1505,19 @@
                         }
                 }
 
+                for (const key of Object.keys(nextFailures)) {
+                        if (!videoKeys.has(key)) {
+                                delete nextFailures[key];
+                                failuresChanged = true;
+                        }
+                }
+
                 if (changed) {
                         videoPreviewPosters = next;
+                }
+
+                if (failuresChanged) {
+                        videoPreviewPosterFailures = nextFailures;
                 }
         });
 
@@ -2426,7 +2470,10 @@
                                                                         </div>
                                                                 {:else if meta.kind === 'video' && meta.url}
                                                                         {@const attachmentKey = attachmentStableKey(attachment, index)}
-                                                                        {@const previewPoster = meta.previewUrl ?? videoPreviewPosters[attachmentKey] ?? null}
+                                                                        {@const storedPreviewPoster = videoPreviewPosters[attachmentKey] ?? null}
+                                                                        {@const previewPoster = storedPreviewPoster ?? meta.previewUrl ?? null}
+                                                                        {@const previewPosterFailed = Boolean(videoPreviewPosterFailures[attachmentKey])}
+                                                                        {@const shouldUseFallbackPoster = !previewPoster || previewPosterFailed}
                                                                         {@const previewFallbackGradient = createVideoFallbackGradient(attachmentKey)}
                                                                         {@const videoHasExplicitDimensions = meta.aspectRatio != null}
                                                                         {@const previewAspectRatio =
@@ -2443,10 +2490,13 @@
                                                                                                 class="relative h-full w-full bg-black"
                                                                                                 style={visualAttachmentMediaStyle}
                                                                                                 style:aspect-ratio={previewAspectRatio}
+                                                                                                style:background-image={shouldUseFallbackPoster
+                                                                                                        ? previewFallbackGradient
+                                                                                                        : undefined}
                                                                                         >
                                                                                                 <VideoAttachmentPlayer
                                                                                                         src={meta.url}
-                                                                                                        poster={previewPoster}
+                                                                                                        poster={shouldUseFallbackPoster ? undefined : previewPoster}
                                                                                                         mediaStyle={`${visualAttachmentMediaStyle} display: block;${videoHasExplicitDimensions ? '' : ' width: 100%; height: 100%;'}`}
                                                                                                         preload="metadata"
                                                                                                         playsinline
@@ -2494,21 +2544,26 @@
                                                                                                         class="relative h-full w-full overflow-hidden bg-black"
                                                                                                         style:aspect-ratio={previewAspectRatio}
                                                                                                         style={visualAttachmentMediaStyle}
+                                                                                                        style:background-image={shouldUseFallbackPoster
+                                                                                                                ? previewFallbackGradient
+                                                                                                                : undefined}
                                                                                                 >
-                                                                                                        {#if previewPoster}
+                                                                                                        {#if previewPoster && !previewPosterFailed}
                                                                                                                 <img
                                                                                                                         src={previewPoster}
                                                                                                                         alt={`Preview frame for ${meta.name}`}
                                                                                                                         class="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                                                                                                                         loading="lazy"
+                                                                                                                        onload={() => handleVideoPosterLoad(attachmentKey)}
+                                                                                                                        onerror={() => handleVideoPosterError(attachmentKey, meta.url)}
                                                                                                                 />
                                                                                                                 <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/40"></div>
-                                                                                                       {:else}
+                                                                                                        {:else}
                                                                                                                 <div
                                                                                                                         class="absolute inset-0 bg-black"
                                                                                                                         style:background-image={previewFallbackGradient}
                                                                                                                 ></div>
-                                                                                                       {/if}
+                                                                                                        {/if}
                                                                                                         <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 text-white transition group-hover:bg-black/40">
                                                                                                                 <span class="rounded-full border border-white/60 bg-black/40 p-3">
                                                                                                                         <Play class="h-6 w-6" stroke-width={2} />
