@@ -1158,6 +1158,22 @@
                 }
         }
 
+        function createVideoFallbackGradient(key: string): string {
+                if (!key) {
+                        key = 'fallback';
+                }
+
+                let hash = 0;
+                for (let index = 0; index < key.length; index += 1) {
+                        hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+                }
+
+                const hue = hash % 360;
+                const secondHue = (hue + 60) % 360;
+
+                return `linear-gradient(135deg, hsl(${hue}, 70%, 55%), hsl(${secondHue}, 65%, 45%))`;
+        }
+
         function attachmentStableKey(
                 attachment: MessageAttachment | undefined,
                 index: number
@@ -2411,6 +2427,7 @@
                                                                 {:else if meta.kind === 'video' && meta.url}
                                                                         {@const attachmentKey = attachmentStableKey(attachment, index)}
                                                                         {@const previewPoster = meta.previewUrl ?? videoPreviewPosters[attachmentKey] ?? null}
+                                                                        {@const previewFallbackGradient = createVideoFallbackGradient(attachmentKey)}
                                                                         {@const videoHasExplicitDimensions = meta.aspectRatio != null}
                                                                         {@const previewAspectRatio =
                                                                                         meta.aspectRatio ?? `${VISUAL_ATTACHMENT_MAX_DIMENSION} / ${VISUAL_ATTACHMENT_MAX_DIMENSION}`}
@@ -2486,9 +2503,12 @@
                                                                                                                         loading="lazy"
                                                                                                                 />
                                                                                                                 <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/40"></div>
-                                                                                                        {:else}
-                                                                                                                <div class="absolute inset-0 bg-black"></div>
-                                                                                                        {/if}
+                                                                                                       {:else}
+                                                                                                                <div
+                                                                                                                        class="absolute inset-0 bg-black"
+                                                                                                                        style:background-image={previewFallbackGradient}
+                                                                                                                ></div>
+                                                                                                       {/if}
                                                                                                         <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 text-white transition group-hover:bg-black/40">
                                                                                                                 <span class="rounded-full border border-white/60 bg-black/40 p-3">
                                                                                                                         <Play class="h-6 w-6" stroke-width={2} />
