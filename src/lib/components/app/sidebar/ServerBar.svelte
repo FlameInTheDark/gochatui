@@ -527,9 +527,10 @@
 			role="presentation"
 		></div>
 		{#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
-			{#if item.type === 'guild'}
-				{@const guildUnread = guildHasUnread(item.guildId)}
-				<div class="group relative flex justify-center">
+                        {#if item.type === 'guild'}
+                                {@const guildUnread = guildHasUnread(item.guildId)}
+                                {@const guildIcon = guildIconUrl(item.guild)}
+                                <div class="group relative flex justify-center">
                                         <button
                                                 class={`relative flex h-12 w-12 transform items-center justify-center overflow-hidden rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
@@ -550,7 +551,6 @@
                                                 onclick={() => selectGuildFromSidebar(item.guildId)}
                                                 oncontextmenu={(event) => openGuildMenu(event, item.guild)}
                                         >
-                                                {@const guildIcon = guildIconUrl(item.guild)}
                                                 {#if guildIcon}
                                                         <img
                                                                 src={guildIcon}
