@@ -128,11 +128,14 @@
                                         dispatch('updated', [updated]);
                                 } catch (e) {
                                         const err = e as {
-                                                response?: { data?: { message?: string } };
+                                                response?: { status?: number; data?: { message?: string } };
                                                 message?: string;
                                         };
+                                        const statusCode = err.response?.status;
                                         const message =
-                                                err.response?.data?.message ?? err.message ?? 'Attachment failed';
+                                                statusCode === 413
+                                                        ? 'File size is too large'
+                                                        : err.response?.data?.message ?? err.message ?? 'Attachment failed';
                                         error = message;
                                         dispatch('updated', [
                                                 {
@@ -274,43 +277,45 @@
         }
 </script>
 
-<div
-	class="flex items-center gap-2"
-	role="button"
-	tabindex="0"
-	ondragover={(e: DragEvent) => e.preventDefault()}
-	ondrop={(e: DragEvent) => {
-		e.preventDefault();
-		const dt = e.dataTransfer;
-		if (!dt) return;
-		const files = dt.files;
-		if (files && files.length) {
-			const inputLike: Pick<HTMLInputElement, 'files'> = { files };
-			pickFiles({ target: inputLike } as unknown as Event);
-		}
-	}}
->
-        <label
-                class={inline
-                        ? 'grid h-8 w-8 cursor-pointer place-items-center rounded-md hover:bg-[var(--panel)]'
-                        : 'cursor-pointer rounded-md border border-[var(--stroke)] px-2 py-1'}
-                use:tooltip={() => (loading ? 'Uploading…' : 'Attach files')}
+<div class="flex flex-col gap-1">
+        <div
+                class="flex items-center gap-2"
+                role="button"
+                tabindex="0"
+                ondragover={(e: DragEvent) => e.preventDefault()}
+                ondrop={(e: DragEvent) => {
+                        e.preventDefault();
+                        const dt = e.dataTransfer;
+                        if (!dt) return;
+                        const files = dt.files;
+                        if (files && files.length) {
+                                const inputLike: Pick<HTMLInputElement, 'files'> = { files };
+                                pickFiles({ target: inputLike } as unknown as Event);
+                        }
+                }}
         >
-		<input type="file" class="hidden" multiple onchange={pickFiles} />
-		{#if inline}
-                        {#if loading}
-                                <LoaderCircle class="h-[18px] w-[18px] animate-spin" stroke-width={2} />
+                <label
+                        class={inline
+                                ? 'grid h-8 w-8 cursor-pointer place-items-center rounded-md hover:bg-[var(--panel)]'
+                                : 'cursor-pointer rounded-md border border-[var(--stroke)] px-2 py-1'}
+                        use:tooltip={() => (loading ? 'Uploading…' : 'Attach files')}
+                >
+                        <input type="file" class="hidden" multiple onchange={pickFiles} />
+                        {#if inline}
+                                {#if loading}
+                                        <LoaderCircle class="h-[18px] w-[18px] animate-spin" stroke-width={2} />
+                                {:else}
+                                        <Paperclip class="h-[18px] w-[18px]" stroke-width={2} />
+                                {/if}
                         {:else}
-                                <Paperclip class="h-[18px] w-[18px]" stroke-width={2} />
+                                {loading ? 'Uploading…' : 'Attach'}
                         {/if}
-		{:else}
-			{loading ? 'Uploading…' : 'Attach'}
-		{/if}
-	</label>
-	{#if !inline}
-		{#if error}<span class="text-xs text-red-400">{error}</span>{/if}
-		{#if attachments.length}
-			<span class="text-xs text-[var(--muted)]">{attachments.length} attachment(s)</span>
-		{/if}
-	{/if}
+                </label>
+                {#if !inline && attachments.length}
+                        <span class="text-xs text-[var(--muted)]">{attachments.length} attachment(s)</span>
+                {/if}
+        </div>
+        {#if error}
+                <span class="text-xs text-[var(--danger)]" role="alert">{error}</span>
+        {/if}
 </div>
