@@ -941,16 +941,20 @@
 		return 0;
 	}
 
-	$effect(() => {
-		const currentId = $me?.id != null ? String($me.id) : null;
-		const authorRaw = (message as any)?.author?.id;
-		const authorStr = authorRaw == null ? null : String(authorRaw);
-		const perms = resolveChannelPermissions();
-		const own = currentId != null && authorStr != null && currentId === authorStr;
-		const manage = Boolean(perms & PERMISSION_MANAGE_MESSAGES);
-		canEditMessage = own;
-		canDeleteMessage = own || manage;
-	});
+        $effect(() => {
+                const currentId = $me?.id != null ? String($me.id) : null;
+                const authorRaw = (message as any)?.author?.id;
+                const authorStr = authorRaw == null ? null : String(authorRaw);
+                const perms = resolveChannelPermissions();
+                const own = currentId != null && authorStr != null && currentId === authorStr;
+                const manage = Boolean(perms & PERMISSION_MANAGE_MESSAGES);
+                const attachments = (message.attachments ?? []) as MessageAttachment[];
+                const hasTextContent =
+                        typeof message.content === 'string' && message.content.trim().length > 0;
+                const attachmentsOnly = attachments.length > 0 && !hasTextContent;
+                canEditMessage = own && !attachmentsOnly;
+                canDeleteMessage = own || manage;
+        });
 
         $effect(() => {
                 const guildRoleCacheTick = $guildRoleCacheState;
@@ -1123,8 +1127,11 @@
 		editTextarea.style.overflowY = nextHeight > viewportHeight ? 'auto' : 'hidden';
 	}
 
-	async function startEditing() {
-		draft = message.content ?? '';
+        async function startEditing() {
+                if (!canEditMessage) {
+                        return;
+                }
+                draft = message.content ?? '';
 		isEditing = true;
 		await tick();
 		autoSizeEditTextarea();
