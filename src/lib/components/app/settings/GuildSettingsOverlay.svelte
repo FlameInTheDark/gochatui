@@ -172,7 +172,7 @@
                                 }
                                 patchPayload.icon_id =
                                         selectedIconId === NO_ICON_ID
-                                                ? (null as any)
+                                                ? (0n as any)
                                                 : (BigInt(selectedIconId) as any);
                         }
 

@@ -133,7 +133,7 @@
                         if (selectedAvatarId !== null && selectedAvatarId !== normalizedCurrentAvatarId) {
                                 patchPayload.avatar =
                                         selectedAvatarId === NO_AVATAR_ID
-                                                ? (null as any)
+                                                ? (0n as any)
                                                 : (BigInt(selectedAvatarId) as any);
                         }
 
