@@ -1,27 +1,66 @@
 <script lang="ts">
-	import AvatarCropper from './AvatarCropper.svelte';
-	import { auth } from '$lib/stores/auth';
-	import { resolveAvatarUrl } from '$lib/utils/avatar';
+        import { onMount } from 'svelte';
+        import AvatarCropper from './AvatarCropper.svelte';
+        import { auth } from '$lib/stores/auth';
+        import { resolveAvatarUrl } from '$lib/utils/avatar';
 
-	const me = auth.user;
+        type AvatarPreview = {
+                id: string;
+                url: string;
+                width?: number | null;
+                height?: number | null;
+        };
 
-	let name = '';
-	let nameInitialized = false;
-	let loading = false;
-	let message: string | null = null;
-	let messageVariant: 'success' | 'error' | null = null;
+        const NO_AVATAR_ID = '__none__';
 
-	let croppedAvatar: string | null = null;
-	let fallbackInitial = '?';
-	let existingAvatarUrl: string | null = null;
+        const me = auth.user;
 
-	$: existingAvatarUrl = resolveAvatarUrl($me);
-	$: if (!nameInitialized && $me) {
-		name = $me.name ?? '';
-		nameInitialized = true;
-	}
+        let name = '';
+        let nameInitialized = false;
+        let loading = false;
+        let message: string | null = null;
+        let messageVariant: 'success' | 'error' | null = null;
 
-	$: fallbackInitial = avatarInitial(name);
+        let croppedAvatar: string | null = null;
+        let fallbackInitial = '?';
+        let baseAvatarUrl: string | null = null;
+        let previewAvatarUrl: string | null = null;
+
+        let avatarPreviews: AvatarPreview[] = [];
+        let avatarsLoading = false;
+        let avatarsError: string | null = null;
+
+        let selectedAvatarId: string | null = null;
+        let avatarSelectionDirty = false;
+
+        onMount(() => {
+                void loadAvailableAvatars();
+        });
+
+        $: baseAvatarUrl = resolveAvatarUrl($me);
+        $: if (!nameInitialized && $me) {
+                name = $me.name ?? '';
+                nameInitialized = true;
+        }
+
+        $: fallbackInitial = avatarInitial(name);
+
+        $: if (!avatarSelectionDirty && !croppedAvatar) {
+                selectedAvatarId = extractAvatarId($me) ?? NO_AVATAR_ID;
+        }
+
+        $: previewAvatarUrl =
+                croppedAvatar ??
+                (selectedAvatarId === NO_AVATAR_ID
+                        ? null
+                        : selectedAvatarId
+                        ? findAvatarUrl(selectedAvatarId) ?? baseAvatarUrl
+                        : baseAvatarUrl);
+
+        $: if (croppedAvatar) {
+                selectedAvatarId = null;
+                avatarSelectionDirty = true;
+        }
 
 	async function uploadCroppedAvatar(dataUrl: string) {
 		const response = await fetch(dataUrl);
@@ -82,24 +121,42 @@
 			const trimmedName = name.trim();
 			name = trimmedName;
 
-			if (trimmedName !== currentName) {
-				await auth.api.user.userMePatch({
-					userModifyUserRequest: { name: trimmedName }
-				});
-				updated = true;
-				shouldReloadMe = true;
-			}
+                        const patchPayload: Record<string, unknown> = {};
 
-			if (croppedAvatar) {
-				await uploadCroppedAvatar(croppedAvatar);
-				updated = true;
-				shouldReloadMe = true;
-			}
+                        if (trimmedName !== currentName) {
+                                patchPayload.name = trimmedName;
+                        }
 
-			if (shouldReloadMe) {
-				await auth.loadMe();
-				croppedAvatar = null;
-			}
+                        const currentAvatarId = extractAvatarId($me);
+                        const normalizedCurrentAvatarId = currentAvatarId ?? NO_AVATAR_ID;
+
+                        if (selectedAvatarId !== null && selectedAvatarId !== normalizedCurrentAvatarId) {
+                                patchPayload.avatar =
+                                        selectedAvatarId === NO_AVATAR_ID
+                                                ? (null as any)
+                                                : (BigInt(selectedAvatarId) as any);
+                        }
+
+                        if (Object.keys(patchPayload).length) {
+                                await auth.api.user.userMePatch({
+                                        userModifyUserRequest: patchPayload
+                                });
+                                updated = true;
+                                shouldReloadMe = true;
+                        }
+
+                        if (croppedAvatar) {
+                                await uploadCroppedAvatar(croppedAvatar);
+                                updated = true;
+                                shouldReloadMe = true;
+                        }
+
+                        if (shouldReloadMe) {
+                                await auth.loadMe();
+                                croppedAvatar = null;
+                                avatarSelectionDirty = false;
+                                await loadAvailableAvatars();
+                        }
 
 			if (updated) {
 				message = 'Profile updated';
@@ -122,26 +179,176 @@
 		}
 	}
 
-	function avatarInitial(source: string | null | undefined) {
-		const trimmed = (source ?? '').trim();
-		if (!trimmed) return '?';
-		return trimmed.charAt(0).toUpperCase();
-	}
+        function avatarInitial(source: string | null | undefined) {
+                const trimmed = (source ?? '').trim();
+                if (!trimmed) return '?';
+                return trimmed.charAt(0).toUpperCase();
+        }
+
+        function extractAvatarId(user: unknown): string | null {
+                if (!user || typeof user !== 'object') return null;
+                const record = user as Record<string, unknown>;
+                const avatar = record.avatar;
+                if (avatar && typeof avatar === 'object') {
+                        const avatarRecord = avatar as Record<string, unknown>;
+                        const id = avatarRecord.id ?? avatarRecord.avatar_id ?? avatarRecord.avatarId;
+                        if (id != null) {
+                                try {
+                                        return BigInt(id as any).toString();
+                                } catch {
+                                        return String(id);
+                                }
+                        }
+                }
+                const fallbackId = record.avatar_id ?? record.avatarId ?? (typeof avatar === 'string' ? avatar : null);
+                if (fallbackId == null) return null;
+                try {
+                        return BigInt(fallbackId as any).toString();
+                } catch {
+                        return String(fallbackId);
+                }
+        }
+
+        function findAvatarUrl(id: string | null | undefined): string | null {
+                if (!id) return null;
+                const entry = avatarPreviews.find((preview) => preview.id === id);
+                return entry?.url ?? null;
+        }
+
+        function selectExistingAvatar(id: string) {
+                croppedAvatar = null;
+                selectedAvatarId = id;
+                avatarSelectionDirty = true;
+        }
+
+        function selectNoAvatar() {
+                croppedAvatar = null;
+                selectedAvatarId = NO_AVATAR_ID;
+                avatarSelectionDirty = true;
+        }
+
+        async function loadAvailableAvatars() {
+                if (avatarsLoading) return;
+                avatarsLoading = true;
+                avatarsError = null;
+                try {
+                        const response = await auth.api.user.userMeAvatarsGet();
+                        const items = Array.isArray(response.data) ? response.data : [];
+                        const mapped: AvatarPreview[] = [];
+                        for (const item of items) {
+                                const record = item as Record<string, unknown>;
+                                const idRaw = record.id;
+                                const url = typeof record.url === 'string' ? record.url : null;
+                                if (idRaw == null || !url) continue;
+                                let id: string;
+                                try {
+                                        id = BigInt(idRaw as any).toString();
+                                } catch {
+                                        id = String(idRaw);
+                                }
+                                mapped.push({
+                                        id,
+                                        url,
+                                        width: (record.width as number | null | undefined) ?? null,
+                                        height: (record.height as number | null | undefined) ?? null
+                                });
+                        }
+                        avatarPreviews = mapped;
+                } catch (error) {
+                        console.error(error);
+                        avatarsError = 'Failed to load previously uploaded avatars.';
+                } finally {
+                        avatarsLoading = false;
+                }
+        }
 </script>
 
 <div class="space-y-4">
-	<AvatarCropper
-		bind:croppedDataUrl={croppedAvatar}
-		{fallbackInitial}
-		initialAvatarUrl={existingAvatarUrl}
-	/>
+        <AvatarCropper
+                bind:croppedDataUrl={croppedAvatar}
+                {fallbackInitial}
+                initialAvatarUrl={previewAvatarUrl}
+        />
 
-	<div class="panel space-y-3 p-4">
-		<div class="text-sm font-medium">Profile</div>
-		<input
-			class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-			placeholder="Display name"
-			bind:value={name}
+        <div class="panel space-y-3 p-4">
+                <div class="text-sm font-medium">Avatar history</div>
+                <p class="text-xs text-[var(--muted)]">
+                        Pick one of your previous avatars or clear your avatar entirely.
+                </p>
+                {#if avatarsError}
+                        <p class="text-xs text-red-400">{avatarsError}</p>
+                {/if}
+                {#if avatarsLoading}
+                        <p class="text-xs text-[var(--muted)]">Loading avatars…</p>
+                {/if}
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-5">
+                        <button
+                                type="button"
+                                class={`group flex flex-col items-center gap-2 text-xs transition ${
+                                        selectedAvatarId === NO_AVATAR_ID
+                                                ? 'text-[var(--brand)]'
+                                                : 'text-[var(--muted)] hover:text-[var(--text)]'
+                                }`}
+                                onclick={selectNoAvatar}
+                                aria-pressed={selectedAvatarId === NO_AVATAR_ID}
+                        >
+                                <span
+                                        class={`flex h-16 w-16 items-center justify-center rounded-full border text-base transition ${
+                                                selectedAvatarId === NO_AVATAR_ID
+                                                        ? 'border-[var(--brand)] bg-[var(--panel-strong)] text-[var(--brand)]'
+                                                        : 'border-[var(--stroke)] bg-[var(--panel)] text-[var(--muted)] group-hover:border-[var(--brand)]/60'
+                                        }`}
+                                >
+                                        ∅
+                                </span>
+                                <span>None</span>
+                        </button>
+
+                        {#each avatarPreviews as avatar (avatar.id)}
+                                <button
+                                        type="button"
+                                        class={`group flex flex-col items-center gap-2 text-xs transition ${
+                                                selectedAvatarId === avatar.id
+                                                        ? 'text-[var(--brand)]'
+                                                        : 'text-[var(--muted)] hover:text-[var(--text)]'
+                                        }`}
+                                        onclick={() => selectExistingAvatar(avatar.id)}
+                                        aria-pressed={selectedAvatarId === avatar.id}
+                                >
+                                        <span
+                                                class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border transition ${
+                                                        selectedAvatarId === avatar.id
+                                                                ? 'border-[var(--brand)] ring-2 ring-[var(--brand)]/60'
+                                                                : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
+                                                }`}
+                                        >
+                                                <img
+                                                        src={avatar.url}
+                                                        alt="Previous avatar"
+                                                        class="h-full w-full object-cover"
+                                                />
+                                        </span>
+                                        <span>
+                                                {#if avatar.width && avatar.height}
+                                                        {avatar.width}×{avatar.height}
+                                                {:else}
+                                                        Avatar
+                                                {/if}
+                                        </span>
+                                </button>
+                        {/each}
+                </div>
+                {#if !avatarsLoading && !avatarPreviews.length}
+                        <p class="text-xs text-[var(--muted)]">No previous avatars yet.</p>
+                {/if}
+        </div>
+
+        <div class="panel space-y-3 p-4">
+                <div class="text-sm font-medium">Profile</div>
+                <input
+                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                        placeholder="Display name"
+                        bind:value={name}
 		/>
 		<div class="flex justify-end gap-2">
 			<button
