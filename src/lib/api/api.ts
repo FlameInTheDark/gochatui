@@ -2633,6 +2633,44 @@ export const GuildApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
+         * Deletes a guild icon. Only the guild owner may delete.
+         * @summary Delete guild icon by ID
+         * @param {number} guildId Guild ID
+         * @param {number} iconId Icon ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdIconsIconIdDelete: async (guildId: number, iconId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'guildId' is not null or undefined
+            assertParamExists('guildGuildIdIconsIconIdDelete', 'guildId', guildId)
+            // verify required parameter 'iconId' is not null or undefined
+            assertParamExists('guildGuildIdIconsIconIdDelete', 'iconId', iconId)
+            const localVarPath = `/guild/{guild_id}/icons/{icon_id}`
+                .replace(`{${"guild_id"}}`, encodeURIComponent(String(guildId)))
+                .replace(`{${"icon_id"}}`, encodeURIComponent(String(iconId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {number} guildId Guild ID
@@ -2905,6 +2943,20 @@ export const GuildApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Deletes a guild icon. Only the guild owner may delete.
+         * @summary Delete guild icon by ID
+         * @param {number} guildId Guild ID
+         * @param {number} iconId Icon ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async guildGuildIdIconsIconIdDelete(guildId: number, iconId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.guildGuildIdIconsIconIdDelete(guildId, iconId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['GuildApi.guildGuildIdIconsIconIdDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {number} guildId Guild ID
@@ -3065,6 +3117,16 @@ export const GuildApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.guildGuildIdIconsGet(requestParameters.guildId, options).then((request) => request(axios, basePath));
         },
         /**
+         * Deletes a guild icon. Only the guild owner may delete.
+         * @summary Delete guild icon by ID
+         * @param {GuildApiGuildGuildIdIconsIconIdDeleteRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdIconsIconIdDelete(requestParameters: GuildApiGuildGuildIdIconsIconIdDeleteRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.guildGuildIdIconsIconIdDelete(requestParameters.guildId, requestParameters.iconId, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {GuildApiGuildGuildIdMembersGetRequest} requestParameters Request parameters.
@@ -3212,6 +3274,16 @@ export interface GuildApiInterface {
      * @memberof GuildApiInterface
      */
     guildGuildIdIconsGet(requestParameters: GuildApiGuildGuildIdIconsGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<Array<DtoIcon>>;
+
+    /**
+     * Deletes a guild icon. Only the guild owner may delete.
+     * @summary Delete guild icon by ID
+     * @param {GuildApiGuildGuildIdIconsIconIdDeleteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApiInterface
+     */
+    guildGuildIdIconsIconIdDelete(requestParameters: GuildApiGuildGuildIdIconsIconIdDeleteRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
 
     /**
      * 
@@ -3463,6 +3535,27 @@ export interface GuildApiGuildGuildIdIconsGetRequest {
 }
 
 /**
+ * Request parameters for guildGuildIdIconsIconIdDelete operation in GuildApi.
+ * @export
+ * @interface GuildApiGuildGuildIdIconsIconIdDeleteRequest
+ */
+export interface GuildApiGuildGuildIdIconsIconIdDeleteRequest {
+    /**
+     * Guild ID
+     * @type {number}
+     * @memberof GuildApiGuildGuildIdIconsIconIdDelete
+     */
+    readonly guildId: number
+
+    /**
+     * Icon ID
+     * @type {number}
+     * @memberof GuildApiGuildGuildIdIconsIconIdDelete
+     */
+    readonly iconId: number
+}
+
+/**
  * Request parameters for guildGuildIdMembersGet operation in GuildApi.
  * @export
  * @interface GuildApiGuildGuildIdMembersGetRequest
@@ -3648,6 +3741,18 @@ export class GuildApi extends BaseAPI implements GuildApiInterface {
      */
     public guildGuildIdIconsGet(requestParameters: GuildApiGuildGuildIdIconsGetRequest, options?: RawAxiosRequestConfig) {
         return GuildApiFp(this.configuration).guildGuildIdIconsGet(requestParameters.guildId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Deletes a guild icon. Only the guild owner may delete.
+     * @summary Delete guild icon by ID
+     * @param {GuildApiGuildGuildIdIconsIconIdDeleteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApi
+     */
+    public guildGuildIdIconsIconIdDelete(requestParameters: GuildApiGuildGuildIdIconsIconIdDeleteRequest, options?: RawAxiosRequestConfig) {
+        return GuildApiFp(this.configuration).guildGuildIdIconsIconIdDelete(requestParameters.guildId, requestParameters.iconId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -6970,6 +7075,40 @@ export const UserApiAxiosParamCreator = function (configuration?: Configuration)
             };
         },
         /**
+         * 
+         * @summary Delete my avatar by ID
+         * @param {number} avatarId Avatar ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        userMeAvatarsAvatarIdDelete: async (avatarId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'avatarId' is not null or undefined
+            assertParamExists('userMeAvatarsAvatarIdDelete', 'avatarId', avatarId)
+            const localVarPath = `/user/me/avatars/{avatar_id}`
+                .replace(`{${"avatar_id"}}`, encodeURIComponent(String(avatarId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Returns a list of previously created avatars for the authenticated user.
          * @summary List my avatars
          * @param {*} [options] Override http request option.
@@ -7602,6 +7741,19 @@ export const UserApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 
+         * @summary Delete my avatar by ID
+         * @param {number} avatarId Avatar ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async userMeAvatarsAvatarIdDelete(avatarId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.userMeAvatarsAvatarIdDelete(avatarId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['UserApi.userMeAvatarsAvatarIdDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Returns a list of previously created avatars for the authenticated user.
          * @summary List my avatars
          * @param {*} [options] Override http request option.
@@ -7851,6 +8003,16 @@ export const UserApiFactory = function (configuration?: Configuration, basePath?
             return localVarFp.userMeAvatarPost(requestParameters.userCreateAvatarRequest, options).then((request) => request(axios, basePath));
         },
         /**
+         * 
+         * @summary Delete my avatar by ID
+         * @param {UserApiUserMeAvatarsAvatarIdDeleteRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        userMeAvatarsAvatarIdDelete(requestParameters: UserApiUserMeAvatarsAvatarIdDeleteRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.userMeAvatarsAvatarIdDelete(requestParameters.avatarId, options).then((request) => request(axios, basePath));
+        },
+        /**
          * Returns a list of previously created avatars for the authenticated user.
          * @summary List my avatars
          * @param {*} [options] Override http request option.
@@ -8045,6 +8207,16 @@ export interface UserApiInterface {
     userMeAvatarPost(requestParameters: UserApiUserMeAvatarPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoAvatarUpload>;
 
     /**
+     * 
+     * @summary Delete my avatar by ID
+     * @param {UserApiUserMeAvatarsAvatarIdDeleteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserApiInterface
+     */
+    userMeAvatarsAvatarIdDelete(requestParameters: UserApiUserMeAvatarsAvatarIdDeleteRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
+
+    /**
      * Returns a list of previously created avatars for the authenticated user.
      * @summary List my avatars
      * @param {*} [options] Override http request option.
@@ -8233,6 +8405,20 @@ export interface UserApiUserMeAvatarPostRequest {
      * @memberof UserApiUserMeAvatarPost
      */
     readonly userCreateAvatarRequest: UserCreateAvatarRequest
+}
+
+/**
+ * Request parameters for userMeAvatarsAvatarIdDelete operation in UserApi.
+ * @export
+ * @interface UserApiUserMeAvatarsAvatarIdDeleteRequest
+ */
+export interface UserApiUserMeAvatarsAvatarIdDeleteRequest {
+    /**
+     * Avatar ID
+     * @type {number}
+     * @memberof UserApiUserMeAvatarsAvatarIdDelete
+     */
+    readonly avatarId: number
 }
 
 /**
@@ -8434,6 +8620,18 @@ export class UserApi extends BaseAPI implements UserApiInterface {
      */
     public userMeAvatarPost(requestParameters: UserApiUserMeAvatarPostRequest, options?: RawAxiosRequestConfig) {
         return UserApiFp(this.configuration).userMeAvatarPost(requestParameters.userCreateAvatarRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Delete my avatar by ID
+     * @param {UserApiUserMeAvatarsAvatarIdDeleteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserApi
+     */
+    public userMeAvatarsAvatarIdDelete(requestParameters: UserApiUserMeAvatarsAvatarIdDeleteRequest, options?: RawAxiosRequestConfig) {
+        return UserApiFp(this.configuration).userMeAvatarsAvatarIdDelete(requestParameters.avatarId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
