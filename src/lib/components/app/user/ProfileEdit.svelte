@@ -1,6 +1,7 @@
 <script lang="ts">
         import { onMount } from 'svelte';
         import AvatarCropper from './AvatarCropper.svelte';
+        import { Trash2 } from 'lucide-svelte';
         import { auth } from '$lib/stores/auth';
         import { resolveAvatarUrl } from '$lib/utils/avatar';
 
@@ -29,6 +30,7 @@
         let avatarPreviews: AvatarPreview[] = [];
         let avatarsLoading = false;
         let avatarsError: string | null = null;
+        let deletingAvatarIds: string[] = [];
 
         let selectedAvatarId: string | null = null;
         let avatarSelectionDirty = false;
@@ -281,6 +283,47 @@
                         avatarsLoading = false;
                 }
         }
+
+        function isDeletingAvatar(id: string): boolean {
+                return deletingAvatarIds.includes(id);
+        }
+
+        function markAvatarDeleting(id: string, deleting: boolean) {
+                if (deleting) {
+                        if (!deletingAvatarIds.includes(id)) {
+                                deletingAvatarIds = [...deletingAvatarIds, id];
+                        }
+                } else {
+                        deletingAvatarIds = deletingAvatarIds.filter((existing) => existing !== id);
+                }
+        }
+
+        async function deleteAvatar(id: string) {
+                if (isDeletingAvatar(id)) return;
+                if (selectedAvatarId === id) return;
+
+                avatarsError = null;
+                markAvatarDeleting(id, true);
+                try {
+                        let avatarId: bigint;
+                        try {
+                                avatarId = BigInt(id);
+                        } catch {
+                                throw new Error('Invalid avatar identifier.');
+                        }
+
+                        await auth.api.user.userMeAvatarsAvatarIdDelete({
+                                avatarId: avatarId as any
+                        });
+
+                        avatarPreviews = avatarPreviews.filter((avatar) => avatar.id !== id);
+                } catch (error) {
+                        console.error(error);
+                        avatarsError = 'Failed to delete avatar. Please try again.';
+                } finally {
+                        markAvatarDeleting(id, false);
+                }
+        }
 </script>
 
 <div class="space-y-4">
@@ -323,34 +366,55 @@
                         </button>
 
                         {#each avatarPreviews as avatar (avatar.id)}
-                                <button
-                                        type="button"
-                                        class={`group flex flex-col items-center gap-2 text-xs transition ${
-                                                selectedAvatarId === avatar.id
-                                                        ? 'text-[var(--success)]'
-                                                        : 'text-[var(--muted)] hover:text-[var(--text)]'
-                                        }`}
-                                        onclick={() => selectExistingAvatar(avatar.id)}
-                                        aria-pressed={selectedAvatarId === avatar.id}
-                                        aria-label={avatar.width && avatar.height
-                                                ? `Use ${avatar.width} by ${avatar.height} avatar`
-                                                : 'Use uploaded avatar'}
-                                        data-tooltip-disabled
-                                >
-                                        <span
-                                                class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border transition ${
+                                <div class="group relative">
+                                        <button
+                                                type="button"
+                                                class={`group flex flex-col items-center gap-2 text-xs transition ${
                                                         selectedAvatarId === avatar.id
-                                                                ? 'border-[var(--success)] ring-2 ring-[var(--success)]/60'
-                                                                : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
+                                                                ? 'text-[var(--success)]'
+                                                                : 'text-[var(--muted)] hover:text-[var(--text)]'
                                                 }`}
+                                                onclick={() => selectExistingAvatar(avatar.id)}
+                                                aria-pressed={selectedAvatarId === avatar.id}
+                                                aria-label={avatar.width && avatar.height
+                                                        ? `Use ${avatar.width} by ${avatar.height} avatar`
+                                                        : 'Use uploaded avatar'}
+                                                data-tooltip-disabled
                                         >
-                                                <img
-                                                        src={avatar.url}
-                                                        alt="Previous avatar"
-                                                        class="h-full w-full object-cover"
-                                                />
-                                        </span>
-                                </button>
+                                                <span
+                                                        class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border transition ${
+                                                                selectedAvatarId === avatar.id
+                                                                        ? 'border-[var(--success)] ring-inset ring-2 ring-[var(--success)]/80'
+                                                                        : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
+                                                        }`}
+                                                >
+                                                        <img
+                                                                src={avatar.url}
+                                                                alt="Previous avatar"
+                                                                class="h-full w-full object-cover"
+                                                        />
+                                                </span>
+                                        </button>
+
+                                        {#if selectedAvatarId !== avatar.id}
+                                                <button
+                                                        type="button"
+                                                        class={`absolute -right-2 -top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--panel)] bg-[var(--panel-strong)]/95 text-[var(--muted)] shadow-sm transition hover:text-red-400 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 ${
+                                                                isDeletingAvatar(avatar.id)
+                                                                        ? 'cursor-not-allowed opacity-60'
+                                                                        : 'opacity-0 group-hover:opacity-100'
+                                                        }`}
+                                                        onclick={(event) => {
+                                                                event.stopPropagation();
+                                                                void deleteAvatar(avatar.id);
+                                                        }}
+                                                        aria-label="Delete avatar"
+                                                        disabled={isDeletingAvatar(avatar.id)}
+                                                >
+                                                        <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
+                                                </button>
+                                        {/if}
+                                </div>
                         {/each}
                 </div>
                 {#if !avatarsLoading && !avatarPreviews.length}
