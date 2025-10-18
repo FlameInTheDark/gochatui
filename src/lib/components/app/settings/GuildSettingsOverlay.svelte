@@ -104,7 +104,18 @@
 
         $effect(() => {
                 if (!iconSelectionDirty && !croppedIcon) {
-                        selectedIconId = currentIconId ?? NO_ICON_ID;
+                        const resolvedId = currentIconId;
+                        if (resolvedId) {
+                                selectedIconId = resolvedId;
+                                return;
+                        }
+
+                        if (baseIconUrl) {
+                                selectedIconId = null;
+                                return;
+                        }
+
+                        selectedIconId = NO_ICON_ID;
                 }
         });
 
@@ -455,9 +466,6 @@
                         {#if isGuildOwner}
                                 <div class="panel space-y-3 p-4">
                                         <div class="text-sm font-medium">Icon history</div>
-                                        <p class="text-xs text-[var(--muted)]">
-                                                Select one of your finalized icons or clear the server icon.
-                                        </p>
                                         {#if iconsError}
                                                 <p class="text-xs text-red-400">{iconsError}</p>
                                         {/if}
@@ -474,6 +482,7 @@
                                                         }`}
                                                         onclick={selectNoIcon}
                                                         aria-pressed={selectedIconId === NO_ICON_ID}
+                                                        aria-label="Clear server icon"
                                                 >
                                                         <span
                                                                 class={`flex h-16 w-16 items-center justify-center rounded-xl border text-base transition ${
@@ -484,7 +493,6 @@
                                                         >
                                                                 ∅
                                                         </span>
-                                                        <span>None</span>
                                                 </button>
 
                                                 {#each availableIcons as icon (icon.id)}
@@ -497,6 +505,9 @@
                                                                 }`}
                                                                 onclick={() => selectExistingIcon(icon.id)}
                                                                 aria-pressed={selectedIconId === icon.id}
+                                                                aria-label={icon.width && icon.height
+                                                                        ? `Use ${icon.width} by ${icon.height} icon`
+                                                                        : 'Use uploaded icon'}
                                                         >
                                                                 <span
                                                                         class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border transition ${
@@ -510,13 +521,6 @@
                                                                                 alt="Previous guild icon"
                                                                                 class="h-full w-full object-cover"
                                                                         />
-                                                                </span>
-                                                                <span>
-                                                                        {#if icon.width && icon.height}
-                                                                                {icon.width}×{icon.height}
-                                                                        {:else}
-                                                                                Icon
-                                                                        {/if}
                                                                 </span>
                                                         </button>
                                                 {/each}
