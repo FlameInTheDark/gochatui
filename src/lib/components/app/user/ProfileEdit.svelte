@@ -384,7 +384,7 @@
                                                 <span
                                                         class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border transition ${
                                                                 selectedAvatarId === avatar.id
-                                                                        ? 'border-[var(--success)] ring-2 ring-[var(--success)]/60'
+                                                                        ? 'border-[var(--success)] ring-inset ring-2 ring-[var(--success)]/80'
                                                                         : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
                                                         }`}
                                                 >
