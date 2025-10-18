@@ -245,6 +245,49 @@ export interface DtoAttachmentUpload {
 /**
  * 
  * @export
+ * @interface DtoAvatar
+ */
+export interface DtoAvatar {
+    /**
+     * 
+     * @type {string}
+     * @memberof DtoAvatar
+     */
+    'content_type'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatar
+     */
+    'height'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatar
+     */
+    'id'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatar
+     */
+    'size'?: number;
+    /**
+     * 
+     * @type {string}
+     * @memberof DtoAvatar
+     */
+    'url'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatar
+     */
+    'width'?: number;
+}
+/**
+ * 
+ * @export
  * @interface DtoAvatarData
  */
 export interface DtoAvatarData {
@@ -2556,6 +2599,40 @@ export const GuildApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
+         * Returns a list of previously created icons for a guild. Only the guild owner may access this list.
+         * @summary List guild icons
+         * @param {number} guildId Guild ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdIconsGet: async (guildId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'guildId' is not null or undefined
+            assertParamExists('guildGuildIdIconsGet', 'guildId', guildId)
+            const localVarPath = `/guild/{guild_id}/icons`
+                .replace(`{${"guild_id"}}`, encodeURIComponent(String(guildId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {number} guildId Guild ID
@@ -2815,6 +2892,19 @@ export const GuildApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Returns a list of previously created icons for a guild. Only the guild owner may access this list.
+         * @summary List guild icons
+         * @param {number} guildId Guild ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async guildGuildIdIconsGet(guildId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<DtoIcon>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.guildGuildIdIconsGet(guildId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['GuildApi.guildGuildIdIconsGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {number} guildId Guild ID
@@ -2965,6 +3055,16 @@ export const GuildApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.guildGuildIdIconPost(requestParameters.guildId, requestParameters.guildCreateIconRequest, options).then((request) => request(axios, basePath));
         },
         /**
+         * Returns a list of previously created icons for a guild. Only the guild owner may access this list.
+         * @summary List guild icons
+         * @param {GuildApiGuildGuildIdIconsGetRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdIconsGet(requestParameters: GuildApiGuildGuildIdIconsGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<Array<DtoIcon>> {
+            return localVarFp.guildGuildIdIconsGet(requestParameters.guildId, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Get guild members
          * @param {GuildApiGuildGuildIdMembersGetRequest} requestParameters Request parameters.
@@ -3102,6 +3202,16 @@ export interface GuildApiInterface {
      * @memberof GuildApiInterface
      */
     guildGuildIdIconPost(requestParameters: GuildApiGuildGuildIdIconPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoIconUpload>;
+
+    /**
+     * Returns a list of previously created icons for a guild. Only the guild owner may access this list.
+     * @summary List guild icons
+     * @param {GuildApiGuildGuildIdIconsGetRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApiInterface
+     */
+    guildGuildIdIconsGet(requestParameters: GuildApiGuildGuildIdIconsGetRequest, options?: RawAxiosRequestConfig): AxiosPromise<Array<DtoIcon>>;
 
     /**
      * 
@@ -3339,6 +3449,20 @@ export interface GuildApiGuildGuildIdIconPostRequest {
 }
 
 /**
+ * Request parameters for guildGuildIdIconsGet operation in GuildApi.
+ * @export
+ * @interface GuildApiGuildGuildIdIconsGetRequest
+ */
+export interface GuildApiGuildGuildIdIconsGetRequest {
+    /**
+     * Guild ID
+     * @type {number}
+     * @memberof GuildApiGuildGuildIdIconsGet
+     */
+    readonly guildId: number
+}
+
+/**
  * Request parameters for guildGuildIdMembersGet operation in GuildApi.
  * @export
  * @interface GuildApiGuildGuildIdMembersGetRequest
@@ -3512,6 +3636,18 @@ export class GuildApi extends BaseAPI implements GuildApiInterface {
      */
     public guildGuildIdIconPost(requestParameters: GuildApiGuildGuildIdIconPostRequest, options?: RawAxiosRequestConfig) {
         return GuildApiFp(this.configuration).guildGuildIdIconPost(requestParameters.guildId, requestParameters.guildCreateIconRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Returns a list of previously created icons for a guild. Only the guild owner may access this list.
+     * @summary List guild icons
+     * @param {GuildApiGuildGuildIdIconsGetRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApi
+     */
+    public guildGuildIdIconsGet(requestParameters: GuildApiGuildGuildIdIconsGetRequest, options?: RawAxiosRequestConfig) {
+        return GuildApiFp(this.configuration).guildGuildIdIconsGet(requestParameters.guildId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -6834,6 +6970,36 @@ export const UserApiAxiosParamCreator = function (configuration?: Configuration)
             };
         },
         /**
+         * Returns a list of previously created avatars for the authenticated user.
+         * @summary List my avatars
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        userMeAvatarsGet: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/user/me/avatars`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary List all DM and Group DM channels for current user
          * @param {*} [options] Override http request option.
@@ -7436,6 +7602,18 @@ export const UserApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Returns a list of previously created avatars for the authenticated user.
+         * @summary List my avatars
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async userMeAvatarsGet(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<DtoAvatar>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.userMeAvatarsGet(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['UserApi.userMeAvatarsGet']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary List all DM and Group DM channels for current user
          * @param {*} [options] Override http request option.
@@ -7673,6 +7851,15 @@ export const UserApiFactory = function (configuration?: Configuration, basePath?
             return localVarFp.userMeAvatarPost(requestParameters.userCreateAvatarRequest, options).then((request) => request(axios, basePath));
         },
         /**
+         * Returns a list of previously created avatars for the authenticated user.
+         * @summary List my avatars
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        userMeAvatarsGet(options?: RawAxiosRequestConfig): AxiosPromise<Array<DtoAvatar>> {
+            return localVarFp.userMeAvatarsGet(options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary List all DM and Group DM channels for current user
          * @param {*} [options] Override http request option.
@@ -7856,6 +8043,15 @@ export interface UserApiInterface {
      * @memberof UserApiInterface
      */
     userMeAvatarPost(requestParameters: UserApiUserMeAvatarPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoAvatarUpload>;
+
+    /**
+     * Returns a list of previously created avatars for the authenticated user.
+     * @summary List my avatars
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserApiInterface
+     */
+    userMeAvatarsGet(options?: RawAxiosRequestConfig): AxiosPromise<Array<DtoAvatar>>;
 
     /**
      * 
@@ -8238,6 +8434,17 @@ export class UserApi extends BaseAPI implements UserApiInterface {
      */
     public userMeAvatarPost(requestParameters: UserApiUserMeAvatarPostRequest, options?: RawAxiosRequestConfig) {
         return UserApiFp(this.configuration).userMeAvatarPost(requestParameters.userCreateAvatarRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Returns a list of previously created avatars for the authenticated user.
+     * @summary List my avatars
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserApi
+     */
+    public userMeAvatarsGet(options?: RawAxiosRequestConfig) {
+        return UserApiFp(this.configuration).userMeAvatarsGet(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
