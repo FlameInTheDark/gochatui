@@ -477,7 +477,7 @@
                                                         type="button"
                                                         class={`group flex flex-col items-center gap-2 text-xs transition ${
                                                                 selectedIconId === NO_ICON_ID
-                                                                        ? 'text-[var(--brand)]'
+                                                                        ? 'text-[var(--success)]'
                                                                         : 'text-[var(--muted)] hover:text-[var(--text)]'
                                                         }`}
                                                         onclick={selectNoIcon}
@@ -488,7 +488,7 @@
                                                         <span
                                                                 class={`flex h-16 w-16 items-center justify-center rounded-xl border text-base transition ${
                                                                         selectedIconId === NO_ICON_ID
-                                                                                ? 'border-[var(--brand)] bg-[var(--panel-strong)] text-[var(--brand)]'
+                                                                                ? 'border-[var(--success)] bg-[var(--panel-strong)] text-[var(--success)]'
                                                                                 : 'border-[var(--stroke)] bg-[var(--panel)] text-[var(--muted)] group-hover:border-[var(--brand)]/60'
                                                                 }`}
                                                         >
@@ -501,7 +501,7 @@
                                                                 type="button"
                                                                 class={`group flex flex-col items-center gap-2 text-xs transition ${
                                                                         selectedIconId === icon.id
-                                                                                ? 'text-[var(--brand)]'
+                                                                                ? 'text-[var(--success)]'
                                                                                 : 'text-[var(--muted)] hover:text-[var(--text)]'
                                                                 }`}
                                                                 onclick={() => selectExistingIcon(icon.id)}
@@ -514,7 +514,7 @@
                                                                 <span
                                                                         class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border transition ${
                                                                                 selectedIconId === icon.id
-                                                                                        ? 'border-[var(--brand)] ring-2 ring-[var(--brand)]/60'
+                                                                                        ? 'border-[var(--success)] ring-2 ring-[var(--success)]/60'
                                                                                         : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
                                                                         }`}
                                                                 >
