@@ -11,7 +11,8 @@
 	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
 	import type { ContextMenuItem } from '$lib/stores/contextMenu';
 	import { m } from '$lib/paraglide/messages.js';
-	import { tooltip } from '$lib/actions/tooltip';
+        import { tooltip } from '$lib/actions/tooltip';
+        import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
 	import CodeBlock from './CodeBlock.svelte';
 	import InlineTokens from './InlineTokens.svelte';
 	import InvitePreview from './InvitePreview.svelte';
@@ -1737,6 +1738,7 @@
 <div
         role="listitem"
         class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
+        use:customContextMenuTarget
         onpointerup={handleRootPointerUp}
         oncontextmenu={openMessageMenu}
         data-message-id={messageDomId((message as any)?.id)}
@@ -1751,6 +1753,7 @@
         {:else}
                 <button
                         type="button"
+                        use:customContextMenuTarget
                         class="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-sm"
                         data-user-menu="true"
                         data-tooltip-disabled
@@ -1801,6 +1804,7 @@
 			<div class="flex items-baseline gap-2 pr-20">
                                 <button
                                         type="button"
+                                        use:customContextMenuTarget
                                         class="truncate font-semibold text-[var(--muted)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                                         style:color={primaryRoleColor ?? null}
                                         data-user-menu="true"

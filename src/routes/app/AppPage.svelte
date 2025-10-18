@@ -15,6 +15,7 @@
         import { derived } from 'svelte/store';
         import { m } from '$lib/paraglide/messages.js';
         import { Plus, FolderPlus, Settings } from 'lucide-svelte';
+        import { eventSupportsCustomContextMenu } from '$lib/stores/contextMenu';
         import {
                 PERMISSION_MANAGE_CHANNELS,
                 PERMISSION_MANAGE_GUILD,
@@ -63,12 +64,19 @@
                 appHasFocus.set(document.visibilityState === 'visible' && document.hasFocus());
         };
 
-	const handleKeyDown = (e: KeyboardEvent) => {
-		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-			e.preventDefault();
-			searchOpen.set(true);
-		}
-	};
+        const handleKeyDown = (e: KeyboardEvent) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                        e.preventDefault();
+                        searchOpen.set(true);
+                }
+        };
+
+        const handleGlobalContextMenu = (event: MouseEvent) => {
+                if (eventSupportsCustomContextMenu(event)) {
+                        return;
+                }
+                event.preventDefault();
+        };
 
 	onMount(() => {
 		updateAppFocus();
@@ -128,8 +136,9 @@
 </AuthGate>
 
 <svelte:window
-	onfocus={updateAppFocus}
-	onblur={updateAppFocus}
-	onvisibilitychange={updateAppFocus}
-	onkeydown={handleKeyDown}
-/>
+        onfocus={updateAppFocus}
+        onblur={updateAppFocus}
+        onvisibilitychange={updateAppFocus}
+        onkeydown={handleKeyDown}
+        oncontextmenu={handleGlobalContextMenu}
+/> 

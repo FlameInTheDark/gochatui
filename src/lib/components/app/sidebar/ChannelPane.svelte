@@ -45,6 +45,7 @@
                 normalizePermissionValue
         } from '$lib/utils/permissions';
         import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
+        import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadChannels = unreadChannelsByGuild;
@@ -1046,12 +1047,13 @@
 	</div>
         <div
                 class="scroll-area channel-scroll flex-1 space-y-2 overflow-y-auto p-2"
-		role="region"
-		oncontextmenu={(e: MouseEvent) => {
-			e.preventDefault();
-			openPaneMenu(e);
-		}}
-	>
+                role="region"
+                use:customContextMenuTarget
+                oncontextmenu={(e: MouseEvent) => {
+                        e.preventDefault();
+                        openPaneMenu(e);
+                }}
+        >
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
 			<div
@@ -1094,6 +1096,7 @@
                                                                         class:pl-3={!channelUnread}
                                                                         role="button"
                                                                         tabindex="0"
+                                                                        use:customContextMenuTarget
                                                                         draggable="true"
                                                                         ondragstart={() => startDrag(sec.ch, null)}
                                                                         onclick={() => selectChannel(channelId)}
@@ -1138,9 +1141,10 @@
 										'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
 										? 'rounded-md ring-2 ring-[var(--brand)]'
 										: ''}"
-									role="button"
-									tabindex="0"
-									draggable="true"
+                                                                        role="button"
+                                                                        tabindex="0"
+                                                                        use:customContextMenuTarget
+                                                                        draggable="true"
 									ondragstart={() => startDrag(sec.cat, null)}
 									ondragover={(e) => {
 										e.preventDefault();
@@ -1207,6 +1211,7 @@
                                                                                                 : ''}"
                                                                                         role="button"
                                                                                         tabindex="0"
+                                                                                        use:customContextMenuTarget
                                                                                         draggable="true"
                                                                                         ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
                                                                                         onclick={() => selectChannel(nestedChannelId)}

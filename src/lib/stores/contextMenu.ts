@@ -1,5 +1,36 @@
 import { writable } from 'svelte/store';
 
+export const CUSTOM_CONTEXT_MENU_ATTR = 'data-has-custom-context-menu';
+
+function nodeSupportsCustomContextMenu(node: unknown): boolean {
+        if (typeof Element === 'undefined') return false;
+        if (!(node instanceof Element)) return false;
+        return node.hasAttribute(CUSTOM_CONTEXT_MENU_ATTR);
+}
+
+export function eventSupportsCustomContextMenu(event: MouseEvent): boolean {
+        const path = typeof event.composedPath === 'function' ? event.composedPath() : null;
+        if (Array.isArray(path)) {
+                for (const item of path) {
+                        if (nodeSupportsCustomContextMenu(item)) {
+                                return true;
+                        }
+                }
+        }
+
+        const NodeCtor: typeof Node | undefined = typeof Node !== 'undefined' ? Node : undefined;
+        let current: Node | null =
+                NodeCtor && event.target instanceof NodeCtor ? event.target : null;
+        while (current) {
+                if (nodeSupportsCustomContextMenu(current)) {
+                        return true;
+                }
+                current = current.parentNode;
+        }
+
+        return false;
+}
+
 export type ContextMenuAction = () => void | Promise<void>;
 
 export type ContextMenuItem = {
