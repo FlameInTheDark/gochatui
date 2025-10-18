@@ -483,6 +483,7 @@
                                                         onclick={selectNoIcon}
                                                         aria-pressed={selectedIconId === NO_ICON_ID}
                                                         aria-label="Clear server icon"
+                                                        data-tooltip-disabled
                                                 >
                                                         <span
                                                                 class={`flex h-16 w-16 items-center justify-center rounded-xl border text-base transition ${
@@ -508,6 +509,7 @@
                                                                 aria-label={icon.width && icon.height
                                                                         ? `Use ${icon.width} by ${icon.height} icon`
                                                                         : 'Use uploaded icon'}
+                                                                data-tooltip-disabled
                                                         >
                                                                 <span
                                                                         class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border transition ${
