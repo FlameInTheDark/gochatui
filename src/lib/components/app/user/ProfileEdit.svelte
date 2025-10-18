@@ -309,6 +309,7 @@
                                 onclick={selectNoAvatar}
                                 aria-pressed={selectedAvatarId === NO_AVATAR_ID}
                                 aria-label="Clear avatar"
+                                data-tooltip-disabled
                         >
                                 <span
                                         class={`flex h-16 w-16 items-center justify-center rounded-full border text-base transition ${
@@ -334,6 +335,7 @@
                                         aria-label={avatar.width && avatar.height
                                                 ? `Use ${avatar.width} by ${avatar.height} avatar`
                                                 : 'Use uploaded avatar'}
+                                        data-tooltip-disabled
                                 >
                                         <span
                                                 class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border transition ${
