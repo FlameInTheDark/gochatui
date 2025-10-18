@@ -136,12 +136,14 @@
 
                         const currentAvatarId = extractAvatarId($me);
                         const normalizedCurrentAvatarId = currentAvatarId ?? NO_AVATAR_ID;
+                        const currentAvatarToken = computeAvatarToken($me, baseAvatarUrl);
 
-                        if (selectedAvatarId !== null && selectedAvatarId !== normalizedCurrentAvatarId) {
-                                patchPayload.avatar =
-                                        selectedAvatarId === NO_AVATAR_ID
-                                                ? (0n as any)
-                                                : (BigInt(selectedAvatarId) as any);
+                        if (selectedAvatarId === NO_AVATAR_ID) {
+                                if (currentAvatarToken !== 'none') {
+                                        patchPayload.avatar = 0n as any;
+                                }
+                        } else if (selectedAvatarId !== null && selectedAvatarId !== normalizedCurrentAvatarId) {
+                                patchPayload.avatar = BigInt(selectedAvatarId) as any;
                         }
 
                         if (Object.keys(patchPayload).length) {
@@ -220,6 +222,17 @@
                 if (!id) return null;
                 const entry = avatarPreviews.find((preview) => preview.id === id);
                 return entry?.url ?? null;
+        }
+
+        function computeAvatarToken(user: unknown, resolvedUrl: string | null): string {
+                const id = extractAvatarId(user);
+                if (id) {
+                        return `id:${id}`;
+                }
+                if (resolvedUrl) {
+                        return `url:${resolvedUrl}`;
+                }
+                return 'none';
         }
 
         function selectExistingAvatar(id: string) {
