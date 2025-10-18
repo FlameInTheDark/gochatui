@@ -2531,6 +2531,40 @@ export const GuildApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
+         * Deletes a guild. Only the guild owner can delete a guild. This removes all members, all guild icons, and all guild channels.
+         * @summary Delete guild
+         * @param {number} guildId Guild ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdDelete: async (guildId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'guildId' is not null or undefined
+            assertParamExists('guildGuildIdDelete', 'guildId', guildId)
+            const localVarPath = `/guild/{guild_id}`
+                .replace(`{${"guild_id"}}`, encodeURIComponent(String(guildId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary Get guild
          * @param {number} guildId Guild id
@@ -2909,6 +2943,19 @@ export const GuildApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Deletes a guild. Only the guild owner can delete a guild. This removes all members, all guild icons, and all guild channels.
+         * @summary Delete guild
+         * @param {number} guildId Guild ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async guildGuildIdDelete(guildId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<string>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.guildGuildIdDelete(guildId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['GuildApi.guildGuildIdDelete']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Get guild
          * @param {number} guildId Guild id
@@ -3093,6 +3140,16 @@ export const GuildApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.guildGuildIdChannelPost(requestParameters.guildId, requestParameters.guildCreateGuildChannelRequest, options).then((request) => request(axios, basePath));
         },
         /**
+         * Deletes a guild. Only the guild owner can delete a guild. This removes all members, all guild icons, and all guild channels.
+         * @summary Delete guild
+         * @param {GuildApiGuildGuildIdDeleteRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdDelete(requestParameters: GuildApiGuildGuildIdDeleteRequest, options?: RawAxiosRequestConfig): AxiosPromise<string> {
+            return localVarFp.guildGuildIdDelete(requestParameters.guildId, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Get guild
          * @param {GuildApiGuildGuildIdGetRequest} requestParameters Request parameters.
@@ -3250,6 +3307,16 @@ export interface GuildApiInterface {
      * @memberof GuildApiInterface
      */
     guildGuildIdChannelPost(requestParameters: GuildApiGuildGuildIdChannelPostRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
+
+    /**
+     * Deletes a guild. Only the guild owner can delete a guild. This removes all members, all guild icons, and all guild channels.
+     * @summary Delete guild
+     * @param {GuildApiGuildGuildIdDeleteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApiInterface
+     */
+    guildGuildIdDelete(requestParameters: GuildApiGuildGuildIdDeleteRequest, options?: RawAxiosRequestConfig): AxiosPromise<string>;
 
     /**
      * 
@@ -3492,6 +3559,20 @@ export interface GuildApiGuildGuildIdChannelPostRequest {
 }
 
 /**
+ * Request parameters for guildGuildIdDelete operation in GuildApi.
+ * @export
+ * @interface GuildApiGuildGuildIdDeleteRequest
+ */
+export interface GuildApiGuildGuildIdDeleteRequest {
+    /**
+     * Guild ID
+     * @type {number}
+     * @memberof GuildApiGuildGuildIdDelete
+     */
+    readonly guildId: number
+}
+
+/**
  * Request parameters for guildGuildIdGet operation in GuildApi.
  * @export
  * @interface GuildApiGuildGuildIdGetRequest
@@ -3711,6 +3792,18 @@ export class GuildApi extends BaseAPI implements GuildApiInterface {
      */
     public guildGuildIdChannelPost(requestParameters: GuildApiGuildGuildIdChannelPostRequest, options?: RawAxiosRequestConfig) {
         return GuildApiFp(this.configuration).guildGuildIdChannelPost(requestParameters.guildId, requestParameters.guildCreateGuildChannelRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Deletes a guild. Only the guild owner can delete a guild. This removes all members, all guild icons, and all guild channels.
+     * @summary Delete guild
+     * @param {GuildApiGuildGuildIdDeleteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApi
+     */
+    public guildGuildIdDelete(requestParameters: GuildApiGuildGuildIdDeleteRequest, options?: RawAxiosRequestConfig) {
+        return GuildApiFp(this.configuration).guildGuildIdDelete(requestParameters.guildId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
