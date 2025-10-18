@@ -574,22 +574,24 @@
                                                                         </span>
                                                                 </button>
 
-                                                                <button
-                                                                        type="button"
-                                                                        class={`absolute right-0 top-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--panel-strong)]/90 text-[var(--muted)] transition hover:text-red-400 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 ${
-                                                                                isDeletingIcon(icon.id) || selectedIconId === icon.id
-                                                                                        ? 'cursor-not-allowed opacity-60'
-                                                                                        : 'opacity-0 group-hover:opacity-100'
-                                                                        }`}
-                                                                        onclick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                void deleteIcon(icon.id);
-                                                                        }}
-                                                                        aria-label="Delete guild icon"
-                                                                        disabled={isDeletingIcon(icon.id) || selectedIconId === icon.id}
-                                                                >
-                                                                        <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
-                                                                </button>
+                                                                {#if selectedIconId !== icon.id}
+                                                                        <button
+                                                                                type="button"
+                                                                                class={`absolute -right-2 -top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--panel)] bg-[var(--panel-strong)]/95 text-[var(--muted)] shadow-sm transition hover:text-red-400 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 ${
+                                                                                        isDeletingIcon(icon.id)
+                                                                                                ? 'cursor-not-allowed opacity-60'
+                                                                                                : 'opacity-0 group-hover:opacity-100'
+                                                                                }`}
+                                                                                onclick={(event) => {
+                                                                                        event.stopPropagation();
+                                                                                        void deleteIcon(icon.id);
+                                                                                }}
+                                                                                aria-label="Delete guild icon"
+                                                                                disabled={isDeletingIcon(icon.id)}
+                                                                        >
+                                                                                <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
+                                                                        </button>
+                                                                {/if}
                                                         </div>
                                                 {/each}
                                         </div>
