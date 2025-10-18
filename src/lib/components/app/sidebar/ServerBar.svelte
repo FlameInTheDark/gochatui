@@ -533,7 +533,7 @@
                                 {@const guildIcon = guildIconUrl(item.guild)}
                                 <div class="group relative flex justify-center">
                                         <button
-                                                class={`relative flex h-12 w-12 transform items-center justify-center overflow-hidden rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                class={`relative flex h-12 w-12 transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                                 } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
                                                 data-tooltip-disabled
@@ -558,7 +558,7 @@
                                                                 src={guildIcon}
                                                                 alt=""
                                                                 aria-hidden="true"
-                                                                class="h-full w-full object-cover"
+                                                                class="h-full w-full rounded-xl object-cover"
                                                                 loading="lazy"
                                                         />
                                                 {:else}
