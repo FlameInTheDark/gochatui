@@ -27,8 +27,8 @@
                           ) => Promise<PendingAttachment[] | void>;
                   }
                 | null = null;
-        let dropActive = false;
-        let dragCounter = 0;
+        let dropActive = $state(false);
+        let dragCounter = $state(0);
         let removeGlobalDragListeners: (() => void) | null = null;
 
         function hasFileTransfer(event: DragEvent): boolean {

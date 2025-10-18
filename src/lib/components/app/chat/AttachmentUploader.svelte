@@ -13,11 +13,13 @@
 	let loading = $state(false);
         let error: string | null = $state(null);
         let errorAnimationKey = $state(0);
+        let previousError: string | null = null;
 
         $effect(() => {
-                if (error) {
+                if (error && error !== previousError) {
                         errorAnimationKey += 1;
                 }
+                previousError = error;
         });
 
         $effect(() => {
@@ -350,14 +352,12 @@
                         role="presentation"
                         onclick={() => (error = null)}
                 >
-                        {@const modalLabelId = `attachment-error-title-${errorAnimationKey}`}
-                        {@const modalDescriptionId = `attachment-error-description-${errorAnimationKey}`}
                         <div
                                 class="pointer-events-auto w-full max-w-sm"
                                 role="alertdialog"
                                 aria-modal="true"
-                                aria-labelledby={modalLabelId}
-                                aria-describedby={modalDescriptionId}
+                                aria-labelledby={`attachment-error-title-${errorAnimationKey}`}
+                                aria-describedby={`attachment-error-description-${errorAnimationKey}`}
                                 tabindex="0"
                                 onclick={(event) => event.stopPropagation()}
                                 onkeydown={(event) => {
@@ -367,17 +367,23 @@
                                         }
                                 }}
                         >
-                                {@key errorAnimationKey}
+                                {#key errorAnimationKey}
                                         <div class="rounded-lg backdrop-blur-md shadow-[var(--shadow-3)]">
                                                 <div class="panel flex items-start gap-4 rounded-md p-5 attachment-error-animate">
                                                         <div class="mt-1 rounded-full bg-red-500/15 p-2 text-red-400">
                                                                 <AlertOctagon class="h-6 w-6" aria-hidden="true" />
                                                         </div>
                                                         <div class="flex-1 space-y-2">
-                                                                <div class="text-lg font-semibold" id={modalLabelId}>
+                                                                <div
+                                                                        class="text-lg font-semibold"
+                                                                        id={`attachment-error-title-${errorAnimationKey}`}
+                                                                >
                                                                         Upload error
                                                                 </div>
-                                                                <p class="text-sm text-[var(--muted)]" id={modalDescriptionId}>
+                                                                <p
+                                                                        class="text-sm text-[var(--muted)]"
+                                                                        id={`attachment-error-description-${errorAnimationKey}`}
+                                                                >
                                                                         {error}
                                                                 </p>
                                                         </div>
@@ -391,6 +397,7 @@
                                                         </button>
                                                 </div>
                                         </div>
+                                {/key}
                         </div>
                 </div>
         {/if}
