@@ -2,7 +2,7 @@
         import { auth } from '$lib/stores/auth';
         import { selectedChannelId } from '$lib/stores/appState';
         import { createEventDispatcher } from 'svelte';
-        import { LoaderCircle, Paperclip } from 'lucide-svelte';
+        import { AlertOctagon, LoaderCircle, Paperclip, X } from 'lucide-svelte';
         import { tooltip } from '$lib/actions/tooltip';
         import type { PendingAttachment } from '$lib/stores/pendingMessages';
 
@@ -11,7 +11,36 @@
                 inline?: boolean;
         }>();
 	let loading = $state(false);
-	let error: string | null = $state(null);
+        let error: string | null = $state(null);
+        let errorAnimationKey = $state(0);
+
+        $effect(() => {
+                if (error) {
+                        errorAnimationKey += 1;
+                }
+        });
+
+        $effect(() => {
+                if (!error) {
+                        return;
+                }
+
+                if (typeof window === 'undefined') {
+                        return;
+                }
+
+                const handleKeydown = (event: KeyboardEvent) => {
+                        if (event.key === 'Escape') {
+                                event.preventDefault();
+                                error = null;
+                        }
+                };
+
+                window.addEventListener('keydown', handleKeydown);
+                return () => {
+                        window.removeEventListener('keydown', handleKeydown);
+                };
+        });
         const dispatch = createEventDispatcher<{ updated: PendingAttachment[] }>();
 
         function toFileArray(input: FileList | File[] | null | undefined): File[] {
@@ -134,7 +163,7 @@
                                         const statusCode = err.response?.status;
                                         const message =
                                                 statusCode === 413
-                                                        ? 'File size is too large'
+                                                        ? 'File size is too big'
                                                         : err.response?.data?.message ?? err.message ?? 'Attachment failed';
                                         error = message;
                                         dispatch('updated', [
@@ -316,6 +345,78 @@
                 {/if}
         </div>
         {#if error}
-                <span class="text-xs text-[var(--danger)]" role="alert">{error}</span>
+                <div
+                        class="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 px-4"
+                        role="presentation"
+                        onclick={() => (error = null)}
+                >
+                        {@const modalLabelId = `attachment-error-title-${errorAnimationKey}`}
+                        {@const modalDescriptionId = `attachment-error-description-${errorAnimationKey}`}
+                        <div
+                                class="pointer-events-auto w-full max-w-sm"
+                                role="alertdialog"
+                                aria-modal="true"
+                                aria-labelledby={modalLabelId}
+                                aria-describedby={modalDescriptionId}
+                                tabindex="0"
+                                onclick={(event) => event.stopPropagation()}
+                                onkeydown={(event) => {
+                                        if (event.key === 'Escape') {
+                                                event.stopPropagation();
+                                                error = null;
+                                        }
+                                }}
+                        >
+                                {@key errorAnimationKey}
+                                        <div class="rounded-lg backdrop-blur-md shadow-[var(--shadow-3)]">
+                                                <div class="panel flex items-start gap-4 rounded-md p-5 attachment-error-animate">
+                                                        <div class="mt-1 rounded-full bg-red-500/15 p-2 text-red-400">
+                                                                <AlertOctagon class="h-6 w-6" aria-hidden="true" />
+                                                        </div>
+                                                        <div class="flex-1 space-y-2">
+                                                                <div class="text-lg font-semibold" id={modalLabelId}>
+                                                                        Upload error
+                                                                </div>
+                                                                <p class="text-sm text-[var(--muted)]" id={modalDescriptionId}>
+                                                                        {error}
+                                                                </p>
+                                                        </div>
+                                                        <button
+                                                                type="button"
+                                                                class="rounded-full p-1 text-[var(--muted)] transition hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                                                aria-label="Dismiss attachment error"
+                                                                onclick={() => (error = null)}
+                                                        >
+                                                                <X class="h-4 w-4" aria-hidden="true" />
+                                                        </button>
+                                                </div>
+                                        </div>
+                        </div>
+                </div>
         {/if}
 </div>
+
+<style>
+        @keyframes attachment-error-shake {
+                0%,
+                100% {
+                        transform: translateX(0);
+                }
+
+                15%,
+                45%,
+                75% {
+                        transform: translateX(-6px);
+                }
+
+                30%,
+                60%,
+                90% {
+                        transform: translateX(6px);
+                }
+        }
+
+        .attachment-error-animate {
+                animation: attachment-error-shake 1s ease both;
+        }
+</style>

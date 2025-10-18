@@ -49,7 +49,7 @@
                 for (const incoming of added) {
                         const index = next.findIndex((attachment) => attachment.localId === incoming.localId);
                         const isOversizeError =
-                                incoming.status === 'error' && incoming.error === 'File size is too large';
+                                incoming.status === 'error' && incoming.error === 'File size is too big';
 
                         if (isOversizeError) {
                                 if (index !== -1) {
