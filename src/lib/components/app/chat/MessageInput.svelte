@@ -27,8 +27,8 @@
                           ) => Promise<PendingAttachment[] | void>;
                   }
                 | null = null;
-        let dropActive = false;
-        let dragCounter = 0;
+        let dropActive = $state(false);
+        let dragCounter = $state(0);
         let removeGlobalDragListeners: (() => void) | null = null;
 
         function hasFileTransfer(event: DragEvent): boolean {
@@ -48,6 +48,19 @@
 
                 for (const incoming of added) {
                         const index = next.findIndex((attachment) => attachment.localId === incoming.localId);
+                        const isOversizeError =
+                                incoming.status === 'error' && incoming.error === 'File size is too big';
+
+                        if (isOversizeError) {
+                                if (index !== -1) {
+                                        const [removed] = next.splice(index, 1);
+                                        if (removed) {
+                                                releasePreviewUrl(removed);
+                                        }
+                                }
+                                continue;
+                        }
+
                         if (index !== -1) {
                                 const previous = next[index];
                                 if (previous.previewUrl && previous.previewUrl !== incoming.previewUrl) {
