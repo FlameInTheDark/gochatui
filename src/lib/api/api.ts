@@ -308,6 +308,12 @@ export interface DtoAvatarData {
      * @type {number}
      * @memberof DtoAvatarData
      */
+    'id'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof DtoAvatarData
+     */
     'size'?: number;
     /**
      * 
