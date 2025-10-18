@@ -6,6 +6,7 @@
         import GuildInvitesManager from './GuildInvitesManager.svelte';
         import GuildRolesManager from './GuildRolesManager.svelte';
         import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
+        import { Trash2 } from 'lucide-svelte';
         import {
                 PERMISSION_BAN_MEMBERS,
                 PERMISSION_CREATE_INVITES,
@@ -81,6 +82,7 @@
         let selectedIconId = $state<string | null>(null);
         let iconSelectionDirty = $state(false);
         let iconsLoadedGuildId = $state<string | null>(null);
+        let deletingIconIds = $state<string[]>([]);
 
         const isGuildOwner = $derived.by(() => {
                 const guild = activeGuild;
@@ -269,6 +271,51 @@
                         iconsError = 'Failed to load server icons.';
                 } finally {
                         iconsLoading = false;
+                }
+        }
+
+        function isDeletingIcon(id: string): boolean {
+                return deletingIconIds.includes(id);
+        }
+
+        function markIconDeleting(id: string, deleting: boolean) {
+                if (deleting) {
+                        if (!deletingIconIds.includes(id)) {
+                                deletingIconIds = [...deletingIconIds, id];
+                        }
+                } else {
+                        deletingIconIds = deletingIconIds.filter((existing) => existing !== id);
+                }
+        }
+
+        async function deleteIcon(id: string) {
+                if (!isGuildOwner) return;
+                const guildId = $selectedGuildId;
+                if (!guildId) return;
+                if (isDeletingIcon(id)) return;
+                if (selectedIconId === id) return;
+
+                iconsError = null;
+                markIconDeleting(id, true);
+                try {
+                        let iconId: bigint;
+                        try {
+                                iconId = BigInt(id);
+                        } catch {
+                                throw new Error('Invalid icon identifier.');
+                        }
+
+                        await auth.api.guild.guildGuildIdIconsIconIdDelete({
+                                guildId: BigInt(guildId) as any,
+                                iconId: iconId as any
+                        });
+
+                        availableIcons = availableIcons.filter((icon) => icon.id !== id);
+                } catch (error) {
+                        console.error(error);
+                        iconsError = 'Failed to delete guild icon. Please try again.';
+                } finally {
+                        markIconDeleting(id, false);
                 }
         }
 
@@ -497,34 +544,53 @@
                                                 </button>
 
                                                 {#each availableIcons as icon (icon.id)}
-                                                        <button
-                                                                type="button"
-                                                                class={`group flex flex-col items-center gap-2 text-xs transition ${
-                                                                        selectedIconId === icon.id
-                                                                                ? 'text-[var(--success)]'
-                                                                                : 'text-[var(--muted)] hover:text-[var(--text)]'
-                                                                }`}
-                                                                onclick={() => selectExistingIcon(icon.id)}
-                                                                aria-pressed={selectedIconId === icon.id}
-                                                                aria-label={icon.width && icon.height
-                                                                        ? `Use ${icon.width} by ${icon.height} icon`
-                                                                        : 'Use uploaded icon'}
-                                                                data-tooltip-disabled
-                                                        >
-                                                                <span
-                                                                        class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border transition ${
+                                                        <div class="group relative">
+                                                                <button
+                                                                        type="button"
+                                                                        class={`group flex flex-col items-center gap-2 text-xs transition ${
                                                                                 selectedIconId === icon.id
-                                                                                        ? 'border-[var(--success)] ring-2 ring-[var(--success)]/60'
-                                                                                        : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
+                                                                                        ? 'text-[var(--success)]'
+                                                                                        : 'text-[var(--muted)] hover:text-[var(--text)]'
                                                                         }`}
+                                                                        onclick={() => selectExistingIcon(icon.id)}
+                                                                        aria-pressed={selectedIconId === icon.id}
+                                                                        aria-label={icon.width && icon.height
+                                                                                ? `Use ${icon.width} by ${icon.height} icon`
+                                                                                : 'Use uploaded icon'}
+                                                                        data-tooltip-disabled
                                                                 >
-                                                                        <img
-                                                                                src={icon.url}
-                                                                                alt="Previous guild icon"
-                                                                                class="h-full w-full object-cover"
-                                                                        />
-                                                                </span>
-                                                        </button>
+                                                                        <span
+                                                                                class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border transition ${
+                                                                                        selectedIconId === icon.id
+                                                                                                ? 'border-[var(--success)] ring-2 ring-[var(--success)]/60'
+                                                                                                : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
+                                                                                }`}
+                                                                        >
+                                                                                <img
+                                                                                        src={icon.url}
+                                                                                        alt="Previous guild icon"
+                                                                                        class="h-full w-full object-cover"
+                                                                                />
+                                                                        </span>
+                                                                </button>
+
+                                                                <button
+                                                                        type="button"
+                                                                        class={`absolute right-0 top-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--panel-strong)]/90 text-[var(--muted)] transition hover:text-red-400 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 ${
+                                                                                isDeletingIcon(icon.id) || selectedIconId === icon.id
+                                                                                        ? 'cursor-not-allowed opacity-60'
+                                                                                        : 'opacity-0 group-hover:opacity-100'
+                                                                        }`}
+                                                                        onclick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                void deleteIcon(icon.id);
+                                                                        }}
+                                                                        aria-label="Delete guild icon"
+                                                                        disabled={isDeletingIcon(icon.id) || selectedIconId === icon.id}
+                                                                >
+                                                                        <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
+                                                                </button>
+                                                        </div>
                                                 {/each}
                                         </div>
                                         {#if !iconsLoading && !availableIcons.length}
