@@ -46,7 +46,14 @@
         $: fallbackInitial = avatarInitial(name);
 
         $: if (!avatarSelectionDirty && !croppedAvatar) {
-                selectedAvatarId = extractAvatarId($me) ?? NO_AVATAR_ID;
+                const resolvedId = extractAvatarId($me);
+                if (resolvedId) {
+                        selectedAvatarId = resolvedId;
+                } else if (baseAvatarUrl) {
+                        selectedAvatarId = null;
+                } else {
+                        selectedAvatarId = NO_AVATAR_ID;
+                }
         }
 
         $: previewAvatarUrl =
@@ -272,9 +279,6 @@
 
         <div class="panel space-y-3 p-4">
                 <div class="text-sm font-medium">Avatar history</div>
-                <p class="text-xs text-[var(--muted)]">
-                        Pick one of your previous avatars or clear your avatar entirely.
-                </p>
                 {#if avatarsError}
                         <p class="text-xs text-red-400">{avatarsError}</p>
                 {/if}
@@ -291,6 +295,7 @@
                                 }`}
                                 onclick={selectNoAvatar}
                                 aria-pressed={selectedAvatarId === NO_AVATAR_ID}
+                                aria-label="Clear avatar"
                         >
                                 <span
                                         class={`flex h-16 w-16 items-center justify-center rounded-full border text-base transition ${
@@ -301,7 +306,6 @@
                                 >
                                         ∅
                                 </span>
-                                <span>None</span>
                         </button>
 
                         {#each avatarPreviews as avatar (avatar.id)}
@@ -314,6 +318,9 @@
                                         }`}
                                         onclick={() => selectExistingAvatar(avatar.id)}
                                         aria-pressed={selectedAvatarId === avatar.id}
+                                        aria-label={avatar.width && avatar.height
+                                                ? `Use ${avatar.width} by ${avatar.height} avatar`
+                                                : 'Use uploaded avatar'}
                                 >
                                         <span
                                                 class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border transition ${
@@ -327,13 +334,6 @@
                                                         alt="Previous avatar"
                                                         class="h-full w-full object-cover"
                                                 />
-                                        </span>
-                                        <span>
-                                                {#if avatar.width && avatar.height}
-                                                        {avatar.width}×{avatar.height}
-                                                {:else}
-                                                        Avatar
-                                                {/if}
                                         </span>
                                 </button>
                         {/each}
