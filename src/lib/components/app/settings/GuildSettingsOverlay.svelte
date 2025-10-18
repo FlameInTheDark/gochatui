@@ -66,6 +66,22 @@
         let error: string | null = $state(null);
         let croppedIcon = $state<string | null>(null);
 
+        type IconPreview = {
+                id: string;
+                url: string;
+                width?: number | null;
+                height?: number | null;
+        };
+
+        const NO_ICON_ID = '__none__';
+
+        let availableIcons = $state<IconPreview[]>([]);
+        let iconsLoading = $state(false);
+        let iconsError: string | null = $state(null);
+        let selectedIconId = $state<string | null>(null);
+        let iconSelectionDirty = $state(false);
+        let iconsLoadedGuildId = $state<string | null>(null);
+
         const isGuildOwner = $derived.by(() => {
                 const guild = activeGuild;
                 if (!guild) return false;
@@ -76,7 +92,41 @@
         });
 
         const iconFallbackInitial = $derived.by(() => guildInitials(activeGuild));
-        const existingIconUrl = $derived.by(() => resolveAvatarUrl(activeGuild));
+        const baseIconUrl = $derived.by(() => resolveAvatarUrl(activeGuild));
+        const currentIconId = $derived.by(() => extractIconId(activeGuild));
+        const selectedIconUrl = $derived.by(() => {
+                if (selectedIconId === NO_ICON_ID) return null;
+                if (!selectedIconId) return baseIconUrl;
+                const entry = availableIcons.find((icon) => icon.id === selectedIconId);
+                return entry?.url ?? baseIconUrl;
+        });
+        const previewIconUrl = $derived.by(() => (croppedIcon ? croppedIcon : selectedIconUrl));
+
+        $effect(() => {
+                if (!iconSelectionDirty && !croppedIcon) {
+                        selectedIconId = currentIconId ?? NO_ICON_ID;
+                }
+        });
+
+        $effect(() => {
+                const open = $guildSettingsOpen;
+                const gid = $selectedGuildId;
+                if (open && gid && isGuildOwner) {
+                        if (iconsLoadedGuildId !== gid && !iconsLoading) {
+                                void loadGuildIcons(gid);
+                        }
+                }
+                if (!open) {
+                        iconSelectionDirty = false;
+                }
+        });
+
+        $effect(() => {
+                if (croppedIcon) {
+                        selectedIconId = null;
+                        iconSelectionDirty = true;
+                }
+        });
 
         $effect(() => {
                 if ($guildSettingsOpen) {
@@ -109,10 +159,27 @@
                         const trimmedName = name.trim();
                         name = trimmedName;
 
+                        const patchPayload: Record<string, unknown> = {};
+
                         if (trimmedName !== (guild?.name ?? '')) {
+                                patchPayload.name = trimmedName;
+                        }
+
+                        const normalizedCurrentIconId = currentIconId ?? NO_ICON_ID;
+                        if (selectedIconId !== null && selectedIconId !== normalizedCurrentIconId) {
+                                if (!isGuildOwner) {
+                                        throw new Error('Only the guild owner can change the server icon.');
+                                }
+                                patchPayload.icon_id =
+                                        selectedIconId === NO_ICON_ID
+                                                ? (null as any)
+                                                : (BigInt(selectedIconId) as any);
+                        }
+
+                        if (Object.keys(patchPayload).length) {
                                 await auth.api.guild.guildGuildIdPatch({
                                         guildId: BigInt(gid) as any,
-                                        guildUpdateGuildRequest: { name: trimmedName }
+                                        guildUpdateGuildRequest: patchPayload
                                 });
                                 shouldReloadGuilds = true;
                         }
@@ -129,6 +196,8 @@
 
                         if (shouldReloadGuilds) {
                                 await auth.loadGuilds();
+                                iconSelectionDirty = false;
+                                await loadGuildIcons(gid, true);
                         }
                 } catch (e: any) {
                         error = formatSaveError(e);
@@ -141,9 +210,84 @@
                 guildSettingsOpen.set(false);
         }
 
+        function selectExistingIcon(id: string) {
+                croppedIcon = null;
+                selectedIconId = id;
+                iconSelectionDirty = true;
+        }
+
+        function selectNoIcon() {
+                croppedIcon = null;
+                selectedIconId = NO_ICON_ID;
+                iconSelectionDirty = true;
+        }
+
+        async function loadGuildIcons(guildId: string, force = false) {
+                if (!isGuildOwner) return;
+                if (iconsLoading && !force) return;
+                iconsLoading = true;
+                iconsError = null;
+                try {
+                        const response = await auth.api.guild.guildGuildIdIconsGet({
+                                guildId: BigInt(guildId) as any
+                        });
+                        const items = Array.isArray(response.data) ? response.data : [];
+                        const mapped: IconPreview[] = [];
+                        for (const item of items) {
+                                const record = item as Record<string, unknown>;
+                                const idRaw = record.id;
+                                const url = typeof record.url === 'string' ? record.url : null;
+                                if (idRaw == null || !url) continue;
+                                let id: string;
+                                try {
+                                        id = BigInt(idRaw as any).toString();
+                                } catch {
+                                        id = String(idRaw);
+                                }
+                                mapped.push({
+                                        id,
+                                        url,
+                                        width: (record.width as number | null | undefined) ?? null,
+                                        height: (record.height as number | null | undefined) ?? null
+                                });
+                        }
+                        availableIcons = mapped;
+                        iconsLoadedGuildId = guildId;
+                } catch (error) {
+                        console.error(error);
+                        iconsError = 'Failed to load server icons.';
+                } finally {
+                        iconsLoading = false;
+                }
+        }
+
         function guildInitials(guild: any): string {
                 const name = String((guild as any)?.name ?? '?');
                 return name.slice(0, 2).toUpperCase();
+        }
+
+        function extractIconId(guild: unknown): string | null {
+                if (!guild || typeof guild !== 'object') return null;
+                const record = guild as Record<string, unknown>;
+                const icon = record.icon;
+                if (icon && typeof icon === 'object') {
+                        const iconRecord = icon as Record<string, unknown>;
+                        const id = iconRecord.id ?? iconRecord.icon_id ?? iconRecord.iconId;
+                        if (id != null) {
+                                try {
+                                        return BigInt(id as any).toString();
+                                } catch {
+                                        return String(id);
+                                }
+                        }
+                }
+                const fallbackId = record.icon_id ?? record.iconId ?? (typeof icon === 'string' ? icon : null);
+                if (fallbackId == null) return null;
+                try {
+                        return BigInt(fallbackId as any).toString();
+                } catch {
+                        return String(fallbackId);
+                }
         }
 
         async function uploadGuildIcon(guildId: string, dataUrl: string) {
@@ -294,7 +438,7 @@
                                 displayImageAlt="Guild icon preview"
                                 fallbackInitial={iconFallbackInitial}
                                 helperText="PNG or JPEG recommended"
-                                initialAvatarUrl={existingIconUrl}
+                                initialAvatarUrl={previewIconUrl}
                                 maskCornerRadiusRatio={0.25}
                                 maskShape="rounded"
                                 previewBorderRadiusClass="rounded-xl"
@@ -307,6 +451,81 @@
                                 uploadLabel="Upload icon"
                                 chooseButtonLabel="Choose icon"
                         />
+
+                        {#if isGuildOwner}
+                                <div class="panel space-y-3 p-4">
+                                        <div class="text-sm font-medium">Icon history</div>
+                                        <p class="text-xs text-[var(--muted)]">
+                                                Select one of your finalized icons or clear the server icon.
+                                        </p>
+                                        {#if iconsError}
+                                                <p class="text-xs text-red-400">{iconsError}</p>
+                                        {/if}
+                                        {#if iconsLoading}
+                                                <p class="text-xs text-[var(--muted)]">Loading icons…</p>
+                                        {/if}
+                                        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-5">
+                                                <button
+                                                        type="button"
+                                                        class={`group flex flex-col items-center gap-2 text-xs transition ${
+                                                                selectedIconId === NO_ICON_ID
+                                                                        ? 'text-[var(--brand)]'
+                                                                        : 'text-[var(--muted)] hover:text-[var(--text)]'
+                                                        }`}
+                                                        onclick={selectNoIcon}
+                                                        aria-pressed={selectedIconId === NO_ICON_ID}
+                                                >
+                                                        <span
+                                                                class={`flex h-16 w-16 items-center justify-center rounded-xl border text-base transition ${
+                                                                        selectedIconId === NO_ICON_ID
+                                                                                ? 'border-[var(--brand)] bg-[var(--panel-strong)] text-[var(--brand)]'
+                                                                                : 'border-[var(--stroke)] bg-[var(--panel)] text-[var(--muted)] group-hover:border-[var(--brand)]/60'
+                                                                }`}
+                                                        >
+                                                                ∅
+                                                        </span>
+                                                        <span>None</span>
+                                                </button>
+
+                                                {#each availableIcons as icon (icon.id)}
+                                                        <button
+                                                                type="button"
+                                                                class={`group flex flex-col items-center gap-2 text-xs transition ${
+                                                                        selectedIconId === icon.id
+                                                                                ? 'text-[var(--brand)]'
+                                                                                : 'text-[var(--muted)] hover:text-[var(--text)]'
+                                                                }`}
+                                                                onclick={() => selectExistingIcon(icon.id)}
+                                                                aria-pressed={selectedIconId === icon.id}
+                                                        >
+                                                                <span
+                                                                        class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border transition ${
+                                                                                selectedIconId === icon.id
+                                                                                        ? 'border-[var(--brand)] ring-2 ring-[var(--brand)]/60'
+                                                                                        : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
+                                                                        }`}
+                                                                >
+                                                                        <img
+                                                                                src={icon.url}
+                                                                                alt="Previous guild icon"
+                                                                                class="h-full w-full object-cover"
+                                                                        />
+                                                                </span>
+                                                                <span>
+                                                                        {#if icon.width && icon.height}
+                                                                                {icon.width}×{icon.height}
+                                                                        {:else}
+                                                                                Icon
+                                                                        {/if}
+                                                                </span>
+                                                        </button>
+                                                {/each}
+                                        </div>
+                                        {#if !iconsLoading && !availableIcons.length}
+                                                <p class="text-xs text-[var(--muted)]">No previous icons yet.</p>
+                                        {/if}
+                                </div>
+                        {/if}
 
                         <div>
                                 <label for="guild-name" class="mb-2 block">{m.server_name()}</label>
