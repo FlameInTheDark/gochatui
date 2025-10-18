@@ -303,7 +303,7 @@
                                 type="button"
                                 class={`group flex flex-col items-center gap-2 text-xs transition ${
                                         selectedAvatarId === NO_AVATAR_ID
-                                                ? 'text-[var(--brand)]'
+                                                ? 'text-[var(--success)]'
                                                 : 'text-[var(--muted)] hover:text-[var(--text)]'
                                 }`}
                                 onclick={selectNoAvatar}
@@ -314,7 +314,7 @@
                                 <span
                                         class={`flex h-16 w-16 items-center justify-center rounded-full border text-base transition ${
                                                 selectedAvatarId === NO_AVATAR_ID
-                                                        ? 'border-[var(--brand)] bg-[var(--panel-strong)] text-[var(--brand)]'
+                                                        ? 'border-[var(--success)] bg-[var(--panel-strong)] text-[var(--success)]'
                                                         : 'border-[var(--stroke)] bg-[var(--panel)] text-[var(--muted)] group-hover:border-[var(--brand)]/60'
                                         }`}
                                 >
@@ -327,7 +327,7 @@
                                         type="button"
                                         class={`group flex flex-col items-center gap-2 text-xs transition ${
                                                 selectedAvatarId === avatar.id
-                                                        ? 'text-[var(--brand)]'
+                                                        ? 'text-[var(--success)]'
                                                         : 'text-[var(--muted)] hover:text-[var(--text)]'
                                         }`}
                                         onclick={() => selectExistingAvatar(avatar.id)}
@@ -340,7 +340,7 @@
                                         <span
                                                 class={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border transition ${
                                                         selectedAvatarId === avatar.id
-                                                                ? 'border-[var(--brand)] ring-2 ring-[var(--brand)]/60'
+                                                                ? 'border-[var(--success)] ring-2 ring-[var(--success)]/60'
                                                                 : 'border-[var(--stroke)] bg-[var(--panel)] group-hover:border-[var(--brand)]/60'
                                                 }`}
                                         >
