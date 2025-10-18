@@ -485,25 +485,6 @@
 		return null;
 	}
 
-	function currentChannel(): any | null {
-		const gid = $selectedGuildId ?? '';
-		const list = $channelsByGuild[gid] ?? [];
-		return list.find((c: any) => String((c as any)?.id) === $selectedChannelId) ?? null;
-	}
-
-	function channelDisplayName() {
-		const ch = currentChannel() as any;
-		const name = typeof ch?.name === 'string' ? ch.name.trim() : '';
-		return name || 'channel';
-	}
-
-	function channelTopic() {
-		const ch = currentChannel() as any;
-		if (!ch) return '';
-		const topic = (ch?.topic ?? '').toString().trim();
-		return topic;
-	}
-
         $effect(() => {
                 const channelId = $selectedChannelId;
                 const ready = $channelReady;
@@ -975,32 +956,18 @@
                 </div>
         {/if}
         {#if endReached && initialLoaded}
-                {@const name = channelDisplayName()}
-                {@const topic = channelTopic()}
                 <div class="px-4 py-6">
-			<div
-				class="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
-			>
-				<div
-					class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--brand)]"
-				>
+                        <div
+                                class="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
+                        >
+                                <div
+                                        class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--brand)]"
+                                >
                                         <Sparkles aria-hidden="true" class="h-6 w-6" stroke-width={2} />
                                 </div>
-				<div class="space-y-1">
-					<p class="text-sm font-semibold text-[var(--fg-strong)]">
-						It&apos;s the beginning of your conversation in
-						<span class="text-[var(--brand)]">#{name}</span>
-					</p>
-					{#if topic}
-						<p class="text-xs text-[var(--muted)]">{topic}</p>
-					{/if}
-				</div>
-				<p class="text-xs leading-relaxed text-[var(--muted)]">
-					Send a message to kick things off and keep the conversation going.
-				</p>
-			</div>
-		</div>
-	{/if}
+                        </div>
+                </div>
+        {/if}
 	{#each messages as m, i (m.id)}
 		{@const d = (function () {
 			const t = (m as any)?.id;
