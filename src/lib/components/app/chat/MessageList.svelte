@@ -958,12 +958,17 @@
         {#if endReached && initialLoaded}
                 <div class="px-4 py-6">
                         <div
-                                class="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
+                                class="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
                         >
                                 <div
                                         class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--brand)]"
                                 >
                                         <Sparkles aria-hidden="true" class="h-6 w-6" stroke-width={2} />
+                                </div>
+                                <div>
+                                        <p class="text-sm font-medium text-[var(--foreground)]">
+                                                {i18n.start_of_history()}
+                                        </p>
                                 </div>
                         </div>
                 </div>
