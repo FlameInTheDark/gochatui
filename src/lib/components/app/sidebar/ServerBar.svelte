@@ -37,6 +37,7 @@
                 FOLDER_UNREAD_BADGE_CLASSES,
                 SERVER_UNREAD_BADGE_CLASSES
         } from '$lib/constants/unreadIndicator';
+        import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
 
         const guilds = auth.guilds;
         const me = auth.user;
@@ -543,6 +544,7 @@
                                                 aria-current={isGuildSelected(item.guildId) ? 'true' : 'false'}
                                                 aria-label={item.guild.name ?? 'Server'}
                                                 draggable="true"
+                                                use:customContextMenuTarget
                                                 ondragstart={(event) => startGuildDrag(event, item.guildId, item.folderId)}
                                                 ondragend={endDrag}
                                                 ondragover={(event) =>
@@ -602,7 +604,8 @@
                                                                 placement: 'right'
                                                         }}
                                                         aria-label={folderLabel}
-							ondragstart={(event) => startFolderDrag(event, item.folder.id)}
+                                                        use:customContextMenuTarget
+                                                        ondragstart={(event) => startFolderDrag(event, item.folder.id)}
 							ondragend={endDrag}
 							oncontextmenu={(event) => openFolderMenu(event, item)}
 							ondragover={(event) =>
@@ -698,8 +701,9 @@
                                                                                 aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
                                                                                 aria-label={nestedGuild.guild.name ?? 'Server'}
                                                                                 draggable="true"
-										ondragstart={(event) =>
-											startGuildDrag(event, nestedGuild.guildId, nestedGuild.folderId)}
+                                                                                use:customContextMenuTarget
+                                                                                ondragstart={(event) =>
+                                                                                        startGuildDrag(event, nestedGuild.guildId, nestedGuild.folderId)}
 										ondragend={endDrag}
 										ondragover={(event) =>
 											onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
