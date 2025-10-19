@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import type { ComponentType } from 'svelte';
 
 export const CUSTOM_CONTEXT_MENU_ATTR = 'data-has-custom-context-menu';
 
@@ -34,11 +35,12 @@ export function eventSupportsCustomContextMenu(event: MouseEvent): boolean {
 export type ContextMenuAction = () => void | Promise<void>;
 
 export type ContextMenuItem = {
-	label: string;
-	action?: ContextMenuAction;
-	danger?: boolean;
-	disabled?: boolean;
-	children?: ContextMenuItem[];
+        label: string;
+        action?: ContextMenuAction;
+        danger?: boolean;
+        disabled?: boolean;
+        children?: ContextMenuItem[];
+        icon?: ComponentType;
 };
 
 export type ContextMenuState = {
