@@ -20,7 +20,13 @@
         } from '$lib/utils/permissions';
         import { resolveAvatarUrl } from '$lib/utils/avatar';
 
-	type SettingsCategory = 'profile' | 'roles' | 'moderation' | 'integrations' | 'invites';
+        type SettingsCategory =
+                | 'profile'
+                | 'roles'
+                | 'moderation'
+                | 'integrations'
+                | 'invites'
+                | 'danger';
 
 	const guilds = auth.guilds;
 	const me = auth.user;
@@ -54,18 +60,25 @@
 		if (hasGuildPermission(guild, $me?.id, PERMISSION_CREATE_INVITES)) {
 			allowed.push('invites');
 		}
-		if (
-			hasAnyGuildPermission(guild, $me?.id, PERMISSION_MANAGE_GUILD, PERMISSION_MANAGE_CHANNELS)
-		) {
-			allowed.push('integrations');
-		}
-		return allowed;
-	});
+                if (
+                        hasAnyGuildPermission(guild, $me?.id, PERMISSION_MANAGE_GUILD, PERMISSION_MANAGE_CHANNELS)
+                ) {
+                        allowed.push('integrations');
+                }
+                if (isGuildOwner) {
+                        allowed.push('danger');
+                }
+                return allowed;
+        });
 	let category = $state<SettingsCategory>('profile');
-	let name = $state('');
+        let name = $state('');
         let saving = $state(false);
         let error: string | null = $state(null);
         let croppedIcon = $state<string | null>(null);
+        let showDeleteModal = $state(false);
+        let deleteConfirmation = $state('');
+        let deletingGuild = $state(false);
+        let deleteGuildError: string | null = $state(null);
 
         type IconPreview = {
                 id: string;
@@ -103,6 +116,10 @@
                 return entry?.url ?? baseIconUrl;
         });
         const previewIconUrl = $derived.by(() => (croppedIcon ? croppedIcon : selectedIconUrl));
+        const activeGuildName = $derived.by(() => {
+                const guild = activeGuild;
+                return String((guild as any)?.name ?? '');
+        });
 
         $effect(() => {
                 if (!iconSelectionDirty && !croppedIcon) {
@@ -156,6 +173,15 @@
                         if (!allowed.includes(category)) {
                                 category = allowed[0];
                         }
+                }
+        });
+
+        $effect(() => {
+                if (!$guildSettingsOpen) {
+                        showDeleteModal = false;
+                        deleteConfirmation = '';
+                        deleteGuildError = null;
+                        deletingGuild = false;
                 }
         });
 
@@ -221,6 +247,62 @@
 
         function closeOverlay() {
                 guildSettingsOpen.set(false);
+        }
+
+        function openDeleteModal() {
+                deleteConfirmation = '';
+                deleteGuildError = null;
+                showDeleteModal = true;
+        }
+
+        function closeDeleteModal() {
+                if (deletingGuild) return;
+                showDeleteModal = false;
+                deleteConfirmation = '';
+                deleteGuildError = null;
+        }
+
+        async function confirmDeleteGuild() {
+                const guild = activeGuild;
+                const gid = $selectedGuildId;
+                if (!guild || !gid) return;
+                if (!isGuildOwner) {
+                        deleteGuildError = m.delete_server_confirm_error_owner();
+                        return;
+                }
+
+                const expectedName = String((guild as any)?.name ?? '');
+                if (deleteConfirmation.trim() !== expectedName) {
+                        deleteGuildError = m.delete_server_confirm_error_mismatch();
+                        return;
+                }
+
+                let guildIdValue: bigint;
+                try {
+                        guildIdValue = BigInt(gid);
+                } catch {
+                        deleteGuildError = m.delete_server_error_generic();
+                        return;
+                }
+
+                deletingGuild = true;
+                deleteGuildError = null;
+                try {
+                        await auth.api.guild.guildGuildIdDelete({
+                                guildId: guildIdValue as any
+                        });
+                        showDeleteModal = false;
+                        deleteConfirmation = '';
+                        guildSettingsOpen.set(false);
+                        if ($selectedGuildId === gid) {
+                                selectedGuildId.set(null);
+                        }
+                        await auth.loadGuilds();
+                } catch (error) {
+                        deleteGuildError = formatDeleteError(error);
+                } finally {
+                        deletingGuild = false;
+                }
         }
 
         function selectExistingIcon(id: string) {
@@ -412,6 +494,20 @@
                 return typeof status === 'number' ? status : null;
         }
 
+        function formatDeleteError(error: unknown): string {
+                const status = extractHttpStatus(error);
+                if (status === 403) {
+                        return m.delete_server_confirm_error_owner();
+                }
+                if (error && typeof error === 'object') {
+                        const message = (error as any)?.response?.data?.message;
+                        if (typeof message === 'string' && message.trim().length > 0) {
+                                return message;
+                        }
+                }
+                return m.delete_server_error_generic();
+        }
+
         function formatSaveError(error: unknown): string {
                 const status = extractHttpStatus(error);
                 if (status === 403) {
@@ -475,18 +571,30 @@
 				{m.invites()}
 			</button>
 		{/if}
-		{#if accessibleCategories.includes('integrations')}
-			<button
-				class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category ===
-				'integrations'
-					? 'bg-[var(--panel)] font-semibold'
-					: ''}"
-				onclick={() => (category = 'integrations')}
-			>
-				{m.integrations()}
-			</button>
-		{/if}
-	</svelte:fragment>
+                {#if accessibleCategories.includes('integrations')}
+                        <button
+                                class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category ===
+                                'integrations'
+                                        ? 'bg-[var(--panel)] font-semibold'
+                                        : ''}"
+                                onclick={() => (category = 'integrations')}
+                        >
+                                {m.integrations()}
+                        </button>
+                {/if}
+                {#if accessibleCategories.includes('danger')}
+                        <button
+                                class={`w-full rounded px-2 py-1 text-left transition ${
+                                        category === 'danger'
+                                                ? 'bg-red-500/20 font-semibold text-red-300'
+                                                : 'text-red-400 hover:bg-red-500/10 hover:text-red-300'
+                                }`}
+                                onclick={() => (category = 'danger')}
+                        >
+                                {m.danger_zone()}
+                        </button>
+                {/if}
+        </svelte:fragment>
 
         {#if category === 'profile' && accessibleCategories.includes('profile')}
                 <div class="space-y-4">
@@ -626,9 +734,94 @@
                 <GuildRolesManager />
 	{:else if category === 'moderation' && accessibleCategories.includes('moderation')}
 		<p>{m.moderation()}...</p>
-	{:else if category === 'invites' && accessibleCategories.includes('invites')}
-		<GuildInvitesManager />
-	{:else if category === 'integrations' && accessibleCategories.includes('integrations')}
-		<p>{m.integrations()}...</p>
-	{/if}
+        {:else if category === 'invites' && accessibleCategories.includes('invites')}
+                <GuildInvitesManager />
+        {:else if category === 'integrations' && accessibleCategories.includes('integrations')}
+                <p>{m.integrations()}...</p>
+        {:else if category === 'danger' && accessibleCategories.includes('danger')}
+                <div class="space-y-4">
+                        <div class="rounded-lg border border-red-500/40 bg-red-500/10 p-4">
+                                <h2 class="text-base font-semibold text-red-300">{m.danger_zone()}</h2>
+                                <p class="mt-2 text-sm text-red-200/90">{m.danger_zone_description()}</p>
+                                <p class="mt-4 text-sm text-red-200/90">
+                                        {m.delete_server_description({ server: activeGuildName })}
+                                </p>
+                                <div class="mt-5 flex justify-end">
+                                        <button
+                                                type="button"
+                                                class="rounded bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                                                onclick={openDeleteModal}
+                                                disabled={deletingGuild}
+                                        >
+                                                {deletingGuild ? m.delete_server_deleting() : m.delete_server_button()}
+                                        </button>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 </SettingsPanel>
+
+{#if showDeleteModal}
+        <div
+                class="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 px-4"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="delete-server-title"
+                aria-describedby="delete-server-description"
+        >
+                <div class="w-full max-w-md rounded-lg bg-[var(--panel-strong)] p-6 shadow-xl">
+                        <form
+                                class="space-y-4"
+                                onsubmit={(event) => {
+                                        event.preventDefault();
+                                        void confirmDeleteGuild();
+                                }}
+                        >
+                                <div class="space-y-1">
+                                        <h2 id="delete-server-title" class="text-lg font-semibold text-red-300">
+                                                {m.delete_server()}
+                                        </h2>
+                                        <p id="delete-server-description" class="text-sm text-[var(--muted)]">
+                                                {m.delete_server_confirm_description({ server: activeGuildName })}
+                                        </p>
+                                </div>
+                                <div class="space-y-2">
+                                        <label
+                                                class="text-sm font-medium text-[var(--muted)]"
+                                                for="delete-server-confirm-input"
+                                        >
+                                                {m.delete_server_confirm_label({ server: activeGuildName })}
+                                        </label>
+                                        <input
+                                                id="delete-server-confirm-input"
+                                                class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                                                bind:value={deleteConfirmation}
+                                                placeholder={m.delete_server_confirm_placeholder()}
+                                                oninput={() => (deleteGuildError = null)}
+                                                autocomplete="off"
+                                        />
+                                </div>
+                                {#if deleteGuildError}
+                                        <p class="text-sm text-red-400">{deleteGuildError}</p>
+                                {/if}
+                                <div class="flex justify-end gap-2">
+                                        <button
+                                                type="button"
+                                                class="rounded px-3 py-1 text-sm text-[var(--muted)] hover:bg-[var(--panel)]"
+                                                onclick={closeDeleteModal}
+                                                disabled={deletingGuild}
+                                        >
+                                                {m.cancel()}
+                                        </button>
+                                        <button
+                                                type="submit"
+                                                class="rounded bg-red-600 px-3 py-1 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                                                disabled={deletingGuild}
+                                        >
+                                                {deletingGuild ? m.delete_server_deleting() : m.delete_server_button()}
+                                        </button>
+                                </div>
+                        </form>
+                </div>
+        </div>
+{/if}
