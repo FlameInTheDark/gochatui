@@ -43,6 +43,7 @@ interface WSGlobalState {
         authed: boolean;
         lastHeartbeatE: number;
         reconnectTimer: ReturnType<typeof setTimeout> | null;
+        reconnectAttempts: number;
         shouldReconnect: boolean;
         latestToken: string | null;
         heartbeatSessionId: string | null;
@@ -76,6 +77,7 @@ const wsState: WSGlobalState =
                 authed: false,
                 lastHeartbeatE: 0,
                 reconnectTimer: null,
+                reconnectAttempts: 0,
                 shouldReconnect: true,
                 latestToken: get(auth.token),
                 heartbeatSessionId: null,
@@ -97,6 +99,7 @@ let lastT = wsState.lastT;
 let authed = wsState.authed;
 let lastHeartbeatE = wsState.lastHeartbeatE; // monotonically increasing heartbeat ack
 let reconnectTimer: ReturnType<typeof setTimeout> | null = wsState.reconnectTimer ?? null;
+let reconnectAttempts = wsState.reconnectAttempts ?? 0;
 let shouldReconnect = wsState.shouldReconnect;
 let latestToken: string | null = wsState.latestToken;
 let heartbeatSessionId: string | null = wsState.heartbeatSessionId;
@@ -752,6 +755,8 @@ export function disconnectWS() {
                 reconnectTimer = null;
                 wsState.reconnectTimer = null;
         }
+        reconnectAttempts = 0;
+        wsState.reconnectAttempts = reconnectAttempts;
         if (socket) {
                 try {
                         socket.close();
@@ -794,6 +799,8 @@ export function connectWS() {
         socket.onopen = () => {
                 wsConnected.set(true);
                 wsConnectionLost.set(false);
+                reconnectAttempts = 0;
+                wsState.reconnectAttempts = reconnectAttempts;
                 // Send auth (hello) immediately: op=1 with token and t
                 const token = latestToken ?? get(auth.token);
                 if (token) {
@@ -1081,13 +1088,21 @@ export function connectWS() {
                 socket = null;
                 wsState.socket = null;
                 if (!shouldReconnect) return;
-                wsConnectionLost.set(true);
+                const attempt = reconnectAttempts;
+                const delay = Math.min(attempt * 5000, 45000);
+                if (attempt === 0) {
+                        wsConnectionLost.set(false);
+                } else {
+                        wsConnectionLost.set(true);
+                }
                 if (!reconnectTimer) {
+                        reconnectAttempts = Math.min(attempt + 1, 9);
+                        wsState.reconnectAttempts = reconnectAttempts;
                         reconnectTimer = setTimeout(() => {
                                 reconnectTimer = null;
                                 wsState.reconnectTimer = null;
                                 connectWS();
-                        }, 1000);
+                        }, delay);
                         wsState.reconnectTimer = reconnectTimer;
                 }
         };
