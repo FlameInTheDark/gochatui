@@ -387,10 +387,8 @@
                                                                                 <span aria-hidden="true" class="text-xs opacity-70">›</span>
                                                                         {/if}
                                                                         {#if it.icon}
-                                                                                <svelte:component
-                                                                                        this={it.icon}
-                                                                                        class="h-4 w-4 shrink-0 opacity-80"
-                                                                                />
+                                                                                {@const Icon = it.icon}
+                                                                                <Icon class="h-4 w-4 shrink-0 opacity-80" />
                                                                         {/if}
                                                                 </span>
                                                         {/if}
@@ -429,10 +427,8 @@
 								>
                                                                         <span class="truncate">{child.label}</span>
                                                                         {#if child.icon}
-                                                                                <svelte:component
-                                                                                        this={child.icon}
-                                                                                        class="h-4 w-4 shrink-0 text-[var(--fg-muted)] opacity-80"
-                                                                                />
+                                                                                {@const Icon = child.icon}
+                                                                                <Icon class="h-4 w-4 shrink-0 text-[var(--fg-muted)] opacity-80" />
                                                                         {/if}
                                                                 </button>
                                                         {/each}
