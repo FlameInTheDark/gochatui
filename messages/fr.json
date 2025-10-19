@@ -159,7 +159,7 @@
         "auth_reset_failed": "Échec de la réinitialisation du mot de passe",
         "ctx_copy_image": "Copier l'image",
         "ctx_copy_message": "Copier le message",
-        "ctx_copy_selected_text": "Copier le texte sélectionné",
+        "ctx_copy_selected_text": "Copier",
         "ctx_open_attachment_url": "Ouvrir l'URL",
         "ctx_copy_attachment_url": "Copier l'URL",
         "ctx_open_attachment_url_named": "Ouvrir l'URL — {name}",
