@@ -799,9 +799,10 @@
         const me = auth.user;
         let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
 	let isEditing = $state(false);
-	let draft = $state(message.content ?? '');
-	let saving = $state(false);
-	let editTextarea = $state<HTMLTextAreaElement | null>(null);
+        let draft = $state(message.content ?? '');
+        let saving = $state(false);
+        let editTextarea = $state<HTMLTextAreaElement | null>(null);
+        let messageRoot = $state<HTMLElement | null>(null);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
         const segments = $derived(parseMessageContent(message.content ?? ''));
         const authorAvatarUrl = $derived.by(() =>
@@ -1434,6 +1435,46 @@
                 void copyToClipboard(message.content);
         }
 
+        function getSelectedMessageText(): string | null {
+                if (typeof window === 'undefined') {
+                        return null;
+                }
+                const root = messageRoot;
+                if (!root) {
+                        return null;
+                }
+                const selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                        return null;
+                }
+                const NodeCtor: typeof Node | undefined = typeof Node !== 'undefined' ? Node : undefined;
+                if (!NodeCtor) {
+                        return null;
+                }
+                let intersects = false;
+                for (let i = 0; i < selection.rangeCount; i += 1) {
+                        const range = selection.getRangeAt(i);
+                        const { startContainer, endContainer, commonAncestorContainer } = range;
+                        if (
+                                (commonAncestorContainer instanceof NodeCtor &&
+                                        (root === commonAncestorContainer || root.contains(commonAncestorContainer))) ||
+                                (startContainer instanceof NodeCtor && root.contains(startContainer)) ||
+                                (endContainer instanceof NodeCtor && root.contains(endContainer))
+                        ) {
+                                intersects = true;
+                                break;
+                        }
+                }
+                if (!intersects) {
+                        return null;
+                }
+                const text = selection.toString();
+                if (!text || !text.trim()) {
+                        return null;
+                }
+                return text;
+        }
+
         async function copyImageToClipboard(target: {
                 attachment: MessageAttachment;
                 meta: AttachmentMeta;
@@ -1508,6 +1549,7 @@
                 const guildId =
                         $selectedGuildId ?? toSnowflake((message as any)?.guild_id) ?? (channelId ? '@me' : null);
                 const items: ContextMenuItem[] = [];
+                const selectedText = getSelectedMessageText();
                 const attachmentEntries = buildAttachmentEntries();
                 const attachmentEntriesWithUrl = attachmentEntries.filter((entry) => Boolean(entry.meta.url));
                 const attachmentKeyFromEvent = findAttachmentKeyFromEvent(e);
@@ -1523,6 +1565,15 @@
                 const useGenericAttachmentLabels =
                         primaryAttachment != null &&
                         (targetedAttachment != null || prioritizedAttachments.length === 1);
+                if (selectedText) {
+                        items.push({
+                                label: m.ctx_copy_selected_text(),
+                                action: () => {
+                                        void copyToClipboard(selectedText);
+                                },
+                                icon: Copy
+                        });
+                }
                 const hasCopyableText =
                         typeof message.content === 'string' && message.content.trim().length > 0;
                 if (hasCopyableText) {
@@ -1999,6 +2050,7 @@
         onpointerup={handleRootPointerUp}
         oncontextmenu={openMessageMenu}
         data-message-id={messageDomId((message as any)?.id)}
+        bind:this={messageRoot}
 >
 	{#if compact}
 		<div

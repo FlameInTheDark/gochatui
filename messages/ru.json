@@ -192,6 +192,7 @@
         "auth_reset_failed": "Ошибка сброса пароля",
         "ctx_copy_image": "Скопировать изображение",
         "ctx_copy_message": "Скопировать сообщение",
+        "ctx_copy_selected_text": "Скопировать выделенный текст",
         "ctx_open_attachment_url": "Открыть ссылку",
         "ctx_copy_attachment_url": "Скопировать ссылку",
         "ctx_open_attachment_url_named": "Открыть ссылку — {name}",

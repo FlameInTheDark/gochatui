@@ -192,6 +192,7 @@
         "auth_reset_failed": "Password reset failed",
         "ctx_copy_image": "Copy image",
         "ctx_copy_message": "Copy message",
+        "ctx_copy_selected_text": "Copy selected text",
         "ctx_open_attachment_url": "Open URL",
         "ctx_copy_attachment_url": "Copy URL",
         "ctx_open_attachment_url_named": "Open URL — {name}",
