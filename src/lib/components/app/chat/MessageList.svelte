@@ -1197,10 +1197,10 @@
 
         @keyframes message-jump-highlight {
                 0% {
-                        background-color: rgba(250, 204, 21, 0.85);
+                        background-color: rgba(249, 115, 22, 0.75);
                 }
                 60% {
-                        background-color: rgba(250, 204, 21, 0.35);
+                        background-color: rgba(249, 115, 22, 0.28);
                 }
                 100% {
                         background-color: transparent;
