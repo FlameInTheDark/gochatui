@@ -1040,6 +1040,69 @@ export function updateGuildSelectedChannel(guildId: string, channelId: string | 
         });
 }
 
+export function setChannelLastReadMessageId(
+        guildId: string | null | undefined,
+        channelId: string | null | undefined,
+        messageId: string | null | undefined
+) {
+        const normalizedChannelId = toSnowflakeString(channelId);
+        if (!normalizedChannelId) return;
+        const normalizedGuildId =
+                guildId != null ? toSnowflakeString(guildId) ?? (guildId === '@me' ? '@me' : null) : '@me';
+        if (!normalizedGuildId) return;
+        const normalizedMessageId =
+                messageId != null ? toSnowflakeString(messageId) ?? null : null;
+
+        mutateAppSettingsWithoutSaving((settings) => {
+                if (normalizedGuildId === '@me') {
+                        const index = settings.dmChannels.findIndex(
+                                (entry) => entry.channelId === normalizedChannelId
+                        );
+                        if (index === -1) return false;
+                        const existing = settings.dmChannels[index];
+                        if ((existing.lastReadMessageId ?? null) === normalizedMessageId) {
+                                return false;
+                        }
+                        settings.dmChannels[index] = {
+                                ...existing,
+                                lastReadMessageId: normalizedMessageId
+                        } satisfies VisibleDmChannel;
+                        return true;
+                }
+
+                const entry = findGuildLayoutGuild(settings.guildLayout, normalizedGuildId);
+                if (!entry) return false;
+                const currentStates = Array.isArray(entry.readStates)
+                        ? entry.readStates.slice()
+                        : [];
+                const idx = currentStates.findIndex(
+                        (state) => state.channelId === normalizedChannelId
+                );
+                if (idx >= 0) {
+                        const existing = currentStates[idx];
+                        if ((existing.lastReadMessageId ?? null) === normalizedMessageId) {
+                                return false;
+                        }
+                        currentStates[idx] = {
+                                ...existing,
+                                channelId: normalizedChannelId,
+                                lastReadMessageId: normalizedMessageId,
+                                scrollPosition: existing.scrollPosition ?? null
+                        } satisfies GuildChannelReadState;
+                        entry.readStates = currentStates;
+                        return true;
+                }
+
+                currentStates.push({
+                        channelId: normalizedChannelId,
+                        lastReadMessageId: normalizedMessageId,
+                        scrollPosition: null
+                });
+                entry.readStates = currentStates;
+                return true;
+        });
+}
+
 export function addVisibleDmChannel(
         channelId: string | null | undefined,
         userId?: string | null | undefined,
