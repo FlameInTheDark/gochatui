@@ -15,6 +15,8 @@
         import { m } from '$lib/paraglide/messages.js';
         import { Search } from 'lucide-svelte';
         import { tooltip } from '$lib/actions/tooltip';
+        import MessageAttachments from '../chat/MessageAttachments.svelte';
+        import type { MessageAttachment } from '../chat/messageAttachments';
 
         type FilterType = 'from' | 'mentions' | 'has';
         interface TextFilterToken {
@@ -771,17 +773,21 @@
                                                                                         </div>
                                                                                 {/if}
                                                                         </div>
-                                                                        <div class="mt-1 whitespace-pre-line text-sm leading-snug text-[var(--fg)]">
-                                                                                {message.content?.trim() || m.search_result_no_content()}
-                                                                        </div>
-                                                                        {#if message.attachments && message.attachments.length > 0}
-                                                                                <div class="mt-2 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-                                                                                        <span>
-                                                                                                {m.search_result_attachments({
-                                                                                                        count: String(message.attachments.length)
-                                                                                                })}
-                                                                                        </span>
+                                                                        {#if message.content?.trim()}
+                                                                                <div class="mt-1 whitespace-pre-line text-sm leading-snug text-[var(--fg)]">
+                                                                                        {message.content?.trim() ?? ''}
                                                                                 </div>
+                                                                        {:else if !message.attachments?.length}
+                                                                                <div class="mt-1 whitespace-pre-line text-sm leading-snug text-[var(--fg)]">
+                                                                                        {m.search_result_no_content()}
+                                                                                </div>
+                                                                        {/if}
+                                                                        {#if message.attachments?.length}
+                                                                                <MessageAttachments
+                                                                                        attachments={(message.attachments ?? []) as MessageAttachment[]}
+                                                                                        messageId={message.id}
+                                                                                        compact={true}
+                                                                                />
                                                                         {/if}
                                                                 </div>
                                                         </div>
