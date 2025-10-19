@@ -34,6 +34,7 @@ interface WSGlobalState {
         wsConnectionLost: Writable<boolean>;
         wsEvent: Writable<AnyRecord | null>;
         wsAuthenticated: Writable<boolean>;
+        wsReconnectCountdown: Writable<number | null>;
         socket: WebSocket | null;
         hbTimer: ReturnType<typeof setInterval> | null;
         hbWorker: Worker | null;
@@ -43,6 +44,9 @@ interface WSGlobalState {
         authed: boolean;
         lastHeartbeatE: number;
         reconnectTimer: ReturnType<typeof setTimeout> | null;
+        reconnectCountdownTimer: ReturnType<typeof setInterval> | null;
+        reconnectCountdownTarget: number;
+        reconnectAttempts: number;
         shouldReconnect: boolean;
         latestToken: string | null;
         heartbeatSessionId: string | null;
@@ -67,6 +71,7 @@ const wsState: WSGlobalState =
                 wsConnectionLost: writable(false),
                 wsEvent: writable<AnyRecord | null>(null),
                 wsAuthenticated: writable(false),
+                wsReconnectCountdown: writable<number | null>(null),
                 socket: null,
                 hbTimer: null,
                 hbWorker: null,
@@ -76,6 +81,9 @@ const wsState: WSGlobalState =
                 authed: false,
                 lastHeartbeatE: 0,
                 reconnectTimer: null,
+                reconnectCountdownTimer: null,
+                reconnectCountdownTarget: 0,
+                reconnectAttempts: 0,
                 shouldReconnect: true,
                 latestToken: get(auth.token),
                 heartbeatSessionId: null,
@@ -83,10 +91,15 @@ const wsState: WSGlobalState =
                 cleanupSubscribers: null
         });
 
+wsState.wsReconnectCountdown ??= writable<number | null>(null);
+wsState.reconnectCountdownTimer ??= null;
+wsState.reconnectCountdownTarget ??= 0;
+
 export const wsConnected = wsState.wsConnected;
 export const wsConnectionLost = wsState.wsConnectionLost;
 export const wsEvent = wsState.wsEvent;
 export const wsAuthenticated = wsState.wsAuthenticated;
+export const wsReconnectCountdown = wsState.wsReconnectCountdown;
 
 let socket: WebSocket | null = wsState.socket ?? null;
 let hbTimer: ReturnType<typeof setInterval> | null = wsState.hbTimer ?? null;
@@ -97,6 +110,10 @@ let lastT = wsState.lastT;
 let authed = wsState.authed;
 let lastHeartbeatE = wsState.lastHeartbeatE; // monotonically increasing heartbeat ack
 let reconnectTimer: ReturnType<typeof setTimeout> | null = wsState.reconnectTimer ?? null;
+let reconnectCountdownTimer: ReturnType<typeof setInterval> | null =
+        wsState.reconnectCountdownTimer ?? null;
+let reconnectCountdownTarget = wsState.reconnectCountdownTarget ?? 0;
+let reconnectAttempts = wsState.reconnectAttempts ?? 0;
 let shouldReconnect = wsState.shouldReconnect;
 let latestToken: string | null = wsState.latestToken;
 let heartbeatSessionId: string | null = wsState.heartbeatSessionId;
@@ -743,6 +760,40 @@ function stopHeartbeat() {
         stopHeartbeatWorker();
 }
 
+function clearReconnectCountdown() {
+        if (reconnectCountdownTimer) {
+                clearInterval(reconnectCountdownTimer);
+        }
+        reconnectCountdownTimer = null;
+        reconnectCountdownTarget = 0;
+        wsState.reconnectCountdownTimer = null;
+        wsState.reconnectCountdownTarget = 0;
+        wsReconnectCountdown.set(null);
+}
+
+function startReconnectCountdown(delayMs: number) {
+        clearReconnectCountdown();
+        if (delayMs <= 0) return;
+
+        const targetTime = Date.now() + delayMs;
+        reconnectCountdownTarget = targetTime;
+        wsState.reconnectCountdownTarget = targetTime;
+
+        const updateCountdown = () => {
+                const remainingMs = Math.max(reconnectCountdownTarget - Date.now(), 0);
+                if (remainingMs <= 0) {
+                        clearReconnectCountdown();
+                        return;
+                }
+                const seconds = Math.ceil(remainingMs / 1000);
+                wsReconnectCountdown.set(seconds);
+        };
+
+        updateCountdown();
+        reconnectCountdownTimer = setInterval(updateCountdown, 250);
+        wsState.reconnectCountdownTimer = reconnectCountdownTimer;
+}
+
 export function disconnectWS() {
         shouldReconnect = false;
         wsState.shouldReconnect = false;
@@ -752,6 +803,9 @@ export function disconnectWS() {
                 reconnectTimer = null;
                 wsState.reconnectTimer = null;
         }
+        clearReconnectCountdown();
+        reconnectAttempts = 0;
+        wsState.reconnectAttempts = reconnectAttempts;
         if (socket) {
                 try {
                         socket.close();
@@ -794,6 +848,9 @@ export function connectWS() {
         socket.onopen = () => {
                 wsConnected.set(true);
                 wsConnectionLost.set(false);
+                clearReconnectCountdown();
+                reconnectAttempts = 0;
+                wsState.reconnectAttempts = reconnectAttempts;
                 // Send auth (hello) immediately: op=1 with token and t
                 const token = latestToken ?? get(auth.token);
                 if (token) {
@@ -1081,13 +1138,24 @@ export function connectWS() {
                 socket = null;
                 wsState.socket = null;
                 if (!shouldReconnect) return;
-                wsConnectionLost.set(true);
+                const attempt = reconnectAttempts;
+                const delay = Math.min(attempt * 5000, 45000);
+                if (attempt === 0) {
+                        wsConnectionLost.set(false);
+                        clearReconnectCountdown();
+                } else {
+                        wsConnectionLost.set(true);
+                        startReconnectCountdown(delay);
+                }
                 if (!reconnectTimer) {
+                        reconnectAttempts = Math.min(attempt + 1, 9);
+                        wsState.reconnectAttempts = reconnectAttempts;
                         reconnectTimer = setTimeout(() => {
                                 reconnectTimer = null;
                                 wsState.reconnectTimer = null;
+                                clearReconnectCountdown();
                                 connectWS();
-                        }, 1000);
+                        }, delay);
                         wsState.reconnectTimer = reconnectTimer;
                 }
         };
