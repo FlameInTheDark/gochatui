@@ -1207,7 +1207,7 @@
                 }
         }
 
-        .message-jump-highlight {
+        :global(.message-jump-highlight) {
                 animation: message-jump-highlight 1.4s ease-out;
         }
 </style>
