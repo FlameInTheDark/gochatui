@@ -637,6 +637,18 @@
                 scroller.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
                 wasAtBottom = false;
                 newCount = 0;
+
+                const highlightClass = 'message-jump-highlight';
+                target.classList.remove(highlightClass);
+                void target.offsetWidth;
+                target.classList.add(highlightClass);
+                target.addEventListener(
+                        'animationend',
+                        () => {
+                                target.classList.remove(highlightClass);
+                        },
+                        { once: true }
+                );
                 return true;
         }
 
@@ -1181,5 +1193,21 @@
 
         .chat-scroll::-webkit-scrollbar-track {
                 background: transparent;
+        }
+
+        @keyframes message-jump-highlight {
+                0% {
+                        background-color: rgba(250, 204, 21, 0.85);
+                }
+                60% {
+                        background-color: rgba(250, 204, 21, 0.35);
+                }
+                100% {
+                        background-color: transparent;
+                }
+        }
+
+        :global(.message-jump-highlight) {
+                animation: message-jump-highlight 1.4s ease-out;
         }
 </style>
