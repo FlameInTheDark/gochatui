@@ -380,12 +380,20 @@
 							onpointerleave={() => handleTriggerLeave(index)}
 							onclick={(event) => handleItemClick(event, it, index)}
 						>
-							<span class="truncate">{it.label}</span>
-							{#if it.children?.length}
-								<span aria-hidden="true" class="text-xs opacity-70">›</span>
-							{/if}
-						</button>
-					{/each}
+                                                        <span class="truncate">{it.label}</span>
+                                                        {#if it.children?.length || it.icon}
+                                                                <span class="flex items-center gap-2 pl-2 text-[var(--fg-muted)]">
+                                                                        {#if it.children?.length}
+                                                                                <span aria-hidden="true" class="text-xs opacity-70">›</span>
+                                                                        {/if}
+                                                                        {#if it.icon}
+                                                                                {@const Icon = it.icon}
+                                                                                <Icon class="h-4 w-4 shrink-0 opacity-80" />
+                                                                        {/if}
+                                                                </span>
+                                                        {/if}
+                                                </button>
+                                        {/each}
 				</div>
 			</div>
 		</div>
@@ -417,9 +425,13 @@
 									disabled={child.disabled}
 									onclick={() => handleSubmenuItemClick(child)}
 								>
-									<span class="truncate">{child.label}</span>
-								</button>
-							{/each}
+                                                                        <span class="truncate">{child.label}</span>
+                                                                        {#if child.icon}
+                                                                                {@const Icon = child.icon}
+                                                                                <Icon class="h-4 w-4 shrink-0 text-[var(--fg-muted)] opacity-80" />
+                                                                        {/if}
+                                                                </button>
+                                                        {/each}
 						</div>
 					</div>
 				</div>
