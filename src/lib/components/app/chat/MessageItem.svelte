@@ -24,6 +24,7 @@
                 CircleDot,
                 Copy,
                 Download,
+                ExternalLink,
                 Hash,
                 Image as ImageIcon,
                 ImageOff,
@@ -484,6 +485,13 @@
                 | { type: 'gallery'; items: AttachmentRenderItem[] }
                 | { type: 'single'; item: AttachmentRenderItem };
 
+        type AttachmentEntry = {
+                attachment: MessageAttachment;
+                meta: AttachmentMeta;
+                index: number;
+                key: string;
+        };
+
         function formatContentType(value: unknown): string | null {
                 if (typeof value !== 'string') return null;
                 const trimmed = value.trim();
@@ -898,6 +906,52 @@
                                         : 'message';
 
                 return `${messageKey}:${attachmentFilename(attachment)}:${index}`;
+        }
+
+        function buildAttachmentEntries(): AttachmentEntry[] {
+                const attachments = (message.attachments ?? []) as MessageAttachment[];
+                return attachments.map((attachment, index) => ({
+                        attachment,
+                        meta: getAttachmentMeta(attachment),
+                        index,
+                        key: attachmentStableKey(attachment, index),
+                }));
+        }
+
+        function findAttachmentEntryByKey(
+                key: string | null,
+                entries: AttachmentEntry[]
+        ): AttachmentEntry | null {
+                if (!key) return null;
+                for (const entry of entries) {
+                        if (entry.key === key) {
+                                return entry;
+                        }
+                }
+                return null;
+        }
+
+        function findAttachmentKeyFromEvent(event: MouseEvent): string | null {
+                const target = event.target as HTMLElement | null;
+                if (!target) return null;
+                const element = target.closest<HTMLElement>('[data-attachment-key]');
+                if (!element) return null;
+                const attr = element.getAttribute('data-attachment-key');
+                return attr && attr.trim() ? attr : null;
+        }
+
+        function openAttachmentUrl(url: string | null | undefined): void {
+                if (!url) return;
+                if (typeof window === 'undefined') return;
+                try {
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                } catch {
+                        try {
+                                window.location.href = url;
+                        } catch {
+                                /* empty */
+                        }
+                }
         }
 
         function isVideoAttachmentActive(key: string): boolean {
@@ -1454,6 +1508,21 @@
                 const guildId =
                         $selectedGuildId ?? toSnowflake((message as any)?.guild_id) ?? (channelId ? '@me' : null);
                 const items: ContextMenuItem[] = [];
+                const attachmentEntries = buildAttachmentEntries();
+                const attachmentEntriesWithUrl = attachmentEntries.filter((entry) => Boolean(entry.meta.url));
+                const attachmentKeyFromEvent = findAttachmentKeyFromEvent(e);
+                const targetedAttachment =
+                        findAttachmentEntryByKey(attachmentKeyFromEvent, attachmentEntriesWithUrl) ?? null;
+                const prioritizedAttachments = targetedAttachment
+                        ? [
+                                  targetedAttachment,
+                                  ...attachmentEntriesWithUrl.filter((entry) => entry !== targetedAttachment),
+                          ]
+                        : attachmentEntriesWithUrl;
+                const primaryAttachment = prioritizedAttachments[0] ?? null;
+                const useGenericAttachmentLabels =
+                        primaryAttachment != null &&
+                        (targetedAttachment != null || prioritizedAttachments.length === 1);
                 const hasCopyableText =
                         typeof message.content === 'string' && message.content.trim().length > 0;
                 if (hasCopyableText) {
@@ -1475,6 +1544,50 @@
                                 },
                                 disabled: !clipboardSupported,
                                 icon: ImageIcon
+                        });
+                }
+                if (primaryAttachment) {
+                        const primaryUrl = primaryAttachment.meta.url;
+                        const primaryOpenLabel = useGenericAttachmentLabels
+                                ? m.ctx_open_attachment_url()
+                                : m.ctx_open_attachment_url_named({ name: primaryAttachment.meta.name });
+                        const primaryCopyLabel = useGenericAttachmentLabels
+                                ? m.ctx_copy_attachment_url()
+                                : m.ctx_copy_attachment_url_named({ name: primaryAttachment.meta.name });
+                        items.push({
+                                label: primaryOpenLabel,
+                                action: () => openAttachmentUrl(primaryUrl),
+                                disabled: !primaryUrl,
+                                icon: ExternalLink
+                        });
+                        items.push({
+                                label: primaryCopyLabel,
+                                action: () => {
+                                        if (primaryUrl) {
+                                                void copyToClipboard(primaryUrl);
+                                        }
+                                },
+                                disabled: !primaryUrl,
+                                icon: Copy
+                        });
+                        prioritizedAttachments.slice(1).forEach((entry) => {
+                                const url = entry.meta.url;
+                                items.push({
+                                        label: m.ctx_open_attachment_url_named({ name: entry.meta.name }),
+                                        action: () => openAttachmentUrl(url),
+                                        disabled: !url,
+                                        icon: ExternalLink
+                                });
+                                items.push({
+                                        label: m.ctx_copy_attachment_url_named({ name: entry.meta.name }),
+                                        action: () => {
+                                                if (url) {
+                                                        void copyToClipboard(url);
+                                                }
+                                        },
+                                        disabled: !url,
+                                        icon: Copy
+                                });
                         });
                 }
                 if (guildId && channelId && messageId) {
@@ -2106,7 +2219,10 @@
                                                                                                 ? item.meta.previewUrl ?? GIF_PLACEHOLDER_SRC
                                                                                                 : item.meta.previewUrl ?? item.meta.url}
                                                                                 {@const galleryPreviewFailed = Boolean(failedPreviewKeys[tileKey])}
-                                                                                <div class="group relative aspect-square overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]">
+                                                                                <div
+                                                                                        class="group relative aspect-square overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                                                                        data-attachment-key={tileKey}
+                                                                                >
                                                                                         <button
                                                                                                 type="button"
                                                                                                 class="flex h-full w-full cursor-zoom-in items-center justify-center bg-transparent p-0 text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
@@ -2165,6 +2281,7 @@
                                                                         {@const imageBounds = computeVisualAttachmentBounds(meta)}
                                                                         <div
                                                                                 class="group relative inline-flex max-w-full items-center justify-center overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                                                                data-attachment-key={previewKey}
                                                                                 style={visualAttachmentWrapperStyle}
                                                                                 style:width={`${imageBounds.width}px`}
                                                                                 style:height={`${imageBounds.height}px`}
@@ -2226,6 +2343,7 @@
                                                                         {#if isVideoAttachmentActive(attachmentKey)}
                                                                                 <div
                                                                                         class="group relative inline-flex max-w-full overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                                                                        data-attachment-key={attachmentKey}
                                                                                         style={visualAttachmentWrapperStyle}
                                                                                         style:width={`${videoBounds.width}px`}
                                                                                         style:height={`${videoBounds.height}px`}
@@ -2273,6 +2391,7 @@
                                                                         {:else}
                                                                                 <div
                                                                                         class="group relative inline-flex max-w-full overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                                                                        data-attachment-key={attachmentKey}
                                                                                         style={visualAttachmentWrapperStyle}
                                                                                         style:width={`${videoBounds.width}px`}
                                                                                         style:height={`${videoBounds.height}px`}
@@ -2331,15 +2450,19 @@
                                                                                 </div>
                                                                         {/if}
                                                                 {:else if meta.url && isAudioAttachment}
-                                                                        <AudioAttachmentPlayer
-                                                                                preload="metadata"
-                                                                                src={meta.url}
-                                                                                name={meta.name ?? undefined}
-                                                                                sizeLabel={meta.sizeLabel ?? undefined}
-                                                                        />
+                                                                        {@const audioAttachmentKey = attachmentStableKey(attachment, index)}
+                                                                        <div data-attachment-key={audioAttachmentKey} class="inline-flex">
+                                                                                <AudioAttachmentPlayer
+                                                                                        preload="metadata"
+                                                                                        src={meta.url}
+                                                                                        name={meta.name ?? undefined}
+                                                                                        sizeLabel={meta.sizeLabel ?? undefined}
+                                                                                />
+                                                                        </div>
                                                                 {:else}
                                                                         <a
                                                                                 class="flex max-w-[18rem] items-center gap-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                                data-attachment-key={attachmentStableKey(attachment, index)}
                                                                                 href={meta.url ?? undefined}
                                                                                 rel={meta.url ? 'noopener noreferrer' : undefined}
                                                                                 target={meta.url ? '_blank' : undefined}
