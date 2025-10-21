@@ -17,7 +17,7 @@ vi.mock('$lib/stores/unreadSeed', () => {
         return {
                 __esModule: true,
                 unreadSnapshot,
-                updateUnreadSnapshot: unreadSnapshot.set.bind(unreadSnapshot)
+                updateUnreadSnapshot: (value: null) => unreadSnapshot.set(value)
         };
 });
 

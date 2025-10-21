@@ -4,13 +4,9 @@ vi.mock('$app/environment', () => ({
         browser: false
 }));
 
-vi.mock(
-        '$lib/paraglide/runtime',
-        () => ({
-                setLocale: vi.fn()
-        }),
-        { virtual: true }
-);
+vi.mock('$lib/paraglide/runtime', () => ({
+        setLocale: vi.fn()
+}));
 
 import { get } from 'svelte/store';
 
@@ -19,6 +15,7 @@ import {
         applyReadStatesMapToLayout,
         type AppSettings,
         type GuildLayoutItem,
+        type GuildTopLevelItem,
         guildChannelReadStateLookup
 } from './settings';
 
@@ -40,7 +37,9 @@ describe('applyReadStatesMapToLayout', () => {
 
                 applyReadStatesMapToLayout(layout, readStateMap, undefined, channelGuildLookup);
 
-                expect(layout[0].readStates).toEqual([
+                const guildLayout = layout[0] as GuildTopLevelItem;
+
+                expect(guildLayout.readStates).toEqual([
                         {
                                 channelId: '456',
                                 lastReadMessageId: '789',

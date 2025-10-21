@@ -5,13 +5,9 @@ vi.mock('$app/environment', () => ({
         browser: false
 }));
 
-vi.mock(
-        '$lib/paraglide/runtime',
-        () => ({
-                setLocale: vi.fn()
-        }),
-        { virtual: true }
-);
+vi.mock('$lib/paraglide/runtime', () => ({
+        setLocale: vi.fn()
+}));
 
 const userMeSettingsGet = vi.fn();
 const userMeSettingsPost = vi.fn();
