@@ -1,3 +1,10 @@
+<script lang="ts" module>
+        export type ChannelPaneHandle = {
+                openCreateChannel: (parentId?: string | null) => void;
+                openCreateCategory: () => void;
+        };
+</script>
+
 <script lang="ts">
 	import { get } from 'svelte/store';
         import { auth } from '$lib/stores/auth';
@@ -26,10 +33,10 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
-        import { Check, Slash, X } from 'lucide-svelte';
-	import {
-		loadGuildRolesCached,
-		loadChannelRoleIds,
+        import { Check, Slash, X, Volume2 } from 'lucide-svelte';
+        import {
+                loadGuildRolesCached,
+                loadChannelRoleIds,
 		primeGuildChannelRoles,
 		pruneChannelRoleCache,
 		refreshChannelRoleIds,
@@ -46,9 +53,13 @@
         } from '$lib/utils/permissions';
         import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import { joinVoiceChannel, leaveVoiceChannel, voiceSession } from '$lib/stores/voice';
+        import VoiceChannelParticipants from '$lib/components/app/sidebar/VoiceChannelParticipants.svelte';
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadChannels = unreadChannelsByGuild;
+        const voice = voiceSession;
+        const selectedGuildIdValue = $derived($selectedGuildId ? String($selectedGuildId) : '');
 
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
 
@@ -57,6 +68,7 @@
 	let creatingCategory = $state(false);
 	let newChannelName = $state('');
 	let newChannelPrivate = $state(false);
+	let newChannelType = $state<'text' | 'voice'>('text');
 	let newCategoryName = $state('');
 	let channelError: string | null = $state(null);
 	let categoryError: string | null = $state(null);
@@ -92,15 +104,11 @@
 	} | null>(null);
         let editChannelPermissionsLoadToken = 0;
 
-        export type ChannelPaneHandle = {
-                openCreateChannel: (parentId?: string | null) => void;
-                openCreateCategory: () => void;
-        };
-
         export function openCreateChannel(parentId: string | null = null) {
                 creatingChannel = true;
                 channelError = null;
                 creatingChannelParent = parentId;
+                newChannelType = 'text';
         }
 
         export function openCreateCategory() {
@@ -229,11 +237,103 @@
                 return Boolean($unreadChannels?.[gid]?.[cid]);
         }
 
-	function currentGuildChannels(): DtoChannel[] {
-		const gid = $selectedGuildId ?? '';
-		if (!gid) return [];
-		const list = $channelsByGuild[gid] ?? [];
-		return list.filter((channel) => canAccessChannel(gid, channel));
+        function isVoiceChannel(channel: DtoChannel): boolean {
+                return Number((channel as any)?.type ?? 0) === 1;
+        }
+
+        function voiceStateForChannel(channelId: string, channel: DtoChannel): 'none' | 'connecting' | 'connected' {
+                const cid = channelId ? String(channelId) : '';
+                if (!cid || !isVoiceChannel(channel)) return 'none';
+                const state = $voice;
+                if (!state.channelId || !state.guildId) return 'none';
+                if (state.channelId !== cid) return 'none';
+                const currentGuildId = $selectedGuildId ? String($selectedGuildId) : null;
+                if (currentGuildId && state.guildId !== currentGuildId) return 'none';
+                if (state.status === 'connecting') return 'connecting';
+                if (state.status === 'connected') return 'connected';
+                return 'none';
+        }
+
+        function joinVoiceById(channelId: string) {
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                if (!gid || !channelId) return;
+                void joinVoiceChannel(gid, channelId);
+        }
+
+        function activateChannel(channel: DtoChannel) {
+                const id = String((channel as any)?.id ?? '');
+                if (!id) return;
+                const type = Number((channel as any)?.type ?? 0);
+                if (type === 0) {
+                        selectChannel(id);
+                } else if (type === 1) {
+                        joinVoiceById(id);
+                }
+        }
+
+        function handleChannelKey(event: KeyboardEvent, channel: DtoChannel) {
+                if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar' && event.key !== 'Space') return;
+                event.preventDefault();
+                activateChannel(channel);
+        }
+
+        function leaveVoiceIfChannel(guildId: string, channelId: string) {
+                const state = $voice;
+                if (!state.channelId || !state.guildId) return;
+                if (state.guildId !== guildId) return;
+                if (state.channelId !== channelId) return;
+                leaveVoiceChannel();
+        }
+
+        function channelRowClasses(
+                channelId: string,
+                channel: DtoChannel,
+                channelUnread: boolean,
+                voiceState?: 'none' | 'connecting' | 'connected'
+        ): string {
+                const classes = [
+                        'relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)]',
+                        channelUnread ? 'pl-6' : 'pl-3'
+                ];
+                const state = voiceState ?? voiceStateForChannel(channelId, channel);
+                const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
+                if (isTextChannel && $selectedChannelId === channelId) {
+                        classes.push('bg-[var(--panel)]');
+                }
+                if (state === 'connected') {
+                        classes.push('bg-[var(--panel)]', 'ring-1', 'ring-[var(--brand)]');
+                }
+                if (state === 'connecting') {
+                        classes.push('bg-[var(--panel)]/60');
+                }
+                return classes.filter(Boolean).join(' ');
+        }
+
+        function nestedChannelRowClasses(
+                channelId: string,
+                channel: DtoChannel,
+                voiceState?: 'none' | 'connecting' | 'connected'
+        ): string {
+                const classes = ['flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)]'];
+                const state = voiceState ?? voiceStateForChannel(channelId, channel);
+                const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
+                if (isTextChannel && $selectedChannelId === channelId) {
+                        classes.push('bg-[var(--panel)]');
+                }
+                if (state === 'connected') {
+                        classes.push('bg-[var(--panel)]', 'ring-1', 'ring-[var(--brand)]');
+                }
+                if (state === 'connecting') {
+                        classes.push('bg-[var(--panel)]/60');
+                }
+                return classes.filter(Boolean).join(' ');
+        }
+
+        function currentGuildChannels(): DtoChannel[] {
+                const gid = $selectedGuildId ?? '';
+                if (!gid) return [];
+                const list = $channelsByGuild[gid] ?? [];
+                return list.filter((channel) => canAccessChannel(gid, channel));
 	}
 
 	$effect(() => {
@@ -522,28 +622,29 @@
 				}
 			}
 
-			if (ev?.t === 109 && ev?.d?.channel_id != null) {
-				const gid = String(ev.d.guild_id);
-				const cid = String(ev.d.channel_id);
-				let list: DtoChannel[] = [];
-				channelsByGuild.update((map) => {
-					list = (map[gid] ?? []).filter((c) => String((c as any).id) !== cid);
-					return { ...map, [gid]: list };
-				});
-				pruneChannelRoleCache(gid, list);
-				invalidateChannelRoleIds(gid, cid);
-				messagesByChannel.update((map) => {
-					if (map[cid]) {
-						const { [cid]: _removed, ...rest } = map;
-						return rest;
-					}
-					return map;
-				});
-				const curGuild = String(get(selectedGuildId) ?? '');
-				const curChannel = String(get(selectedChannelId) ?? '');
-				if (curGuild === gid && curChannel === cid) {
-					const next = list.find((c: any) => (c as any).type === 0);
-					const nextId = next ? String((next as any).id) : null;
+                        if (ev?.t === 109 && ev?.d?.channel_id != null) {
+                                const gid = String(ev.d.guild_id);
+                                const cid = String(ev.d.channel_id);
+                                let list: DtoChannel[] = [];
+                                channelsByGuild.update((map) => {
+                                        list = (map[gid] ?? []).filter((c) => String((c as any).id) !== cid);
+                                        return { ...map, [gid]: list };
+                                });
+                                pruneChannelRoleCache(gid, list);
+                                invalidateChannelRoleIds(gid, cid);
+                                messagesByChannel.update((map) => {
+                                        if (map[cid]) {
+                                                const { [cid]: _removed, ...rest } = map;
+                                                return rest;
+                                        }
+                                        return map;
+                                });
+                                leaveVoiceIfChannel(gid, cid);
+                                const curGuild = String(get(selectedGuildId) ?? '');
+                                const curChannel = String(get(selectedChannelId) ?? '');
+                                if (curGuild === gid && curChannel === cid) {
+                                        const next = list.find((c: any) => (c as any).type === 0);
+                                        const nextId = next ? String((next as any).id) : null;
 					selectedChannelId.set(nextId);
                                         if (nextId) {
                                                 subscribeWS([gid], nextId);
@@ -598,22 +699,24 @@
 
 	async function createChannel() {
 		if (!newChannelName.trim() || !$selectedGuildId) return;
-		try {
-			await auth.api.guild.guildGuildIdChannelPost({
-				guildId: BigInt($selectedGuildId) as any,
-				guildCreateGuildChannelRequest: {
-					name: newChannelName,
-					parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
-					type: 0,
-					private: newChannelPrivate
-				}
-			});
-			creatingChannel = false;
-			newChannelName = '';
-			newChannelPrivate = false;
-			creatingChannelParent = null;
-			channelError = null;
-			await refreshChannels();
+                try {
+                        const channelType = newChannelType === 'voice' ? 1 : 0;
+                        await auth.api.guild.guildGuildIdChannelPost({
+                                guildId: BigInt($selectedGuildId) as any,
+                                guildCreateGuildChannelRequest: {
+                                        name: newChannelName,
+                                        parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
+                                        type: channelType,
+                                        private: newChannelPrivate
+                                }
+                        });
+                        creatingChannel = false;
+                        newChannelName = '';
+                        newChannelPrivate = false;
+                        newChannelType = 'text';
+                        creatingChannelParent = null;
+                        channelError = null;
+                        await refreshChannels();
 		} catch (e: any) {
 			channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
 		}
@@ -639,49 +742,60 @@
                 channelReady.set(true);
         }
 
-	function openChannelMenu(e: MouseEvent, ch: any) {
-		const id = String(ch?.id ?? '');
-		const type = (ch as any)?.type;
-		const items = [
-			{ label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id },
-			{ label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 },
-			{ label: m.edit_channel(), action: () => openEditChannel(ch) },
-			{ label: m.delete_channel(), action: () => deleteChannel(id), danger: true }
-		];
-		contextMenu.openFromEvent(e, items);
+        function openChannelMenu(e: MouseEvent, ch: any) {
+                const id = String(ch?.id ?? '');
+                const type = (ch as any)?.type;
+                const items = [
+                        { label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id },
+                        ...(type === 1
+                                ? [
+                                          {
+                                                  label:
+                                                          voiceStateForChannel(id, ch) === 'connected' ||
+                                                          voiceStateForChannel(id, ch) === 'connecting'
+                                                                  ? m.voice_leave_channel()
+                                                                  : m.voice_join_channel(),
+                                                  action: () => {
+                                                          const state = voiceStateForChannel(id, ch);
+                                                          if (state === 'connected' || state === 'connecting') {
+                                                                  leaveVoiceChannel();
+                                                          } else {
+                                                                  joinVoiceById(id);
+                                                          }
+                                                  }
+                                          }
+                                  ]
+                                : []),
+                        { label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 },
+                        { label: m.edit_channel(), action: () => openEditChannel(ch) },
+                        { label: m.delete_channel(), action: () => deleteChannel(id), danger: true }
+                ];
+                contextMenu.openFromEvent(e, items);
 	}
 
-	function openCategoryMenu(e: MouseEvent, cat: any) {
-		const id = String(cat?.id ?? '');
-		const items = [
-			{
-				label: m.new_channel(),
-				action: () => {
-					creatingChannel = true;
-					channelError = null;
-					creatingChannelParent = id;
-				}
-			},
-			{ label: m.edit_category(), action: () => openEditCategory(cat) },
-			{ label: m.delete_category(), action: () => deleteCategory(id), danger: true }
-		];
-		contextMenu.openFromEvent(e, items);
-	}
+        function openCategoryMenu(e: MouseEvent, cat: any) {
+                const id = String(cat?.id ?? '');
+                const items = [
+                        {
+                                label: m.new_channel(),
+                                action: () => openCreateChannel(id)
+                        },
+                        { label: m.edit_category(), action: () => openEditCategory(cat) },
+                        { label: m.delete_category(), action: () => deleteCategory(id), danger: true }
+                ];
+                contextMenu.openFromEvent(e, items);
+        }
 
-	function openPaneMenu(e: MouseEvent) {
-		const items = [
-			{
-				label: m.new_channel(),
-				action: () => {
-					creatingChannel = true;
-					channelError = null;
-					creatingChannelParent = null;
-				}
-			},
-			{
-				label: m.new_category(),
-				action: () => {
-					creatingCategory = true;
+        function openPaneMenu(e: MouseEvent) {
+                const items = [
+                        {
+                                label: m.new_channel(),
+                                action: () => openCreateChannel(null)
+                        },
+                        {
+                                label: m.new_category(),
+                                action: () => {
+                                        creatingCategory = true;
 					categoryError = null;
 				}
 			}
@@ -1068,6 +1182,7 @@
                                         {#if sec.type === 'channel'}
                                                 {@const channelId = String((sec.ch as any).id)}
                                                 {@const channelUnread = isChannelUnread($selectedGuildId, channelId)}
+                                                {@const voiceState = voiceStateForChannel(channelId, sec.ch)}
                                                 {#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
                                                         <div
                                                                 role="listitem"
@@ -1088,21 +1203,14 @@
                                                                         ></div>
                                                                 {/if}
                                                                 <div
-                                                                        class="relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)] {$selectedChannelId ===
-                                                                        channelId
-                                                                                ? 'bg-[var(--panel)]'
-                                                                                : ''}"
-                                                                        class:pl-6={channelUnread}
-                                                                        class:pl-3={!channelUnread}
+                                                                        class={channelRowClasses(channelId, sec.ch, channelUnread, voiceState)}
                                                                         role="button"
                                                                         tabindex="0"
                                                                         use:customContextMenuTarget
                                                                         draggable="true"
                                                                         ondragstart={() => startDrag(sec.ch, null)}
-                                                                        onclick={() => selectChannel(channelId)}
-                                                                        onkeydown={(e) =>
-                                                                                (e.key === 'Enter' || e.key === ' ') &&
-                                                                                selectChannel(channelId)}
+                                                                        onclick={() => activateChannel(sec.ch)}
+                                                                        onkeydown={(e) => handleChannelKey(e, sec.ch)}
                                                                         oncontextmenu={(e: MouseEvent) => {
                                                                                 e.preventDefault();
                                                                                 e.stopPropagation();
@@ -1114,15 +1222,31 @@
                                                                                 <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                         {/if}
                                                                         <div class="flex w-full items-center gap-2 truncate">
-                                                                                <span class="opacity-70">#</span>
-                                                                                {sec.ch.name}
+                                                                                {#if isVoiceChannel(sec.ch)}
+                                                                                        <Volume2 class="opacity-70" size={16} />
+                                                                                {:else}
+                                                                                        <span class="opacity-70">#</span>
+                                                                                {/if}
+                                                                                <span class="truncate">{sec.ch.name}</span>
+                                                                                {#if voiceState === 'connecting'}
+                                                                                        <span class="text-xs text-[var(--muted)]">{m.voice_channel_status_connecting()}</span>
+                                                                                {:else if voiceState === 'connected'}
+                                                                                        <span class="text-xs text-[var(--brand)]">{m.voice_channel_status_connected()}</span>
+                                                                                {/if}
                                                                         </div>
                                                                 </div>
+                                                                {#if isVoiceChannel(sec.ch)}
+                                                                        <VoiceChannelParticipants
+                                                                                guildId={selectedGuildIdValue}
+                                                                                channelId={channelId}
+                                                                                indentClass="ml-9"
+                                                                        />
+                                                                {/if}
                                                         </div>
                                                 {/if}
                                         {:else}
-						<div
-							class="mt-2"
+                                                <div
+                                                        class="mt-2"
 							ondragover={(e) => {
 								e.preventDefault();
 								dragOverContainer(String((sec.cat as any)?.id));
@@ -1186,6 +1310,7 @@
                                                                                 .includes(filter.toLowerCase())) as ch (String((ch as any).id))}
                                                                         {@const nestedChannelId = String((ch as any).id)}
                                                                         {@const nestedChannelUnread = isChannelUnread($selectedGuildId, nestedChannelId)}
+                                                                        {@const nestedVoiceState = voiceStateForChannel(nestedChannelId, ch)}
                                                                         <div
                                                                                 role="listitem"
                                                                                 class="relative"
@@ -1205,19 +1330,14 @@
                                                                                         ></div>
                                                                                 {/if}
                                                                                 <div
-                                                                                        class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-                                                                                        nestedChannelId
-                                                                                                ? 'bg-[var(--panel)]'
-                                                                                                : ''}"
+                                                                                        class={nestedChannelRowClasses(nestedChannelId, ch, nestedVoiceState)}
                                                                                         role="button"
                                                                                         tabindex="0"
                                                                                         use:customContextMenuTarget
                                                                                         draggable="true"
                                                                                         ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
-                                                                                        onclick={() => selectChannel(nestedChannelId)}
-                                                                                        onkeydown={(e) =>
-                                                                                                (e.key === 'Enter' || e.key === ' ') &&
-                                                                                                selectChannel(nestedChannelId)}
+                                                                                        onclick={() => activateChannel(ch)}
+                                                                                        onkeydown={(e) => handleChannelKey(e, ch)}
                                                                                         oncontextmenu={(e: MouseEvent) => {
                                                                                                 e.preventDefault();
                                                                                                 e.stopPropagation();
@@ -1232,10 +1352,26 @@
                                                                                                                 class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
                                                                                                         ></span>
                                                                                                 {/if}
-                                                                                                <span class="opacity-70">#</span>
-                                                                                                {ch.name}
+                                                                                                {#if isVoiceChannel(ch)}
+                                                                                                        <Volume2 class="opacity-70" size={16} />
+                                                                                                {:else}
+                                                                                                        <span class="opacity-70">#</span>
+                                                                                                {/if}
+                                                                                                <span class="truncate">{ch.name}</span>
+                                                                                                {#if nestedVoiceState === 'connecting'}
+                                                                                                        <span class="text-xs text-[var(--muted)]">{m.voice_channel_status_connecting()}</span>
+                                                                                                {:else if nestedVoiceState === 'connected'}
+                                                                                                        <span class="text-xs text-[var(--brand)]">{m.voice_channel_status_connected()}</span>
+                                                                                                {/if}
                                                                                         </div>
                                                                                 </div>
+                                                                                {#if isVoiceChannel(ch)}
+                                                                                        <VoiceChannelParticipants
+                                                                                                guildId={selectedGuildIdValue}
+                                                                                                channelId={nestedChannelId}
+                                                                                                indentClass="ml-12"
+                                                                                        />
+                                                                                {/if}
                                                                         </div>
                                                                 {/each}
                                                         {/if}
@@ -1596,6 +1732,32 @@
                                                         placeholder={m.channel_name()}
                                                         bind:value={newChannelName}
                                                 />
+                                                <div class="mb-2">
+                                                        <div class="mb-1 text-xs uppercase tracking-wide text-[var(--muted)]">
+                                                                {m.channel_type()}
+                                                        </div>
+                                                        <div class="flex flex-col gap-1">
+                                                                <label class="flex items-center gap-2 text-sm">
+                                                                        <input
+                                                                                type="radio"
+                                                                                bind:group={newChannelType}
+                                                                                value="text"
+                                                                        />
+                                                                        {m.channel_type_text()}
+                                                                </label>
+                                                                <label class="flex items-center gap-2 text-sm">
+                                                                        <input
+                                                                                type="radio"
+                                                                                bind:group={newChannelType}
+                                                                                value="voice"
+                                                                        />
+                                                                        {m.channel_type_voice()}
+                                                                </label>
+                                                        </div>
+                                                        <div class="mt-1 text-xs text-[var(--muted)]">
+                                                                {m.channel_voice_hint()}
+                                                        </div>
+                                                </div>
                                                 {#if creatingChannelParent}
                                                         <div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
                                                 {/if}
