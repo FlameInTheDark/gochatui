@@ -54,10 +54,12 @@
         import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
         import { joinVoiceChannel, leaveVoiceChannel, voiceSession } from '$lib/stores/voice';
+        import VoiceChannelParticipants from '$lib/components/app/sidebar/VoiceChannelParticipants.svelte';
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadChannels = unreadChannelsByGuild;
         const voice = voiceSession;
+        const selectedGuildIdValue = $derived($selectedGuildId ? String($selectedGuildId) : '');
 
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
 
@@ -771,37 +773,29 @@
                 contextMenu.openFromEvent(e, items);
 	}
 
-	function openCategoryMenu(e: MouseEvent, cat: any) {
-		const id = String(cat?.id ?? '');
-		const items = [
-			{
-				label: m.new_channel(),
-				action: () => {
-					creatingChannel = true;
-					channelError = null;
-					creatingChannelParent = id;
-				}
-			},
-			{ label: m.edit_category(), action: () => openEditCategory(cat) },
-			{ label: m.delete_category(), action: () => deleteCategory(id), danger: true }
-		];
-		contextMenu.openFromEvent(e, items);
-	}
+        function openCategoryMenu(e: MouseEvent, cat: any) {
+                const id = String(cat?.id ?? '');
+                const items = [
+                        {
+                                label: m.new_channel(),
+                                action: () => openCreateChannel(id)
+                        },
+                        { label: m.edit_category(), action: () => openEditCategory(cat) },
+                        { label: m.delete_category(), action: () => deleteCategory(id), danger: true }
+                ];
+                contextMenu.openFromEvent(e, items);
+        }
 
-	function openPaneMenu(e: MouseEvent) {
-		const items = [
-			{
-				label: m.new_channel(),
-				action: () => {
-					creatingChannel = true;
-					channelError = null;
-					creatingChannelParent = null;
-				}
-			},
-			{
-				label: m.new_category(),
-				action: () => {
-					creatingCategory = true;
+        function openPaneMenu(e: MouseEvent) {
+                const items = [
+                        {
+                                label: m.new_channel(),
+                                action: () => openCreateChannel(null)
+                        },
+                        {
+                                label: m.new_category(),
+                                action: () => {
+                                        creatingCategory = true;
 					categoryError = null;
 				}
 			}
@@ -1241,11 +1235,18 @@
                                                                                 {/if}
                                                                         </div>
                                                                 </div>
+                                                                {#if isVoiceChannel(sec.ch)}
+                                                                        <VoiceChannelParticipants
+                                                                                guildId={selectedGuildIdValue}
+                                                                                channelId={channelId}
+                                                                                indentClass="ml-9"
+                                                                        />
+                                                                {/if}
                                                         </div>
                                                 {/if}
                                         {:else}
-						<div
-							class="mt-2"
+                                                <div
+                                                        class="mt-2"
 							ondragover={(e) => {
 								e.preventDefault();
 								dragOverContainer(String((sec.cat as any)?.id));
@@ -1364,6 +1365,13 @@
                                                                                                 {/if}
                                                                                         </div>
                                                                                 </div>
+                                                                                {#if isVoiceChannel(ch)}
+                                                                                        <VoiceChannelParticipants
+                                                                                                guildId={selectedGuildIdValue}
+                                                                                                channelId={nestedChannelId}
+                                                                                                indentClass="ml-12"
+                                                                                        />
+                                                                                {/if}
                                                                         </div>
                                                                 {/each}
                                                         {/if}

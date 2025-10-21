@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import { writable, derived, get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
+import { setSelfVoiceChannelId } from '$lib/stores/presence';
 
 const noop = () => {};
 
@@ -12,6 +13,16 @@ type VoiceRemoteStream = {
         userId: string | null;
 };
 
+type VoiceRemoteSettings = {
+        volume: number;
+        muted: boolean;
+};
+
+type StreamMonitor = {
+        stop: () => void;
+        userId: string;
+};
+
 type VoiceState = {
         status: VoiceConnectionStatus;
         guildId: string | null;
@@ -20,6 +31,8 @@ type VoiceState = {
         muted: boolean;
         deafened: boolean;
         remoteStreams: VoiceRemoteStream[];
+        remoteSettings: Record<string, VoiceRemoteSettings>;
+        speakingUserIds: string[];
 };
 
 type VoiceSessionInternal = {
@@ -30,6 +43,8 @@ type VoiceSessionInternal = {
         pc: RTCPeerConnection | null;
         localStream: MediaStream | null;
         remoteStreams: Map<string, MediaStream>;
+        remoteMonitors: Map<string, StreamMonitor>;
+        localMonitor: StreamMonitor | null;
         manualClose: boolean;
 };
 
@@ -40,7 +55,9 @@ const initialState: VoiceState = {
         error: null,
         muted: false,
         deafened: false,
-        remoteStreams: []
+        remoteStreams: [],
+        remoteSettings: {},
+        speakingUserIds: []
 };
 
 const state = writable<VoiceState>(initialState);
@@ -53,22 +70,184 @@ function toApiSnowflake(id: string): any {
         return BigInt(id) as any;
 }
 
-function toChannelLiteral(id: string): string {
+function toNumericLiteral(id: string): string {
         return String(id ?? '').replace(/[^0-9]/g, '');
+}
+
+function toSnowflakeString(value: unknown): string | null {
+        if (value == null) return null;
+        try {
+                if (typeof value === 'string') return value;
+                if (typeof value === 'bigint') return value.toString();
+                if (typeof value === 'number') return BigInt(value).toString();
+                return String(value);
+        } catch {
+                try {
+                        return String(value);
+                } catch {
+                        return null;
+                }
+        }
+}
+
+const remoteUserSettings = new Map<string, VoiceRemoteSettings>();
+const speakingUsers = new Set<string>();
+
+function emitRemoteSettings() {
+        const record: Record<string, VoiceRemoteSettings> = {};
+        for (const [userId, settings] of remoteUserSettings.entries()) {
+                record[userId] = { ...settings };
+        }
+        state.update((current) => ({ ...current, remoteSettings: record }));
+}
+
+function emitSpeakingUsers() {
+        state.update((current) => ({ ...current, speakingUserIds: Array.from(speakingUsers) }));
+}
+
+function ensureRemoteSettingsEntry(userId: string): VoiceRemoteSettings {
+        let entry = remoteUserSettings.get(userId);
+        if (!entry) {
+                entry = { volume: 1, muted: false };
+                remoteUserSettings.set(userId, entry);
+                emitRemoteSettings();
+        }
+        return entry;
+}
+
+function pruneRemoteSettings(activeUserIds: Set<string>) {
+        let changed = false;
+        for (const id of Array.from(remoteUserSettings.keys())) {
+                if (!activeUserIds.has(id)) {
+                        remoteUserSettings.delete(id);
+                        changed = true;
+                }
+        }
+        if (changed) emitRemoteSettings();
+}
+
+function pruneSpeakingUsers(activeUserIds: Set<string>) {
+        let changed = false;
+        for (const id of Array.from(speakingUsers)) {
+                if (!activeUserIds.has(id)) {
+                        speakingUsers.delete(id);
+                        changed = true;
+                }
+        }
+        if (changed) emitSpeakingUsers();
+}
+
+function setUserSpeaking(userId: string | null, speaking: boolean) {
+        if (!userId) return;
+        const has = speakingUsers.has(userId);
+        if (speaking) {
+                if (!has) {
+                        speakingUsers.add(userId);
+                        emitSpeakingUsers();
+                }
+        } else if (has) {
+                speakingUsers.delete(userId);
+                emitSpeakingUsers();
+        }
+}
+
+function resetRemoteState() {
+        remoteUserSettings.clear();
+        speakingUsers.clear();
+        emitRemoteSettings();
+        emitSpeakingUsers();
+}
+
+function createAudioLevelMonitor(stream: MediaStream | null, userId: string | null): StreamMonitor | null {
+        if (!browser) return null;
+        if (!stream || !userId) return null;
+        if (typeof window === 'undefined' || typeof AudioContext === 'undefined') return null;
+        if (stream.getAudioTracks().length === 0) return null;
+        try {
+                const audioContext = new AudioContext();
+                const source = audioContext.createMediaStreamSource(stream);
+                const analyser = audioContext.createAnalyser();
+                analyser.fftSize = 512;
+                const data = new Uint8Array(analyser.fftSize);
+                let raf = 0;
+                let disposed = false;
+                let lastSpeaking = false;
+                const threshold = 6;
+
+                const update = () => {
+                        if (disposed) return;
+                        analyser.getByteTimeDomainData(data);
+                        let sum = 0;
+                        for (let i = 0; i < data.length; i += 1) {
+                                sum += Math.abs(data[i] - 128);
+                        }
+                        const avg = sum / data.length;
+                        const speaking = avg > threshold;
+                        if (speaking !== lastSpeaking) {
+                                lastSpeaking = speaking;
+                                setUserSpeaking(userId, speaking);
+                        }
+                        raf = window.requestAnimationFrame(update);
+                };
+
+                audioContext.resume().catch(() => {});
+                update();
+
+                return {
+                        userId,
+                        stop() {
+                                if (disposed) return;
+                                disposed = true;
+                                if (raf) window.cancelAnimationFrame(raf);
+                                setUserSpeaking(userId, false);
+                                try {
+                                        source.disconnect();
+                                } catch {}
+                                audioContext.close().catch(() => {});
+                        }
+                };
+        } catch {
+                return null;
+        }
+}
+
+function startLocalMonitor(currentSession: VoiceSessionInternal) {
+        currentSession.localMonitor?.stop();
+        const localStream = currentSession.localStream;
+        if (!localStream) {
+                currentSession.localMonitor = null;
+                return;
+        }
+        const me = get(auth.user);
+        const userId = toSnowflakeString((me as any)?.id);
+        if (!userId) {
+                currentSession.localMonitor = null;
+                return;
+        }
+        const monitor = createAudioLevelMonitor(localStream, userId);
+        currentSession.localMonitor = monitor;
 }
 
 function updateRemoteStreams(nextSession: VoiceSessionInternal | null) {
         const entries: VoiceRemoteStream[] = [];
+        const activeUserIds = new Set<string>();
         if (nextSession) {
                 for (const [id, stream] of nextSession.remoteStreams.entries()) {
-                        entries.push({
-                                id,
-                                stream,
-                                userId: extractUserId(stream?.id ?? id)
-                        });
+                        const userId = extractUserId(stream?.id ?? id);
+                        entries.push({ id, stream, userId });
+                        if (userId) {
+                                activeUserIds.add(userId);
+                                ensureRemoteSettingsEntry(userId);
+                        }
                 }
         }
         state.update((current) => ({ ...current, remoteStreams: entries }));
+        if (nextSession) {
+                pruneRemoteSettings(activeUserIds);
+                pruneSpeakingUsers(activeUserIds);
+        } else {
+                resetRemoteState();
+        }
 }
 
 function extractUserId(streamId: string | null | undefined): string | null {
@@ -97,14 +276,38 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
         const current = session;
         if (!current) {
                 if (options.error) {
-                        setState({ status: 'error', error: options.error, guildId: null, channelId: null, remoteStreams: [] });
+                        setState({
+                                status: 'error',
+                                error: options.error,
+                                guildId: null,
+                                channelId: null,
+                                remoteStreams: [],
+                                remoteSettings: {},
+                                speakingUserIds: []
+                        });
                 } else {
-                        setState({ status: 'disconnected', error: null, guildId: null, channelId: null, remoteStreams: [] });
+                        setState({
+                                status: 'disconnected',
+                                error: null,
+                                guildId: null,
+                                channelId: null,
+                                remoteStreams: [],
+                                remoteSettings: {},
+                                speakingUserIds: []
+                        });
                 }
+                setSelfVoiceChannelId(null);
                 return;
         }
 
         session = null;
+
+        current.localMonitor?.stop();
+        current.localMonitor = null;
+        for (const monitor of current.remoteMonitors.values()) {
+                monitor.stop();
+        }
+        current.remoteMonitors.clear();
 
         try {
                 if (current.ws) {
@@ -147,11 +350,28 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
 
         current.remoteStreams.clear();
         updateRemoteStreams(null);
+        setSelfVoiceChannelId(null);
 
         if (options.error) {
-                        setState({ status: 'error', error: options.error, guildId: null, channelId: null, remoteStreams: [] });
+                        setState({
+                                status: 'error',
+                                error: options.error,
+                                guildId: null,
+                                channelId: null,
+                                remoteStreams: [],
+                                remoteSettings: {},
+                                speakingUserIds: []
+                        });
         } else {
-                        setState({ status: 'disconnected', error: null, guildId: null, channelId: null, remoteStreams: [] });
+                        setState({
+                                status: 'disconnected',
+                                error: null,
+                                guildId: null,
+                                channelId: null,
+                                remoteStreams: [],
+                                remoteSettings: {},
+                                speakingUserIds: []
+                        });
         }
 }
 
@@ -188,8 +408,22 @@ async function createPeerConnection(currentSession: VoiceSessionInternal) {
                 for (const stream of event.streams) {
                         const key = stream.id || `${Date.now()}-${Math.random()}`;
                         currentSession.remoteStreams.set(key, stream);
+                        const userId = extractUserId(stream?.id ?? key);
+                        if (userId) {
+                                const existingMonitor = currentSession.remoteMonitors.get(key);
+                                existingMonitor?.stop();
+                                const monitor = createAudioLevelMonitor(stream, userId);
+                                if (monitor) {
+                                        currentSession.remoteMonitors.set(key, monitor);
+                                }
+                        }
                         stream.onremovetrack = () => {
                                 currentSession.remoteStreams.delete(key);
+                                const monitor = currentSession.remoteMonitors.get(key);
+                                if (monitor) {
+                                        monitor.stop();
+                                        currentSession.remoteMonitors.delete(key);
+                                }
                                 updateRemoteStreams(currentSession);
                         };
                 }
@@ -247,7 +481,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
         const normalizedChannel = String(channelId ?? '').trim();
         if (!normalizedGuild || !normalizedChannel) return;
 
-        const channelLiteral = toChannelLiteral(normalizedChannel);
+        const channelLiteral = toNumericLiteral(normalizedChannel);
         if (!channelLiteral) {
                 setState({ status: 'error', error: 'Invalid channel identifier.', guildId: null, channelId: null });
                 return;
@@ -262,7 +496,15 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
         }
 
         const attemptId = ++sessionCounter;
-        setState({ status: 'connecting', guildId: normalizedGuild, channelId: normalizedChannel, error: null });
+        setState({
+                status: 'connecting',
+                guildId: normalizedGuild,
+                channelId: normalizedChannel,
+                error: null,
+                remoteStreams: [],
+                remoteSettings: {},
+                speakingUserIds: []
+        });
 
         let localStream: MediaStream | null = null;
         try {
@@ -292,10 +534,15 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         pc: null,
                         localStream,
                         remoteStreams: new Map(),
+                        remoteMonitors: new Map(),
+                        localMonitor: null,
                         manualClose: false
                 };
 
                 session = currentSession;
+
+                setSelfVoiceChannelId(normalizedChannel);
+                startLocalMonitor(currentSession);
 
                 ws.onopen = () => {
                         if (!session || session.id !== attemptId) return;
@@ -382,8 +629,11 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         error: error?.response?.data?.message ?? error?.message ?? 'Failed to join voice channel.',
                         guildId: null,
                         channelId: null,
-                        remoteStreams: []
+                        remoteStreams: [],
+                        remoteSettings: {},
+                        speakingUserIds: []
                 });
+                setSelfVoiceChannelId(null);
                 if (localStream) {
                         for (const track of localStream.getTracks()) {
                                 try {
@@ -432,6 +682,45 @@ export function setVoiceDeafened(deafened: boolean): void {
 export function toggleVoiceDeafened(): void {
         const current = get(state);
         setVoiceDeafened(!current.deafened);
+}
+
+export function setRemoteUserVolume(userId: string, volume: number): void {
+        const normalized = toSnowflakeString(userId);
+        if (!normalized) return;
+        const numericVolume = Number(volume);
+        const clamped = Math.max(0, Math.min(1, Number.isFinite(numericVolume) ? numericVolume : 1));
+        const entry = ensureRemoteSettingsEntry(normalized);
+        if (entry.volume === clamped) return;
+        entry.volume = clamped;
+        emitRemoteSettings();
+}
+
+export function setRemoteUserMuted(userId: string, muted: boolean): void {
+        const normalized = toSnowflakeString(userId);
+        if (!normalized) return;
+        const entry = ensureRemoteSettingsEntry(normalized);
+        const wasMuted = entry.muted;
+        if (wasMuted === muted) {
+                if (muted) {
+                        setUserSpeaking(normalized, false);
+                }
+                return;
+        }
+        entry.muted = muted;
+        emitRemoteSettings();
+        if (muted) {
+                setUserSpeaking(normalized, false);
+        }
+        if (session?.ws && session.ws.readyState === WebSocket.OPEN) {
+                const userLiteral = toNumericLiteral(normalized);
+                if (userLiteral) {
+                        try {
+                                session.ws.send(
+                                        `{"op":7,"t":506,"d":{"user":${userLiteral},"muted":${muted ? 'true' : 'false'}}}`
+                                );
+                        } catch {}
+                }
+        }
 }
 
 if (browser) {

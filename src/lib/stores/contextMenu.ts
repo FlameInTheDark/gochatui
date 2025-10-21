@@ -34,14 +34,28 @@ export function eventSupportsCustomContextMenu(event: MouseEvent): boolean {
 
 export type ContextMenuAction = () => void | Promise<void>;
 
-export type ContextMenuItem = {
+export type ContextMenuActionItem = {
+        type?: 'action';
         label: string;
         action?: ContextMenuAction;
         danger?: boolean;
         disabled?: boolean;
-        children?: ContextMenuItem[];
+        children?: ContextMenuActionItem[];
         icon?: ComponentType;
 };
+
+export type ContextMenuSliderItem = {
+        type: 'slider';
+        label: string;
+        value: number;
+        min?: number;
+        max?: number;
+        step?: number;
+        onChange?: (value: number) => void;
+        disabled?: boolean;
+};
+
+export type ContextMenuItem = ContextMenuActionItem | ContextMenuSliderItem;
 
 export type ContextMenuState = {
 	open: boolean;
