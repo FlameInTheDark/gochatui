@@ -66,6 +66,7 @@
 	let creatingCategory = $state(false);
 	let newChannelName = $state('');
 	let newChannelPrivate = $state(false);
+	let newChannelType = $state<'text' | 'voice'>('text');
 	let newCategoryName = $state('');
 	let channelError: string | null = $state(null);
 	let categoryError: string | null = $state(null);
@@ -105,6 +106,7 @@
                 creatingChannel = true;
                 channelError = null;
                 creatingChannelParent = parentId;
+                newChannelType = 'text';
         }
 
         export function openCreateCategory() {
@@ -695,22 +697,24 @@
 
 	async function createChannel() {
 		if (!newChannelName.trim() || !$selectedGuildId) return;
-		try {
-			await auth.api.guild.guildGuildIdChannelPost({
-				guildId: BigInt($selectedGuildId) as any,
-				guildCreateGuildChannelRequest: {
-					name: newChannelName,
-					parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
-					type: 0,
-					private: newChannelPrivate
-				}
-			});
-			creatingChannel = false;
-			newChannelName = '';
-			newChannelPrivate = false;
-			creatingChannelParent = null;
-			channelError = null;
-			await refreshChannels();
+                try {
+                        const channelType = newChannelType === 'voice' ? 1 : 0;
+                        await auth.api.guild.guildGuildIdChannelPost({
+                                guildId: BigInt($selectedGuildId) as any,
+                                guildCreateGuildChannelRequest: {
+                                        name: newChannelName,
+                                        parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
+                                        type: channelType,
+                                        private: newChannelPrivate
+                                }
+                        });
+                        creatingChannel = false;
+                        newChannelName = '';
+                        newChannelPrivate = false;
+                        newChannelType = 'text';
+                        creatingChannelParent = null;
+                        channelError = null;
+                        await refreshChannels();
 		} catch (e: any) {
 			channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
 		}
@@ -1720,6 +1724,32 @@
                                                         placeholder={m.channel_name()}
                                                         bind:value={newChannelName}
                                                 />
+                                                <div class="mb-2">
+                                                        <div class="mb-1 text-xs uppercase tracking-wide text-[var(--muted)]">
+                                                                {m.channel_type()}
+                                                        </div>
+                                                        <div class="flex flex-col gap-1">
+                                                                <label class="flex items-center gap-2 text-sm">
+                                                                        <input
+                                                                                type="radio"
+                                                                                bind:group={newChannelType}
+                                                                                value="text"
+                                                                        />
+                                                                        {m.channel_type_text()}
+                                                                </label>
+                                                                <label class="flex items-center gap-2 text-sm">
+                                                                        <input
+                                                                                type="radio"
+                                                                                bind:group={newChannelType}
+                                                                                value="voice"
+                                                                        />
+                                                                        {m.channel_type_voice()}
+                                                                </label>
+                                                        </div>
+                                                        <div class="mt-1 text-xs text-[var(--muted)]">
+                                                                {m.channel_voice_hint()}
+                                                        </div>
+                                                </div>
                                                 {#if creatingChannelParent}
                                                         <div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
                                                 {/if}
