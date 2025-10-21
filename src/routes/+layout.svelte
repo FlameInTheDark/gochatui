@@ -6,6 +6,7 @@
         import FolderSettingsOverlay from '$lib/components/app/settings/FolderSettingsOverlay.svelte';
         import GuildSettingsOverlay from '$lib/components/app/settings/GuildSettingsOverlay.svelte';
         import TooltipLayer from '$lib/components/ui/TooltipLayer.svelte';
+        import VoiceAudioLayer from '$lib/components/app/voice/VoiceAudioLayer.svelte';
 
 	let { children } = $props();
 </script>
@@ -22,3 +23,4 @@
 <FolderSettingsOverlay />
 <GuildSettingsOverlay />
 <TooltipLayer />
+<VoiceAudioLayer />
