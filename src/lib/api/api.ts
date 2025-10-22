@@ -1330,6 +1330,67 @@ export interface MessageUploadAttachmentRequest {
 /**
  * 
  * @export
+ * @interface ModelDevices
+ */
+export interface ModelDevices {
+    /**
+     * 
+     * @type {string}
+     * @memberof ModelDevices
+     */
+    'audio_input_device'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelDevices
+     */
+    'audio_input_level'?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelDevices
+     */
+    'audio_input_threshold'?: number;
+    /**
+     * 
+     * @type {string}
+     * @memberof ModelDevices
+     */
+    'audio_output_device'?: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof ModelDevices
+     */
+    'audio_output_level'?: number;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ModelDevices
+     */
+    'auto_gain_control'?: boolean;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ModelDevices
+     */
+    'echo_cancellation'?: boolean;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ModelDevices
+     */
+    'noise_suppression'?: boolean;
+    /**
+     * 
+     * @type {string}
+     * @memberof ModelDevices
+     */
+    'video_device'?: string;
+}
+/**
+ * 
+ * @export
  * @interface ModelStatus
  */
 export interface ModelStatus {
@@ -1414,6 +1475,12 @@ export interface ModelUserSettingsData {
      * @memberof ModelUserSettingsData
      */
     'appearance'?: ModelUserSettingsAppearance;
+    /**
+     * 
+     * @type {ModelDevices}
+     * @memberof ModelUserSettingsData
+     */
+    'devices'?: ModelDevices;
     /**
      * 
      * @type {Array<ModelUserDMChannels>}
