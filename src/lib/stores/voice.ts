@@ -54,7 +54,6 @@ type VoiceSessionInternal = {
         manualClose: boolean;
         pingInterval: ReturnType<typeof setInterval> | null;
         pendingPings: Map<string, number>;
-        awaitingServerOffer: boolean;
         pendingLocalCandidates: RTCIceCandidateInit[];
         pendingRemoteCandidates: RTCIceCandidateInit[];
 };
@@ -746,16 +745,6 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                 }
         };
 
-        pc.onnegotiationneeded = async () => {
-                if (!session || session.id !== currentSession.id) return;
-                if (currentSession.awaitingServerOffer) return;
-                try {
-                        await sendClientOffer(currentSession);
-                } catch (error) {
-                        console.error('Failed to send renegotiation offer.', error);
-                }
-        };
-
         const currentState = get(state);
         if (currentSession.localStream) {
                 for (const track of currentSession.localStream.getTracks()) {
@@ -767,29 +756,6 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
         }
 
         return pc;
-}
-
-async function sendClientOffer(currentSession: VoiceSessionInternal): Promise<void> {
-        if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
-                throw new Error('SFU socket is not open');
-        }
-        if (!currentSession.pc) {
-                throw new Error('Peer connection not initialized');
-        }
-        if (currentSession.pc.signalingState === 'have-remote-offer') {
-                throw new Error('Cannot create offer while remote offer is pending');
-        }
-
-        const offer = await currentSession.pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-        await currentSession.pc.setLocalDescription(offer);
-
-        currentSession.ws.send(
-                JSON.stringify({
-                        op: 7,
-                        t: 501,
-                        d: { sdp: offer.sdp ?? '' }
-                })
-        );
 }
 
 async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: string): Promise<void> {
@@ -829,7 +795,6 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
                 })
         );
 
-        currentSession.awaitingServerOffer = false;
 }
 
 function ensureBrowser(): void {
@@ -917,7 +882,6 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         manualClose: false,
                         pingInterval: null,
                         pendingPings: new Map(),
-                        awaitingServerOffer: true,
                         pendingLocalCandidates: [],
                         pendingRemoteCandidates: []
                 };
