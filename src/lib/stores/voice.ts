@@ -233,7 +233,14 @@ function updateRemoteStreams(nextSession: VoiceSessionInternal | null) {
         const activeUserIds = new Set<string>();
         if (nextSession) {
                 for (const [id, stream] of nextSession.remoteStreams.entries()) {
-                        const userId = extractUserId(stream?.id ?? id);
+                        const trackHints: string[] = [];
+                        if (stream) {
+                                for (const track of stream.getTracks()) {
+                                        if (track?.id) trackHints.push(track.id);
+                                        if (track?.label) trackHints.push(track.label);
+                                }
+                        }
+                        const userId = extractUserId(stream?.id ?? null, id, ...trackHints);
                         entries.push({ id, stream, userId });
                         if (userId) {
                                 activeUserIds.add(userId);
@@ -250,25 +257,40 @@ function updateRemoteStreams(nextSession: VoiceSessionInternal | null) {
         }
 }
 
-function extractUserId(streamId: string | null | undefined): string | null {
-        if (!streamId) return null;
-        const trimmed = streamId.trim();
-        if (!trimmed) return null;
-        if (/^[0-9]+$/.test(trimmed)) {
-                return trimmed;
+function parseUserIdFragment(value: string): string | null {
+        if (/^[0-9]{15,}$/.test(value)) {
+                return value;
         }
-        if (trimmed.startsWith('user-')) {
-                const candidate = trimmed.slice(5);
-                if (/^[0-9]+$/.test(candidate)) {
-                        return candidate;
+
+        const directMatch = value.match(/(?:^|[^0-9])([0-9]{15,})(?=$|[^0-9])/);
+        if (directMatch) {
+                return directMatch[1];
+        }
+
+        const prefixMatch = value.match(/(?:user|uid|participant)[-_:= ]*([0-9]{15,})/i);
+        if (prefixMatch) {
+                return prefixMatch[1];
+        }
+
+        const digitsOnly = value.replace(/[^0-9]/g, '');
+        if (digitsOnly.length >= 15) {
+                return digitsOnly;
+        }
+
+        return null;
+}
+
+function extractUserId(...candidates: (string | null | undefined)[]): string | null {
+        const seen = new Set<string>();
+        for (const candidate of candidates) {
+                if (typeof candidate !== 'string') continue;
+                const trimmed = candidate.trim();
+                if (!trimmed || seen.has(trimmed)) continue;
+                seen.add(trimmed);
+                const parsed = parseUserIdFragment(trimmed);
+                if (parsed) {
+                        return parsed;
                 }
-        }
-        const segments = trimmed.split(/[^0-9]+/).filter((part) => part.length > 0);
-        if (!segments.length) return null;
-        segments.sort((a, b) => b.length - a.length);
-        const longest = segments[0];
-        if (longest.length >= 15) {
-                return longest;
         }
         return null;
 }
@@ -417,10 +439,18 @@ async function createPeerConnection(currentSession: VoiceSessionInternal) {
 
         pc.ontrack = (event) => {
                 if (!session || session.id !== currentSession.id) return;
+                const trackId = event.track?.id ?? '';
                 for (const stream of event.streams) {
-                        const key = stream.id || `${Date.now()}-${Math.random()}`;
+                        const streamId = stream.id || '';
+                        const keySource = streamId || trackId || `${Date.now()}-${Math.random()}`;
+                        const key = trackId ? `${keySource}:${trackId}` : keySource;
                         currentSession.remoteStreams.set(key, stream);
-                        const userId = extractUserId(stream?.id ?? key);
+                        const trackHints: string[] = [];
+                        for (const track of stream.getTracks()) {
+                                if (track?.id) trackHints.push(track.id);
+                                if (track?.label) trackHints.push(track.label);
+                        }
+                        const userId = extractUserId(streamId, trackId, event.track?.label, key, ...trackHints);
                         if (userId) {
                                 const existingMonitor = currentSession.remoteMonitors.get(key);
                                 existingMonitor?.stop();
