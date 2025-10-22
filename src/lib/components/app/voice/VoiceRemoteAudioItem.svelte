@@ -17,6 +17,7 @@
         let usingAudioGraph = false;
         let currentStream: MediaStream | null = null;
         let sinkErrorLogged = false;
+        let failedSinkId: string | null = null;
 
         const sinkIdSupported =
                 typeof HTMLMediaElement !== 'undefined' &&
@@ -161,6 +162,9 @@
                 if (!audioEl || !sinkIdSupported) return;
                 if (!audioEl.isConnected) return;
                 const target = deviceId && deviceId.length ? deviceId : 'default';
+                if (failedSinkId && target !== failedSinkId) {
+                        failedSinkId = null;
+                }
                 let currentSink: string | undefined;
                 try {
                         currentSink = (audioEl as any).sinkId;
@@ -169,12 +173,14 @@
                 try {
                         await audioEl.setSinkId(target);
                         sinkErrorLogged = false;
+                        failedSinkId = null;
                         return;
                 } catch (error) {
                         if (target !== 'default') {
                                 try {
                                         await audioEl.setSinkId('default');
                                 } catch {}
+                                failedSinkId = target;
                         }
                         if (!sinkErrorLogged) {
                                 const isAbortError =
@@ -182,7 +188,8 @@
                                 const message = isAbortError
                                         ? 'Audio output device became unavailable. Falling back to default sink.'
                                         : 'Failed to set audio output device.';
-                                console.error(message, error);
+                                const log = isAbortError ? console.warn : console.error;
+                                log(message, error);
                                 sinkErrorLogged = true;
                         }
                 }
