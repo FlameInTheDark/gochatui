@@ -67,6 +67,9 @@ type VoiceSessionInternal = {
         pendingRemoteCandidates: RTCIceCandidateInit[];
         isNegotiating: boolean;
         negotiationReason: string | null;
+        makingOffer: boolean;
+        processingRemoteOffer: boolean;
+        polite: boolean;
 };
 
 const initialState: VoiceState = {
@@ -557,6 +560,13 @@ async function negotiateWithSfu(
         if (!session || session.id !== currentSession.id) return;
         const pc = currentSession.pc;
         if (!pc) return;
+        if (currentSession.processingRemoteOffer) {
+                logVoice('skipping negotiation, processing remote offer', {
+                        sessionId: currentSession.id,
+                        reason
+                });
+                return;
+        }
         if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
                 logVoice('skipping negotiation, websocket not ready', {
                         sessionId: currentSession.id,
@@ -583,6 +593,7 @@ async function negotiateWithSfu(
 
         currentSession.isNegotiating = true;
         currentSession.negotiationReason = reason;
+        currentSession.makingOffer = true;
 
         try {
                 const offer = await pc.createOffer();
@@ -616,6 +627,7 @@ async function negotiateWithSfu(
         } finally {
                 currentSession.isNegotiating = false;
                 currentSession.negotiationReason = null;
+                currentSession.makingOffer = false;
         }
 }
 
@@ -811,6 +823,8 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
         currentSession.pc = pc;
         currentSession.pendingLocalCandidates = [];
         currentSession.pendingRemoteCandidates = [];
+        currentSession.makingOffer = false;
+        currentSession.processingRemoteOffer = false;
 
         pc.onicecandidate = (event) => {
                 if (!event.candidate) {
@@ -933,47 +947,70 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
                 offerSize: offerSdp.length
         });
 
-        const pc = currentSession.pc ?? (await createPeerConnection(currentSession));
-        if (!pc) {
-                throw new Error('Peer connection unavailable');
+        if (currentSession.processingRemoteOffer) {
+                logVoice('ignoring SFU offer, already processing one', {
+                        sessionId: currentSession.id
+                });
+                return;
         }
 
-        if (pc.signalingState === 'have-local-offer') {
-                try {
-                        await pc.setLocalDescription({ type: 'rollback' });
-                        logVoice('rolled back local offer before applying server offer', {
-                                sessionId: currentSession.id
-                        });
-                } catch (error) {
-                        console.warn('Failed to rollback local offer before applying server offer.', error);
+        currentSession.processingRemoteOffer = true;
+
+        try {
+                const pc = currentSession.pc ?? (await createPeerConnection(currentSession));
+                if (!pc) {
+                        throw new Error('Peer connection unavailable');
                 }
+
+                const offerCollision = currentSession.makingOffer || pc.signalingState !== 'stable';
+                const shouldIgnore = !currentSession.polite && offerCollision;
+
+                if (shouldIgnore) {
+                        logVoice('ignoring SFU offer due to collision', {
+                                sessionId: currentSession.id,
+                                signalingState: pc.signalingState
+                        });
+                        return;
+                }
+
+                if (offerCollision && pc.signalingState === 'have-local-offer') {
+                        try {
+                                await pc.setLocalDescription({ type: 'rollback' });
+                                logVoice('rolled back local offer before applying server offer', {
+                                        sessionId: currentSession.id
+                                });
+                        } catch (error) {
+                                console.warn('Failed to rollback local offer before applying server offer.', error);
+                        }
+                }
+
+                await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
+                logVoice('applied remote offer', { sessionId: currentSession.id });
+                await flushPendingRemoteCandidates(currentSession);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                logVoice('created and set local answer', {
+                        sessionId: currentSession.id,
+                        answerSize: answer.sdp?.length ?? 0
+                });
+                flushPendingLocalCandidates(currentSession);
+
+                if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
+                        throw new Error('SFU socket is not open');
+                }
+
+                currentSession.ws.send(
+                        JSON.stringify({
+                                op: 7,
+                                t: 502,
+                                d: { sdp: answer.sdp ?? '' }
+                        })
+                );
+
+                logVoice('sent local answer to SFU', { sessionId: currentSession.id });
+        } finally {
+                currentSession.processingRemoteOffer = false;
         }
-
-        await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
-        logVoice('applied remote offer', { sessionId: currentSession.id });
-        await flushPendingRemoteCandidates(currentSession);
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        logVoice('created and set local answer', {
-                sessionId: currentSession.id,
-                answerSize: answer.sdp?.length ?? 0
-        });
-        flushPendingLocalCandidates(currentSession);
-
-        if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
-                throw new Error('SFU socket is not open');
-        }
-
-        currentSession.ws.send(
-                JSON.stringify({
-                        op: 7,
-                        t: 502,
-                        d: { sdp: answer.sdp ?? '' }
-                })
-        );
-
-        logVoice('sent local answer to SFU', { sessionId: currentSession.id });
-
 }
 
 function ensureBrowser(): void {
@@ -1100,7 +1137,10 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         pendingLocalCandidates: [],
                         pendingRemoteCandidates: [],
                         isNegotiating: false,
-                        negotiationReason: null
+                        negotiationReason: null,
+                        makingOffer: false,
+                        processingRemoteOffer: false,
+                        polite: true
                 };
 
                 session = currentSession;
