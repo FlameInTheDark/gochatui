@@ -42,7 +42,7 @@
 	let previewActive = false;
 	let previewLevel = 0;
 	let previewSpeaking = false;
-	let previewSignature = '';
+        let previewSignature = '';
 	let previewRaf: number | null = null;
 	let previewStream: MediaStream | null = null;
 	let previewContext: AudioContext | null = null;
@@ -62,15 +62,19 @@
 
 	$: dirty = !deviceSettingsEqual(form, currentSettings);
 
-	$: if (previewActive) {
-		const signature = `${form.audioInputDevice ?? SYSTEM_DEVICE_ID}|${form.autoGainControl ? 1 : 0}|${
-			form.echoCancellation ? 1 : 0
-		}|${form.noiseSuppression ? 1 : 0}`;
-		if (signature !== previewSignature && !previewLoading) {
-			previewSignature = signature;
-			void restartPreview();
-		}
-	}
+        function computePreviewSignature(settings: DeviceSettings): string {
+                return `${settings.audioInputDevice ?? SYSTEM_DEVICE_ID}|${settings.autoGainControl ? 1 : 0}|${
+                        settings.echoCancellation ? 1 : 0
+                }|${settings.noiseSuppression ? 1 : 0}`;
+        }
+
+        $: if (previewActive) {
+                const signature = computePreviewSignature(form);
+                if (signature !== previewSignature && !previewLoading) {
+                        previewSignature = signature;
+                        void restartPreview();
+                }
+        }
 
 	let previousDeviceChangeHandler: ((this: MediaDevices, ev: Event) => unknown) | null = null;
 
@@ -227,11 +231,11 @@
 			previewAnalyser.fftSize = 2048;
 			previewBuffer = new Uint8Array(new ArrayBuffer(previewAnalyser.fftSize));
 			source.connect(previewAnalyser);
-			previewActive = true;
-			previewSignature = '';
-			animatePreview();
-			showPermissionReminder = false;
-			void refreshDeviceList();
+                        previewActive = true;
+                        previewSignature = computePreviewSignature(form);
+                        animatePreview();
+                        showPermissionReminder = false;
+                        void refreshDeviceList();
 		} catch (error) {
 			console.error('Failed to start microphone preview', error);
 			previewError = m.settings_voice_preview_error();
@@ -266,14 +270,15 @@
 				track.stop();
 			}
 		}
-		previewStream = null;
-		previewContext = null;
-		previewAnalyser = null;
-		previewBuffer = null;
-		previewActive = false;
-		previewLevel = 0;
-		previewSpeaking = false;
-	}
+                previewStream = null;
+                previewContext = null;
+                previewAnalyser = null;
+                previewBuffer = null;
+                previewActive = false;
+                previewSignature = '';
+                previewLevel = 0;
+                previewSpeaking = false;
+        }
 
 	function animatePreview() {
 		if (!previewAnalyser || !previewBuffer) return;
