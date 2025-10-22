@@ -393,7 +393,12 @@
 
 <svelte:window
         onkeydown={onGlobalKey}
-        onclick={() => contextMenu.close()}
+        onpointerdown={(event) => {
+                if (event.defaultPrevented) return;
+                if (event.pointerType === 'touch' || event.button === 0 || event.button === -1) {
+                        contextMenu.close();
+                }
+        }}
         onresize={() => {
                 updatePosition();
                 updateSubmenuPosition();

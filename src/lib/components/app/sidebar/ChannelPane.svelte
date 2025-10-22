@@ -33,7 +33,7 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
-        import { Check, Slash, X, Volume2 } from 'lucide-svelte';
+        import { Check, PhoneOff, Slash, X, Volume2 } from 'lucide-svelte';
         import {
                 loadGuildRolesCached,
                 loadChannelRoleIds,
@@ -1221,17 +1221,33 @@
                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
                                                                                 <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                         {/if}
-                                                                        <div class="flex w-full items-center gap-2 truncate">
-                                                                                {#if isVoiceChannel(sec.ch)}
-                                                                                        <Volume2 class="opacity-70" size={16} />
-                                                                                {:else}
-                                                                                        <span class="opacity-70">#</span>
-                                                                                {/if}
-                                                                                <span class="truncate">{sec.ch.name}</span>
-                                                                                {#if voiceState === 'connecting'}
-                                                                                        <span class="text-xs text-[var(--muted)]">{m.voice_channel_status_connecting()}</span>
-                                                                                {:else if voiceState === 'connected'}
-                                                                                        <span class="text-xs text-[var(--brand)]">{m.voice_channel_status_connected()}</span>
+                                                                        <div class="flex w-full items-center gap-2">
+                                                                                <div class="flex min-w-0 flex-1 items-center gap-2 truncate">
+                                                                                        {#if isVoiceChannel(sec.ch)}
+                                                                                                <Volume2 class="opacity-70" size={16} />
+                                                                                        {:else}
+                                                                                                <span class="opacity-70">#</span>
+                                                                                        {/if}
+                                                                                        <span class="truncate">{sec.ch.name}</span>
+                                                                                </div>
+                                                                                {#if voiceState === 'connecting' || voiceState === 'connected'}
+                                                                                        <span class={`text-xs ${voiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>
+                                                                                                {voiceState === 'connecting'
+                                                                                                        ? m.voice_channel_status_connecting()
+                                                                                                        : m.voice_channel_status_connected()}
+                                                                                        </span>
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="grid h-6 w-6 place-items-center rounded text-[var(--brand)] hover:bg-[var(--panel-strong)]"
+                                                                                                onclick={(event) => {
+                                                                                                        event.preventDefault();
+                                                                                                        event.stopPropagation();
+                                                                                                        leaveVoiceChannel();
+                                                                                                }}
+                                                                                                aria-label={m.voice_leave_channel()}
+                                                                                        >
+                                                                                                <PhoneOff class="h-4 w-4" stroke-width={2} />
+                                                                                        </button>
                                                                                 {/if}
                                                                         </div>
                                                                 </div>
@@ -1344,24 +1360,40 @@
                                                                                                 openChannelMenu(e, ch);
                                                                                         }}
                                                                                 >
-                                                                                        <div class="relative flex w-full items-center gap-2 truncate pl-3">
-                                                                                                {#if nestedChannelUnread}
-                                                                                                        <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                                        <span
-                                                                                                                aria-hidden="true"
-                                                                                                                class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-                                                                                                        ></span>
-                                                                                                {/if}
-                                                                                                {#if isVoiceChannel(ch)}
-                                                                                                        <Volume2 class="opacity-70" size={16} />
-                                                                                                {:else}
-                                                                                                        <span class="opacity-70">#</span>
-                                                                                                {/if}
-                                                                                                <span class="truncate">{ch.name}</span>
-                                                                                                {#if nestedVoiceState === 'connecting'}
-                                                                                                        <span class="text-xs text-[var(--muted)]">{m.voice_channel_status_connecting()}</span>
-                                                                                                {:else if nestedVoiceState === 'connected'}
-                                                                                                        <span class="text-xs text-[var(--brand)]">{m.voice_channel_status_connected()}</span>
+                                                                                        <div class="relative flex w-full items-center gap-2">
+                                                                                                <div class="flex min-w-0 flex-1 items-center gap-2 truncate pl-3">
+                                                                                                        {#if nestedChannelUnread}
+                                                                                                                <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                                                <span
+                                                                                                                        aria-hidden="true"
+                                                                                                                        class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                                                                ></span>
+                                                                                                        {/if}
+                                                                                                        {#if isVoiceChannel(ch)}
+                                                                                                                <Volume2 class="opacity-70" size={16} />
+                                                                                                        {:else}
+                                                                                                                <span class="opacity-70">#</span>
+                                                                                                        {/if}
+                                                                                                        <span class="truncate">{ch.name}</span>
+                                                                                                </div>
+                                                                                                {#if nestedVoiceState === 'connecting' || nestedVoiceState === 'connected'}
+                                                                                                        <span class={`text-xs ${nestedVoiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>
+                                                                                                                {nestedVoiceState === 'connecting'
+                                                                                                                        ? m.voice_channel_status_connecting()
+                                                                                                                        : m.voice_channel_status_connected()}
+                                                                                                        </span>
+                                                                                                        <button
+                                                                                                                type="button"
+                                                                                                                class="grid h-6 w-6 place-items-center rounded text-[var(--brand)] hover:bg-[var(--panel-strong)]"
+                                                                                                                onclick={(event) => {
+                                                                                                                        event.preventDefault();
+                                                                                                                        event.stopPropagation();
+                                                                                                                        leaveVoiceChannel();
+                                                                                                                }}
+                                                                                                                aria-label={m.voice_leave_channel()}
+                                                                                                        >
+                                                                                                                <PhoneOff class="h-4 w-4" stroke-width={2} />
+                                                                                                        </button>
                                                                                                 {/if}
                                                                                         </div>
                                                                                 </div>

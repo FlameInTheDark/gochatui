@@ -318,12 +318,14 @@ function transmitSelfPresence(status: PresenceStatus, forceSend: boolean) {
         ) {
                 return;
         }
+        const voiceChannelField =
+                currentVoiceChannelId != null ? BigInt(currentVoiceChannelId) : null;
         sendWSMessage({
                 op: 3,
                 d: {
                         status,
                         custom_status_text: customStatusText,
-                        voice_channel_id: currentVoiceChannelId ?? null
+                        voice_channel_id: voiceChannelField
                 }
         });
         lastSentPresence = { status, customStatusText, voiceChannelId: currentVoiceChannelId ?? null };
@@ -407,7 +409,7 @@ export function setSelfCustomStatusText(value: string | null) {
         transmitSelfPresence(currentStatus, false);
 }
 
-export function setSelfVoiceChannelId(value: string | null) {
+export function setSelfVoiceChannelId(value: string | bigint | null) {
         const normalizedRaw = toSnowflakeString(value);
         const normalized = normalizedRaw && /^[0-9]+$/.test(normalizedRaw) ? normalizedRaw : null;
         if (normalized === currentVoiceChannelId) return;
