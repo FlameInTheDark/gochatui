@@ -3,7 +3,8 @@
 	import { settingsOpen } from '$lib/stores/settings';
 	import { m } from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
-        import { HeadphoneOff, Headphones, Mic, MicOff, PhoneOff, Settings, Check } from 'lucide-svelte';
+        import { HeadphoneOff, Headphones, Loader2, Mic, MicOff, PhoneOff, Settings, Check, Wifi } from 'lucide-svelte';
+        import { tooltip } from '$lib/actions/tooltip';
         import {
                 presenceIndicatorClass,
                 selfCustomStatusText,
@@ -90,6 +91,15 @@
         const voiceError = $derived.by(() => {
                 if ($voice.status !== 'error') return null;
                 return $voice.error ?? m.voice_status_error();
+        });
+
+        const voiceLatencyTooltip = $derived.by(() => {
+                const latency = $voice.latencyMs;
+                if (typeof latency === 'number' && Number.isFinite(latency)) {
+                        const rounded = Math.round(latency);
+                        return m.voice_latency_ms({ latency: rounded });
+                }
+                return m.voice_latency_measuring();
         });
 
 	type StatusOption = {
@@ -235,12 +245,36 @@
 </script>
 
 <div class="relative border-t border-[var(--stroke)] p-3">
-	<div class="flex h-11 items-center justify-between gap-2">
-		<button
-			type="button"
-			class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-1 py-1 text-left hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
-			onclick={toggleStatusMenu}
-			aria-haspopup="menu"
+        {#if voiceStatusText}
+                <div class="mb-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--muted)]">
+                        <div class="flex items-center gap-2">
+                                <span
+                                        class="grid h-5 w-5 place-items-center rounded-full bg-[var(--panel-strong)] text-[var(--accent)]"
+                                        aria-label={voiceLatencyTooltip}
+                                        role="img"
+                                        tabindex="0"
+                                        use:tooltip={() => voiceLatencyTooltip}
+                                >
+                                        {#if $voice.status === 'connecting'}
+                                                <Loader2 class="h-3.5 w-3.5 animate-spin" stroke-width={2} />
+                                        {:else}
+                                                <Wifi class="h-3.5 w-3.5" stroke-width={2} />
+                                        {/if}
+                                </span>
+                                <span class="min-w-0 truncate">{voiceStatusText}</span>
+                        </div>
+                </div>
+        {:else if voiceError}
+                <div class="mb-2 rounded border border-red-500 bg-red-500/10 px-2 py-1 text-xs text-red-400">
+                        {voiceError}
+                </div>
+        {/if}
+        <div class="flex h-11 items-center justify-between gap-2">
+                <button
+                        type="button"
+                        class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-1 py-1 text-left hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+                        onclick={toggleStatusMenu}
+                        aria-haspopup="menu"
 			aria-expanded={statusMenuOpen}
 			bind:this={statusTriggerEl}
 			data-tooltip-disabled
@@ -312,23 +346,14 @@
                                 aria-label={m.settings()}
 			>
 				<Settings class="h-4 w-4" stroke-width={2} />
-			</button>
+                        </button>
                 </div>
         </div>
-        {#if voiceStatusText}
-                <div class="mt-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--muted)]">
-                        {voiceStatusText}
-                </div>
-        {:else if voiceError}
-                <div class="mt-2 rounded border border-red-500 bg-red-500/10 px-2 py-1 text-xs text-red-400">
-                        {voiceError}
-                </div>
-        {/if}
         {#if statusMenuOpen}
                 <div
                         class="absolute bottom-[calc(100%+0.5rem)] left-3 z-40"
-			bind:this={statusMenuEl}
-			role="menu"
+                        bind:this={statusMenuEl}
+                        role="menu"
 			aria-label={m.status_menu_title()}
 		>
 			<div class="w-64 rounded-lg backdrop-blur-md">

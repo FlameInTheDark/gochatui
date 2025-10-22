@@ -33,6 +33,7 @@ type VoiceState = {
         remoteStreams: VoiceRemoteStream[];
         remoteSettings: Record<string, VoiceRemoteSettings>;
         speakingUserIds: string[];
+        latencyMs: number | null;
 };
 
 type VoiceSessionInternal = {
@@ -46,6 +47,8 @@ type VoiceSessionInternal = {
         remoteMonitors: Map<string, StreamMonitor>;
         localMonitor: StreamMonitor | null;
         manualClose: boolean;
+        pingInterval: ReturnType<typeof setInterval> | null;
+        pendingPings: Map<string, number>;
 };
 
 const initialState: VoiceState = {
@@ -57,7 +60,8 @@ const initialState: VoiceState = {
         deafened: false,
         remoteStreams: [],
         remoteSettings: {},
-        speakingUserIds: []
+        speakingUserIds: [],
+        latencyMs: null
 };
 
 const state = writable<VoiceState>(initialState);
@@ -65,6 +69,7 @@ export const voiceSession = derived(state, (value) => value);
 
 let session: VoiceSessionInternal | null = null;
 let sessionCounter = 0;
+let pingCounter = 0;
 
 function toApiSnowflake(id: string): any {
         return BigInt(id) as any;
@@ -306,6 +311,47 @@ function setState(partial: Partial<VoiceState>) {
         state.update((current) => ({ ...current, ...partial }));
 }
 
+function stopLatencyProbe(currentSession: VoiceSessionInternal | null) {
+        if (!currentSession) return;
+        if (currentSession.pingInterval) {
+                clearInterval(currentSession.pingInterval);
+        }
+        currentSession.pingInterval = null;
+        currentSession.pendingPings.clear();
+}
+
+function createPingNonce(): string {
+        pingCounter += 1;
+        return `ping-${Date.now()}-${pingCounter}`;
+}
+
+function sendLatencyPing(currentSession: VoiceSessionInternal) {
+        if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) return;
+        const nonce = createPingNonce();
+        const ts = Date.now();
+        currentSession.pendingPings.set(nonce, ts);
+        try {
+                currentSession.ws.send(
+                        JSON.stringify({
+                                op: 2,
+                                d: {
+                                        nonce,
+                                        ts
+                                }
+                        })
+                );
+        } catch {
+                currentSession.pendingPings.delete(nonce);
+        }
+}
+
+function startLatencyProbe(currentSession: VoiceSessionInternal) {
+        stopLatencyProbe(currentSession);
+        const tick = () => sendLatencyPing(currentSession);
+        tick();
+        currentSession.pingInterval = setInterval(tick, 10_000);
+}
+
 function clearSession(options: { error?: string | null; manual?: boolean } = {}) {
         const current = session;
         if (!current) {
@@ -317,7 +363,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                                 channelId: null,
                                 remoteStreams: [],
                                 remoteSettings: {},
-                                speakingUserIds: []
+                                speakingUserIds: [],
+                                latencyMs: null
                         });
                 } else {
                         setState({
@@ -327,7 +374,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                                 channelId: null,
                                 remoteStreams: [],
                                 remoteSettings: {},
-                                speakingUserIds: []
+                                speakingUserIds: [],
+                                latencyMs: null
                         });
                 }
                 setSelfVoiceChannelId(null);
@@ -335,6 +383,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
         }
 
         session = null;
+
+        stopLatencyProbe(current);
 
         current.localMonitor?.stop();
         current.localMonitor = null;
@@ -394,7 +444,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                                 channelId: null,
                                 remoteStreams: [],
                                 remoteSettings: {},
-                                speakingUserIds: []
+                                speakingUserIds: [],
+                                latencyMs: null
                         });
         } else {
                         setState({
@@ -404,7 +455,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                                 channelId: null,
                                 remoteStreams: [],
                                 remoteSettings: {},
-                                speakingUserIds: []
+                                speakingUserIds: [],
+                                latencyMs: null
                         });
         }
 }
@@ -545,7 +597,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 error: null,
                 remoteStreams: [],
                 remoteSettings: {},
-                speakingUserIds: []
+                speakingUserIds: [],
+                latencyMs: null
         });
 
         let localStream: MediaStream | null = null;
@@ -578,7 +631,9 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         remoteStreams: new Map(),
                         remoteMonitors: new Map(),
                         localMonitor: null,
-                        manualClose: false
+                        manualClose: false,
+                        pingInterval: null,
+                        pendingPings: new Map()
                 };
 
                 session = currentSession;
@@ -603,6 +658,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
 
                 ws.onclose = () => {
                         if (!session || session.id !== attemptId) return;
+                        stopLatencyProbe(currentSession);
                         if (currentSession.manualClose) {
                                 clearSession();
                         } else {
@@ -623,6 +679,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                         if (payload?.d?.ok) {
                                                 try {
                                                         await createPeerConnection(currentSession);
+                                                        startLatencyProbe(currentSession);
                                                 } catch (error: any) {
                                                         clearSession({
                                                                 error:
@@ -656,6 +713,16 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                 } else if (payload?.t === 512) {
                                         clearSession({ error: 'Moved to another channel.' });
                                 }
+                        } else if (payload?.op === 2 && payload?.d?.pong) {
+                                const nonce = typeof payload?.d?.nonce === 'string' ? payload.d.nonce : null;
+                                if (nonce) {
+                                        const sent = currentSession.pendingPings.get(nonce);
+                                        if (sent != null) {
+                                                currentSession.pendingPings.delete(nonce);
+                                                const latency = Math.max(0, Date.now() - sent);
+                                                setState({ latencyMs: latency });
+                                        }
+                                }
                         }
                 };
 
@@ -673,7 +740,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         channelId: null,
                         remoteStreams: [],
                         remoteSettings: {},
-                        speakingUserIds: []
+                        speakingUserIds: [],
+                        latencyMs: null
                 });
                 setSelfVoiceChannelId(null);
                 if (localStream) {
