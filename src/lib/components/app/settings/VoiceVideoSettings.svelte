@@ -13,8 +13,11 @@
 	import { auth } from '$lib/stores/auth';
 
 	const SYSTEM_DEVICE_ID = '__system__';
-	const INPUT_VOLUME_MAX = 1.5;
+	const INPUT_VOLUME_MAX = 1;
+	const OUTPUT_VOLUME_MAX = 1.5;
 	const THRESHOLD_MAX = 1;
+	const INPUT_VOLUME_PERCENT_MAX = 100;
+	const OUTPUT_VOLUME_PERCENT_MAX = 150;
 
 	type MessageVariant = 'success' | 'error' | 'info';
 
@@ -36,18 +39,26 @@
 	let devicesError: string | null = null;
 	let showPermissionReminder = false;
 
-	let previewSupported = browser && typeof navigator.mediaDevices?.getUserMedia === 'function';
-	let previewLoading = false;
-	let previewError: string | null = null;
-	let previewActive = false;
-	let previewLevel = 0;
-	let previewSpeaking = false;
-        let previewSignature = '';
-	let previewRaf: number | null = null;
-	let previewStream: MediaStream | null = null;
-	let previewContext: AudioContext | null = null;
-	let previewAnalyser: AnalyserNode | null = null;
-	let previewBuffer: Uint8Array | null = null;
+	let micPreviewSupported = browser && typeof navigator.mediaDevices?.getUserMedia === 'function';
+	let micPreviewLoading = false;
+	let micPreviewError: string | null = null;
+	let micPreviewActive = false;
+	let micPreviewLevel = 0;
+	let micPreviewSpeaking = false;
+	let micPreviewSignature = '';
+	let micPreviewRaf: number | null = null;
+	let micPreviewStream: MediaStream | null = null;
+	let micPreviewContext: AudioContext | null = null;
+	let micPreviewAnalyser: AnalyserNode | null = null;
+	let micPreviewBuffer: Uint8Array | null = null;
+	let cameraPreviewSupported =
+		browser && typeof navigator.mediaDevices?.getUserMedia === 'function';
+	let cameraPreviewLoading = false;
+	let cameraPreviewError: string | null = null;
+	let cameraPreviewActive = false;
+	let cameraPreviewSignature = '';
+	let cameraPreviewStream: MediaStream | null = null;
+	let cameraPreviewElement: HTMLVideoElement | null = null;
 	const inputVolumeId = 'voice-input-volume';
 	const outputVolumeId = 'voice-output-volume';
 	const thresholdId = 'voice-input-threshold';
@@ -62,19 +73,31 @@
 
 	$: dirty = !deviceSettingsEqual(form, currentSettings);
 
-        function computePreviewSignature(settings: DeviceSettings): string {
-                return `${settings.audioInputDevice ?? SYSTEM_DEVICE_ID}|${settings.autoGainControl ? 1 : 0}|${
-                        settings.echoCancellation ? 1 : 0
-                }|${settings.noiseSuppression ? 1 : 0}`;
-        }
+	function computeMicPreviewSignature(settings: DeviceSettings): string {
+		return `${settings.audioInputDevice ?? SYSTEM_DEVICE_ID}|${settings.autoGainControl ? 1 : 0}|${
+			settings.echoCancellation ? 1 : 0
+		}|${settings.noiseSuppression ? 1 : 0}`;
+	}
 
-        $: if (previewActive) {
-                const signature = computePreviewSignature(form);
-                if (signature !== previewSignature && !previewLoading) {
-                        previewSignature = signature;
-                        void restartPreview();
-                }
-        }
+	$: if (micPreviewActive) {
+		const signature = computeMicPreviewSignature(form);
+		if (signature !== micPreviewSignature && !micPreviewLoading) {
+			micPreviewSignature = signature;
+			void restartMicPreview();
+		}
+	}
+
+	function computeCameraPreviewSignature(settings: DeviceSettings): string {
+		return settings.videoDevice ?? SYSTEM_DEVICE_ID;
+	}
+
+	$: if (cameraPreviewActive) {
+		const signature = computeCameraPreviewSignature(form);
+		if (signature !== cameraPreviewSignature && !cameraPreviewLoading) {
+			cameraPreviewSignature = signature;
+			void restartCameraPreview();
+		}
+	}
 
 	let previousDeviceChangeHandler: ((this: MediaDevices, ev: Event) => unknown) | null = null;
 
@@ -104,7 +127,8 @@
 
 	onDestroy(() => {
 		unsubscribe();
-		stopPreview();
+		stopMicPreview();
+		void stopCameraPreview();
 	});
 
 	function clamp(value: number, min: number, max: number): number {
@@ -131,7 +155,7 @@
 			audioInputLevel: clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX),
 			audioInputThreshold: clamp(form.audioInputThreshold, 0, THRESHOLD_MAX),
 			audioOutputDevice: form.audioOutputDevice,
-			audioOutputLevel: clamp(form.audioOutputLevel, 0, INPUT_VOLUME_MAX),
+			audioOutputLevel: clamp(form.audioOutputLevel, 0, OUTPUT_VOLUME_MAX),
 			autoGainControl: form.autoGainControl,
 			echoCancellation: form.echoCancellation,
 			noiseSuppression: form.noiseSuppression,
@@ -150,7 +174,8 @@
 
 	async function refreshDeviceList() {
 		if (!browser || !navigator.mediaDevices?.enumerateDevices) {
-			previewSupported = false;
+			micPreviewSupported = false;
+			cameraPreviewSupported = false;
 			devicesError = m.settings_voice_preview_not_supported();
 			return;
 		}
@@ -158,6 +183,9 @@
 		devicesError = null;
 		try {
 			const devices = await navigator.mediaDevices.enumerateDevices();
+			const supportsPreview = typeof navigator.mediaDevices?.getUserMedia === 'function';
+			micPreviewSupported = supportsPreview;
+			cameraPreviewSupported = supportsPreview;
 			audioInputDevices = devices.filter((device) => device.kind === 'audioinput');
 			audioOutputDevices = devices.filter((device) => device.kind === 'audiooutput');
 			videoDevices = devices.filter((device) => device.kind === 'videoinput');
@@ -204,17 +232,17 @@
 		message = null;
 	}
 
-	async function startPreview() {
-		if (!previewSupported || !browser) {
-			previewError = m.settings_voice_preview_not_supported();
+	async function startMicPreview() {
+		if (!micPreviewSupported || !browser) {
+			micPreviewError = m.settings_voice_preview_not_supported();
 			return;
 		}
-		if (previewLoading) return;
+		if (micPreviewLoading) return;
 
-		previewLoading = true;
-		previewError = null;
+		micPreviewLoading = true;
+		micPreviewError = null;
 		try {
-			await stopPreview();
+			await stopMicPreview();
 			const constraints: MediaStreamConstraints = {
 				audio: {
 					deviceId: form.audioInputDevice ? { exact: form.audioInputDevice } : undefined,
@@ -224,75 +252,139 @@
 				}
 			};
 			const stream = await navigator.mediaDevices.getUserMedia(constraints);
-			previewStream = stream;
-			previewContext = new AudioContext();
-			const source = previewContext.createMediaStreamSource(stream);
-			previewAnalyser = previewContext.createAnalyser();
-			previewAnalyser.fftSize = 2048;
-			previewBuffer = new Uint8Array(new ArrayBuffer(previewAnalyser.fftSize));
-			source.connect(previewAnalyser);
-                        previewActive = true;
-                        previewSignature = computePreviewSignature(form);
-                        animatePreview();
-                        showPermissionReminder = false;
-                        void refreshDeviceList();
+			micPreviewStream = stream;
+			micPreviewContext = new AudioContext();
+			const source = micPreviewContext.createMediaStreamSource(stream);
+			micPreviewAnalyser = micPreviewContext.createAnalyser();
+			micPreviewAnalyser.fftSize = 2048;
+			micPreviewBuffer = new Uint8Array(new ArrayBuffer(micPreviewAnalyser.fftSize));
+			source.connect(micPreviewAnalyser);
+			micPreviewActive = true;
+			micPreviewSignature = computeMicPreviewSignature(form);
+			animateMicPreview();
+			showPermissionReminder = false;
+			void refreshDeviceList();
 		} catch (error) {
 			console.error('Failed to start microphone preview', error);
-			previewError = m.settings_voice_preview_error();
-			await stopPreview();
+			micPreviewError = m.settings_voice_preview_error();
+			await stopMicPreview();
 		} finally {
-			previewLoading = false;
+			micPreviewLoading = false;
 		}
 	}
 
-	async function restartPreview() {
-		if (!previewActive || previewLoading) return;
-		await startPreview();
+	async function restartMicPreview() {
+		if (!micPreviewActive || micPreviewLoading) return;
+		await startMicPreview();
 	}
 
-	async function stopPreview() {
-		if (previewRaf != null) {
-			cancelAnimationFrame(previewRaf);
-			previewRaf = null;
+	async function stopMicPreview() {
+		if (micPreviewRaf != null) {
+			cancelAnimationFrame(micPreviewRaf);
+			micPreviewRaf = null;
 		}
-		if (previewAnalyser) {
+		if (micPreviewAnalyser) {
 			try {
-				previewAnalyser.disconnect();
+				micPreviewAnalyser.disconnect();
 			} catch {}
 		}
-		if (previewContext) {
+		if (micPreviewContext) {
 			try {
-				await previewContext.close();
+				await micPreviewContext.close();
 			} catch {}
 		}
-		if (previewStream) {
-			for (const track of previewStream.getTracks()) {
+		if (micPreviewStream) {
+			for (const track of micPreviewStream.getTracks()) {
 				track.stop();
 			}
 		}
-                previewStream = null;
-                previewContext = null;
-                previewAnalyser = null;
-                previewBuffer = null;
-                previewActive = false;
-                previewSignature = '';
-                previewLevel = 0;
-                previewSpeaking = false;
-        }
+		micPreviewStream = null;
+		micPreviewContext = null;
+		micPreviewAnalyser = null;
+		micPreviewBuffer = null;
+		micPreviewActive = false;
+		micPreviewSignature = '';
+		micPreviewLevel = 0;
+		micPreviewSpeaking = false;
+	}
 
-	function animatePreview() {
-		if (!previewAnalyser || !previewBuffer) return;
-		previewAnalyser.getByteTimeDomainData(previewBuffer as unknown as Uint8Array<ArrayBuffer>);
+	function animateMicPreview() {
+		if (!micPreviewAnalyser || !micPreviewBuffer) return;
+		micPreviewAnalyser.getByteTimeDomainData(
+			micPreviewBuffer as unknown as Uint8Array<ArrayBuffer>
+		);
 		let sumSquares = 0;
-		for (let i = 0; i < previewBuffer.length; i += 1) {
-			const value = previewBuffer[i] / 128 - 1;
+		for (let i = 0; i < micPreviewBuffer.length; i += 1) {
+			const value = micPreviewBuffer[i] / 128 - 1;
 			sumSquares += value * value;
 		}
-		const rms = Math.sqrt(sumSquares / previewBuffer.length);
+		const rms = Math.sqrt(sumSquares / micPreviewBuffer.length);
 		const level = clamp(rms * 2 * form.audioInputLevel, 0, 1);
-		previewLevel = level;
-		previewSpeaking = level >= form.audioInputThreshold;
-		previewRaf = requestAnimationFrame(animatePreview);
+		micPreviewLevel = level;
+		micPreviewSpeaking = level >= form.audioInputThreshold;
+		micPreviewRaf = requestAnimationFrame(animateMicPreview);
+	}
+
+	async function startCameraPreview() {
+		if (!cameraPreviewSupported || !browser) {
+			cameraPreviewError = m.settings_video_preview_not_supported();
+			return;
+		}
+		if (cameraPreviewLoading) return;
+
+		cameraPreviewLoading = true;
+		cameraPreviewError = null;
+		try {
+			await stopCameraPreview();
+			const constraints: MediaStreamConstraints = {
+				video: form.videoDevice ? { deviceId: { exact: form.videoDevice } } : true,
+				audio: false
+			};
+			const stream = await navigator.mediaDevices.getUserMedia(constraints);
+			cameraPreviewStream = stream;
+			cameraPreviewActive = true;
+			cameraPreviewSignature = computeCameraPreviewSignature(form);
+			showPermissionReminder = false;
+			void refreshDeviceList();
+		} catch (error) {
+			console.error('Failed to start camera preview', error);
+			cameraPreviewError = m.settings_video_preview_error();
+			await stopCameraPreview();
+		} finally {
+			cameraPreviewLoading = false;
+		}
+	}
+
+	async function restartCameraPreview() {
+		if (!cameraPreviewActive || cameraPreviewLoading) return;
+		await startCameraPreview();
+	}
+
+	async function stopCameraPreview() {
+		if (cameraPreviewStream) {
+			for (const track of cameraPreviewStream.getTracks()) {
+				track.stop();
+			}
+		}
+		if (cameraPreviewElement) {
+			try {
+				cameraPreviewElement.pause();
+			} catch {}
+			cameraPreviewElement.srcObject = null;
+		}
+		cameraPreviewStream = null;
+		cameraPreviewActive = false;
+		cameraPreviewSignature = '';
+	}
+
+	$: if (cameraPreviewActive && cameraPreviewElement && cameraPreviewStream) {
+		if (cameraPreviewElement.srcObject !== cameraPreviewStream) {
+			cameraPreviewElement.srcObject = cameraPreviewStream;
+			const playPromise = cameraPreviewElement.play();
+			if (playPromise && typeof playPromise.catch === 'function') {
+				playPromise.catch(() => {});
+			}
+		}
 	}
 </script>
 
@@ -397,19 +489,22 @@
 			<div class="flex-1">
 				<label class="flex justify-between text-sm font-medium" for={inputVolumeId}>
 					<span>{m.settings_input_volume()}</span>
-					<span>{form.audioInputLevel.toFixed(2)}×</span>
+					<span>{Math.round(clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX) * 100)}%</span>
 				</label>
 				<input
 					id={inputVolumeId}
 					type="range"
 					min="0"
-					max={INPUT_VOLUME_MAX}
-					step="0.01"
-					value={form.audioInputLevel}
+					max={INPUT_VOLUME_PERCENT_MAX}
+					step="1"
+					value={Math.round(
+						clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX) * INPUT_VOLUME_PERCENT_MAX
+					)}
 					oninput={(event) =>
 						updateForm({
 							audioInputLevel: clamp(
-								Number((event.currentTarget as HTMLInputElement).value) || 0,
+								(Number((event.currentTarget as HTMLInputElement).value) || 0) /
+									INPUT_VOLUME_PERCENT_MAX,
 								0,
 								INPUT_VOLUME_MAX
 							)
@@ -420,21 +515,21 @@
 			<div class="flex-1">
 				<label class="flex justify-between text-sm font-medium" for={outputVolumeId}>
 					<span>{m.settings_output_volume()}</span>
-					<span>{form.audioOutputLevel.toFixed(2)}×</span>
+					<span>{Math.round(clamp(form.audioOutputLevel, 0, OUTPUT_VOLUME_MAX) * 100)}%</span>
 				</label>
 				<input
 					id={outputVolumeId}
 					type="range"
 					min="0"
-					max={INPUT_VOLUME_MAX}
-					step="0.01"
-					value={form.audioOutputLevel}
+					max={OUTPUT_VOLUME_PERCENT_MAX}
+					step="1"
+					value={Math.round(clamp(form.audioOutputLevel, 0, OUTPUT_VOLUME_MAX) * 100)}
 					oninput={(event) =>
 						updateForm({
 							audioOutputLevel: clamp(
-								Number((event.currentTarget as HTMLInputElement).value) || 0,
+								(Number((event.currentTarget as HTMLInputElement).value) || 0) / 100,
 								0,
-								INPUT_VOLUME_MAX
+								OUTPUT_VOLUME_MAX
 							)
 						})}
 					class="mt-2 w-full"
@@ -467,9 +562,9 @@
 			<div class="relative mt-3 h-3 w-full overflow-hidden rounded-full bg-[var(--panel-strong)]">
 				<div
 					class={`absolute inset-y-0 left-0 rounded-full transition-[width] ${
-						previewSpeaking ? 'bg-[var(--success)]' : 'bg-[var(--brand)]/60'
+						micPreviewSpeaking ? 'bg-[var(--success)]' : 'bg-[var(--brand)]/60'
 					}`}
-					style={`width: ${(previewLevel * 100).toFixed(2)}%`}
+					style={`width: ${(micPreviewLevel * 100).toFixed(2)}%`}
 				></div>
 				<div
 					class="absolute inset-y-0 w-0.5 bg-[var(--stroke-strong)]"
@@ -517,8 +612,8 @@
 			<div>
 				<h3 class="text-sm font-semibold">{m.settings_voice_preview()}</h3>
 				<p class="text-xs text-[var(--muted)]">
-					{previewActive
-						? previewSpeaking
+					{micPreviewActive
+						? micPreviewSpeaking
 							? m.settings_voice_preview_detected()
 							: m.settings_voice_preview_listening()
 						: m.settings_voice_preview_help()}
@@ -534,15 +629,58 @@
 				</button>
 				<button
 					class="rounded bg-[var(--brand)] px-3 py-2 text-sm font-medium text-[var(--brand-contrast)] disabled:opacity-50"
-					onclick={() => (previewActive ? stopPreview() : startPreview())}
-					disabled={previewLoading}
+					onclick={() => (micPreviewActive ? stopMicPreview() : startMicPreview())}
+					disabled={micPreviewLoading}
 				>
-					{previewActive ? m.settings_voice_preview_stop() : m.settings_voice_preview_start()}
+					{micPreviewActive ? m.settings_voice_preview_stop() : m.settings_voice_preview_start()}
 				</button>
 			</div>
 		</div>
-		{#if previewError}
-			<p class="mt-3 text-sm text-[var(--danger)]">{previewError}</p>
+		{#if micPreviewError}
+			<p class="mt-3 text-sm text-[var(--danger)]">{micPreviewError}</p>
+		{/if}
+	</div>
+
+	<div class="rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
+		<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+			<div>
+				<h3 class="text-sm font-semibold">{m.settings_video_preview()}</h3>
+				<p class="text-xs text-[var(--muted)]">
+					{cameraPreviewSupported
+						? cameraPreviewActive
+							? m.settings_video_preview_live()
+							: m.settings_video_preview_help()
+						: m.settings_video_preview_not_supported()}
+				</p>
+			</div>
+			<div class="flex gap-2">
+				<button
+					class="rounded bg-[var(--brand)] px-3 py-2 text-sm font-medium text-[var(--brand-contrast)] disabled:opacity-50"
+					onclick={() => (cameraPreviewActive ? stopCameraPreview() : startCameraPreview())}
+					disabled={cameraPreviewLoading || !cameraPreviewSupported}
+				>
+					{cameraPreviewActive ? m.settings_video_preview_stop() : m.settings_video_preview_start()}
+				</button>
+			</div>
+		</div>
+		<div class="mt-3">
+			<video
+				bind:this={cameraPreviewElement}
+				class={`h-48 w-full rounded bg-black object-cover ${cameraPreviewActive ? '' : 'hidden'}`}
+				autoplay
+				muted
+				playsinline
+			></video>
+			{#if !cameraPreviewActive}
+				<div
+					class="flex h-48 items-center justify-center rounded border border-dashed border-[var(--stroke)] bg-[var(--panel-strong)] text-sm text-[var(--muted)]"
+				>
+					{m.settings_video_preview_placeholder()}
+				</div>
+			{/if}
+		</div>
+		{#if cameraPreviewError}
+			<p class="mt-3 text-sm text-[var(--danger)]">{cameraPreviewError}</p>
 		{/if}
 	</div>
 

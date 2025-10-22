@@ -2,6 +2,11 @@ import { browser } from '$app/environment';
 import { writable, derived, get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import { setSelfVoiceChannelId } from '$lib/stores/presence';
+import {
+        appSettings,
+        cloneDeviceSettings,
+        type DeviceSettings
+} from '$lib/stores/settings';
 
 const noop = () => {};
 
@@ -70,6 +75,122 @@ export const voiceSession = derived(state, (value) => value);
 let session: VoiceSessionInternal | null = null;
 let sessionCounter = 0;
 let pingCounter = 0;
+
+function clamp(value: number, min: number, max: number): number {
+        return Math.max(min, Math.min(max, value));
+}
+
+function buildAudioConstraints(settings: DeviceSettings): MediaTrackConstraints {
+        const constraints: MediaTrackConstraints = {
+                autoGainControl: settings.autoGainControl,
+                echoCancellation: settings.echoCancellation,
+                noiseSuppression: settings.noiseSuppression
+        };
+        if (settings.audioInputDevice) {
+                constraints.deviceId = { exact: settings.audioInputDevice };
+        }
+        return constraints;
+}
+
+function stopStream(stream: MediaStream | null | undefined) {
+        if (!stream) return;
+        for (const track of stream.getTracks()) {
+                try {
+                        track.stop();
+                } catch {}
+        }
+}
+
+function applyGainToTrack(track: MediaStreamTrack | null | undefined, gain: number) {
+        if (!track || typeof track.applyConstraints !== 'function') return;
+        const normalized = clamp(Number.isFinite(gain) ? Number(gain) : 1, 0, 1);
+        try {
+                const constraints: MediaTrackConstraints = {};
+                (constraints as any).volume = normalized;
+                const result = track.applyConstraints(constraints);
+                if (result && typeof (result as Promise<void>).catch === 'function') {
+                        (result as Promise<void>).catch(() => {});
+                }
+        } catch {}
+}
+
+async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> {
+        if (!browser) return;
+        const activeSession = session;
+        if (!activeSession) return;
+        const sessionId = activeSession.id;
+        const constraints = buildAudioConstraints(settings);
+        let newStream: MediaStream | null = null;
+        try {
+                newStream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+        } catch (error) {
+                console.error('Failed to apply audio device constraints, retrying with defaults.', error);
+                try {
+                        newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                } catch (fallbackError) {
+                        console.error('Failed to acquire replacement audio stream.', fallbackError);
+                        return;
+                }
+        }
+
+        if (!session || session.id !== sessionId) {
+                stopStream(newStream);
+                return;
+        }
+
+        const newTrack = newStream.getAudioTracks()[0] ?? null;
+        if (!newTrack) {
+                stopStream(newStream);
+                return;
+        }
+
+        applyGainToTrack(newTrack, settings.audioInputLevel);
+
+        const previousStream = activeSession.localStream;
+        activeSession.localStream = newStream;
+        startLocalMonitor(activeSession);
+
+        if (!session || session.id !== sessionId) {
+                stopStream(newStream);
+                return;
+        }
+
+        if (activeSession.pc) {
+                const sender = activeSession.pc.getSenders().find((item) => item.track?.kind === 'audio');
+                if (sender) {
+                        try {
+                                await sender.replaceTrack(newTrack);
+                        } catch (error) {
+                                console.error('Failed to replace audio track on peer connection.', error);
+                        }
+                } else {
+                        try {
+                                activeSession.pc.addTrack(newTrack, newStream);
+                        } catch (error) {
+                                console.error('Failed to attach audio track to peer connection.', error);
+                        }
+                }
+        }
+
+        applyMuteState(newStream, get(state).muted);
+
+        if (session && session.id === sessionId) {
+                stopStream(previousStream);
+        } else {
+                stopStream(newStream);
+        }
+}
+
+function applyLocalInputGain(settings: DeviceSettings) {
+        const activeSession = session;
+        if (!activeSession) return;
+        const track = activeSession.localStream?.getAudioTracks()[0] ?? null;
+        applyGainToTrack(track, settings.audioInputLevel);
+}
+
+const defaultDeviceSettings = cloneDeviceSettings(null);
+let lastDeviceSettings: DeviceSettings = defaultDeviceSettings;
+let deviceSettingsQueue: Promise<void> = Promise.resolve();
 
 function toApiSnowflake(id: string): any {
         return BigInt(id) as any;
@@ -304,6 +425,28 @@ function applyMuteState(localStream: MediaStream | null, muted: boolean) {
         if (!localStream) return;
         for (const track of localStream.getAudioTracks()) {
                 track.enabled = !muted;
+        }
+}
+
+async function handleDeviceSettingsChange(
+        previous: DeviceSettings,
+        next: DeviceSettings
+): Promise<void> {
+        if (!browser) return;
+        if (!session) return;
+
+        const inputDeviceChanged = (previous.audioInputDevice ?? null) !== (next.audioInputDevice ?? null);
+        const agcChanged = previous.autoGainControl !== next.autoGainControl;
+        const echoChanged = previous.echoCancellation !== next.echoCancellation;
+        const noiseChanged = previous.noiseSuppression !== next.noiseSuppression;
+
+        if (inputDeviceChanged || agcChanged || echoChanged || noiseChanged) {
+                await replaceLocalAudioStream(next);
+                return;
+        }
+
+        if (Math.abs(previous.audioInputLevel - next.audioInputLevel) > 1e-3) {
+                applyLocalInputGain(next);
         }
 }
 
@@ -601,11 +744,25 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 latencyMs: null
         });
 
+        const deviceSnapshot = cloneDeviceSettings(lastDeviceSettings);
         let localStream: MediaStream | null = null;
         try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch {
-                localStream = null;
+                localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: buildAudioConstraints(deviceSnapshot)
+                });
+        } catch (error) {
+                console.error('Failed to acquire preferred audio stream.', error);
+                try {
+                        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                } catch (fallbackError) {
+                        console.error('Failed to acquire fallback audio stream.', fallbackError);
+                        localStream = null;
+                }
+        }
+
+        if (localStream) {
+                const track = localStream.getAudioTracks()[0] ?? null;
+                applyGainToTrack(track, deviceSnapshot.audioInputLevel);
         }
 
         try {
@@ -834,6 +991,18 @@ export function setRemoteUserMuted(userId: string, muted: boolean): void {
 }
 
 if (browser) {
+        lastDeviceSettings = cloneDeviceSettings(get(appSettings).devices);
+        appSettings.subscribe(($settings) => {
+                const next = cloneDeviceSettings($settings.devices);
+                const previous = lastDeviceSettings;
+                lastDeviceSettings = next;
+                deviceSettingsQueue = deviceSettingsQueue
+                        .then(() => handleDeviceSettingsChange(previous, next))
+                        .catch((error) => {
+                                console.error('Failed to apply device settings update.', error);
+                        });
+        });
+
         auth.isAuthenticated.subscribe((ok) => {
                 if (!ok) {
                         leaveVoiceChannel();

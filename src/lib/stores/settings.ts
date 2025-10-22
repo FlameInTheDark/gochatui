@@ -832,7 +832,7 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
 			devicesPayload,
 			'audio_input_level',
 			defaultDeviceSettings.audioInputLevel,
-			{ min: 0, max: 1.5 }
+			{ min: 0, max: 1 }
 		),
 		audioInputThreshold: resolveNumberField(
 			devicesPayload,
@@ -1052,7 +1052,7 @@ export function convertAppSettingsToApi(settings: AppSettings): ModelUserSetting
 		},
 		devices: {
 			audio_input_device: settings.devices.audioInputDevice ?? undefined,
-			audio_input_level: clamp(settings.devices.audioInputLevel, 0, 1.5),
+			audio_input_level: clamp(settings.devices.audioInputLevel, 0, 1),
 			audio_input_threshold: clamp(settings.devices.audioInputThreshold, 0, 1),
 			audio_output_device: settings.devices.audioOutputDevice ?? undefined,
 			audio_output_level: clamp(settings.devices.audioOutputLevel, 0, 1.5),
