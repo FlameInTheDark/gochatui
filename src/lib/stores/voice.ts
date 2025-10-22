@@ -417,10 +417,13 @@ async function createPeerConnection(currentSession: VoiceSessionInternal) {
 
         pc.ontrack = (event) => {
                 if (!session || session.id !== currentSession.id) return;
+                const trackId = event.track?.id ?? '';
                 for (const stream of event.streams) {
-                        const key = stream.id || `${Date.now()}-${Math.random()}`;
+                        const streamId = stream.id || '';
+                        const keySource = streamId || trackId || `${Date.now()}-${Math.random()}`;
+                        const key = trackId ? `${keySource}:${trackId}` : keySource;
                         currentSession.remoteStreams.set(key, stream);
-                        const userId = extractUserId(stream?.id ?? key);
+                        const userId = extractUserId(streamId || trackId || key);
                         if (userId) {
                                 const existingMonitor = currentSession.remoteMonitors.get(key);
                                 existingMonitor?.stop();
