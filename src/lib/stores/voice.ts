@@ -54,6 +54,7 @@ type VoiceSessionInternal = {
         manualClose: boolean;
         pingInterval: ReturnType<typeof setInterval> | null;
         pendingPings: Map<string, number>;
+        awaitingServerOffer: boolean;
 };
 
 const initialState: VoiceState = {
@@ -604,7 +605,7 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
         }
 }
 
-async function createPeerConnection(currentSession: VoiceSessionInternal) {
+async function createPeerConnection(currentSession: VoiceSessionInternal): Promise<RTCPeerConnection> {
         if (!currentSession.ws) {
                 throw new Error('Missing SFU socket');
         }
@@ -680,6 +681,16 @@ async function createPeerConnection(currentSession: VoiceSessionInternal) {
                 }
         };
 
+        pc.onnegotiationneeded = async () => {
+                if (!session || session.id !== currentSession.id) return;
+                if (currentSession.awaitingServerOffer) return;
+                try {
+                        await sendClientOffer(currentSession);
+                } catch (error) {
+                        console.error('Failed to send renegotiation offer.', error);
+                }
+        };
+
         const currentState = get(state);
         if (currentSession.localStream) {
                 for (const track of currentSession.localStream.getTracks()) {
@@ -690,20 +701,68 @@ async function createPeerConnection(currentSession: VoiceSessionInternal) {
                 applyMuteState(currentSession.localStream, currentState.muted);
         }
 
-        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-        await pc.setLocalDescription(offer);
+        return pc;
+}
 
-        try {
-                currentSession.ws.send(
-                        JSON.stringify({
-                                op: 7,
-                                t: 501,
-                                d: { sdp: offer.sdp ?? '' }
-                        })
-                );
-        } catch (error) {
-                throw error instanceof Error ? error : new Error('Failed to send offer');
+async function sendClientOffer(currentSession: VoiceSessionInternal): Promise<void> {
+        if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
+                throw new Error('SFU socket is not open');
         }
+        if (!currentSession.pc) {
+                throw new Error('Peer connection not initialized');
+        }
+        if (currentSession.pc.signalingState === 'have-remote-offer') {
+                throw new Error('Cannot create offer while remote offer is pending');
+        }
+
+        const offer = await currentSession.pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+        await currentSession.pc.setLocalDescription(offer);
+
+        currentSession.ws.send(
+                JSON.stringify({
+                        op: 7,
+                        t: 501,
+                        d: { sdp: offer.sdp ?? '' }
+                })
+        );
+}
+
+async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: string): Promise<void> {
+        const offerSdp = typeof sdp === 'string' ? sdp : '';
+        if (!offerSdp) {
+                throw new Error('SFU offer missing SDP');
+        }
+
+        const pc = currentSession.pc ?? (await createPeerConnection(currentSession));
+        if (!pc) {
+                throw new Error('Peer connection unavailable');
+        }
+
+        if (pc.signalingState === 'have-local-offer') {
+                try {
+                        await pc.setLocalDescription({ type: 'rollback' });
+                } catch (error) {
+                        console.warn('Failed to rollback local offer before applying server offer.', error);
+                }
+        }
+
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
+                throw new Error('SFU socket is not open');
+        }
+
+        currentSession.ws.send(
+                JSON.stringify({
+                        op: 7,
+                        t: 502,
+                        d: { sdp: answer.sdp ?? '' }
+                })
+        );
+
+        currentSession.awaitingServerOffer = false;
 }
 
 function ensureBrowser(): void {
@@ -790,7 +849,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         localMonitor: null,
                         manualClose: false,
                         pingInterval: null,
-                        pendingPings: new Map()
+                        pendingPings: new Map(),
+                        awaitingServerOffer: true
                 };
 
                 session = currentSession;
@@ -845,6 +905,14 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                                 }
                                         } else {
                                                 clearSession({ error: payload?.d?.error ?? 'SFU join rejected.' });
+                                        }
+                                } else if (payload?.t === 501) {
+                                        try {
+                                                await handleServerOffer(currentSession, payload?.d?.sdp ?? '');
+                                        } catch (error: any) {
+                                                clearSession({
+                                                        error: error?.message ?? 'Failed to apply SFU offer.'
+                                                });
                                         }
                                 } else if (payload?.t === 502) {
                                         try {
