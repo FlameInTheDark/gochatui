@@ -49,8 +49,18 @@
 	let micPreviewRaf: number | null = null;
 	let micPreviewStream: MediaStream | null = null;
 	let micPreviewContext: AudioContext | null = null;
+	let micPreviewSource: MediaStreamAudioSourceNode | null = null;
+	let micPreviewInputGain: GainNode | null = null;
 	let micPreviewAnalyser: AnalyserNode | null = null;
+	let micPreviewOutputGain: GainNode | null = null;
+	let micPreviewDestination: MediaStreamAudioDestinationNode | null = null;
 	let micPreviewBuffer: Uint8Array | null = null;
+	let micPreviewAudioElement: HTMLAudioElement | null = null;
+	const sinkIdSupported =
+		typeof HTMLMediaElement !== 'undefined' &&
+		typeof HTMLMediaElement.prototype.setSinkId === 'function';
+	let micPreviewAppliedSink: string | null = null;
+	let micPreviewSinkErrorLogged = false;
 	let cameraPreviewSupported =
 		browser && typeof navigator.mediaDevices?.getUserMedia === 'function';
 	let cameraPreviewLoading = false;
@@ -253,12 +263,33 @@
 			};
 			const stream = await navigator.mediaDevices.getUserMedia(constraints);
 			micPreviewStream = stream;
-			micPreviewContext = new AudioContext();
+			const AudioContextCtor =
+				window.AudioContext ?? (window as any).webkitAudioContext ?? AudioContext;
+			micPreviewContext = new AudioContextCtor();
 			const source = micPreviewContext.createMediaStreamSource(stream);
-			micPreviewAnalyser = micPreviewContext.createAnalyser();
+			const inputGain = micPreviewContext.createGain();
+			const analyser = micPreviewContext.createAnalyser();
+			const outputGain = micPreviewContext.createGain();
+			const destination = micPreviewContext.createMediaStreamDestination();
+			source.connect(inputGain);
+			inputGain.connect(analyser);
+			analyser.connect(outputGain);
+			outputGain.connect(destination);
+			micPreviewSource = source;
+			micPreviewInputGain = inputGain;
+			micPreviewAnalyser = analyser;
+			micPreviewOutputGain = outputGain;
+			micPreviewDestination = destination;
 			micPreviewAnalyser.fftSize = 2048;
 			micPreviewBuffer = new Uint8Array(new ArrayBuffer(micPreviewAnalyser.fftSize));
-			source.connect(micPreviewAnalyser);
+			updateMicPreviewInputGain();
+			updateMicPreviewOutputGain();
+			if (micPreviewAudioElement) {
+				micPreviewAudioElement.srcObject = destination.stream;
+				ensureMicPreviewPlayback();
+				await applyMicPreviewSink(form.audioOutputDevice ?? null);
+			}
+			micPreviewContext.resume().catch(() => {});
 			micPreviewActive = true;
 			micPreviewSignature = computeMicPreviewSignature(form);
 			animateMicPreview();
@@ -283,10 +314,35 @@
 			cancelAnimationFrame(micPreviewRaf);
 			micPreviewRaf = null;
 		}
+		if (micPreviewSource) {
+			try {
+				micPreviewSource.disconnect();
+			} catch {}
+			micPreviewSource = null;
+		}
+		if (micPreviewInputGain) {
+			try {
+				micPreviewInputGain.disconnect();
+			} catch {}
+			micPreviewInputGain = null;
+		}
 		if (micPreviewAnalyser) {
 			try {
 				micPreviewAnalyser.disconnect();
 			} catch {}
+			micPreviewAnalyser = null;
+		}
+		if (micPreviewOutputGain) {
+			try {
+				micPreviewOutputGain.disconnect();
+			} catch {}
+			micPreviewOutputGain = null;
+		}
+		if (micPreviewDestination) {
+			try {
+				micPreviewDestination.disconnect?.();
+			} catch {}
+			micPreviewDestination = null;
 		}
 		if (micPreviewContext) {
 			try {
@@ -298,14 +354,22 @@
 				track.stop();
 			}
 		}
+		if (micPreviewAudioElement) {
+			try {
+				micPreviewAudioElement.pause();
+			} catch {}
+			micPreviewAudioElement.srcObject = null;
+			micPreviewAudioElement.muted = true;
+		}
 		micPreviewStream = null;
 		micPreviewContext = null;
-		micPreviewAnalyser = null;
 		micPreviewBuffer = null;
 		micPreviewActive = false;
 		micPreviewSignature = '';
 		micPreviewLevel = 0;
 		micPreviewSpeaking = false;
+		micPreviewAppliedSink = null;
+		micPreviewSinkErrorLogged = false;
 	}
 
 	function animateMicPreview() {
@@ -323,6 +387,63 @@
 		micPreviewLevel = level;
 		micPreviewSpeaking = level >= form.audioInputThreshold;
 		micPreviewRaf = requestAnimationFrame(animateMicPreview);
+	}
+
+	function updateMicPreviewInputGain() {
+		if (!micPreviewInputGain) return;
+		micPreviewInputGain.gain.value = clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX);
+	}
+
+	function ensureMicPreviewPlayback() {
+		if (!micPreviewAudioElement) return;
+		try {
+			micPreviewAudioElement.muted = false;
+			micPreviewAudioElement.volume = 1;
+		} catch {}
+		const playPromise = micPreviewAudioElement.play();
+		if (playPromise && typeof playPromise.catch === 'function') {
+			playPromise.catch(() => {});
+		}
+	}
+
+	function updateMicPreviewOutputGain() {
+		if (!micPreviewOutputGain) return;
+		const level = clamp(form.audioOutputLevel, 0, OUTPUT_VOLUME_MAX);
+		micPreviewOutputGain.gain.value = level;
+		if (micPreviewAudioElement) {
+			micPreviewAudioElement.muted = level <= 0;
+			if (level > 0) {
+				ensureMicPreviewPlayback();
+			}
+		}
+	}
+
+	async function applyMicPreviewSink(deviceId: string | null) {
+		if (!micPreviewAudioElement || !sinkIdSupported) return;
+		const target = deviceId && deviceId.length ? deviceId : 'default';
+		if (micPreviewAppliedSink === target) return;
+		try {
+			await micPreviewAudioElement.setSinkId(target);
+			micPreviewAppliedSink = target;
+			micPreviewSinkErrorLogged = false;
+		} catch (error) {
+			if (!micPreviewSinkErrorLogged) {
+				console.error('Failed to set microphone preview output device.', error);
+				micPreviewSinkErrorLogged = true;
+			}
+		}
+	}
+
+	$: if (micPreviewActive) {
+		updateMicPreviewInputGain();
+	}
+
+	$: if (micPreviewActive) {
+		updateMicPreviewOutputGain();
+	}
+
+	$: if (micPreviewActive) {
+		void applyMicPreviewSink(form.audioOutputDevice ?? null);
 	}
 
 	async function startCameraPreview() {
@@ -639,6 +760,7 @@
 		{#if micPreviewError}
 			<p class="mt-3 text-sm text-[var(--danger)]">{micPreviewError}</p>
 		{/if}
+		<audio bind:this={micPreviewAudioElement} class="hidden" autoplay playsinline></audio>
 	</div>
 
 	<div class="rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
