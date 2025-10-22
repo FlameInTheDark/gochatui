@@ -159,17 +159,30 @@
 
         async function applySink(deviceId: string | null) {
                 if (!audioEl || !sinkIdSupported) return;
+                if (!audioEl.isConnected) return;
                 const target = deviceId && deviceId.length ? deviceId : 'default';
+                let currentSink: string | undefined;
                 try {
-                        const currentSink: string | undefined = (audioEl as any).sinkId;
-                        if (currentSink === target) return;
+                        currentSink = (audioEl as any).sinkId;
                 } catch {}
+                if (currentSink === target) return;
                 try {
                         await audioEl.setSinkId(target);
                         sinkErrorLogged = false;
+                        return;
                 } catch (error) {
+                        if (target !== 'default') {
+                                try {
+                                        await audioEl.setSinkId('default');
+                                } catch {}
+                        }
                         if (!sinkErrorLogged) {
-                                console.error('Failed to set audio output device.', error);
+                                const isAbortError =
+                                        error instanceof DOMException && error.name === 'AbortError';
+                                const message = isAbortError
+                                        ? 'Audio output device became unavailable. Falling back to default sink.'
+                                        : 'Failed to set audio output device.';
+                                console.error(message, error);
                                 sinkErrorLogged = true;
                         }
                 }

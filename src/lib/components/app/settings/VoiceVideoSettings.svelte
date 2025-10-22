@@ -15,7 +15,9 @@
 	const SYSTEM_DEVICE_ID = '__system__';
 	const INPUT_VOLUME_MAX = 1;
 	const OUTPUT_VOLUME_MAX = 1.5;
-	const THRESHOLD_MAX = 1;
+        const THRESHOLD_MAX = 1;
+        const THRESHOLD_DB_MIN = -100;
+        const THRESHOLD_DB_MAX = 0;
 	const INPUT_VOLUME_PERCENT_MAX = 100;
 	const OUTPUT_VOLUME_PERCENT_MAX = 150;
 
@@ -141,9 +143,36 @@
 		void stopCameraPreview();
 	});
 
-	function clamp(value: number, min: number, max: number): number {
-		return Math.max(min, Math.min(max, value));
-	}
+        function clamp(value: number, min: number, max: number): number {
+                return Math.max(min, Math.min(max, value));
+        }
+
+        function decibelsToNormalized(value: number): number {
+                const db = clamp(value, THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
+                if (db <= THRESHOLD_DB_MIN) return 0;
+                return clamp(Math.pow(10, db / 20), 0, THRESHOLD_MAX);
+        }
+
+        function normalizedToDecibels(value: number): number {
+                const normalized = clamp(value, 0, THRESHOLD_MAX);
+                if (normalized <= 0) return THRESHOLD_DB_MIN;
+                return clamp(20 * Math.log10(normalized), THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
+        }
+
+        function formatDecibels(value: number): string {
+                return `${Math.round(value)} dB`;
+        }
+
+        function decibelsToSliderPercent(value: number): number {
+                const db = clamp(value, THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
+                const span = THRESHOLD_DB_MAX - THRESHOLD_DB_MIN;
+                if (span <= 0) return 0;
+                return ((db - THRESHOLD_DB_MIN) / span) * 100;
+        }
+
+        function normalizedToSliderPercent(value: number): number {
+                return decibelsToSliderPercent(normalizedToDecibels(value));
+        }
 
 	function deviceSettingsEqual(a: DeviceSettings, b: DeviceSettings): boolean {
 		return (
@@ -661,19 +690,21 @@
 		<div>
 			<label class="flex justify-between text-sm font-medium" for={thresholdId}>
 				<span>{m.settings_input_threshold()}</span>
-				<span>{form.audioInputThreshold.toFixed(2)}</span>
+				<span>{formatDecibels(normalizedToDecibels(form.audioInputThreshold))}</span>
 			</label>
 			<input
 				id={thresholdId}
 				type="range"
-				min="0"
-				max={THRESHOLD_MAX}
-				step="0.01"
-				value={form.audioInputThreshold}
+				min={THRESHOLD_DB_MIN}
+				max={THRESHOLD_DB_MAX}
+				step="1"
+				value={normalizedToDecibels(form.audioInputThreshold)}
 				oninput={(event) =>
 					updateForm({
 						audioInputThreshold: clamp(
-							Number((event.currentTarget as HTMLInputElement).value) || 0,
+							decibelsToNormalized(
+								Number((event.currentTarget as HTMLInputElement).value) || THRESHOLD_DB_MIN
+							),
 							0,
 							THRESHOLD_MAX
 						)
@@ -681,16 +712,16 @@
 				class="mt-2 w-full"
 			/>
 			<div class="relative mt-3 h-3 w-full overflow-hidden rounded-full bg-[var(--panel-strong)]">
-				<div
-					class={`absolute inset-y-0 left-0 rounded-full transition-[width] ${
-						micPreviewSpeaking ? 'bg-[var(--success)]' : 'bg-[var(--brand)]/60'
-					}`}
-					style={`width: ${(micPreviewLevel * 100).toFixed(2)}%`}
-				></div>
-				<div
-					class="absolute inset-y-0 w-0.5 bg-[var(--stroke-strong)]"
-					style={`left: ${(form.audioInputThreshold * 100).toFixed(2)}%`}
-				></div>
+                                <div
+                                        class={`absolute inset-y-0 left-0 rounded-full transition-[width] ${
+                                                micPreviewSpeaking ? 'bg-[var(--success)]' : 'bg-[var(--brand)]/60'
+                                        }`}
+                                        style={`width: ${normalizedToSliderPercent(micPreviewLevel).toFixed(2)}%`}
+                                ></div>
+                                <div
+                                        class="absolute inset-y-0 w-0.5 bg-[var(--stroke-strong)]"
+                                        style={`left: ${normalizedToSliderPercent(form.audioInputThreshold).toFixed(2)}%`}
+                                ></div>
 			</div>
 			<p class="mt-2 text-xs text-[var(--muted)]">{m.settings_voice_preview_description()}</p>
 		</div>
