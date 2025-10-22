@@ -488,9 +488,9 @@ function applyPresencePayload(payload: AnyRecord | null | undefined) {
                 const customStatusText = customStatusPayload.found
                         ? normalizeCustomStatusText(customStatusPayload.value)
                         : null;
-                const voiceChannelId = voiceFieldProvided
+        const voiceChannelId = voiceFieldProvided
                         ? normalizedVoiceChannelId
-                        : prev?.voiceChannelId ?? null;
+                        : null;
                 appliedVoiceChannelId = voiceChannelId;
                 nextCustomStatusText = customStatusText;
                 if (
