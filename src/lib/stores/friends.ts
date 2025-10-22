@@ -36,7 +36,9 @@ function extractCandidateId(candidate: unknown): string | null {
 		toSnowflakeString((record.relationship as AnyRecord | undefined)?.target_id) ??
 		toSnowflakeString((record.member as AnyRecord | undefined)?.user_id) ??
 		toSnowflakeString((record.member as AnyRecord | undefined)?.userId) ??
-		toSnowflakeString((record.member as AnyRecord | undefined)?.user?.id);
+                toSnowflakeString(
+                        ((record.member as AnyRecord | undefined)?.user as AnyRecord | undefined)?.id
+                );
 
 	if (direct) {
 		return direct;
