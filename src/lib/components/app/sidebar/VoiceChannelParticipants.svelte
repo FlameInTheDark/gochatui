@@ -98,18 +98,6 @@
                         register(userId);
                 }
 
-                if (isConnected) {
-                        const remoteUserIds = new Set<string>();
-                        for (const remote of voiceState.remoteStreams ?? []) {
-                                const candidate = normalizedId(remote.userId);
-                                if (candidate) remoteUserIds.add(candidate);
-                        }
-                        if (currentUserId) remoteUserIds.add(currentUserId);
-                        for (const userId of remoteUserIds) {
-                                register(userId);
-                        }
-                }
-
                 return Array.from(participantMap.values()).sort((a, b) =>
                         a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' })
                 );
