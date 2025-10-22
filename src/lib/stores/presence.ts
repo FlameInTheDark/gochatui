@@ -4,7 +4,7 @@ import { auth } from './auth';
 import { appHasFocus } from './appState';
 import { appSettings, mutateAppSettings, settingsReady } from './settings';
 import type { AppSettings } from './settings';
-import { sendWSMessage, sendWSRaw, wsAuthenticated, wsEvent } from '$lib/client/ws';
+import { sendWSRaw, wsAuthenticated, wsEvent } from '$lib/client/ws';
 import type { PresenceMode, PresenceStatus } from '$lib/types/presence';
 
 type AnyRecord = Record<string, unknown>;
@@ -318,16 +318,19 @@ function transmitSelfPresence(status: PresenceStatus, forceSend: boolean) {
         ) {
                 return;
         }
-        const voiceChannelField =
-                currentVoiceChannelId != null ? BigInt(currentVoiceChannelId) : null;
-        sendWSMessage({
-                op: 3,
-                d: {
-                        status,
-                        custom_status_text: customStatusText,
-                        voice_channel_id: voiceChannelField
-                }
-        });
+
+        const voiceChannelLiteral =
+                currentVoiceChannelId && /^[0-9]+$/.test(currentVoiceChannelId)
+                        ? currentVoiceChannelId
+                        : null;
+        const customStatusLiteral =
+                customStatusText == null ? 'null' : JSON.stringify(customStatusText);
+        const payload = `{"op":3,"d":{"status":${JSON.stringify(
+                status
+        )},"custom_status_text":${customStatusLiteral},"voice_channel_id":${
+                voiceChannelLiteral ?? 'null'
+        }}}`;
+        sendWSRaw(payload);
         lastSentPresence = { status, customStatusText, voiceChannelId: currentVoiceChannelId ?? null };
 }
 
