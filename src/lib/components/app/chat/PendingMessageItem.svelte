@@ -84,7 +84,12 @@
                                 <span>•</span>
                                 <span>{relativeTime(message.createdAt)}</span>
                         </div>
-                        {#if message.status === 'error' || message.attachments.some((a) => a.status === 'error')}
+                        {#if
+                                message.status === 'error' ||
+                                message.attachments.some(
+                                        (attachment: PendingAttachment) => attachment.status === 'error'
+                                )
+                        }
                                 <button
                                         type="button"
                                         class="rounded-md p-1 text-[var(--muted)] transition-colors hover:text-[var(--fg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
