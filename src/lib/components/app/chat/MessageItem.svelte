@@ -1707,12 +1707,18 @@
                         event.preventDefault();
                         return;
                 }
-                if (event.button !== 0) return;
+
+                const pointerType = event.pointerType ?? '';
+                if (pointerType === 'mouse' || (!pointerType && event instanceof MouseEvent)) {
+                        return;
+                }
+
+                if (event.button !== 0 && event.button !== -1) return;
                 if (event.defaultPrevented || isEditing) return;
-		if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
-		const target = event.target as HTMLElement | null;
-		if (
-			target &&
+                if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
+                const target = event.target as HTMLElement | null;
+                if (
+                        target &&
 			target.closest(
 				'button, a, textarea, input, [contenteditable], [role="button"], [data-user-menu="true"]'
 			)
