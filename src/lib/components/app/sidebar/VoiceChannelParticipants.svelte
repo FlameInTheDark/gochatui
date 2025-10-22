@@ -1,6 +1,6 @@
 <script lang="ts">
         import type { DtoMember } from '$lib/api';
-        import { presenceByUser } from '$lib/stores/presence';
+        import { presenceByUser, type PresenceInfo } from '$lib/stores/presence';
         import { membersByGuild } from '$lib/stores/appState';
         import { auth } from '$lib/stores/auth';
         import {
@@ -59,7 +59,7 @@
         function getParticipants(): ParticipantEntry[] {
                 const targetChannel = normalizedId(props.channelId);
                 if (!targetChannel) return [];
-                const presence = $presenceMap ?? {};
+                const presence = ($presenceMap ?? {}) as Record<string, PresenceInfo>;
                 const voiceState = $voice;
                 const speakingSet = new Set(voiceState.speakingUserIds ?? []);
                 const connectedGuild = normalizedId(voiceState.guildId);
@@ -70,31 +70,49 @@
                         connectedChannel === targetChannel;
                 const remoteSettings = voiceState.remoteSettings ?? {};
                 const currentUserId = toSnowflakeString($me?.id);
-                const entries: ParticipantEntry[] = [];
-                for (const [userId, info] of Object.entries(presence)) {
-                        if ((info as any)?.voiceChannelId !== targetChannel) continue;
-                        const member = findMember(userId);
-                        const displayName = memberPrimaryName(member) || `User ${userId}`;
+                const participantMap = new Map<string, ParticipantEntry>();
+
+                function register(userId: string) {
+                        const normalized = normalizedId(userId);
+                        if (!normalized || participantMap.has(normalized)) return;
+                        const member = findMember(normalized);
+                        const displayName = memberPrimaryName(member) || `User ${normalized}`;
                         const avatarUrl = resolveAvatarUrl(member?.user, 64);
                         const initial = memberInitial(member);
-                        const settings = remoteSettings[userId] ?? { volume: 1, muted: false };
-                        const canControl = isConnected && userId !== currentUserId;
-                        entries.push({
-                                userId,
+                        const settings = remoteSettings[normalized] ?? { volume: 1, muted: false };
+                        participantMap.set(normalized, {
+                                userId: normalized,
                                 displayName,
                                 avatarUrl,
                                 initial,
-                                isSelf: userId === currentUserId,
-                                speaking: speakingSet.has(userId),
-                                canControl,
+                                isSelf: normalized === currentUserId,
+                                speaking: speakingSet.has(normalized),
+                                canControl: isConnected && normalized !== currentUserId,
                                 volume: settings.volume ?? 1,
                                 muted: settings.muted ?? false
                         });
                 }
-                entries.sort((a, b) =>
+
+                for (const [userId, info] of Object.entries(presence)) {
+                        if (info?.voiceChannelId !== targetChannel) continue;
+                        register(userId);
+                }
+
+                if (isConnected) {
+                        const remoteUserIds = new Set<string>();
+                        for (const remote of voiceState.remoteStreams ?? []) {
+                                const candidate = normalizedId(remote.userId);
+                                if (candidate) remoteUserIds.add(candidate);
+                        }
+                        if (currentUserId) remoteUserIds.add(currentUserId);
+                        for (const userId of remoteUserIds) {
+                                register(userId);
+                        }
+                }
+
+                return Array.from(participantMap.values()).sort((a, b) =>
                         a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' })
                 );
-                return entries;
         }
 
         const participants = $derived(getParticipants());

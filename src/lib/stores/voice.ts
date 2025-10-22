@@ -252,11 +252,23 @@ function updateRemoteStreams(nextSession: VoiceSessionInternal | null) {
 
 function extractUserId(streamId: string | null | undefined): string | null {
         if (!streamId) return null;
-        if (streamId.startsWith('user-')) {
-                const candidate = streamId.slice(5);
+        const trimmed = streamId.trim();
+        if (!trimmed) return null;
+        if (/^[0-9]+$/.test(trimmed)) {
+                return trimmed;
+        }
+        if (trimmed.startsWith('user-')) {
+                const candidate = trimmed.slice(5);
                 if (/^[0-9]+$/.test(candidate)) {
                         return candidate;
                 }
+        }
+        const segments = trimmed.split(/[^0-9]+/).filter((part) => part.length > 0);
+        if (!segments.length) return null;
+        segments.sort((a, b) => b.length - a.length);
+        const longest = segments[0];
+        if (longest.length >= 15) {
+                return longest;
         }
         return null;
 }
