@@ -55,6 +55,7 @@ type VoiceSessionInternal = {
         pingInterval: ReturnType<typeof setInterval> | null;
         pendingPings: Map<string, number>;
         awaitingServerOffer: boolean;
+        pendingLocalCandidates: RTCIceCandidateInit[];
 };
 
 const initialState: VoiceState = {
@@ -464,6 +465,48 @@ function stopLatencyProbe(currentSession: VoiceSessionInternal | null) {
         currentSession.pendingPings.clear();
 }
 
+function sendLocalIceCandidate(
+        currentSession: VoiceSessionInternal,
+        candidate: RTCIceCandidateInit
+): boolean {
+        if (!candidate.candidate) return true;
+        const socket = currentSession.ws;
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+                return false;
+        }
+        try {
+                socket.send(
+                        JSON.stringify({
+                                op: 7,
+                                t: 503,
+                                d: {
+                                        candidate: candidate.candidate,
+                                        sdpMid: candidate.sdpMid ?? undefined,
+                                        sdpMLineIndex: candidate.sdpMLineIndex ?? undefined
+                                }
+                        })
+                );
+                return true;
+        } catch {
+                return false;
+        }
+}
+
+function flushPendingLocalCandidates(currentSession: VoiceSessionInternal): void {
+        const pc = currentSession.pc;
+        if (!pc || !pc.remoteDescription) {
+                return;
+        }
+
+        while (currentSession.pendingLocalCandidates.length > 0) {
+                const nextCandidate = currentSession.pendingLocalCandidates[0]!;
+                if (!sendLocalIceCandidate(currentSession, nextCandidate)) {
+                        break;
+                }
+                currentSession.pendingLocalCandidates.shift();
+        }
+}
+
 function createPingNonce(): string {
         pingCounter += 1;
         return `ping-${Date.now()}-${pingCounter}`;
@@ -536,6 +579,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                 monitor.stop();
         }
         current.remoteMonitors.clear();
+
+        current.pendingLocalCandidates = [];
 
         try {
                 if (current.ws) {
@@ -615,22 +660,17 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
         });
 
         currentSession.pc = pc;
+        currentSession.pendingLocalCandidates = [];
 
         pc.onicecandidate = (event) => {
-                if (!event.candidate || !currentSession.ws) return;
-                try {
-                        currentSession.ws.send(
-                                JSON.stringify({
-                                        op: 7,
-                                        t: 503,
-                                        d: {
-                                                candidate: event.candidate.candidate,
-                                                sdpMid: event.candidate.sdpMid ?? undefined,
-                                                sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined
-                                        }
-                                })
-                        );
-                } catch {}
+                if (!event.candidate) return;
+                const candidateInit: RTCIceCandidateInit = {
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid ?? undefined,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined
+                };
+                currentSession.pendingLocalCandidates.push(candidateInit);
+                flushPendingLocalCandidates(currentSession);
         };
 
         pc.ontrack = (event) => {
@@ -674,7 +714,10 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                 if (stateValue === 'connected') {
                         setState({ status: 'connected', error: null });
                 }
-                if (stateValue === 'failed' || stateValue === 'disconnected' || stateValue === 'closed') {
+                if (stateValue === 'disconnected') {
+                        setState({ status: 'connecting' });
+                }
+                if (stateValue === 'failed' || stateValue === 'closed') {
                         if (!currentSession.manualClose) {
                                 clearSession({ error: 'Voice connection lost.' });
                         }
@@ -747,6 +790,7 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
         }
 
         await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
+        flushPendingLocalCandidates(currentSession);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
@@ -850,7 +894,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         manualClose: false,
                         pingInterval: null,
                         pendingPings: new Map(),
-                        awaitingServerOffer: true
+                        awaitingServerOffer: true,
+                        pendingLocalCandidates: []
                 };
 
                 session = currentSession;
@@ -863,6 +908,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         const joinPayload = `{"op":7,"t":500,"d":{"channel":${channelLiteral},"token":${JSON.stringify(token)}}}`;
                         try {
                                 ws.send(joinPayload);
+                                flushPendingLocalCandidates(currentSession);
                         } catch (error) {
                                 clearSession({ error: 'Failed to join SFU.' });
                         }
@@ -918,6 +964,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                         try {
                                                 const desc = new RTCSessionDescription({ type: 'answer', sdp: payload?.d?.sdp });
                                                 await currentSession.pc?.setRemoteDescription(desc);
+                                                flushPendingLocalCandidates(currentSession);
                                         } catch (error: any) {
                                                 clearSession({
                                                         error: error?.message ?? 'Failed to apply SFU answer.'
