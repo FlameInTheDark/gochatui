@@ -3,26 +3,28 @@ import type { DtoMessage } from '$lib/api';
 import { applyMessageEventToList } from './messageEventHandlers';
 
 describe('applyMessageEventToList', () => {
-        const baseMessage = (overrides: Partial<DtoMessage> = {}): DtoMessage => ({
-                id: '1',
-                channel_id: '10',
-                guild_id: '100',
-                content: 'hello',
-                type: 0,
-                author: null,
-                attachments: [],
-                mentions: [],
-                mention_roles: [],
-                mention_everyone: false,
-                pinned: false,
-                timestamp: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                flags: 0,
-                components: [],
-                embeds: [],
-                reactions: [],
-                ...overrides
-        });
+        const baseMessage = <T extends Record<string, unknown>>(
+                overrides: T = {} as T
+        ): DtoMessage & T =>
+                ({
+                        id: 1,
+                        channel_id: 10,
+                        guild_id: 100,
+                        content: 'hello',
+                        type: 0,
+                        attachments: [],
+                        mentions: [],
+                        mention_roles: [],
+                        mention_everyone: false,
+                        pinned: false,
+                        timestamp: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                        flags: 0,
+                        components: [],
+                        embeds: [],
+                        reactions: [],
+                        ...overrides
+                }) as DtoMessage & T;
 
         it('appends new messages when channel matches and user is not at bottom', () => {
                 const event = {
@@ -30,8 +32,8 @@ describe('applyMessageEventToList', () => {
                         t: 101,
                         d: {
                                 message: {
-                                        ...baseMessage({ id: '2', content: 'second' }),
-                                        author_id: '42'
+                                        ...baseMessage({ id: 2, content: 'second' }),
+                                        author_id: 42
                                 }
                         }
                 };
@@ -46,7 +48,7 @@ describe('applyMessageEventToList', () => {
                 expect(result).not.toBeNull();
                 expect(result?.messages).toHaveLength(2);
                 expect(result?.messages[1].content).toBe('second');
-                expect(result?.messages[1].author).toBe('42');
+                expect(result?.messages[1].author).toBe(42);
                 expect(result?.shouldScrollToBottom).toBe(false);
                 expect(result?.newCountDelta).toBe(1);
         });
@@ -80,8 +82,8 @@ describe('applyMessageEventToList', () => {
                         op: 0,
                         t: 102,
                         d: {
-                                channel_id: '10',
-                                message_id: '1'
+                                channel_id: 10,
+                                message_id: 1
                         }
                 };
 
@@ -102,8 +104,8 @@ describe('applyMessageEventToList', () => {
                         op: 0,
                         t: 300,
                         d: {
-                                channel_id: '10',
-                                message_id: '1'
+                                channel_id: 10,
+                                message_id: 1
                         }
                 };
 
@@ -122,8 +124,8 @@ describe('applyMessageEventToList', () => {
                         op: 0,
                         t: 320,
                         d: {
-                                channel_id: '10',
-                                message_id: '1'
+                                channel_id: 10,
+                                message_id: 1
                         }
                 };
 
@@ -142,7 +144,7 @@ describe('applyMessageEventToList', () => {
                         op: 0,
                         t: 101,
                         d: {
-                                message: baseMessage({ id: '3' })
+                                message: baseMessage({ id: 3 })
                         }
                 };
 

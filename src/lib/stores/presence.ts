@@ -4,7 +4,7 @@ import { auth } from './auth';
 import { appHasFocus } from './appState';
 import { appSettings, mutateAppSettings, settingsReady } from './settings';
 import type { AppSettings } from './settings';
-import { sendWSMessage, sendWSRaw, wsAuthenticated, wsEvent } from '$lib/client/ws';
+import { sendWSRaw, wsAuthenticated, wsEvent } from '$lib/client/ws';
 import type { PresenceMode, PresenceStatus } from '$lib/types/presence';
 
 type AnyRecord = Record<string, unknown>;
@@ -15,6 +15,7 @@ export interface PresenceInfo {
         status: PresenceStatus;
         since: number | null;
         customStatusText: string | null;
+        voiceChannelId: string | null;
 }
 
 const AUTO_IDLE_MS = 120_000;
@@ -131,7 +132,10 @@ let manualOverride: Exclude<PresenceMode, 'auto'> | null = null;
 let desiredStatus: PresenceStatus = 'online';
 let currentStatus: PresenceStatus = 'online';
 let currentCustomStatusText: string | null = null;
-let lastSentPresence: { status: PresenceStatus; customStatusText: string | null } | null = null;
+let currentVoiceChannelId: string | null = null;
+let lastSentPresence:
+        | { status: PresenceStatus; customStatusText: string | null; voiceChannelId: string | null }
+        | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let lastActivityAt = browser ? Date.now() : 0;
 let lastDomActivityAt = 0;
@@ -267,7 +271,8 @@ function updateSelfCustomStatus(text: string | null) {
                 const next: PresenceInfo = {
                         status: prev?.status ?? currentStatus,
                         since: prev?.since ?? null,
-                        customStatusText: normalized
+                        customStatusText: normalized,
+                        voiceChannelId: prev?.voiceChannelId ?? currentVoiceChannelId
                 };
                 return { ...map, [currentUserId!]: next };
         });
@@ -282,7 +287,8 @@ function transmitSelfPresence(status: PresenceStatus, forceSend: boolean) {
                         if (
                                 prev?.status === status &&
                                 prev?.since == null &&
-                                prev?.customStatusText === currentCustomStatusText
+                                prev?.customStatusText === currentCustomStatusText &&
+                                prev?.voiceChannelId === currentVoiceChannelId
                         )
                                 return map;
                         return {
@@ -290,7 +296,8 @@ function transmitSelfPresence(status: PresenceStatus, forceSend: boolean) {
                                 [currentUserId!]: {
                                         status,
                                         since: null,
-                                        customStatusText: currentCustomStatusText
+                                        customStatusText: currentCustomStatusText,
+                                        voiceChannelId: currentVoiceChannelId
                                 }
                         };
                 });
@@ -306,12 +313,25 @@ function transmitSelfPresence(status: PresenceStatus, forceSend: boolean) {
                 !forceSend &&
                 lastSentPresence &&
                 lastSentPresence.status === status &&
-                lastSentPresence.customStatusText === customStatusText
+                lastSentPresence.customStatusText === customStatusText &&
+                lastSentPresence.voiceChannelId === currentVoiceChannelId
         ) {
                 return;
         }
-        sendWSMessage({ op: 3, d: { status, custom_status_text: customStatusText } });
-        lastSentPresence = { status, customStatusText };
+
+        const voiceChannelLiteral =
+                currentVoiceChannelId && /^[0-9]+$/.test(currentVoiceChannelId)
+                        ? currentVoiceChannelId
+                        : '0';
+        const customStatusLiteral =
+                customStatusText == null ? 'null' : JSON.stringify(customStatusText);
+        const payload = `{"op":3,"d":{"status":${JSON.stringify(
+                status
+        )},"custom_status_text":${customStatusLiteral},"voice_channel_id":${
+                voiceChannelLiteral ?? 'null'
+        }}}`;
+        sendWSRaw(payload);
+        lastSentPresence = { status, customStatusText, voiceChannelId: currentVoiceChannelId ?? null };
 }
 
 function setSelfPresence(status: PresenceStatus) {
@@ -392,6 +412,34 @@ export function setSelfCustomStatusText(value: string | null) {
         transmitSelfPresence(currentStatus, false);
 }
 
+export function setSelfVoiceChannelId(value: string | bigint | null) {
+        const normalizedRaw = toSnowflakeString(value);
+        const normalized = normalizedRaw && /^[0-9]+$/.test(normalizedRaw) ? normalizedRaw : null;
+        if (normalized === currentVoiceChannelId) return;
+        currentVoiceChannelId = normalized;
+        if (currentUserId) {
+                presenceStore.update((map) => {
+                        const prev = map[currentUserId!];
+                        const next: PresenceInfo = {
+                                status: prev?.status ?? currentStatus,
+                                since: prev?.since ?? null,
+                                customStatusText: prev?.customStatusText ?? currentCustomStatusText,
+                                voiceChannelId: normalized
+                        };
+                        if (
+                                prev?.status === next.status &&
+                                prev?.since === next.since &&
+                                prev?.customStatusText === next.customStatusText &&
+                                prev?.voiceChannelId === next.voiceChannelId
+                        ) {
+                                return map;
+                        }
+                        return { ...map, [currentUserId!]: next };
+                });
+        }
+        transmitSelfPresence(currentStatus, true);
+}
+
 function applyModeFromUser(mode: PresenceMode) {
         currentMode = mode;
         selfModeStore.set(mode);
@@ -417,21 +465,44 @@ function applyPresencePayload(payload: AnyRecord | null | undefined) {
         const since = parseSince((payload as AnyRecord)?.since);
         let nextCustomStatusText: string | null = null;
         const customStatusPayload = extractCustomStatusPayload(payload);
+        const payloadRecord = (payload ?? {}) as AnyRecord;
+        const hasVoiceSnake = Object.prototype.hasOwnProperty.call(payloadRecord, 'voice_channel_id');
+        const hasVoiceCamel = Object.prototype.hasOwnProperty.call(payloadRecord, 'voiceChannelId');
+        const voiceFieldProvided = hasVoiceSnake || hasVoiceCamel;
+        const voiceRaw =
+                (hasVoiceSnake ? (payloadRecord as AnyRecord).voice_channel_id : undefined) ??
+                (hasVoiceCamel ? (payloadRecord as AnyRecord).voiceChannelId : undefined);
+        const voiceCandidate = toSnowflakeString(voiceRaw);
+        const normalizedVoiceChannelId =
+                voiceFieldProvided &&
+                voiceCandidate &&
+                /^[0-9]+$/.test(voiceCandidate) &&
+                voiceCandidate !== '0'
+                        ? voiceCandidate
+                        : voiceFieldProvided
+                          ? null
+                          : null;
+        let appliedVoiceChannelId: string | null = null;
         presenceStore.update((map) => {
                 const prev = map[userId];
                 const customStatusText = customStatusPayload.found
                         ? normalizeCustomStatusText(customStatusPayload.value)
                         : null;
+                const voiceChannelId = voiceFieldProvided
+                        ? normalizedVoiceChannelId
+                        : prev?.voiceChannelId ?? null;
+                appliedVoiceChannelId = voiceChannelId;
                 nextCustomStatusText = customStatusText;
                 if (
                         prev?.status === status &&
                         prev?.since === since &&
-                        prev?.customStatusText === customStatusText
+                        prev?.customStatusText === customStatusText &&
+                        prev?.voiceChannelId === voiceChannelId
                 )
                         return map;
                 return {
                         ...map,
-                        [userId]: { status, since, customStatusText }
+                        [userId]: { status, since, customStatusText, voiceChannelId }
                 };
         });
         if (userId === currentUserId) {
@@ -442,6 +513,14 @@ function applyPresencePayload(payload: AnyRecord | null | undefined) {
                         selfCustomStatusStore.set(nextCustomStatusText);
                 } else {
                         selfCustomStatusStore.set(nextCustomStatusText);
+                }
+                currentVoiceChannelId = appliedVoiceChannelId;
+                if (voiceFieldProvided) {
+                        lastSentPresence = {
+                                status,
+                                customStatusText: nextCustomStatusText,
+                                voiceChannelId: appliedVoiceChannelId
+                        };
                 }
                 if (currentMode === 'auto') {
                         if (status === 'online') {
@@ -550,13 +629,14 @@ if (browser) {
 }
 
 auth.user.subscribe((user) => {
-	const nextId = toSnowflakeString(user?.id);
-	const prevId = currentUserId;
-	currentUserId = nextId;
-	if (!nextId) {
-		presenceStore.set({});
-		return;
-	}
+        const nextId = toSnowflakeString(user?.id);
+        const prevId = currentUserId;
+        currentUserId = nextId;
+        if (!nextId) {
+                currentVoiceChannelId = null;
+                presenceStore.set({});
+                return;
+        }
         presenceStore.update((map) => {
                 const next = { ...map };
                 if (prevId && prevId !== nextId) {
@@ -566,12 +646,14 @@ auth.user.subscribe((user) => {
                 if (
                         !existing ||
                         existing.status !== currentStatus ||
-                        existing.customStatusText !== currentCustomStatusText
+                        existing.customStatusText !== currentCustomStatusText ||
+                        existing.voiceChannelId !== currentVoiceChannelId
                 ) {
                         next[nextId] = {
                                 status: currentStatus,
                                 since: null,
-                                customStatusText: currentCustomStatusText
+                                customStatusText: currentCustomStatusText,
+                                voiceChannelId: currentVoiceChannelId
                         };
                 }
                 return next;
@@ -592,6 +674,7 @@ auth.isAuthenticated.subscribe((ok) => {
                 desiredStatus = 'online';
                 currentStatus = 'online';
                 currentCustomStatusText = null;
+                currentVoiceChannelId = null;
                 selfCustomStatusStore.set(null);
                 lastSentPresence = null;
                 clearIdleTimer();

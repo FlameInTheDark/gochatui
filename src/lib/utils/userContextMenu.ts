@@ -2,7 +2,7 @@ import type { DtoMember, DtoRole } from '$lib/api';
 import { auth } from '$lib/stores/auth';
 import { membersByGuild } from '$lib/stores/appState';
 import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-import type { ContextMenuItem } from '$lib/stores/contextMenu';
+import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
 import { m } from '$lib/paraglide/messages.js';
 import { PERMISSION_MANAGE_ROLES, hasGuildPermission } from '$lib/utils/permissions';
 import { loadGuildRolesCached } from '$lib/utils/guildRoles';
@@ -109,7 +109,7 @@ export function openUserContextMenu(
 		guildId && userId && guild && hasGuildPermission(guild as any, me?.id, PERMISSION_MANAGE_ROLES)
 	);
 
-	let rolesItem: ContextMenuItem | null = null;
+        let rolesItem: ContextMenuActionItem | null = null;
 	let rolesIndex = -1;
 	let resolvedMember: DtoMember | null = null;
 	let shouldShowRolesSubmenu = canManageRoles && Boolean(guildId && userId);
@@ -141,10 +141,10 @@ export function openUserContextMenu(
 	}
 
 	if (shouldShowRolesSubmenu && guildId && userId) {
-		rolesItem = {
-			label: m.ctx_roles_menu(),
-			children: [{ label: m.ctx_roles_loading(), disabled: true }]
-		};
+                rolesItem = {
+                        label: m.ctx_roles_menu(),
+                        children: [{ label: m.ctx_roles_loading(), disabled: true }]
+                };
 		items.push(rolesItem);
 		rolesIndex = items.length - 1;
 	}
@@ -232,18 +232,18 @@ export function openUserContextMenu(
 			]);
 			if (!allowRefresh) return;
 
-			const roleItems: ContextMenuItem[] = [];
-			for (const role of roles) {
-				const rid = getRoleId(role);
-				if (!rid) continue;
-				const roleName = String(role.name ?? 'Role');
-				const labelForState = (assigned: boolean) =>
-					assigned
-						? m.ctx_roles_item_assigned({ role: roleName })
-						: m.ctx_roles_item_unassigned({ role: roleName });
-				const item: ContextMenuItem = {
-					label: labelForState(memberRoleIds.has(rid))
-				};
+                        const roleItems: ContextMenuActionItem[] = [];
+                        for (const role of roles) {
+                                const rid = getRoleId(role);
+                                if (!rid) continue;
+                                const roleName = String(role.name ?? 'Role');
+                                const labelForState = (assigned: boolean) =>
+                                        assigned
+                                                ? m.ctx_roles_item_assigned({ role: roleName })
+                                                : m.ctx_roles_item_unassigned({ role: roleName });
+                                const item: ContextMenuActionItem = {
+                                        label: labelForState(memberRoleIds.has(rid))
+                                };
 				item.action = async () => {
 					const assigned = memberRoleIds.has(rid);
 					let roleSnowflake: any;
@@ -292,15 +292,13 @@ export function openUserContextMenu(
 				roleItems.push(item);
 			}
 
-			if (!roleItems.length) {
-				rolesItem.children = [{ label: m.ctx_roles_empty(), disabled: true }];
-			} else {
-				rolesItem.children = roleItems;
-			}
+                        rolesItem.children = roleItems.length
+                                ? roleItems
+                                : [{ label: m.ctx_roles_empty(), disabled: true }];
 			refreshMenu();
 		} catch {
 			if (!allowRefresh) return;
-			rolesItem.children = [{ label: m.ctx_roles_error_loading(), disabled: true }];
+                        rolesItem.children = [{ label: m.ctx_roles_error_loading(), disabled: true }];
 			refreshMenu();
 		}
 	})();
