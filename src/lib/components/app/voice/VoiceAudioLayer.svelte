@@ -1,8 +1,10 @@
 <script lang="ts">
         import { voiceSession } from '$lib/stores/voice';
+        import { appSettings } from '$lib/stores/settings';
         import VoiceRemoteAudioItem from './VoiceRemoteAudioItem.svelte';
 
         const voice = voiceSession;
+        const settings = appSettings;
 </script>
 
 <div aria-hidden="true" class="hidden">
@@ -12,6 +14,8 @@
                         deafened={$voice.deafened}
                         volume={$voice.remoteSettings?.[remote.userId ?? '']?.volume ?? 1}
                         muted={$voice.remoteSettings?.[remote.userId ?? '']?.muted ?? false}
+                        outputLevel={$settings.devices.audioOutputLevel}
+                        outputDeviceId={$settings.devices.audioOutputDevice}
                 />
         {/each}
 </div>

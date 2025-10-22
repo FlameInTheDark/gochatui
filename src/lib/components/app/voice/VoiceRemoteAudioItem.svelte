@@ -1,17 +1,116 @@
 <script lang="ts">
         import { onDestroy } from 'svelte';
 
-        const props = $props<{ stream: MediaStream; deafened: boolean; volume?: number; muted?: boolean }>();
-        let audioEl: HTMLAudioElement | null = null;
+        const props = $props<{
+                stream: MediaStream;
+                deafened: boolean;
+                volume?: number;
+                muted?: boolean;
+                outputLevel?: number;
+                outputDeviceId?: string | null;
+        }>();
 
-        function applyStream(stream: MediaStream) {
-                if (!audioEl) return;
-                if (audioEl.srcObject !== stream) {
-                        audioEl.srcObject = stream;
+        let audioEl: HTMLAudioElement | null = null;
+        let gainNode: GainNode | null = null;
+        let sourceNode: MediaStreamAudioSourceNode | null = null;
+        let destinationNode: MediaStreamAudioDestinationNode | null = null;
+        let usingAudioGraph = false;
+        let currentStream: MediaStream | null = null;
+        let sinkErrorLogged = false;
+
+        const sinkIdSupported =
+                typeof HTMLMediaElement !== 'undefined' &&
+                typeof HTMLMediaElement.prototype.setSinkId === 'function';
+
+        function getSharedAudioContext(): AudioContext | null {
+                if (typeof window === 'undefined') return null;
+                const globalObj = window as any;
+                const ctor: any = globalObj.AudioContext ?? globalObj.webkitAudioContext;
+                if (!ctor) return null;
+                const key = '__gochat_voice_shared_audio_context';
+                let context: AudioContext | null = globalObj[key] ?? null;
+                if (!context) {
+                        try {
+                                context = new ctor();
+                                globalObj[key] = context;
+                        } catch {
+                                globalObj[key] = null;
+                                return null;
+                        }
                 }
+                if (context && typeof context.resume === 'function') {
+                        context.resume().catch(() => {});
+                }
+                return context;
+        }
+
+        function teardownAudioGraph() {
+                if (sourceNode) {
+                        try {
+                                sourceNode.disconnect();
+                        } catch {}
+                        sourceNode = null;
+                }
+                if (gainNode) {
+                        try {
+                                gainNode.disconnect();
+                        } catch {}
+                        gainNode = null;
+                }
+                destinationNode = null;
+                usingAudioGraph = false;
+        }
+
+        function ensurePlayback() {
+                if (!audioEl) return;
                 const playPromise = audioEl.play();
                 if (playPromise) {
                         void playPromise.catch(() => {});
+                }
+        }
+
+        function ensurePipeline(stream: MediaStream, requireBoost: boolean) {
+                if (!audioEl) return;
+
+                if (requireBoost) {
+                        const context = getSharedAudioContext();
+                        if (!context) {
+                                if (audioEl.srcObject !== stream) {
+                                        audioEl.srcObject = stream;
+                                }
+                                usingAudioGraph = false;
+                                currentStream = stream;
+                                return;
+                        }
+                        if (!usingAudioGraph || currentStream !== stream) {
+                                teardownAudioGraph();
+                                try {
+                                        sourceNode = context.createMediaStreamSource(stream);
+                                        gainNode = context.createGain();
+                                        destinationNode = context.createMediaStreamDestination();
+                                        sourceNode.connect(gainNode);
+                                        gainNode.connect(destinationNode);
+                                        usingAudioGraph = true;
+                                        currentStream = stream;
+                                        audioEl.srcObject = destinationNode.stream;
+                                        context.resume().catch(() => {});
+                                } catch {
+                                        teardownAudioGraph();
+                                        usingAudioGraph = false;
+                                        currentStream = stream;
+                                        if (audioEl.srcObject !== stream) {
+                                                audioEl.srcObject = stream;
+                                        }
+                                }
+                        }
+                } else {
+                        if (usingAudioGraph) {
+                                teardownAudioGraph();
+                        }
+                        if (audioEl.srcObject !== stream) {
+                                audioEl.srcObject = stream;
+                        }
+                        currentStream = stream;
                 }
         }
 
@@ -21,38 +120,76 @@
                 return Math.max(0, Math.min(1, numeric));
         }
 
-        function applyAudioState({
-                deafened,
-                muted,
-                volume
-        }: {
-                deafened: boolean;
-                muted: boolean | undefined;
-                volume: number | undefined;
-        }) {
+        function normalizedOutputLevel(value: number | undefined): number {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric)) return 1;
+                return Math.max(0, Math.min(1.5, numeric));
+        }
+
+        function updateAudioPlayback() {
                 if (!audioEl) return;
-                const clamped = normalizedVolume(volume);
-                const shouldMute = deafened || Boolean(muted) || clamped === 0;
+                const activeStream = props.stream;
+                if (!activeStream) return;
+
+                const baseVolume = normalizedVolume(props.volume);
+                const outputMultiplier = normalizedOutputLevel(props.outputLevel);
+                const effectiveVolume = baseVolume * outputMultiplier;
+                const shouldMute = props.deafened || Boolean(props.muted) || effectiveVolume <= 0;
+                const requiresBoost = !shouldMute && outputMultiplier > 1 + 1e-3;
+
+                ensurePipeline(activeStream, requiresBoost);
+
                 audioEl.muted = shouldMute;
-                audioEl.volume = shouldMute ? 0 : clamped;
+                if (shouldMute) {
+                        if (usingAudioGraph && gainNode) {
+                                gainNode.gain.value = 0;
+                        }
+                        audioEl.volume = 0;
+                } else if (usingAudioGraph && gainNode) {
+                        const boosted = Math.max(0, Math.min(1.5, effectiveVolume));
+                        gainNode.gain.value = boosted;
+                        audioEl.volume = 1;
+                } else {
+                        const clamped = Math.max(0, Math.min(1, effectiveVolume));
+                        audioEl.volume = clamped;
+                }
+
+                ensurePlayback();
+        }
+
+        async function applySink(deviceId: string | null) {
+                if (!audioEl || !sinkIdSupported) return;
+                const target = deviceId && deviceId.length ? deviceId : 'default';
+                try {
+                        const currentSink: string | undefined = (audioEl as any).sinkId;
+                        if (currentSink === target) return;
+                } catch {}
+                try {
+                        await audioEl.setSinkId(target);
+                        sinkErrorLogged = false;
+                } catch (error) {
+                        if (!sinkErrorLogged) {
+                                console.error('Failed to set audio output device.', error);
+                                sinkErrorLogged = true;
+                        }
+                }
         }
 
         $effect(() => {
-                applyStream(props.stream);
+                updateAudioPlayback();
         });
 
         $effect(() => {
-                applyAudioState({
-                        deafened: props.deafened,
-                        muted: props.muted,
-                        volume: props.volume
-                });
+                void applySink(props.outputDeviceId ?? null);
         });
 
         onDestroy(() => {
-                if (!audioEl) return;
-                audioEl.pause();
-                audioEl.srcObject = null;
+                teardownAudioGraph();
+                currentStream = null;
+                if (audioEl) {
+                        audioEl.pause();
+                        audioEl.srcObject = null;
+                }
         });
 </script>
 
