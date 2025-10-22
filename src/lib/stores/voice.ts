@@ -65,6 +65,8 @@ type VoiceSessionInternal = {
         pendingPings: Map<string, number>;
         pendingLocalCandidates: RTCIceCandidateInit[];
         pendingRemoteCandidates: RTCIceCandidateInit[];
+        isNegotiating: boolean;
+        negotiationReason: string | null;
 };
 
 const initialState: VoiceState = {
@@ -177,6 +179,7 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
                 } else {
                         try {
                                 activeSession.pc.addTrack(newTrack, newStream);
+                                void negotiateWithSfu(activeSession, 'local-track-added');
                         } catch (error) {
                                 console.error('Failed to attach audio track to peer connection.', error);
                         }
@@ -547,6 +550,75 @@ async function flushPendingRemoteCandidates(currentSession: VoiceSessionInternal
         }
 }
 
+async function negotiateWithSfu(
+        currentSession: VoiceSessionInternal,
+        reason: string
+): Promise<void> {
+        if (!session || session.id !== currentSession.id) return;
+        const pc = currentSession.pc;
+        if (!pc) return;
+        if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
+                logVoice('skipping negotiation, websocket not ready', {
+                        sessionId: currentSession.id,
+                        reason
+                });
+                return;
+        }
+        if (currentSession.isNegotiating) {
+                logVoice('skipping negotiation, already negotiating', {
+                        sessionId: currentSession.id,
+                        reason,
+                        pending: currentSession.negotiationReason
+                });
+                return;
+        }
+        if (pc.signalingState !== 'stable') {
+                logVoice('skipping negotiation, signaling state not stable', {
+                        sessionId: currentSession.id,
+                        reason,
+                        signalingState: pc.signalingState
+                });
+                return;
+        }
+
+        currentSession.isNegotiating = true;
+        currentSession.negotiationReason = reason;
+
+        try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                logVoice('created local offer', {
+                        sessionId: currentSession.id,
+                        reason,
+                        offerSize: offer.sdp?.length ?? 0
+                });
+
+                try {
+                        currentSession.ws.send(
+                                JSON.stringify({
+                                        op: 7,
+                                        t: 501,
+                                        d: { sdp: offer.sdp ?? '' }
+                                })
+                        );
+                        logVoice('sent local offer to SFU', {
+                                sessionId: currentSession.id,
+                                reason
+                        });
+                } catch (error) {
+                        console.error('Failed to send local offer to SFU.', error);
+                        throw error;
+                }
+
+                flushPendingLocalCandidates(currentSession);
+        } catch (error) {
+                console.error('Failed to negotiate with SFU.', error);
+        } finally {
+                currentSession.isNegotiating = false;
+                currentSession.negotiationReason = null;
+        }
+}
+
 function createPingNonce(): string {
         pingCounter += 1;
         return `ping-${Date.now()}-${pingCounter}`;
@@ -578,6 +650,26 @@ function startLatencyProbe(currentSession: VoiceSessionInternal) {
         tick();
         currentSession.pingInterval = setInterval(tick, 10_000);
         logVoice('started latency probe', { sessionId: currentSession.id });
+}
+
+function respondToSfuPing(currentSession: VoiceSessionInternal, payload: any): void {
+        const socket = currentSession.ws;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        const rawNonce = payload?.d?.nonce;
+        const hasNonce = typeof rawNonce === 'string' || typeof rawNonce === 'number';
+        const body: any = { op: 2, d: { pong: true } };
+        if (hasNonce) {
+                body.d.nonce = rawNonce;
+        }
+        try {
+                socket.send(JSON.stringify(body));
+                logVoice('responded to SFU ping', {
+                        sessionId: currentSession.id,
+                        nonce: hasNonce ? String(rawNonce) : null
+                });
+        } catch (error) {
+                console.error('Failed to respond to SFU ping.', error);
+        }
 }
 
 function clearSession(options: { error?: string | null; manual?: boolean } = {}) {
@@ -630,6 +722,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
 
         current.pendingLocalCandidates = [];
         current.pendingRemoteCandidates = [];
+        current.isNegotiating = false;
+        current.negotiationReason = null;
 
         try {
                 if (current.ws) {
@@ -796,6 +890,15 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                                 clearSession({ error: 'Voice connection lost.' });
                         }
                 }
+        };
+
+        pc.onnegotiationneeded = () => {
+                if (!session || session.id !== currentSession.id) return;
+                logVoice('peer connection negotiation needed', {
+                        sessionId: currentSession.id,
+                        signalingState: pc.signalingState
+                });
+                void negotiateWithSfu(currentSession, 'pc.onnegotiationneeded');
         };
 
         pc.oniceconnectionstatechange = () => {
@@ -995,7 +1098,9 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         pingInterval: null,
                         pendingPings: new Map(),
                         pendingLocalCandidates: [],
-                        pendingRemoteCandidates: []
+                        pendingRemoteCandidates: [],
+                        isNegotiating: false,
+                        negotiationReason: null
                 };
 
                 session = currentSession;
@@ -1074,6 +1179,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                                         logVoice('SFU join acknowledged', { sessionId: attemptId });
                                                         await createPeerConnection(currentSession);
                                                         startLatencyProbe(currentSession);
+                                                        void negotiateWithSfu(currentSession, 'initial-join');
                                                 } catch (error: any) {
                                                         clearSession({
                                                                 error:
@@ -1148,19 +1254,24 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                         logVoice('received SFU channel move', { sessionId: attemptId });
                                         clearSession({ error: 'Moved to another channel.' });
                                 }
-                        } else if (payload?.op === 2 && payload?.d?.pong) {
-                                const nonce = typeof payload?.d?.nonce === 'string' ? payload.d.nonce : null;
-                                if (nonce) {
-                                        const sent = currentSession.pendingPings.get(nonce);
-                                        if (sent != null) {
-                                                currentSession.pendingPings.delete(nonce);
-                                                const latency = Math.max(0, Date.now() - sent);
-                                                setState({ latencyMs: latency });
-                                                logVoice('received latency pong', {
-                                                        sessionId: attemptId,
-                                                        latency
-                                                });
+                        } else if (payload?.op === 2) {
+                                if (payload?.d?.pong) {
+                                        const rawNonce = payload?.d?.nonce;
+                                        const nonce = rawNonce != null ? String(rawNonce) : null;
+                                        if (nonce) {
+                                                const sent = currentSession.pendingPings.get(nonce);
+                                                if (sent != null) {
+                                                        currentSession.pendingPings.delete(nonce);
+                                                        const latency = Math.max(0, Date.now() - sent);
+                                                        setState({ latencyMs: latency });
+                                                        logVoice('received latency pong', {
+                                                                sessionId: attemptId,
+                                                                latency
+                                                        });
+                                                }
                                         }
+                                } else if (payload?.d?.ping || payload?.d?.nonce != null) {
+                                        respondToSfuPing(currentSession, payload);
                                 }
                         } else {
                                 logVoice('ignored SFU message', {
