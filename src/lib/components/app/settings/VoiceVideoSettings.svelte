@@ -163,6 +163,17 @@
                 return `${Math.round(value)} dB`;
         }
 
+        function decibelsToSliderPercent(value: number): number {
+                const db = clamp(value, THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
+                const span = THRESHOLD_DB_MAX - THRESHOLD_DB_MIN;
+                if (span <= 0) return 0;
+                return ((db - THRESHOLD_DB_MIN) / span) * 100;
+        }
+
+        function normalizedToSliderPercent(value: number): number {
+                return decibelsToSliderPercent(normalizedToDecibels(value));
+        }
+
 	function deviceSettingsEqual(a: DeviceSettings, b: DeviceSettings): boolean {
 		return (
 			(a.audioInputDevice ?? null) === (b.audioInputDevice ?? null) &&
@@ -701,16 +712,16 @@
 				class="mt-2 w-full"
 			/>
 			<div class="relative mt-3 h-3 w-full overflow-hidden rounded-full bg-[var(--panel-strong)]">
-				<div
-					class={`absolute inset-y-0 left-0 rounded-full transition-[width] ${
-						micPreviewSpeaking ? 'bg-[var(--success)]' : 'bg-[var(--brand)]/60'
-					}`}
-					style={`width: ${(micPreviewLevel * 100).toFixed(2)}%`}
-				></div>
-				<div
-					class="absolute inset-y-0 w-0.5 bg-[var(--stroke-strong)]"
-					style={`left: ${(form.audioInputThreshold * 100).toFixed(2)}%`}
-				></div>
+                                <div
+                                        class={`absolute inset-y-0 left-0 rounded-full transition-[width] ${
+                                                micPreviewSpeaking ? 'bg-[var(--success)]' : 'bg-[var(--brand)]/60'
+                                        }`}
+                                        style={`width: ${normalizedToSliderPercent(micPreviewLevel).toFixed(2)}%`}
+                                ></div>
+                                <div
+                                        class="absolute inset-y-0 w-0.5 bg-[var(--stroke-strong)]"
+                                        style={`left: ${normalizedToSliderPercent(form.audioInputThreshold).toFixed(2)}%`}
+                                ></div>
 			</div>
 			<p class="mt-2 text-xs text-[var(--muted)]">{m.settings_voice_preview_description()}</p>
 		</div>
