@@ -322,7 +322,7 @@ function transmitSelfPresence(status: PresenceStatus, forceSend: boolean) {
         const voiceChannelLiteral =
                 currentVoiceChannelId && /^[0-9]+$/.test(currentVoiceChannelId)
                         ? currentVoiceChannelId
-                        : null;
+                        : '0';
         const customStatusLiteral =
                 customStatusText == null ? 'null' : JSON.stringify(customStatusText);
         const payload = `{"op":3,"d":{"status":${JSON.stringify(
@@ -474,7 +474,10 @@ function applyPresencePayload(payload: AnyRecord | null | undefined) {
                 (hasVoiceCamel ? (payloadRecord as AnyRecord).voiceChannelId : undefined);
         const voiceCandidate = toSnowflakeString(voiceRaw);
         const normalizedVoiceChannelId =
-                voiceFieldProvided && voiceCandidate && /^[0-9]+$/.test(voiceCandidate)
+                voiceFieldProvided &&
+                voiceCandidate &&
+                /^[0-9]+$/.test(voiceCandidate) &&
+                voiceCandidate !== '0'
                         ? voiceCandidate
                         : voiceFieldProvided
                           ? null
