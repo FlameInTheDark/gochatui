@@ -10,6 +10,15 @@ import {
 
 const noop = () => {};
 
+const VOICE_LOG_PREFIX = '[voice]';
+
+function logVoice(...args: unknown[]) {
+        if (!browser) return;
+        try {
+                console.info(VOICE_LOG_PREFIX, ...args);
+        } catch {}
+}
+
 export type VoiceConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 type VoiceRemoteStream = {
@@ -56,6 +65,8 @@ type VoiceSessionInternal = {
         pendingPings: Map<string, number>;
         pendingLocalCandidates: RTCIceCandidateInit[];
         pendingRemoteCandidates: RTCIceCandidateInit[];
+        isNegotiating: boolean;
+        negotiationReason: string | null;
 };
 
 const initialState: VoiceState = {
@@ -168,6 +179,7 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
                 } else {
                         try {
                                 activeSession.pc.addTrack(newTrack, newStream);
+                                void negotiateWithSfu(activeSession, 'local-track-added');
                         } catch (error) {
                                 console.error('Failed to attach audio track to peer connection.', error);
                         }
@@ -501,9 +513,17 @@ function flushPendingLocalCandidates(currentSession: VoiceSessionInternal): void
         while (currentSession.pendingLocalCandidates.length > 0) {
                 const nextCandidate = currentSession.pendingLocalCandidates[0]!;
                 if (!sendLocalIceCandidate(currentSession, nextCandidate)) {
+                        logVoice('failed to send local ICE candidate, socket not ready', {
+                                sessionId: currentSession.id,
+                                remaining: currentSession.pendingLocalCandidates.length
+                        });
                         break;
                 }
                 currentSession.pendingLocalCandidates.shift();
+                logVoice('sent local ICE candidate', {
+                        sessionId: currentSession.id,
+                        remaining: currentSession.pendingLocalCandidates.length
+                });
         }
 }
 
@@ -520,9 +540,82 @@ async function flushPendingRemoteCandidates(currentSession: VoiceSessionInternal
                 }
                 try {
                         await pc.addIceCandidate(new RTCIceCandidate(candidateInit));
+                        logVoice('applied pending remote ICE candidate', {
+                                sessionId: currentSession.id,
+                                remaining: currentSession.pendingRemoteCandidates.length
+                        });
                 } catch (error) {
                         console.warn('Failed to apply pending remote ICE candidate.', error);
                 }
+        }
+}
+
+async function negotiateWithSfu(
+        currentSession: VoiceSessionInternal,
+        reason: string
+): Promise<void> {
+        if (!session || session.id !== currentSession.id) return;
+        const pc = currentSession.pc;
+        if (!pc) return;
+        if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
+                logVoice('skipping negotiation, websocket not ready', {
+                        sessionId: currentSession.id,
+                        reason
+                });
+                return;
+        }
+        if (currentSession.isNegotiating) {
+                logVoice('skipping negotiation, already negotiating', {
+                        sessionId: currentSession.id,
+                        reason,
+                        pending: currentSession.negotiationReason
+                });
+                return;
+        }
+        if (pc.signalingState !== 'stable') {
+                logVoice('skipping negotiation, signaling state not stable', {
+                        sessionId: currentSession.id,
+                        reason,
+                        signalingState: pc.signalingState
+                });
+                return;
+        }
+
+        currentSession.isNegotiating = true;
+        currentSession.negotiationReason = reason;
+
+        try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                logVoice('created local offer', {
+                        sessionId: currentSession.id,
+                        reason,
+                        offerSize: offer.sdp?.length ?? 0
+                });
+
+                try {
+                        currentSession.ws.send(
+                                JSON.stringify({
+                                        op: 7,
+                                        t: 501,
+                                        d: { sdp: offer.sdp ?? '' }
+                                })
+                        );
+                        logVoice('sent local offer to SFU', {
+                                sessionId: currentSession.id,
+                                reason
+                        });
+                } catch (error) {
+                        console.error('Failed to send local offer to SFU.', error);
+                        throw error;
+                }
+
+                flushPendingLocalCandidates(currentSession);
+        } catch (error) {
+                console.error('Failed to negotiate with SFU.', error);
+        } finally {
+                currentSession.isNegotiating = false;
+                currentSession.negotiationReason = null;
         }
 }
 
@@ -556,9 +649,37 @@ function startLatencyProbe(currentSession: VoiceSessionInternal) {
         const tick = () => sendLatencyPing(currentSession);
         tick();
         currentSession.pingInterval = setInterval(tick, 10_000);
+        logVoice('started latency probe', { sessionId: currentSession.id });
+}
+
+function respondToSfuPing(currentSession: VoiceSessionInternal, payload: any): void {
+        const socket = currentSession.ws;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        const rawNonce = payload?.d?.nonce;
+        const hasNonce = typeof rawNonce === 'string' || typeof rawNonce === 'number';
+        const body: any = { op: 2, d: { pong: true } };
+        if (hasNonce) {
+                body.d.nonce = rawNonce;
+        }
+        try {
+                socket.send(JSON.stringify(body));
+                logVoice('responded to SFU ping', {
+                        sessionId: currentSession.id,
+                        nonce: hasNonce ? String(rawNonce) : null
+                });
+        } catch (error) {
+                console.error('Failed to respond to SFU ping.', error);
+        }
 }
 
 function clearSession(options: { error?: string | null; manual?: boolean } = {}) {
+        if (options.error) {
+                logVoice('clearing session with error', options.error);
+        } else if (options.manual) {
+                logVoice('clearing session manually');
+        } else {
+                logVoice('clearing session');
+        }
         const current = session;
         if (!current) {
                 if (options.error) {
@@ -601,6 +722,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
 
         current.pendingLocalCandidates = [];
         current.pendingRemoteCandidates = [];
+        current.isNegotiating = false;
+        current.negotiationReason = null;
 
         try {
                 if (current.ws) {
@@ -675,6 +798,12 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                 throw new Error('Missing SFU socket');
         }
 
+        logVoice('creating peer connection', {
+                sessionId: currentSession.id,
+                guildId: currentSession.guildId,
+                channelId: currentSession.channelId
+        });
+
         const pc = new RTCPeerConnection({
                 iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         });
@@ -684,13 +813,22 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
         currentSession.pendingRemoteCandidates = [];
 
         pc.onicecandidate = (event) => {
-                if (!event.candidate) return;
+                if (!event.candidate) {
+                        logVoice('local ICE gathering complete', {
+                                sessionId: currentSession.id
+                        });
+                        return;
+                }
                 const candidateInit: RTCIceCandidateInit = {
                         candidate: event.candidate.candidate,
                         sdpMid: event.candidate.sdpMid ?? undefined,
                         sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined
                 };
                 currentSession.pendingLocalCandidates.push(candidateInit);
+                logVoice('local ICE candidate gathered', {
+                        sessionId: currentSession.id,
+                        totalPending: currentSession.pendingLocalCandidates.length
+                });
                 flushPendingLocalCandidates(currentSession);
         };
 
@@ -726,12 +864,21 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                                 updateRemoteStreams(currentSession);
                         };
                 }
+                logVoice('remote track received', {
+                        sessionId: currentSession.id,
+                        trackId,
+                        streamCount: event.streams.length
+                });
                 updateRemoteStreams(currentSession);
         };
 
         pc.onconnectionstatechange = () => {
                 if (!session || session.id !== currentSession.id) return;
                 const stateValue = pc.connectionState;
+                logVoice('peer connection state change', {
+                        sessionId: currentSession.id,
+                        state: stateValue
+                });
                 if (stateValue === 'connected') {
                         setState({ status: 'connected', error: null });
                 }
@@ -743,6 +890,23 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                                 clearSession({ error: 'Voice connection lost.' });
                         }
                 }
+        };
+
+        pc.onnegotiationneeded = () => {
+                if (!session || session.id !== currentSession.id) return;
+                logVoice('peer connection negotiation needed', {
+                        sessionId: currentSession.id,
+                        signalingState: pc.signalingState
+                });
+                void negotiateWithSfu(currentSession, 'pc.onnegotiationneeded');
+        };
+
+        pc.oniceconnectionstatechange = () => {
+                if (!session || session.id !== currentSession.id) return;
+                logVoice('ICE connection state change', {
+                        sessionId: currentSession.id,
+                        state: pc.iceConnectionState
+                });
         };
 
         const currentState = get(state);
@@ -764,6 +928,11 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
                 throw new Error('SFU offer missing SDP');
         }
 
+        logVoice('handling SFU offer', {
+                sessionId: currentSession.id,
+                offerSize: offerSdp.length
+        });
+
         const pc = currentSession.pc ?? (await createPeerConnection(currentSession));
         if (!pc) {
                 throw new Error('Peer connection unavailable');
@@ -772,15 +941,23 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
         if (pc.signalingState === 'have-local-offer') {
                 try {
                         await pc.setLocalDescription({ type: 'rollback' });
+                        logVoice('rolled back local offer before applying server offer', {
+                                sessionId: currentSession.id
+                        });
                 } catch (error) {
                         console.warn('Failed to rollback local offer before applying server offer.', error);
                 }
         }
 
         await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
+        logVoice('applied remote offer', { sessionId: currentSession.id });
         await flushPendingRemoteCandidates(currentSession);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        logVoice('created and set local answer', {
+                sessionId: currentSession.id,
+                answerSize: answer.sdp?.length ?? 0
+        });
         flushPendingLocalCandidates(currentSession);
 
         if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
@@ -794,6 +971,8 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
                         d: { sdp: answer.sdp ?? '' }
                 })
         );
+
+        logVoice('sent local answer to SFU', { sessionId: currentSession.id });
 
 }
 
@@ -809,6 +988,11 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
         const normalizedChannel = String(channelId ?? '').trim();
         if (!normalizedGuild || !normalizedChannel) return;
 
+        logVoice('joinVoiceChannel invoked', {
+                guildId: normalizedGuild,
+                channelId: normalizedChannel
+        });
+
         const channelLiteral = toNumericLiteral(normalizedChannel);
         if (!channelLiteral) {
                 setState({ status: 'error', error: 'Invalid channel identifier.', guildId: null, channelId: null });
@@ -816,10 +1000,18 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
         }
 
         if (session && session.guildId === normalizedGuild && session.channelId === normalizedChannel) {
+                logVoice('already connected to voice channel', {
+                        guildId: normalizedGuild,
+                        channelId: normalizedChannel
+                });
                 return;
         }
 
         if (session) {
+                logVoice('rejoining voice channel, existing session will be closed', {
+                        previousGuildId: session.guildId,
+                        previousChannelId: session.channelId
+                });
                 leaveVoiceChannel();
         }
 
@@ -841,22 +1033,34 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 localStream = await navigator.mediaDevices.getUserMedia({
                         audio: buildAudioConstraints(deviceSnapshot)
                 });
+                logVoice('acquired preferred local audio stream', { sessionId: attemptId });
         } catch (error) {
                 console.error('Failed to acquire preferred audio stream.', error);
                 try {
                         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        logVoice('acquired fallback local audio stream', { sessionId: attemptId });
                 } catch (fallbackError) {
                         console.error('Failed to acquire fallback audio stream.', fallbackError);
                         localStream = null;
+                        logVoice('failed to acquire any local audio stream', { sessionId: attemptId });
                 }
         }
 
         if (localStream) {
                 const track = localStream.getAudioTracks()[0] ?? null;
                 applyGainToTrack(track, deviceSnapshot.audioInputLevel);
+                logVoice('applied local input gain', {
+                        sessionId: attemptId,
+                        trackPresent: Boolean(track)
+                });
         }
 
         try {
+                logVoice('requesting SFU credentials', {
+                        sessionId: attemptId,
+                        guildId: normalizedGuild,
+                        channelId: normalizedChannel
+                });
                 const response = await auth.api.guild.guildGuildIdVoiceChannelIdJoinPost({
                         guildId: toApiSnowflake(normalizedGuild),
                         channelId: toApiSnowflake(normalizedChannel)
@@ -867,7 +1071,18 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         throw new Error('SFU connection info missing');
                 }
 
+                logVoice('received SFU credentials', {
+                        sessionId: attemptId,
+                        hasUrl: Boolean(sfuUrl),
+                        hasToken: Boolean(token)
+                });
+
                 const ws = new WebSocket(sfuUrl);
+
+                logVoice('created SFU websocket', {
+                        sessionId: attemptId,
+                        url: sfuUrl
+                });
 
                 const currentSession: VoiceSessionInternal = {
                         id: attemptId,
@@ -883,35 +1098,61 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         pingInterval: null,
                         pendingPings: new Map(),
                         pendingLocalCandidates: [],
-                        pendingRemoteCandidates: []
+                        pendingRemoteCandidates: [],
+                        isNegotiating: false,
+                        negotiationReason: null
                 };
 
                 session = currentSession;
+
+                logVoice('voice session created', {
+                        sessionId: currentSession.id,
+                        guildId: currentSession.guildId,
+                        channelId: currentSession.channelId,
+                        hasLocalStream: Boolean(localStream)
+                });
 
                 setSelfVoiceChannelId(normalizedChannel);
                 startLocalMonitor(currentSession);
 
                 ws.onopen = () => {
                         if (!session || session.id !== attemptId) return;
+                        logVoice('SFU websocket open', { sessionId: attemptId });
                         const joinPayload = `{"op":7,"t":500,"d":{"channel":${channelLiteral},"token":${JSON.stringify(token)}}}`;
                         try {
                                 ws.send(joinPayload);
+                                logVoice('sent SFU join payload', {
+                                        sessionId: attemptId,
+                                        channelLiteral
+                                });
                                 flushPendingLocalCandidates(currentSession);
                         } catch (error) {
                                 clearSession({ error: 'Failed to join SFU.' });
                         }
                 };
 
-                ws.onerror = () => {
+                ws.onerror = (event) => {
                         if (!session || session.id !== attemptId) return;
+                        const errorEvent = event as unknown as { message?: unknown };
+                        const errorMessage =
+                                typeof errorEvent.message === 'string' ? errorEvent.message : null;
+                        logVoice('SFU websocket error', {
+                                sessionId: attemptId,
+                                message: errorMessage
+                        });
                         clearSession({ error: 'SFU connection error.' });
                 };
 
-                ws.onclose = () => {
+                ws.onclose = (event) => {
                         if (!session || session.id !== attemptId) return;
+                        logVoice('SFU websocket closed', {
+                                sessionId: attemptId,
+                                code: event.code,
+                                reason: event.reason
+                        });
                         stopLatencyProbe(currentSession);
                         if (currentSession.manualClose) {
-                                clearSession();
+                                clearSession({ manual: true });
                         } else {
                                 clearSession({ error: 'Voice connection closed.' });
                         }
@@ -925,12 +1166,20 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         } catch {
                                 return;
                         }
+                        logVoice('received SFU message', {
+                                sessionId: attemptId,
+                                op: payload?.op,
+                                t: payload?.t
+                        });
+
                         if (payload?.op === 7) {
                                 if (payload?.t === 500) {
                                         if (payload?.d?.ok) {
                                                 try {
+                                                        logVoice('SFU join acknowledged', { sessionId: attemptId });
                                                         await createPeerConnection(currentSession);
                                                         startLatencyProbe(currentSession);
+                                                        void negotiateWithSfu(currentSession, 'initial-join');
                                                 } catch (error: any) {
                                                         clearSession({
                                                                 error:
@@ -938,10 +1187,18 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                                         });
                                                 }
                                         } else {
+                                                logVoice('SFU join rejected', {
+                                                        sessionId: attemptId,
+                                                        error: payload?.d?.error ?? null
+                                                });
                                                 clearSession({ error: payload?.d?.error ?? 'SFU join rejected.' });
                                         }
                                 } else if (payload?.t === 501) {
                                         try {
+                                                logVoice('received SFU offer', {
+                                                        sessionId: attemptId,
+                                                        sdpSize: payload?.d?.sdp?.length ?? 0
+                                                });
                                                 await handleServerOffer(currentSession, payload?.d?.sdp ?? '');
                                         } catch (error: any) {
                                                 clearSession({
@@ -959,6 +1216,10 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                                         sdp: payload?.d?.sdp ?? ''
                                                 };
                                                 await pc.setRemoteDescription(desc);
+                                                logVoice('applied SFU answer', {
+                                                        sessionId: attemptId,
+                                                        sdpSize: desc.sdp?.length ?? 0
+                                                });
                                                 await flushPendingRemoteCandidates(currentSession);
                                                 flushPendingLocalCandidates(currentSession);
                                         } catch (error: any) {
@@ -977,24 +1238,47 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                                         const pc = currentSession.pc;
                                                         if (pc && pc.remoteDescription) {
                                                                 await pc.addIceCandidate(new RTCIceCandidate(candidateInit));
+                                                                logVoice('applied immediate remote ICE candidate', {
+                                                                        sessionId: attemptId
+                                                                });
                                                         } else {
                                                                 currentSession.pendingRemoteCandidates.push(candidateInit);
+                                                                logVoice('queued remote ICE candidate', {
+                                                                        sessionId: attemptId,
+                                                                        pending: currentSession.pendingRemoteCandidates.length
+                                                                });
                                                         }
                                                 } catch {}
                                         }
                                 } else if (payload?.t === 512) {
+                                        logVoice('received SFU channel move', { sessionId: attemptId });
                                         clearSession({ error: 'Moved to another channel.' });
                                 }
-                        } else if (payload?.op === 2 && payload?.d?.pong) {
-                                const nonce = typeof payload?.d?.nonce === 'string' ? payload.d.nonce : null;
-                                if (nonce) {
-                                        const sent = currentSession.pendingPings.get(nonce);
-                                        if (sent != null) {
-                                                currentSession.pendingPings.delete(nonce);
-                                                const latency = Math.max(0, Date.now() - sent);
-                                                setState({ latencyMs: latency });
+                        } else if (payload?.op === 2) {
+                                if (payload?.d?.pong) {
+                                        const rawNonce = payload?.d?.nonce;
+                                        const nonce = rawNonce != null ? String(rawNonce) : null;
+                                        if (nonce) {
+                                                const sent = currentSession.pendingPings.get(nonce);
+                                                if (sent != null) {
+                                                        currentSession.pendingPings.delete(nonce);
+                                                        const latency = Math.max(0, Date.now() - sent);
+                                                        setState({ latencyMs: latency });
+                                                        logVoice('received latency pong', {
+                                                                sessionId: attemptId,
+                                                                latency
+                                                        });
+                                                }
                                         }
+                                } else if (payload?.d?.ping || payload?.d?.nonce != null) {
+                                        respondToSfuPing(currentSession, payload);
                                 }
+                        } else {
+                                logVoice('ignored SFU message', {
+                                        sessionId: attemptId,
+                                        op: payload?.op,
+                                        keys: Object.keys(payload ?? {})
+                                });
                         }
                 };
 
@@ -1027,6 +1311,9 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
 }
 
 export function leaveVoiceChannel(): void {
+        logVoice('leaveVoiceChannel invoked', {
+                hasSession: Boolean(session)
+        });
         if (!session) {
                 clearSession();
                 return;
@@ -1037,7 +1324,7 @@ export function leaveVoiceChannel(): void {
                         session.ws.send(JSON.stringify({ op: 7, t: 504, d: {} }));
                 } catch {}
         }
-        clearSession();
+        clearSession({ manual: true });
 }
 
 export function setVoiceMuted(muted: boolean): void {
