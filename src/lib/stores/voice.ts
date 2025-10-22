@@ -56,6 +56,7 @@ type VoiceSessionInternal = {
         pendingPings: Map<string, number>;
         awaitingServerOffer: boolean;
         pendingLocalCandidates: RTCIceCandidateInit[];
+        pendingRemoteCandidates: RTCIceCandidateInit[];
 };
 
 const initialState: VoiceState = {
@@ -494,7 +495,7 @@ function sendLocalIceCandidate(
 
 function flushPendingLocalCandidates(currentSession: VoiceSessionInternal): void {
         const pc = currentSession.pc;
-        if (!pc || !pc.remoteDescription) {
+        if (!pc || !pc.remoteDescription || !pc.localDescription) {
                 return;
         }
 
@@ -504,6 +505,25 @@ function flushPendingLocalCandidates(currentSession: VoiceSessionInternal): void
                         break;
                 }
                 currentSession.pendingLocalCandidates.shift();
+        }
+}
+
+async function flushPendingRemoteCandidates(currentSession: VoiceSessionInternal): Promise<void> {
+        const pc = currentSession.pc;
+        if (!pc || !pc.remoteDescription) {
+                return;
+        }
+
+        while (currentSession.pendingRemoteCandidates.length > 0) {
+                const candidateInit = currentSession.pendingRemoteCandidates.shift();
+                if (!candidateInit) {
+                        continue;
+                }
+                try {
+                        await pc.addIceCandidate(new RTCIceCandidate(candidateInit));
+                } catch (error) {
+                        console.warn('Failed to apply pending remote ICE candidate.', error);
+                }
         }
 }
 
@@ -581,6 +601,7 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
         current.remoteMonitors.clear();
 
         current.pendingLocalCandidates = [];
+        current.pendingRemoteCandidates = [];
 
         try {
                 if (current.ws) {
@@ -661,6 +682,7 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
 
         currentSession.pc = pc;
         currentSession.pendingLocalCandidates = [];
+        currentSession.pendingRemoteCandidates = [];
 
         pc.onicecandidate = (event) => {
                 if (!event.candidate) return;
@@ -789,10 +811,11 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
                 }
         }
 
-        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
-        flushPendingLocalCandidates(currentSession);
+        await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
+        await flushPendingRemoteCandidates(currentSession);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        flushPendingLocalCandidates(currentSession);
 
         if (!currentSession.ws || currentSession.ws.readyState !== WebSocket.OPEN) {
                 throw new Error('SFU socket is not open');
@@ -895,7 +918,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         pingInterval: null,
                         pendingPings: new Map(),
                         awaitingServerOffer: true,
-                        pendingLocalCandidates: []
+                        pendingLocalCandidates: [],
+                        pendingRemoteCandidates: []
                 };
 
                 session = currentSession;
@@ -962,8 +986,16 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                         }
                                 } else if (payload?.t === 502) {
                                         try {
-                                                const desc = new RTCSessionDescription({ type: 'answer', sdp: payload?.d?.sdp });
-                                                await currentSession.pc?.setRemoteDescription(desc);
+                                                const pc = currentSession.pc;
+                                                if (!pc) {
+                                                        throw new Error('Peer connection not initialized');
+                                                }
+                                                const desc: RTCSessionDescriptionInit = {
+                                                        type: 'answer',
+                                                        sdp: payload?.d?.sdp ?? ''
+                                                };
+                                                await pc.setRemoteDescription(desc);
+                                                await flushPendingRemoteCandidates(currentSession);
                                                 flushPendingLocalCandidates(currentSession);
                                         } catch (error: any) {
                                                 clearSession({
@@ -973,13 +1005,17 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                 } else if (payload?.t === 503) {
                                         if (payload?.d?.candidate) {
                                                 try {
-                                                        await currentSession.pc?.addIceCandidate(
-                                                                new RTCIceCandidate({
-                                                                        candidate: payload.d.candidate,
-                                                                        sdpMid: payload.d.sdpMid ?? undefined,
-                                                                        sdpMLineIndex: payload.d.sdpMLineIndex ?? undefined
-                                                                })
-                                                        );
+                                                        const candidateInit: RTCIceCandidateInit = {
+                                                                candidate: payload.d.candidate,
+                                                                sdpMid: payload.d.sdpMid ?? undefined,
+                                                                sdpMLineIndex: payload.d.sdpMLineIndex ?? undefined
+                                                        };
+                                                        const pc = currentSession.pc;
+                                                        if (pc && pc.remoteDescription) {
+                                                                await pc.addIceCandidate(new RTCIceCandidate(candidateInit));
+                                                        } else {
+                                                                currentSession.pendingRemoteCandidates.push(candidateInit);
+                                                        }
                                                 } catch {}
                                         }
                                 } else if (payload?.t === 512) {
