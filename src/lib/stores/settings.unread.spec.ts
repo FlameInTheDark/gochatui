@@ -200,4 +200,82 @@ describe('settings unread snapshot integration', () => {
                         }
                 });
         });
+
+        it('applies default voice settings when the API returns no settings payload', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 204,
+                        data: null
+                });
+
+                const settingsModule = await import('./settings');
+                const { appSettings, cloneDeviceSettings } = settingsModule;
+                const { auth } = await import('$lib/stores/auth');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                const defaults = cloneDeviceSettings(null);
+                expect(get(appSettings).devices).toEqual(defaults);
+        });
+
+        it('applies default voice settings when the API omits device data', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                settings: {}
+                        }
+                });
+
+                const settingsModule = await import('./settings');
+                const { appSettings, cloneDeviceSettings } = settingsModule;
+                const { auth } = await import('$lib/stores/auth');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                const defaults = cloneDeviceSettings(null);
+                expect(get(appSettings).devices).toEqual(defaults);
+        });
+
+        it('hydrates audible device defaults when the API returns silent levels', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                settings: {
+                                        devices: {
+                                                audio_input_level: 0,
+                                                audio_output_level: 0,
+                                                audio_input_threshold: 0,
+                                                auto_gain_control: true,
+                                                echo_cancellation: true,
+                                                noise_suppression: true
+                                        }
+                                }
+                        }
+                });
+                userMeSettingsPost.mockResolvedValue({ status: 204 });
+
+                const { auth } = await import('$lib/stores/auth');
+                const { appSettings } = await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                const snapshot = get(appSettings);
+                expect(snapshot.devices.audioInputLevel).toBeCloseTo(1);
+                expect(snapshot.devices.audioOutputLevel).toBeCloseTo(1);
+                expect(snapshot.devices.audioInputThreshold).toBeCloseTo(0.1);
+
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(userMeSettingsPost).toHaveBeenCalledTimes(1);
+                const payload = userMeSettingsPost.mock.calls[0]?.[0]?.modelUserSettingsData?.devices;
+                expect(payload.audio_input_level).toBeCloseTo(1);
+                expect(payload.audio_output_level).toBeCloseTo(1);
+                expect(payload.audio_input_threshold).toBeCloseTo(0.1);
+        });
 });
