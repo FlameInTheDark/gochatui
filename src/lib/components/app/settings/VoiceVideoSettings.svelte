@@ -28,8 +28,8 @@
 		variant: MessageVariant;
 	}
 
-	let form: DeviceSettings = cloneDeviceSettings(null);
-	let currentSettings: DeviceSettings = cloneDeviceSettings(null);
+        let form: DeviceSettings = cloneDeviceSettings(get(appSettings).devices);
+        let currentSettings: DeviceSettings = cloneDeviceSettings(get(appSettings).devices);
 	let dirty = false;
 	let saving = false;
 	let message: FeedbackMessage | null = null;

@@ -202,6 +202,8 @@ function applyLocalInputGain(settings: DeviceSettings) {
 }
 
 const defaultDeviceSettings = cloneDeviceSettings(null);
+const REMOTE_SPEAKING_THRESHOLD = 0.08;
+const MIN_MONITOR_THRESHOLD = 0.02;
 let lastDeviceSettings: DeviceSettings = defaultDeviceSettings;
 let deviceSettingsQueue: Promise<void> = Promise.resolve();
 
@@ -297,7 +299,16 @@ function resetRemoteState() {
         emitSpeakingUsers();
 }
 
-function createAudioLevelMonitor(stream: MediaStream | null, userId: string | null): StreamMonitor | null {
+function normalizedMonitorThreshold(value: number | null | undefined): number {
+        if (!Number.isFinite(value)) return REMOTE_SPEAKING_THRESHOLD;
+        return clamp(Number(value), MIN_MONITOR_THRESHOLD, 1);
+}
+
+function createAudioLevelMonitor(
+        stream: MediaStream | null,
+        userId: string | null,
+        options?: { levelMultiplier?: number; threshold?: number }
+): StreamMonitor | null {
         if (!browser) return null;
         if (!stream || !userId) return null;
         if (typeof window === 'undefined' || typeof AudioContext === 'undefined') return null;
@@ -311,17 +322,24 @@ function createAudioLevelMonitor(stream: MediaStream | null, userId: string | nu
                 let raf = 0;
                 let disposed = false;
                 let lastSpeaking = false;
-                const threshold = 6;
+                const levelMultiplier = clamp(
+                        Number.isFinite(options?.levelMultiplier) ? Number(options?.levelMultiplier) : 1,
+                        0,
+                        1.5
+                );
+                const threshold = normalizedMonitorThreshold(options?.threshold);
 
                 const update = () => {
                         if (disposed) return;
                         analyser.getByteTimeDomainData(data);
-                        let sum = 0;
+                        let sumSquares = 0;
                         for (let i = 0; i < data.length; i += 1) {
-                                sum += Math.abs(data[i] - 128);
+                                const sample = data[i] / 128 - 1;
+                                sumSquares += sample * sample;
                         }
-                        const avg = sum / data.length;
-                        const speaking = avg > threshold;
+                        const rms = Math.sqrt(sumSquares / data.length);
+                        const level = clamp(rms * 2 * levelMultiplier, 0, 1);
+                        const speaking = level >= threshold;
                         if (speaking !== lastSpeaking) {
                                 lastSpeaking = speaking;
                                 setUserSpeaking(userId, speaking);
@@ -363,7 +381,10 @@ function startLocalMonitor(currentSession: VoiceSessionInternal) {
                 currentSession.localMonitor = null;
                 return;
         }
-        const monitor = createAudioLevelMonitor(localStream, userId);
+        const monitor = createAudioLevelMonitor(localStream, userId, {
+                levelMultiplier: lastDeviceSettings.audioInputLevel,
+                threshold: lastDeviceSettings.audioInputThreshold
+        });
         currentSession.localMonitor = monitor;
 }
 
@@ -452,6 +473,7 @@ async function handleDeviceSettingsChange(
         const agcChanged = previous.autoGainControl !== next.autoGainControl;
         const echoChanged = previous.echoCancellation !== next.echoCancellation;
         const noiseChanged = previous.noiseSuppression !== next.noiseSuppression;
+        const thresholdChanged = Math.abs(previous.audioInputThreshold - next.audioInputThreshold) > 1e-3;
 
         if (inputDeviceChanged || agcChanged || echoChanged || noiseChanged) {
                 await replaceLocalAudioStream(next);
@@ -460,6 +482,10 @@ async function handleDeviceSettingsChange(
 
         if (Math.abs(previous.audioInputLevel - next.audioInputLevel) > 1e-3) {
                 applyLocalInputGain(next);
+        }
+
+        if (thresholdChanged) {
+                startLocalMonitor(session);
         }
 }
 
@@ -856,7 +882,9 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                         if (userId) {
                                 const existingMonitor = currentSession.remoteMonitors.get(key);
                                 existingMonitor?.stop();
-                                const monitor = createAudioLevelMonitor(stream, userId);
+                                const monitor = createAudioLevelMonitor(stream, userId, {
+                                        threshold: REMOTE_SPEAKING_THRESHOLD
+                                });
                                 if (monitor) {
                                         currentSession.remoteMonitors.set(key, monitor);
                                 }
