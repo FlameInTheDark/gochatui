@@ -37,6 +37,7 @@ export interface DeviceSettings {
 const DEFAULT_AUDIO_INPUT_LEVEL = 1;
 const DEFAULT_AUDIO_INPUT_THRESHOLD = 0.1;
 const DEFAULT_AUDIO_OUTPUT_LEVEL = 1;
+const SILENT_AUDIO_LEVEL_EPSILON = 1e-3;
 
 function createDefaultDeviceSettings(): DeviceSettings {
         return {
@@ -136,28 +137,36 @@ function toCamelCase(snake: string): string {
 	return snake.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
+function hasOwnProperty(payload: AnyRecord | null | undefined, key: string): boolean {
+        if (!payload || typeof payload !== 'object') return false;
+        return Object.prototype.hasOwnProperty.call(payload, key);
+}
+
 function resolveNumberField(
-	payload: AnyRecord,
-	snakeKey: string,
-	fallback: number,
-	options?: { min?: number; max?: number }
-): number {
-	const camelKey = toCamelCase(snakeKey);
-	const candidate = payload?.[snakeKey] ?? payload?.[camelKey];
-	let numeric: number | null = null;
-	if (typeof candidate === 'number') {
-		numeric = Number.isFinite(candidate) ? candidate : null;
-	} else if (typeof candidate === 'string') {
-		const parsed = Number(candidate);
-		numeric = Number.isFinite(parsed) ? parsed : null;
-	}
-	const value = numeric ?? fallback;
-	const min = options?.min;
-	const max = options?.max;
-	if (typeof min === 'number' || typeof max === 'number') {
-		return clamp(value, min ?? Number.NEGATIVE_INFINITY, max ?? Number.POSITIVE_INFINITY);
-	}
-	return value;
+        payload: AnyRecord,
+        snakeKey: string,
+        fallback: number,
+        options?: { min?: number; max?: number }
+): { value: number; explicit: boolean } {
+        const camelKey = toCamelCase(snakeKey);
+        const hasSnake = hasOwnProperty(payload, snakeKey);
+        const hasCamel = hasOwnProperty(payload, camelKey);
+        const explicit = hasSnake || hasCamel;
+        const candidate = hasSnake ? payload?.[snakeKey] : hasCamel ? payload?.[camelKey] : undefined;
+        let numeric: number | null = null;
+        if (typeof candidate === 'number') {
+                numeric = Number.isFinite(candidate) ? candidate : null;
+        } else if (typeof candidate === 'string') {
+                const parsed = Number(candidate);
+                numeric = Number.isFinite(parsed) ? parsed : null;
+        }
+        const min = options?.min;
+        const max = options?.max;
+        let value = numeric ?? fallback;
+        if (typeof min === 'number' || typeof max === 'number') {
+                value = clamp(value, min ?? Number.NEGATIVE_INFINITY, max ?? Number.POSITIVE_INFINITY);
+        }
+        return { value, explicit };
 }
 
 function resolveBooleanField(payload: AnyRecord, snakeKey: string, fallback: boolean): boolean {
@@ -828,8 +837,12 @@ function applyDmReadStatesToSettings(
 	}
 }
 
-function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
-	if (!data) return cloneSettings(defaultSettings);
+function convertFromApi(
+        data?: ModelUserSettingsData | null
+): { settings: AppSettings; correctedDeviceLevels: boolean } {
+        if (!data) {
+                return { settings: cloneSettings(defaultSettings), correctedDeviceLevels: false };
+        }
 
 	const appearance = data.appearance ?? {};
 	const themeValue = (appearance.color_scheme as Theme | undefined) ?? defaultSettings.theme;
@@ -851,35 +864,39 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
 		statusPayload?.custom_status_text ?? statusPayload?.customStatusText
 	);
 
-	const devicesPayload = ((data as AnyRecord)?.devices ?? {}) as AnyRecord;
-	const devices = cloneDeviceSettings({
-		audioInputDevice: normalizeDeviceIdValue(
-			devicesPayload?.audio_input_device ?? devicesPayload?.audioInputDevice
-		),
-		audioInputLevel: resolveNumberField(
-			devicesPayload,
-			'audio_input_level',
-			defaultDeviceSettings.audioInputLevel,
-			{ min: 0, max: 1 }
-		),
-		audioInputThreshold: resolveNumberField(
-			devicesPayload,
-			'audio_input_threshold',
-			defaultDeviceSettings.audioInputThreshold,
-			{ min: 0, max: 1 }
-		),
-		audioOutputDevice: normalizeDeviceIdValue(
-			devicesPayload?.audio_output_device ?? devicesPayload?.audioOutputDevice
-		),
-		audioOutputLevel: resolveNumberField(
-			devicesPayload,
-			'audio_output_level',
-			defaultDeviceSettings.audioOutputLevel,
-			{ min: 0, max: 1.5 }
-		),
-		autoGainControl: resolveBooleanField(
-			devicesPayload,
-			'auto_gain_control',
+        const devicesPayload = ((data as AnyRecord)?.devices ?? {}) as AnyRecord;
+        const inputLevelField = resolveNumberField(
+                devicesPayload,
+                'audio_input_level',
+                defaultDeviceSettings.audioInputLevel,
+                { min: 0, max: 1 }
+        );
+        const thresholdField = resolveNumberField(
+                devicesPayload,
+                'audio_input_threshold',
+                defaultDeviceSettings.audioInputThreshold,
+                { min: 0, max: 1 }
+        );
+        const outputLevelField = resolveNumberField(
+                devicesPayload,
+                'audio_output_level',
+                defaultDeviceSettings.audioOutputLevel,
+                { min: 0, max: 1.5 }
+        );
+
+        let devices = cloneDeviceSettings({
+                audioInputDevice: normalizeDeviceIdValue(
+                        devicesPayload?.audio_input_device ?? devicesPayload?.audioInputDevice
+                ),
+                audioInputLevel: inputLevelField.value,
+                audioInputThreshold: thresholdField.value,
+                audioOutputDevice: normalizeDeviceIdValue(
+                        devicesPayload?.audio_output_device ?? devicesPayload?.audioOutputDevice
+                ),
+                audioOutputLevel: outputLevelField.value,
+                autoGainControl: resolveBooleanField(
+                        devicesPayload,
+                        'auto_gain_control',
 			defaultDeviceSettings.autoGainControl
 		),
 		echoCancellation: resolveBooleanField(
@@ -895,7 +912,28 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
 		videoDevice: normalizeDeviceIdValue(devicesPayload?.video_device ?? devicesPayload?.videoDevice)
 	});
 
-	const dmChannelEntries = Array.isArray(data.dm_channels)
+        const hasAudibleExplicitDeviceValue =
+                (inputLevelField.explicit && inputLevelField.value > SILENT_AUDIO_LEVEL_EPSILON) ||
+                (outputLevelField.explicit && outputLevelField.value > SILENT_AUDIO_LEVEL_EPSILON) ||
+                (thresholdField.explicit && thresholdField.value > SILENT_AUDIO_LEVEL_EPSILON);
+
+        let correctedDeviceLevels = false;
+        if (!hasAudibleExplicitDeviceValue) {
+                if (inputLevelField.explicit && devices.audioInputLevel <= SILENT_AUDIO_LEVEL_EPSILON) {
+                        devices = { ...devices, audioInputLevel: DEFAULT_AUDIO_INPUT_LEVEL };
+                        correctedDeviceLevels = true;
+                }
+                if (outputLevelField.explicit && devices.audioOutputLevel <= SILENT_AUDIO_LEVEL_EPSILON) {
+                        devices = { ...devices, audioOutputLevel: DEFAULT_AUDIO_OUTPUT_LEVEL };
+                        correctedDeviceLevels = true;
+                }
+                if (thresholdField.explicit && devices.audioInputThreshold <= SILENT_AUDIO_LEVEL_EPSILON) {
+                        devices = { ...devices, audioInputThreshold: DEFAULT_AUDIO_INPUT_THRESHOLD };
+                        correctedDeviceLevels = true;
+                }
+        }
+
+        const dmChannelEntries = Array.isArray(data.dm_channels)
 		? data.dm_channels
 				.map((entry) => {
 					const record = (entry ?? {}) as AnyRecord;
@@ -998,21 +1036,24 @@ function convertFromApi(data?: ModelUserSettingsData | null): AppSettings {
 
 	layoutWithPositions.sort((a, b) => a.position - b.position);
 
-	return {
-		language: languageValue,
-		theme: themeValue,
-		chatFontScale,
-		chatSpacing,
-		guildLayout: layoutWithPositions.map((entry) => entry.item),
-		selectedGuildId: null,
-		presenceMode: modeValue,
-		status: {
-			status: statusValue,
-			customStatusText: customStatusText ?? null
-		},
-		dmChannels: dmChannelEntries,
-		devices
-	};
+        return {
+                settings: {
+                        language: languageValue,
+                        theme: themeValue,
+                        chatFontScale,
+                        chatSpacing,
+                        guildLayout: layoutWithPositions.map((entry) => entry.item),
+                        selectedGuildId: null,
+                        presenceMode: modeValue,
+                        status: {
+                                status: statusValue,
+                                customStatusText: customStatusText ?? null
+                        },
+                        dmChannels: dmChannelEntries,
+                        devices
+                },
+                correctedDeviceLevels
+        };
 }
 
 export function convertAppSettingsToApi(settings: AppSettings): ModelUserSettingsData {
@@ -1650,7 +1691,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
 	settingsLoadInFlight = true;
 	settingsLoadToken = tokenToLoad;
 	hasSyncedGuildLayout = false;
-	try {
+        try {
                 if (!tokenToLoad) {
                         suppressSave = true;
                         appSettings.set(createDefaultSettingsSnapshot());
@@ -1663,10 +1704,11 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
 			return;
 		}
 
-		try {
-			const previousSettings = get(appSettings);
-			const response = await auth.api.user.userMeSettingsGet();
-			const responseData = response.data ?? {};
+                let shouldPersistAudibleDefaults = false;
+                try {
+                        const previousSettings = get(appSettings);
+                        const response = await auth.api.user.userMeSettingsGet();
+                        const responseData = response.data ?? {};
 			const guildListRaw =
 				(responseData as any)?.guilds ??
 				(responseData as any)?.user_guilds ??
@@ -1697,27 +1739,28 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                                         previousSettings.guildLayout,
 					channelGuildLookup
 				);
-				applyDmReadStatesToSettings(next, responseData?.read_states);
-				appSettings.set(next);
-				suppressSave = false;
-			} else {
-				const parsed = convertFromApi(response.data.settings);
-				applyReadStatesMapToLayout(
-					parsed.guildLayout,
-					responseData.read_states,
-					previousSettings.guildLayout,
-					channelGuildLookup
-				);
-				applyDmReadStatesToSettings(parsed, responseData.read_states);
-				suppressSave = true;
-				suppressThemePropagation = true;
-				suppressLocalePropagation = true;
-				appSettings.set(parsed);
-				theme.set(parsed.theme);
-				locale.set(parsed.language);
-				suppressThemePropagation = false;
-				suppressLocalePropagation = false;
-				suppressSave = false;
+                                applyDmReadStatesToSettings(next, responseData?.read_states);
+                                appSettings.set(next);
+                                suppressSave = false;
+                        } else {
+                                const parsed = convertFromApi(response.data.settings);
+                                shouldPersistAudibleDefaults = parsed.correctedDeviceLevels;
+                                applyReadStatesMapToLayout(
+                                        parsed.settings.guildLayout,
+                                        responseData.read_states,
+                                        previousSettings.guildLayout,
+                                        channelGuildLookup
+                                );
+                                applyDmReadStatesToSettings(parsed.settings, responseData.read_states);
+                                suppressSave = true;
+                                suppressThemePropagation = true;
+                                suppressLocalePropagation = true;
+                                appSettings.set(parsed.settings);
+                                theme.set(parsed.settings.theme);
+                                locale.set(parsed.settings.language);
+                                suppressThemePropagation = false;
+                                suppressLocalePropagation = false;
+                                suppressSave = false;
 			}
 			updateUnreadSnapshot(lastMessageSnapshot);
 			if (tokenToLoad) {
@@ -1734,9 +1777,12 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         settingsLoadedOnce = false;
 		}
 
-		settingsReady.set(true);
-		syncLayoutWithGuilds();
-	} finally {
+                settingsReady.set(true);
+                syncLayoutWithGuilds();
+                if (shouldPersistAudibleDefaults) {
+                        scheduleSave();
+                }
+        } finally {
 		settingsLoadInFlight = false;
 		settingsLoadToken = null;
 		const queued = queuedSettingsToken;
