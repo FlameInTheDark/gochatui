@@ -2,22 +2,30 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { browser } from '$app/environment';
-	import { m } from '$lib/paraglide/messages.js';
-	import {
-		appSettings,
-		cloneDeviceSettings,
-		convertAppSettingsToApi,
-		mutateAppSettingsWithoutSaving,
-		type DeviceSettings
-	} from '$lib/stores/settings';
-	import { auth } from '$lib/stores/auth';
+        import { m } from '$lib/paraglide/messages.js';
+        import {
+                appSettings,
+                cloneDeviceSettings,
+                convertAppSettingsToApi,
+                mutateAppSettingsWithoutSaving,
+                type DeviceSettings
+        } from '$lib/stores/settings';
+        import { auth } from '$lib/stores/auth';
+        import {
+                AUDIO_LEVEL_DB_MAX,
+                AUDIO_LEVEL_DB_MIN,
+                analyzeTimeDomainLevel,
+                decibelsToNormalized,
+                normalizedToDecibels,
+                normalizedToPercent
+        } from '$lib/utils/audio';
 
 	const SYSTEM_DEVICE_ID = '__system__';
 	const INPUT_VOLUME_MAX = 1;
 	const OUTPUT_VOLUME_MAX = 1.5;
         const THRESHOLD_MAX = 1;
-        const THRESHOLD_DB_MIN = -100;
-        const THRESHOLD_DB_MAX = 0;
+        const THRESHOLD_DB_MIN = AUDIO_LEVEL_DB_MIN;
+        const THRESHOLD_DB_MAX = AUDIO_LEVEL_DB_MAX;
 	const INPUT_VOLUME_PERCENT_MAX = 100;
 	const OUTPUT_VOLUME_PERCENT_MAX = 150;
 
@@ -56,7 +64,7 @@
 	let micPreviewAnalyser: AnalyserNode | null = null;
 	let micPreviewOutputGain: GainNode | null = null;
 	let micPreviewDestination: MediaStreamAudioDestinationNode | null = null;
-	let micPreviewBuffer: Uint8Array | null = null;
+        let micPreviewBuffer: Uint8Array<ArrayBuffer> | null = null;
 	let micPreviewAudioElement: HTMLAudioElement | null = null;
 	const sinkIdSupported =
 		typeof HTMLMediaElement !== 'undefined' &&
@@ -147,31 +155,8 @@
                 return Math.max(min, Math.min(max, value));
         }
 
-        function decibelsToNormalized(value: number): number {
-                const db = clamp(value, THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
-                if (db <= THRESHOLD_DB_MIN) return 0;
-                return clamp(Math.pow(10, db / 20), 0, THRESHOLD_MAX);
-        }
-
-        function normalizedToDecibels(value: number): number {
-                const normalized = clamp(value, 0, THRESHOLD_MAX);
-                if (normalized <= 0) return THRESHOLD_DB_MIN;
-                return clamp(20 * Math.log10(normalized), THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
-        }
-
         function formatDecibels(value: number): string {
-                return `${Math.round(value)} dB`;
-        }
-
-        function decibelsToSliderPercent(value: number): number {
-                const db = clamp(value, THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
-                const span = THRESHOLD_DB_MAX - THRESHOLD_DB_MIN;
-                if (span <= 0) return 0;
-                return ((db - THRESHOLD_DB_MIN) / span) * 100;
-        }
-
-        function normalizedToSliderPercent(value: number): number {
-                return decibelsToSliderPercent(normalizedToDecibels(value));
+                return `${Math.round(clamp(value, THRESHOLD_DB_MIN, THRESHOLD_DB_MAX))} dB`;
         }
 
 	function deviceSettingsEqual(a: DeviceSettings, b: DeviceSettings): boolean {
@@ -309,8 +294,9 @@
 			micPreviewAnalyser = analyser;
 			micPreviewOutputGain = outputGain;
 			micPreviewDestination = destination;
-			micPreviewAnalyser.fftSize = 2048;
-			micPreviewBuffer = new Uint8Array(new ArrayBuffer(micPreviewAnalyser.fftSize));
+                        micPreviewAnalyser.fftSize = 2048;
+                        micPreviewAnalyser.smoothingTimeConstant = 0.6;
+                        micPreviewBuffer = new Uint8Array(new ArrayBuffer(micPreviewAnalyser.fftSize));
 			updateMicPreviewInputGain();
 			updateMicPreviewOutputGain();
 			if (micPreviewAudioElement) {
@@ -403,18 +389,14 @@
 
 	function animateMicPreview() {
 		if (!micPreviewAnalyser || !micPreviewBuffer) return;
-		micPreviewAnalyser.getByteTimeDomainData(
-			micPreviewBuffer as unknown as Uint8Array<ArrayBuffer>
-		);
-		let sumSquares = 0;
-		for (let i = 0; i < micPreviewBuffer.length; i += 1) {
-			const value = micPreviewBuffer[i] / 128 - 1;
-			sumSquares += value * value;
-		}
-		const rms = Math.sqrt(sumSquares / micPreviewBuffer.length);
-		const level = clamp(rms * 2 * form.audioInputLevel, 0, 1);
-		micPreviewLevel = level;
-		micPreviewSpeaking = level >= form.audioInputThreshold;
+                micPreviewAnalyser.getByteTimeDomainData(micPreviewBuffer);
+                const measurement = analyzeTimeDomainLevel(micPreviewBuffer, {
+                        gain: 1,
+                        previous: micPreviewLevel,
+                        smoothing: 0.35
+                });
+                micPreviewLevel = measurement.normalized;
+                micPreviewSpeaking = micPreviewLevel >= form.audioInputThreshold;
 		micPreviewRaf = requestAnimationFrame(animateMicPreview);
 	}
 
@@ -690,7 +672,7 @@
 		<div>
 			<label class="flex justify-between text-sm font-medium" for={thresholdId}>
 				<span>{m.settings_input_threshold()}</span>
-				<span>{formatDecibels(normalizedToDecibels(form.audioInputThreshold))}</span>
+                                <span>{formatDecibels(normalizedToDecibels(form.audioInputThreshold))}</span>
 			</label>
 			<input
 				id={thresholdId}
@@ -698,7 +680,7 @@
 				min={THRESHOLD_DB_MIN}
 				max={THRESHOLD_DB_MAX}
 				step="1"
-				value={normalizedToDecibels(form.audioInputThreshold)}
+                                value={normalizedToDecibels(form.audioInputThreshold)}
 				oninput={(event) =>
 					updateForm({
 						audioInputThreshold: clamp(
@@ -716,11 +698,11 @@
                                         class={`absolute inset-y-0 left-0 rounded-full transition-[width] ${
                                                 micPreviewSpeaking ? 'bg-[var(--success)]' : 'bg-[var(--brand)]/60'
                                         }`}
-                                        style={`width: ${normalizedToSliderPercent(micPreviewLevel).toFixed(2)}%`}
+                                        style={`width: ${normalizedToPercent(micPreviewLevel).toFixed(2)}%`}
                                 ></div>
                                 <div
                                         class="absolute inset-y-0 w-0.5 bg-[var(--stroke-strong)]"
-                                        style={`left: ${normalizedToSliderPercent(form.audioInputThreshold).toFixed(2)}%`}
+                                        style={`left: ${normalizedToPercent(form.audioInputThreshold).toFixed(2)}%`}
                                 ></div>
 			</div>
 			<p class="mt-2 text-xs text-[var(--muted)]">{m.settings_voice_preview_description()}</p>

@@ -2,11 +2,8 @@ import { browser } from '$app/environment';
 import { writable, derived, get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import { setSelfVoiceChannelId } from '$lib/stores/presence';
-import {
-        appSettings,
-        cloneDeviceSettings,
-        type DeviceSettings
-} from '$lib/stores/settings';
+import { appSettings, cloneDeviceSettings, type DeviceSettings } from '$lib/stores/settings';
+import { analyzeTimeDomainLevel, clampNormalized } from '$lib/utils/audio';
 
 const noop = () => {};
 
@@ -203,7 +200,6 @@ function applyLocalInputGain(settings: DeviceSettings) {
 
 const defaultDeviceSettings = cloneDeviceSettings(null);
 const REMOTE_SPEAKING_THRESHOLD = 0.08;
-const MIN_MONITOR_THRESHOLD = 0.02;
 let lastDeviceSettings: DeviceSettings = defaultDeviceSettings;
 let deviceSettingsQueue: Promise<void> = Promise.resolve();
 
@@ -301,7 +297,7 @@ function resetRemoteState() {
 
 function normalizedMonitorThreshold(value: number | null | undefined): number {
         if (!Number.isFinite(value)) return REMOTE_SPEAKING_THRESHOLD;
-        return clamp(Number(value), MIN_MONITOR_THRESHOLD, 1);
+        return clampNormalized(Number(value));
 }
 
 function createAudioLevelMonitor(
@@ -325,20 +321,21 @@ function createAudioLevelMonitor(
                 const levelMultiplier = clamp(
                         Number.isFinite(options?.levelMultiplier) ? Number(options?.levelMultiplier) : 1,
                         0,
-                        1.5
+                        4
                 );
                 const threshold = normalizedMonitorThreshold(options?.threshold);
+                let lastLevel = 0;
 
                 const update = () => {
                         if (disposed) return;
                         analyser.getByteTimeDomainData(data);
-                        let sumSquares = 0;
-                        for (let i = 0; i < data.length; i += 1) {
-                                const sample = data[i] / 128 - 1;
-                                sumSquares += sample * sample;
-                        }
-                        const rms = Math.sqrt(sumSquares / data.length);
-                        const level = clamp(rms * 2 * levelMultiplier, 0, 1);
+                        const measurement = analyzeTimeDomainLevel(data, {
+                                gain: levelMultiplier,
+                                previous: lastLevel,
+                                smoothing: 0.35
+                        });
+                        const level = measurement.normalized;
+                        lastLevel = level;
                         const speaking = level >= threshold;
                         if (speaking !== lastSpeaking) {
                                 lastSpeaking = speaking;
