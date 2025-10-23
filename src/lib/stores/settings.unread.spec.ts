@@ -200,4 +200,42 @@ describe('settings unread snapshot integration', () => {
                         }
                 });
         });
+
+        it('applies default voice settings when the API returns no settings payload', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 204,
+                        data: null
+                });
+
+                const settingsModule = await import('./settings');
+                const { appSettings, cloneDeviceSettings } = settingsModule;
+                const { auth } = await import('$lib/stores/auth');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                const defaults = cloneDeviceSettings(null);
+                expect(get(appSettings).devices).toEqual(defaults);
+        });
+
+        it('applies default voice settings when the API omits device data', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                settings: {}
+                        }
+                });
+
+                const settingsModule = await import('./settings');
+                const { appSettings, cloneDeviceSettings } = settingsModule;
+                const { auth } = await import('$lib/stores/auth');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                const defaults = cloneDeviceSettings(null);
+                expect(get(appSettings).devices).toEqual(defaults);
+        });
 });

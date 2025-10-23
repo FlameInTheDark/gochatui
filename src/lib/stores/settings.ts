@@ -23,32 +23,36 @@ export const supportedLocales = ['en', 'ru', 'de', 'fr'] as const;
 export type Locale = (typeof supportedLocales)[number];
 
 export interface DeviceSettings {
-	audioInputDevice: string | null;
-	audioInputLevel: number;
-	audioInputThreshold: number;
-	audioOutputDevice: string | null;
-	audioOutputLevel: number;
-	autoGainControl: boolean;
-	echoCancellation: boolean;
-	noiseSuppression: boolean;
-	videoDevice: string | null;
+        audioInputDevice: string | null;
+        audioInputLevel: number;
+        audioInputThreshold: number;
+        audioOutputDevice: string | null;
+        audioOutputLevel: number;
+        autoGainControl: boolean;
+        echoCancellation: boolean;
+        noiseSuppression: boolean;
+        videoDevice: string | null;
 }
 
 const DEFAULT_AUDIO_INPUT_LEVEL = 1;
 const DEFAULT_AUDIO_INPUT_THRESHOLD = 0.1;
 const DEFAULT_AUDIO_OUTPUT_LEVEL = 1;
 
-const defaultDeviceSettings: DeviceSettings = {
-	audioInputDevice: null,
-	audioInputLevel: DEFAULT_AUDIO_INPUT_LEVEL,
-	audioInputThreshold: DEFAULT_AUDIO_INPUT_THRESHOLD,
-	audioOutputDevice: null,
-	audioOutputLevel: DEFAULT_AUDIO_OUTPUT_LEVEL,
-	autoGainControl: true,
-	echoCancellation: true,
-	noiseSuppression: true,
-	videoDevice: null
-};
+function createDefaultDeviceSettings(): DeviceSettings {
+        return {
+                audioInputDevice: null,
+                audioInputLevel: DEFAULT_AUDIO_INPUT_LEVEL,
+                audioInputThreshold: DEFAULT_AUDIO_INPUT_THRESHOLD,
+                audioOutputDevice: null,
+                audioOutputLevel: DEFAULT_AUDIO_OUTPUT_LEVEL,
+                autoGainControl: true,
+                echoCancellation: true,
+                noiseSuppression: true,
+                videoDevice: null
+        } satisfies DeviceSettings;
+}
+
+const defaultDeviceSettings: DeviceSettings = createDefaultDeviceSettings();
 
 export function cloneDeviceSettings(settings: DeviceSettings | null | undefined): DeviceSettings {
 	const source = settings ?? defaultDeviceSettings;
@@ -222,15 +226,23 @@ setLocale(initialLocale);
 export const locale = writable<Locale>(initialLocale);
 
 locale.subscribe((value) => {
-	setLocale(value);
-	if (browser) {
-		try {
-			localStorage.setItem('locale', value);
-		} catch {
-			/* ignore */
-		}
-	}
+        setLocale(value);
+        if (browser) {
+                try {
+                        localStorage.setItem('locale', value);
+                } catch {
+                        /* ignore */
+                }
+        }
 });
+
+function createDefaultSettingsSnapshot(): AppSettings {
+        const snapshot = cloneSettings(defaultSettings);
+        snapshot.language = get(locale);
+        snapshot.theme = get(theme);
+        snapshot.devices = createDefaultDeviceSettings();
+        return snapshot;
+}
 
 export interface GuildChannelReadState {
 	channelId: string;
@@ -288,23 +300,27 @@ export interface AppSettings {
 	devices: DeviceSettings;
 }
 
-const defaultSettings: AppSettings = {
-	language: initialLocale,
-	theme: initialTheme,
-	chatFontScale: 1,
-	chatSpacing: 1,
-	guildLayout: [],
-	selectedGuildId: null,
-	presenceMode: 'auto',
-	status: {
-		status: 'online',
-		customStatusText: null
-	},
-	dmChannels: [],
-	devices: cloneDeviceSettings(defaultDeviceSettings)
-};
+function createDefaultAppSettings(): AppSettings {
+        return {
+                language: initialLocale,
+                theme: initialTheme,
+                chatFontScale: 1,
+                chatSpacing: 1,
+                guildLayout: [],
+                selectedGuildId: null,
+                presenceMode: 'auto',
+                status: {
+                        status: 'online',
+                        customStatusText: null
+                },
+                dmChannels: [],
+                devices: cloneDeviceSettings(defaultDeviceSettings)
+        } satisfies AppSettings;
+}
 
-export const appSettings = writable<AppSettings>(defaultSettings);
+const defaultSettings: AppSettings = createDefaultAppSettings();
+
+export const appSettings = writable<AppSettings>(cloneSettings(defaultSettings));
 export type GuildChannelReadStateLookup = Record<string, Record<string, GuildChannelReadState>>;
 export type ChannelGuildLookup = Record<string, string>;
 
@@ -1635,18 +1651,13 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
 	settingsLoadToken = tokenToLoad;
 	hasSyncedGuildLayout = false;
 	try {
-		if (!tokenToLoad) {
-			suppressSave = true;
-			appSettings.set({
-				...defaultSettings,
-				language: get(locale),
-				theme: get(theme),
-				devices: cloneDeviceSettings(defaultDeviceSettings)
-			});
-			suppressSave = false;
-			settingsReady.set(false);
-			loadedSettingsToken = null;
-			auth.ingestGuilds([]);
+                if (!tokenToLoad) {
+                        suppressSave = true;
+                        appSettings.set(createDefaultSettingsSnapshot());
+                        suppressSave = false;
+                        settingsReady.set(false);
+                        loadedSettingsToken = null;
+                        auth.ingestGuilds([]);
 			updateUnreadSnapshot(null);
 			settingsLoadedOnce = false;
 			return;
@@ -1677,18 +1688,13 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
 				(responseData as any)?.last_messages ??
 				null;
 			const channelGuildLookup = buildChannelGuildLookupFromSnapshot(lastMessageSnapshot);
-			if (response.status === 204 || !response.data?.settings) {
-				suppressSave = true;
-				const next = {
-					...defaultSettings,
-					language: get(locale),
-					theme: get(theme),
-					devices: cloneDeviceSettings(defaultDeviceSettings)
-				};
-				applyReadStatesMapToLayout(
-					next.guildLayout,
-					responseData?.read_states,
-					previousSettings.guildLayout,
+                        if (response.status === 204 || !response.data?.settings) {
+                                suppressSave = true;
+                                const next = createDefaultSettingsSnapshot();
+                                applyReadStatesMapToLayout(
+                                        next.guildLayout,
+                                        responseData?.read_states,
+                                        previousSettings.guildLayout,
 					channelGuildLookup
 				);
 				applyDmReadStatesToSettings(next, responseData?.read_states);
@@ -1720,17 +1726,12 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
 			settingsLoadedOnce = true;
 		} catch (error) {
 			console.error('Failed to load settings', error);
-			suppressSave = true;
-			appSettings.set({
-				...defaultSettings,
-				language: get(locale),
-				theme: get(theme),
-				devices: cloneDeviceSettings(defaultDeviceSettings)
-			});
-			suppressSave = false;
-			loadedSettingsToken = null;
-			updateUnreadSnapshot(null);
-			settingsLoadedOnce = false;
+                        suppressSave = true;
+                        appSettings.set(createDefaultSettingsSnapshot());
+                        suppressSave = false;
+                        loadedSettingsToken = null;
+                        updateUnreadSnapshot(null);
+                        settingsLoadedOnce = false;
 		}
 
 		settingsReady.set(true);
@@ -1757,17 +1758,12 @@ function handleAuthTokenChange(token: string | null) {
 	} else {
 		hasSyncedGuildLayout = false;
 		guildsHydrated = false;
-		suppressSave = true;
-		appSettings.set({
-			...defaultSettings,
-			language: get(locale),
-			theme: get(theme),
-			devices: cloneDeviceSettings(defaultDeviceSettings)
-		});
-		suppressSave = false;
-		settingsReady.set(false);
-		loadedSettingsToken = null;
-		settingsLoadedOnce = false;
+                suppressSave = true;
+                appSettings.set(createDefaultSettingsSnapshot());
+                suppressSave = false;
+                settingsReady.set(false);
+                loadedSettingsToken = null;
+                settingsLoadedOnce = false;
 	}
 }
 
