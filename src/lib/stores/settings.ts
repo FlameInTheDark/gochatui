@@ -34,12 +34,16 @@ export interface DeviceSettings {
 	videoDevice: string | null;
 }
 
+const DEFAULT_AUDIO_INPUT_LEVEL = 1;
+const DEFAULT_AUDIO_INPUT_THRESHOLD = 0.1;
+const DEFAULT_AUDIO_OUTPUT_LEVEL = 1;
+
 const defaultDeviceSettings: DeviceSettings = {
 	audioInputDevice: null,
-	audioInputLevel: 1,
-	audioInputThreshold: 0.5,
+	audioInputLevel: DEFAULT_AUDIO_INPUT_LEVEL,
+	audioInputThreshold: DEFAULT_AUDIO_INPUT_THRESHOLD,
 	audioOutputDevice: null,
-	audioOutputLevel: 1,
+	audioOutputLevel: DEFAULT_AUDIO_OUTPUT_LEVEL,
 	autoGainControl: true,
 	echoCancellation: true,
 	noiseSuppression: true,
@@ -50,11 +54,19 @@ export function cloneDeviceSettings(settings: DeviceSettings | null | undefined)
 	const source = settings ?? defaultDeviceSettings;
 	return {
 		audioInputDevice: source.audioInputDevice ?? null,
-		audioInputLevel: typeof source.audioInputLevel === 'number' ? source.audioInputLevel : 1,
+		audioInputLevel:
+			typeof source.audioInputLevel === 'number' && Number.isFinite(source.audioInputLevel)
+				? clamp(source.audioInputLevel, 0, 1)
+				: DEFAULT_AUDIO_INPUT_LEVEL,
 		audioInputThreshold:
-			typeof source.audioInputThreshold === 'number' ? source.audioInputThreshold : 0.5,
+			typeof source.audioInputThreshold === 'number' && Number.isFinite(source.audioInputThreshold)
+				? clamp(source.audioInputThreshold, 0, 1)
+				: DEFAULT_AUDIO_INPUT_THRESHOLD,
 		audioOutputDevice: source.audioOutputDevice ?? null,
-		audioOutputLevel: typeof source.audioOutputLevel === 'number' ? source.audioOutputLevel : 1,
+		audioOutputLevel:
+			typeof source.audioOutputLevel === 'number' && Number.isFinite(source.audioOutputLevel)
+				? clamp(source.audioOutputLevel, 0, 1.5)
+				: DEFAULT_AUDIO_OUTPUT_LEVEL,
 		autoGainControl: source.autoGainControl !== false,
 		echoCancellation: source.echoCancellation !== false,
 		noiseSuppression: source.noiseSuppression !== false,
