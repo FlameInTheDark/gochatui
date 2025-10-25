@@ -985,6 +985,13 @@ export function connectWS() {
                                                 markChannelTyping(channelId, userId, { durationMs: 10_000 });
                                         }
                                 }
+                        } else if (data.t === WS_EVENT_CHANNEL_TYPING) {
+                                const payload = (data?.d as AnyRecord) ?? {};
+                                const channelId = normalizeSnowflake(payload?.channel_id);
+                                const userId = normalizeSnowflake(payload?.user_id);
+                                if (channelId && userId) {
+                                        markChannelTyping(channelId, userId, { durationMs: 10_000 });
+                                }
                         } else if (data.t === WS_EVENT_FRIEND_REQUEST) {
                                 const payload = (data?.d as AnyRecord) ?? {};
                                 const requesterId =
