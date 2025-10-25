@@ -471,7 +471,7 @@
                                                                                         {/if}
                                                                                 </div>
                                                                         <span
-                                                                                        class={`absolute -right-0.5 -bottom-0.5 grid h-3 w-3 place-items-center rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
+                                                                                        class={`absolute -right-0.5 -bottom-0.5 flex h-3 items-center justify-center rounded-full border-2 border-[var(--panel)] transition-all duration-150 ease-out ${presenceIndicatorClass(entry.presenceStatus)} ${entry.isTyping ? 'px-[0.125rem]' : 'w-3'}`}
                                                                                         class:opacity-0={!entry.hasPresence && !entry.isTyping}
                                                                                 >
                                                                                         {#if entry.isTyping}

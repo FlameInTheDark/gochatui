@@ -1235,22 +1235,22 @@
         {/if}
 </div>
 
-{#if typingIndicator}
-        {#if typingIndicator.hasTooltip}
-                <div
-                        class="px-4 pb-3 pt-1 text-xs italic text-[var(--muted)]"
-                        use:tooltip={{
-                                content: () => typingIndicator.tooltip,
-                                placement: 'top',
-                                align: 'start'
-                        }}
-                >
-                        {typingIndicator.text}
-                </div>
-        {:else}
-                <div class="px-4 pb-3 pt-1 text-xs italic text-[var(--muted)]">{typingIndicator.text}</div>
-        {/if}
-{/if}
+<div
+        class="typing-banner flex h-6 items-center px-4 text-xs italic text-[var(--muted)]"
+        use:tooltip={
+                typingIndicator?.hasTooltip
+                        ? {
+                                  content: () => typingIndicator.tooltip,
+                                  placement: 'top' as const,
+                                  align: 'start' as const
+                          }
+                        : ''
+        }
+>
+        <span class="block w-full truncate" style:visibility={typingIndicator ? 'visible' : 'hidden'}>
+                {typingIndicator?.text ?? ''}
+        </span>
+</div>
 
 {#if !wasAtBottom && initialLoaded}
         <div class="pointer-events-none relative">
