@@ -31,6 +31,12 @@
         let dragCounter = $state(0);
         let removeGlobalDragListeners: (() => void) | null = null;
 
+        const TYPING_RENEWAL_INTERVAL_MS = 10_000;
+        let typingResetTimer: ReturnType<typeof setTimeout> | null = null;
+        let typingLastSentAt = 0;
+        let typingActive = false;
+        let typingChannelId: string | null = null;
+
         function hasFileTransfer(event: DragEvent): boolean {
                 const dt = event.dataTransfer;
                 if (!dt) return false;
@@ -126,6 +132,66 @@
                 event.dataTransfer?.clearData();
         }
 
+        function clearTypingTimer() {
+                if (typingResetTimer) {
+                        clearTimeout(typingResetTimer);
+                        typingResetTimer = null;
+                }
+        }
+
+        function resetTypingState() {
+                typingActive = false;
+                typingLastSentAt = 0;
+                typingChannelId = null;
+                clearTypingTimer();
+        }
+
+        async function postTypingIndicator(channelId: string) {
+                const messageApi = auth.api.message;
+                if (!messageApi?.messageChannelChannelIdTypingPost) {
+                        return;
+                }
+                await messageApi.messageChannelChannelIdTypingPost({
+                        channelId: channelId as any
+                });
+        }
+
+        async function dispatchTypingIndicator(channelId: string) {
+                typingChannelId = channelId;
+                typingActive = true;
+                typingLastSentAt = Date.now();
+                clearTypingTimer();
+                typingResetTimer = setTimeout(() => {
+                        typingActive = false;
+                        typingResetTimer = null;
+                }, TYPING_RENEWAL_INTERVAL_MS);
+                try {
+                        await postTypingIndicator(channelId);
+                } catch (error) {
+                        console.debug('Failed to send typing indicator', error);
+                }
+        }
+
+        function handleTypingActivity(value: string) {
+                const trimmed = value.trim();
+                if (!trimmed) {
+                        resetTypingState();
+                        return;
+                }
+                const channelId = $selectedChannelId;
+                if (!channelId) {
+                        return;
+                }
+                const now = Date.now();
+                const shouldSend =
+                        !typingActive ||
+                        channelId !== typingChannelId ||
+                        now - typingLastSentAt >= TYPING_RENEWAL_INTERVAL_MS;
+                if (shouldSend) {
+                        void dispatchTypingIndicator(channelId);
+                }
+        }
+
         const VISUAL_ATTACHMENT_PREVIEW_SIZE = 218;
         const visualAttachmentWrapperStyle = `width: min(100%, ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px); max-width: min(100%, ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px);`;
         const visualAttachmentMediaStyle = `width: 100%; height: ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px; object-fit: contain;`;
@@ -141,14 +207,21 @@
 		return (ch?.name ?? '').toString();
 	}
 
-	function autoResize() {
-		if (!ta) return;
-		ta.style.height = 'auto';
-		const max = Math.floor((window?.innerHeight || 800) * 0.4);
-		const next = Math.min(ta.scrollHeight, max);
-		ta.style.height = next + 'px';
-		ta.style.overflowY = ta.scrollHeight > next ? 'auto' : 'hidden';
-	}
+        function autoResize() {
+                if (!ta) return;
+                ta.style.height = 'auto';
+                const max = Math.floor((window?.innerHeight || 800) * 0.4);
+                const next = Math.min(ta.scrollHeight, max);
+                ta.style.height = next + 'px';
+                ta.style.overflowY = ta.scrollHeight > next ? 'auto' : 'hidden';
+        }
+
+        function handleInput(event: Event) {
+                autoResize();
+                const target = event.currentTarget as HTMLTextAreaElement | null;
+                const value = target?.value ?? '';
+                handleTypingActivity(value);
+        }
 
         onMount(() => {
                 autoResize();
@@ -181,6 +254,15 @@
                 if (removeGlobalDragListeners) {
                         removeGlobalDragListeners();
                         removeGlobalDragListeners = null;
+                }
+                resetTypingState();
+        });
+
+        $effect(() => {
+                const channelId = $selectedChannelId;
+                if (channelId !== typingChannelId) {
+                        resetTypingState();
+                        typingChannelId = channelId ?? null;
                 }
         });
 
@@ -259,6 +341,8 @@
                 addPendingMessage(pendingMessage);
 
                 content = '';
+                resetTypingState();
+                typingChannelId = $selectedChannelId ?? null;
                 clearLocalAttachments({ releasePreviews: true });
                 // wait for DOM to reflect cleared content, then collapse height
                 await tick();
@@ -477,7 +561,7 @@
                         rows={1}
                         placeholder={m.message_placeholder({ channel: channelName() })}
                         bind:value={content}
-                        oninput={autoResize}
+                        oninput={handleInput}
                         onkeydown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
