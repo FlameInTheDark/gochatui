@@ -400,10 +400,10 @@
 		micPreviewRaf = requestAnimationFrame(animateMicPreview);
 	}
 
-	function updateMicPreviewInputGain() {
-		if (!micPreviewInputGain) return;
-		micPreviewInputGain.gain.value = clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX);
-	}
+        function updateMicPreviewInputGain(level: number = form.audioInputLevel) {
+                if (!micPreviewInputGain) return;
+                micPreviewInputGain.gain.value = clamp(level, 0, INPUT_VOLUME_MAX);
+        }
 
 	function ensureMicPreviewPlayback() {
 		if (!micPreviewAudioElement) return;
@@ -417,17 +417,17 @@
 		}
 	}
 
-	function updateMicPreviewOutputGain() {
-		if (!micPreviewOutputGain) return;
-		const level = clamp(form.audioOutputLevel, 0, OUTPUT_VOLUME_MAX);
-		micPreviewOutputGain.gain.value = level;
-		if (micPreviewAudioElement) {
-			micPreviewAudioElement.muted = level <= 0;
-			if (level > 0) {
-				ensureMicPreviewPlayback();
-			}
-		}
-	}
+        function updateMicPreviewOutputGain(level: number = form.audioOutputLevel) {
+                if (!micPreviewOutputGain) return;
+                const clampedLevel = clamp(level, 0, OUTPUT_VOLUME_MAX);
+                micPreviewOutputGain.gain.value = clampedLevel;
+                if (micPreviewAudioElement) {
+                        micPreviewAudioElement.muted = clampedLevel <= 0;
+                        if (clampedLevel > 0) {
+                                ensureMicPreviewPlayback();
+                        }
+                }
+        }
 
 	async function applyMicPreviewSink(deviceId: string | null) {
 		if (!micPreviewAudioElement || !sinkIdSupported) return;
@@ -445,17 +445,18 @@
 		}
 	}
 
-	$: if (micPreviewActive) {
-		updateMicPreviewInputGain();
-	}
+        $: if (micPreviewActive) {
+                updateMicPreviewInputGain(form.audioInputLevel);
+        }
 
-	$: if (micPreviewActive) {
-		updateMicPreviewOutputGain();
-	}
+        $: if (micPreviewActive) {
+                updateMicPreviewOutputGain(form.audioOutputLevel);
+        }
 
-	$: if (micPreviewActive) {
-		void applyMicPreviewSink(form.audioOutputDevice ?? null);
-	}
+        $: if (micPreviewActive) {
+                const sink = form.audioOutputDevice ?? null;
+                void applyMicPreviewSink(sink);
+        }
 
 	async function startCameraPreview() {
 		if (!cameraPreviewSupported || !browser) {
