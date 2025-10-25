@@ -62,8 +62,9 @@
 	let micPreviewSource: MediaStreamAudioSourceNode | null = null;
 	let micPreviewInputGain: GainNode | null = null;
 	let micPreviewAnalyser: AnalyserNode | null = null;
-	let micPreviewOutputGain: GainNode | null = null;
-	let micPreviewDestination: MediaStreamAudioDestinationNode | null = null;
+        let micPreviewOutputGain: GainNode | null = null;
+        let micPreviewGateGain: GainNode | null = null;
+        let micPreviewDestination: MediaStreamAudioDestinationNode | null = null;
         let micPreviewBuffer: Uint8Array<ArrayBuffer> | null = null;
 	let micPreviewAudioElement: HTMLAudioElement | null = null;
 	const sinkIdSupported =
@@ -282,23 +283,27 @@
 			micPreviewContext = new AudioContextCtor();
 			const source = micPreviewContext.createMediaStreamSource(stream);
 			const inputGain = micPreviewContext.createGain();
-			const analyser = micPreviewContext.createAnalyser();
-			const outputGain = micPreviewContext.createGain();
-			const destination = micPreviewContext.createMediaStreamDestination();
+                        const analyser = micPreviewContext.createAnalyser();
+                        const outputGain = micPreviewContext.createGain();
+                        const gateGain = micPreviewContext.createGain();
+                        const destination = micPreviewContext.createMediaStreamDestination();
 			source.connect(inputGain);
 			inputGain.connect(analyser);
-			analyser.connect(outputGain);
-			outputGain.connect(destination);
+                        analyser.connect(outputGain);
+                        outputGain.connect(gateGain);
+                        gateGain.connect(destination);
 			micPreviewSource = source;
 			micPreviewInputGain = inputGain;
-			micPreviewAnalyser = analyser;
-			micPreviewOutputGain = outputGain;
-			micPreviewDestination = destination;
+                        micPreviewAnalyser = analyser;
+                        micPreviewOutputGain = outputGain;
+                        micPreviewGateGain = gateGain;
+                        micPreviewDestination = destination;
                         micPreviewAnalyser.fftSize = 2048;
                         micPreviewAnalyser.smoothingTimeConstant = 0.6;
                         micPreviewBuffer = new Uint8Array(new ArrayBuffer(micPreviewAnalyser.fftSize));
-			updateMicPreviewInputGain();
-			updateMicPreviewOutputGain();
+                        updateMicPreviewInputGain();
+                        updateMicPreviewOutputGain();
+                        updateMicPreviewGate(false);
 			if (micPreviewAudioElement) {
 				micPreviewAudioElement.srcObject = destination.stream;
 				ensureMicPreviewPlayback();
@@ -347,12 +352,18 @@
 			} catch {}
 			micPreviewAnalyser = null;
 		}
-		if (micPreviewOutputGain) {
-			try {
-				micPreviewOutputGain.disconnect();
-			} catch {}
-			micPreviewOutputGain = null;
-		}
+                if (micPreviewOutputGain) {
+                        try {
+                                micPreviewOutputGain.disconnect();
+                        } catch {}
+                        micPreviewOutputGain = null;
+                }
+                if (micPreviewGateGain) {
+                        try {
+                                micPreviewGateGain.disconnect();
+                        } catch {}
+                        micPreviewGateGain = null;
+                }
 		if (micPreviewDestination) {
 			try {
 				micPreviewDestination.disconnect?.();
@@ -383,22 +394,23 @@
 		micPreviewSignature = '';
 		micPreviewLevel = 0;
 		micPreviewSpeaking = false;
-		micPreviewAppliedSink = null;
-		micPreviewSinkErrorLogged = false;
+                micPreviewAppliedSink = null;
+                micPreviewSinkErrorLogged = false;
 	}
 
 	function animateMicPreview() {
 		if (!micPreviewAnalyser || !micPreviewBuffer) return;
                 micPreviewAnalyser.getByteTimeDomainData(micPreviewBuffer);
                 const measurement = analyzeTimeDomainLevel(micPreviewBuffer, {
-                        gain: 1,
+                        gain: clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX),
                         previous: micPreviewLevel,
                         smoothing: 0.35
                 });
                 micPreviewLevel = measurement.normalized;
                 micPreviewSpeaking = micPreviewLevel >= form.audioInputThreshold;
-		micPreviewRaf = requestAnimationFrame(animateMicPreview);
-	}
+                updateMicPreviewGate(micPreviewSpeaking);
+                micPreviewRaf = requestAnimationFrame(animateMicPreview);
+        }
 
         function updateMicPreviewInputGain(level: number = form.audioInputLevel) {
                 if (!micPreviewInputGain) return;
@@ -426,6 +438,16 @@
                         if (clampedLevel > 0) {
                                 ensureMicPreviewPlayback();
                         }
+                }
+        }
+
+        function updateMicPreviewGate(active: boolean) {
+                if (!micPreviewGateGain || !micPreviewContext) return;
+                const target = active ? 1 : 0;
+                try {
+                        micPreviewGateGain.gain.setTargetAtTime(target, micPreviewContext.currentTime, 0.05);
+                } catch {
+                        micPreviewGateGain.gain.value = target;
                 }
         }
 
@@ -682,16 +704,16 @@
 				max={THRESHOLD_DB_MAX}
 				step="1"
                                 value={normalizedToDecibels(form.audioInputThreshold)}
-				oninput={(event) =>
-					updateForm({
-						audioInputThreshold: clamp(
-							decibelsToNormalized(
-								Number((event.currentTarget as HTMLInputElement).value) || THRESHOLD_DB_MIN
-							),
-							0,
-							THRESHOLD_MAX
-						)
-					})}
+                                oninput={(event) => {
+                                        const value = Number((event.currentTarget as HTMLInputElement).value);
+                                        updateForm({
+                                                audioInputThreshold: clamp(
+                                                        decibelsToNormalized(Number.isFinite(value) ? value : THRESHOLD_DB_MIN),
+                                                        0,
+                                                        THRESHOLD_MAX
+                                                )
+                                        });
+                                }}
 				class="mt-2 w-full"
 			/>
 			<div class="relative mt-3 h-3 w-full overflow-hidden rounded-full bg-[var(--panel-strong)]">
