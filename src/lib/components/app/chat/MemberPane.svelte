@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { DtoMember, DtoRole } from '$lib/api';
-	import { auth } from '$lib/stores/auth';
-	import {
-		channelsByGuild,
-		channelRolesByGuild,
-		membersByGuild,
+        import { auth } from '$lib/stores/auth';
+        import {
+                channelsByGuild,
+                channelRolesByGuild,
+                membersByGuild,
 		selectedChannelId,
 		selectedGuildId
 	} from '$lib/stores/appState';
@@ -36,10 +36,13 @@
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
         import { onDestroy } from 'svelte';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import { channelTypingUsers } from '$lib/stores/channelTyping';
+        import { Ellipsis } from 'lucide-svelte';
 
-	const guilds = auth.guilds;
-	const presenceMap = presenceByUser;
-	const presenceSubscription = createPresenceSubscription();
+        const guilds = auth.guilds;
+        const presenceMap = presenceByUser;
+        const typingUsers = channelTypingUsers;
+        const presenceSubscription = createPresenceSubscription();
 	let lastTrackedUserIds: string[] = [];
 
 	function applyTrackedUserIds(next: string[]) {
@@ -286,17 +289,29 @@
                 hasPresence: boolean;
                 customStatusText: string | null;
                 presenceBucket: PresenceBucket;
+                isTyping: boolean;
         };
 
         const decoratedMembers = $derived.by(() => {
                 const channel = currentChannel;
                 const guild = currentGuild;
-		const list = currentMembers ?? [];
-		if (!channel) {
-			applyTrackedUserIds([]);
-			return [] as DecoratedMember[];
-		}
-		const lookup = $presenceMap;
+                const list = currentMembers ?? [];
+                if (!channel) {
+                        applyTrackedUserIds([]);
+                        return [] as DecoratedMember[];
+                }
+                const lookup = $presenceMap;
+                const typingLookup = $typingUsers;
+                const channelId = toSnowflakeString((channel as any)?.id);
+                const typingSet = new Set<string>();
+                if (channelId && Array.isArray(typingLookup?.[channelId])) {
+                        for (const value of typingLookup[channelId]) {
+                                const normalized = toSnowflakeString(value);
+                                if (normalized) {
+                                        typingSet.add(normalized);
+                                }
+                        }
+                }
                 const entries = list.map<DecoratedMember>((member) => {
                         const hasAccess = memberHasChannelAccess(member, channel, guild);
                         const guildId = toSnowflakeString((guild as any)?.id) ?? null;
@@ -324,7 +339,8 @@
                                 presenceSince: info?.since ?? null,
                                 hasPresence,
                                 customStatusText,
-                                presenceBucket
+                                presenceBucket,
+                                isTyping: Boolean(userId && typingSet.has(userId))
                         };
                 });
                 const hideWithoutAccess = Boolean((channel as any)?.private);
@@ -454,10 +470,18 @@
                                                                                                 {memberInitial(entry.member)}
                                                                                         {/if}
                                                                                 </div>
-                                                                                <span
-                                                                                        class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
-                                                                                        class:opacity-0={!entry.hasPresence}
-                                                                                ></span>
+                                                                        <span
+                                                                                        class={`absolute -right-0.5 -bottom-0.5 flex h-3 items-center justify-center rounded-full border-2 border-[var(--panel)] transition-all duration-150 ease-out ${presenceIndicatorClass(entry.presenceStatus)} ${entry.isTyping ? 'px-[0.125rem]' : 'w-3'}`}
+                                                                                        class:opacity-0={!entry.hasPresence && !entry.isTyping}
+                                                                                >
+                                                                                        {#if entry.isTyping}
+                                                                                                <Ellipsis
+                                                                                                        class="h-2 w-2 text-[var(--bg)]"
+                                                                                                        stroke-width={3}
+                                                                                                        aria-hidden="true"
+                                                                                                />
+                                                                                        {/if}
+                                                                                </span>
                                                                         </div>
                                                                         <div class="min-w-0 flex-1">
                                                                                 <div class="truncate font-medium" style:color={entry.color ?? null}>
