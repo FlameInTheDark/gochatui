@@ -149,25 +149,12 @@
         }
 
         async function postTypingIndicator(channelId: string) {
-                const messageApi = auth.api.message as any;
-                const basePath: string =
-                        typeof messageApi?.basePath === 'string' && messageApi.basePath
-                                ? messageApi.basePath
-                                : computeApiBase();
-                const sanitizedBase = basePath.replace(/\/+$/, '');
-                const url = `${sanitizedBase}/channel/${encodeURIComponent(channelId)}/typing`;
-                if (messageApi?.axios && typeof messageApi.axios.post === 'function') {
-                        await messageApi.axios.post(url);
+                const messageApi = auth.api.message;
+                if (!messageApi?.messageChannelChannelIdTypingPost) {
                         return;
                 }
-                const token = get(auth.token);
-                const headers: Record<string, string> = {};
-                if (token) {
-                        headers.Authorization = `Bearer ${token}`;
-                }
-                await fetch(url, {
-                        method: 'POST',
-                        headers
+                await messageApi.messageChannelChannelIdTypingPost({
+                        channelId: channelId as any
                 });
         }
 
