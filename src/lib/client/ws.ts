@@ -19,6 +19,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { getRuntimeConfig } from '$lib/runtime/config';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 import { addVisibleDmChannel } from '$lib/stores/settings';
+import { clearChannelTyping, markChannelTyping } from '$lib/stores/channelTyping';
 import {
         isFriendId,
         markFriendAdded,
@@ -120,6 +121,7 @@ let heartbeatSessionId: string | null = wsState.heartbeatSessionId;
 
 const WS_EVENT_MEMBER_JOIN = 200;
 const WS_EVENT_MEMBER_LEAVE = 202;
+const WS_EVENT_CHANNEL_TYPING = 301;
 const WS_EVENT_FRIEND_REQUEST = 402;
 const WS_EVENT_FRIEND_ADDED = 403;
 const WS_EVENT_FRIEND_REMOVED = 404;
@@ -904,43 +906,84 @@ export function connectWS() {
 
 		handleGuildMembershipEvent(data);
 
-                if (data?.op === 0 && typeof data?.t === 'number') {
-                        if (data.t === 300) {
-                                const payload = (data?.d as AnyRecord) ?? {};
-                                const message = (payload?.message as AnyRecord) ?? payload;
-                                const guildId =
-                                        normalizeSnowflake(payload?.guild_id) ??
-                                        normalizeSnowflake(message?.guild_id) ??
-					normalizeSnowflake(payload?.guild?.id) ??
-					normalizeSnowflake(message?.guild?.id);
-				const channelId =
-					normalizeSnowflake(payload?.channel_id) ??
-					normalizeSnowflake(message?.channel_id) ??
-					normalizeSnowflake(payload?.channel?.id) ??
-					normalizeSnowflake(message?.channel?.id);
-				const messageId =
-					normalizeSnowflake(payload?.message_id) ??
-					normalizeSnowflake(message?.message_id) ??
-					normalizeSnowflake(message?.id) ??
-					normalizeSnowflake(payload?.id);
-				if (guildId && channelId && messageId) {
-					let shouldMarkUnread = true;
-					if (browser) {
-						const focused = Boolean(get(appHasFocus));
-						if (focused) {
-							const activeGuildId = normalizeSnowflake(get(selectedGuildId));
-							const activeChannelId = normalizeSnowflake(get(selectedChannelId));
-							if (guildId === activeGuildId && channelId === activeChannelId) {
-								shouldMarkUnread = false;
-							}
-						}
-					}
+                if (data?.op === 0) {
+                        const payload = (data?.d as AnyRecord) ?? {};
+                        const messagePayload = (payload?.message as AnyRecord | undefined) ?? undefined;
+                        const messageLike =
+                                messagePayload ?? (payload?.message_id != null ? payload : undefined);
+                        if (messageLike) {
+                                const channelId =
+                                        normalizeSnowflake(payload?.channel_id) ??
+                                        normalizeSnowflake(messageLike?.channel_id) ??
+                                        normalizeSnowflake(payload?.channel?.id) ??
+                                        normalizeSnowflake(messageLike?.channel?.id) ??
+                                        normalizeSnowflake(payload?.channelId) ??
+                                        normalizeSnowflake(messageLike?.channelId);
+                                const authorPayload =
+                                        (messageLike?.author as AnyRecord | undefined) ??
+                                        (payload?.author as AnyRecord | undefined) ??
+                                        (payload?.member?.user as AnyRecord | undefined);
+                                const authorId =
+                                        normalizeSnowflake(messageLike?.author_id) ??
+                                        normalizeSnowflake(messageLike?.authorId) ??
+                                        normalizeSnowflake(authorPayload?.id) ??
+                                        normalizeSnowflake(payload?.user_id) ??
+                                        normalizeSnowflake(payload?.userId) ??
+                                        normalizeSnowflake((payload?.user as AnyRecord | undefined)?.id);
+                                if (channelId && authorId) {
+                                        clearChannelTyping(channelId, authorId);
+                                }
+                        }
 
-					if (shouldMarkUnread) {
-						markChannelUnread(guildId, channelId, messageId);
-					}
+                        if (typeof data?.t === 'number') {
+                                if (data.t === 300) {
+                                        const message = (payload?.message as AnyRecord) ?? payload;
+                                        const guildId =
+                                                normalizeSnowflake(payload?.guild_id) ??
+                                                normalizeSnowflake(message?.guild_id) ??
+                                                normalizeSnowflake(payload?.guild?.id) ??
+                                                normalizeSnowflake(message?.guild?.id);
+                                        const channelId =
+                                                normalizeSnowflake(payload?.channel_id) ??
+                                                normalizeSnowflake(message?.channel_id) ??
+                                                normalizeSnowflake(payload?.channel?.id) ??
+                                                normalizeSnowflake(message?.channel?.id) ??
+                                                normalizeSnowflake(payload?.channelId) ??
+                                                normalizeSnowflake(message?.channelId);
+                                        const messageId =
+                                                normalizeSnowflake(payload?.message_id) ??
+                                                normalizeSnowflake(message?.message_id) ??
+                                                normalizeSnowflake(message?.id) ??
+                                                normalizeSnowflake(payload?.id);
+                                        if (guildId && channelId && messageId) {
+                                                let shouldMarkUnread = true;
+                                                if (browser) {
+                                                        const focused = Boolean(get(appHasFocus));
+                                                        if (focused) {
+                                                                const activeGuildId = normalizeSnowflake(get(selectedGuildId));
+                                                                const activeChannelId = normalizeSnowflake(get(selectedChannelId));
+                                                                if (guildId === activeGuildId && channelId === activeChannelId) {
+                                                                        shouldMarkUnread = false;
+                                                                }
+                                                        }
+                                                }
 
-                                        updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
+                                                if (shouldMarkUnread) {
+                                                        markChannelUnread(guildId, channelId, messageId);
+                                                }
+
+                                                updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
+                                        }
+                                } else if (data.t === WS_EVENT_CHANNEL_TYPING) {
+                                        const channelId =
+                                                normalizeSnowflake(payload?.channel_id) ??
+                                                normalizeSnowflake(payload?.channelId);
+                                        const userId =
+                                                normalizeSnowflake(payload?.user_id) ??
+                                                normalizeSnowflake(payload?.userId);
+                                        if (channelId && userId) {
+                                                markChannelTyping(channelId, userId, { durationMs: 10_000 });
+                                        }
                                 }
                         } else if (data.t === WS_EVENT_FRIEND_REQUEST) {
                                 const payload = (data?.d as AnyRecord) ?? {};
@@ -985,7 +1028,23 @@ export function connectWS() {
                                         return;
                                 }
 
+                                const rawMessage = (payload?.message as AnyRecord | undefined) ?? null;
                                 const senderId = normalizeSnowflake(payload?.from?.id);
+                                const rawAuthor =
+                                        (rawMessage?.author as AnyRecord | undefined) ??
+                                        (payload?.from as AnyRecord | undefined) ??
+                                        (payload?.author as AnyRecord | undefined);
+                                const typingAuthorId =
+                                        senderId ??
+                                        normalizeSnowflake(rawMessage?.author_id) ??
+                                        normalizeSnowflake(rawMessage?.authorId) ??
+                                        normalizeSnowflake(rawAuthor?.id) ??
+                                        normalizeSnowflake(payload?.user_id) ??
+                                        normalizeSnowflake(payload?.userId) ??
+                                        normalizeSnowflake((payload?.user as AnyRecord | undefined)?.id);
+                                if (channelId && typingAuthorId) {
+                                        clearChannelTyping(channelId, typingAuthorId);
+                                }
                                 if (senderId) {
                                         addVisibleDmChannel(channelId, senderId);
                                 } else {
@@ -998,16 +1057,12 @@ export function connectWS() {
                                         minimalMessage.authorId = senderId;
                                 }
 
-                                const rawMessage = (payload?.message as AnyRecord | undefined) ?? null;
                                 if (rawMessage && typeof rawMessage === 'object') {
                                         if (rawMessage.content != null && minimalMessage.content == null) {
                                                 minimalMessage.content = rawMessage.content;
                                         }
                                 }
 
-                                const rawAuthor =
-                                        (rawMessage?.author as AnyRecord | undefined) ??
-                                        (payload?.from as AnyRecord | undefined);
                                 if (rawAuthor && typeof rawAuthor === 'object') {
                                         const author: AnyRecord = { ...rawAuthor };
                                         if (!author.id && senderId) {
