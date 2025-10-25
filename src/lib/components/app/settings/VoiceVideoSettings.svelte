@@ -13,19 +13,21 @@
         import { auth } from '$lib/stores/auth';
         import {
                 AUDIO_LEVEL_DB_MAX,
-                AUDIO_LEVEL_DB_MIN,
                 analyzeTimeDomainLevel,
                 decibelsToNormalized,
-                normalizedToDecibels,
-                normalizedToPercent
+                normalizedToDecibels
         } from '$lib/utils/audio';
 
 	const SYSTEM_DEVICE_ID = '__system__';
 	const INPUT_VOLUME_MAX = 1;
-	const OUTPUT_VOLUME_MAX = 1.5;
+        const OUTPUT_VOLUME_MAX = 1.5;
         const THRESHOLD_MAX = 1;
-        const THRESHOLD_DB_MIN = AUDIO_LEVEL_DB_MIN;
-        const THRESHOLD_DB_MAX = AUDIO_LEVEL_DB_MAX;
+        const THRESHOLD_UI_DB_MIN = -60;
+        const THRESHOLD_UI_DB_MAX = AUDIO_LEVEL_DB_MAX;
+        const THRESHOLD_UI_DB_RANGE = THRESHOLD_UI_DB_MAX - THRESHOLD_UI_DB_MIN;
+        const THRESHOLD_NORMALIZED_MIN = decibelsToNormalized(THRESHOLD_UI_DB_MIN);
+        const MIC_PREVIEW_GATE_HOLD_MS = 300;
+        const MIC_PREVIEW_GATE_CLOSE_RATIO = 0.7;
 	const INPUT_VOLUME_PERCENT_MAX = 100;
 	const OUTPUT_VOLUME_PERCENT_MAX = 150;
 
@@ -36,8 +38,8 @@
 		variant: MessageVariant;
 	}
 
-        let form: DeviceSettings = cloneDeviceSettings(get(appSettings).devices);
-        let currentSettings: DeviceSettings = cloneDeviceSettings(get(appSettings).devices);
+        let form: DeviceSettings = normalizeDeviceSettings(cloneDeviceSettings(get(appSettings).devices));
+        let currentSettings: DeviceSettings = normalizeDeviceSettings(cloneDeviceSettings(get(appSettings).devices));
 	let dirty = false;
 	let saving = false;
 	let message: FeedbackMessage | null = null;
@@ -51,21 +53,29 @@
 
 	let micPreviewSupported = browser && typeof navigator.mediaDevices?.getUserMedia === 'function';
 	let micPreviewLoading = false;
-	let micPreviewError: string | null = null;
-	let micPreviewActive = false;
-	let micPreviewLevel = 0;
-	let micPreviewSpeaking = false;
-	let micPreviewSignature = '';
-	let micPreviewRaf: number | null = null;
-	let micPreviewStream: MediaStream | null = null;
-	let micPreviewContext: AudioContext | null = null;
-	let micPreviewSource: MediaStreamAudioSourceNode | null = null;
+        let micPreviewError: string | null = null;
+        let micPreviewActive = false;
+        let micPreviewLevel = 0;
+        let micPreviewSpeaking = false;
+        let micPreviewGateOpen = false;
+        let micPreviewLastGateOpenAt = 0;
+        let micPreviewThresholdPercent = 0;
+        let micPreviewLevelPercent = 0;
+        let micPreviewDisplayPercent = 0;
+        let micPreviewSignature = '';
+        let micPreviewRaf: number | null = null;
+        let micPreviewStream: MediaStream | null = null;
+        let micPreviewContext: AudioContext | null = null;
+        let micPreviewSource: MediaStreamAudioSourceNode | null = null;
 	let micPreviewInputGain: GainNode | null = null;
 	let micPreviewAnalyser: AnalyserNode | null = null;
-	let micPreviewOutputGain: GainNode | null = null;
-	let micPreviewDestination: MediaStreamAudioDestinationNode | null = null;
+        let micPreviewOutputGain: GainNode | null = null;
+        let micPreviewGateGain: GainNode | null = null;
+        let micPreviewDestination: MediaStreamAudioDestinationNode | null = null;
         let micPreviewBuffer: Uint8Array<ArrayBuffer> | null = null;
-	let micPreviewAudioElement: HTMLAudioElement | null = null;
+        let micPreviewAudioElement: HTMLAudioElement | null = null;
+        let thresholdSliderElement: HTMLDivElement | null = null;
+        let thresholdDragging = false;
 	const sinkIdSupported =
 		typeof HTMLMediaElement !== 'undefined' &&
 		typeof HTMLMediaElement.prototype.setSinkId === 'function';
@@ -83,13 +93,13 @@
 	const outputVolumeId = 'voice-output-volume';
 	const thresholdId = 'voice-input-threshold';
 
-	const unsubscribe = appSettings.subscribe(($settings) => {
-		const next = cloneDeviceSettings($settings.devices);
-		currentSettings = next;
-		if (!dirty) {
-			form = { ...next };
-		}
-	});
+        const unsubscribe = appSettings.subscribe(($settings) => {
+                const next = normalizeDeviceSettings(cloneDeviceSettings($settings.devices));
+                currentSettings = next;
+                if (!dirty) {
+                        form = { ...next };
+                }
+        });
 
 	$: dirty = !deviceSettingsEqual(form, currentSettings);
 
@@ -155,15 +165,46 @@
                 return Math.max(min, Math.min(max, value));
         }
 
-        function formatDecibels(value: number): string {
-                return `${Math.round(clamp(value, THRESHOLD_DB_MIN, THRESHOLD_DB_MAX))} dB`;
+        function clampThreshold(value: number): number {
+                if (!Number.isFinite(value)) return THRESHOLD_NORMALIZED_MIN;
+                return clamp(value, THRESHOLD_NORMALIZED_MIN, THRESHOLD_MAX);
         }
 
-	function deviceSettingsEqual(a: DeviceSettings, b: DeviceSettings): boolean {
-		return (
-			(a.audioInputDevice ?? null) === (b.audioInputDevice ?? null) &&
-			Math.abs(a.audioInputLevel - b.audioInputLevel) < 1e-3 &&
-			Math.abs(a.audioInputThreshold - b.audioInputThreshold) < 1e-3 &&
+        function clampDecibelsToUiRange(value: number): number {
+                if (!Number.isFinite(value)) return THRESHOLD_UI_DB_MIN;
+                return clamp(value, THRESHOLD_UI_DB_MIN, THRESHOLD_UI_DB_MAX);
+        }
+
+        function normalizedToSliderPercent(value: number): number {
+                if (!Number.isFinite(value) || value <= 0) return 0;
+                if (THRESHOLD_UI_DB_RANGE <= 0) return 0;
+                const db = clampDecibelsToUiRange(normalizedToDecibels(value));
+                return clamp(((db - THRESHOLD_UI_DB_MIN) / THRESHOLD_UI_DB_RANGE) * 100, 0, 100);
+        }
+
+        function sliderPercentToNormalized(percent: number): number {
+                if (THRESHOLD_UI_DB_RANGE <= 0) return THRESHOLD_NORMALIZED_MIN;
+                const clampedPercent = clamp(percent, 0, 100);
+                const db = THRESHOLD_UI_DB_MIN + (clampedPercent / 100) * THRESHOLD_UI_DB_RANGE;
+                return clampThreshold(decibelsToNormalized(db));
+        }
+
+        function getNow(): number {
+                if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+                        return performance.now();
+                }
+                return Date.now();
+        }
+
+        function formatDecibels(value: number): string {
+                return `${Math.round(clampDecibelsToUiRange(value))} dB`;
+        }
+
+        function deviceSettingsEqual(a: DeviceSettings, b: DeviceSettings): boolean {
+                return (
+                        (a.audioInputDevice ?? null) === (b.audioInputDevice ?? null) &&
+                        Math.abs(a.audioInputLevel - b.audioInputLevel) < 1e-3 &&
+                        Math.abs(a.audioInputThreshold - b.audioInputThreshold) < 1e-3 &&
 			(a.audioOutputDevice ?? null) === (b.audioOutputDevice ?? null) &&
 			Math.abs(a.audioOutputLevel - b.audioOutputLevel) < 1e-3 &&
 			a.autoGainControl === b.autoGainControl &&
@@ -171,26 +212,39 @@
 			a.noiseSuppression === b.noiseSuppression &&
 			(a.videoDevice ?? null) === (b.videoDevice ?? null)
 		);
-	}
+        }
 
-	function sanitizeForm(): DeviceSettings {
-		return cloneDeviceSettings({
-			audioInputDevice: form.audioInputDevice,
-			audioInputLevel: clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX),
-			audioInputThreshold: clamp(form.audioInputThreshold, 0, THRESHOLD_MAX),
-			audioOutputDevice: form.audioOutputDevice,
-			audioOutputLevel: clamp(form.audioOutputLevel, 0, OUTPUT_VOLUME_MAX),
-			autoGainControl: form.autoGainControl,
-			echoCancellation: form.echoCancellation,
-			noiseSuppression: form.noiseSuppression,
-			videoDevice: form.videoDevice
-		});
-	}
+        function normalizeDeviceSettings(settings: DeviceSettings): DeviceSettings {
+                return {
+                        ...settings,
+                        audioInputThreshold: clampThreshold(settings.audioInputThreshold)
+                };
+        }
 
-	function updateForm(patch: Partial<DeviceSettings>) {
-		form = { ...form, ...patch };
-		message = null;
-	}
+        function sanitizeForm(): DeviceSettings {
+                return normalizeDeviceSettings(
+                        cloneDeviceSettings({
+                                audioInputDevice: form.audioInputDevice,
+                                audioInputLevel: clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX),
+                                audioInputThreshold: clampThreshold(form.audioInputThreshold),
+                                audioOutputDevice: form.audioOutputDevice,
+                                audioOutputLevel: clamp(form.audioOutputLevel, 0, OUTPUT_VOLUME_MAX),
+                                autoGainControl: form.autoGainControl,
+                                echoCancellation: form.echoCancellation,
+                                noiseSuppression: form.noiseSuppression,
+                                videoDevice: form.videoDevice
+                        })
+                );
+        }
+
+        function updateForm(patch: Partial<DeviceSettings>) {
+                const nextPatch: Partial<DeviceSettings> = { ...patch };
+                if (nextPatch.audioInputThreshold != null) {
+                        nextPatch.audioInputThreshold = clampThreshold(nextPatch.audioInputThreshold);
+                }
+                form = { ...form, ...nextPatch };
+                message = null;
+        }
 
 	function resolveSelectValue(value: string): string | null {
 		return value === SYSTEM_DEVICE_ID ? null : value;
@@ -251,10 +305,10 @@
 		}
 	}
 
-	function handleReset() {
-		form = { ...cloneDeviceSettings(currentSettings) };
-		message = null;
-	}
+        function handleReset() {
+                form = { ...normalizeDeviceSettings(currentSettings) };
+                message = null;
+        }
 
 	async function startMicPreview() {
 		if (!micPreviewSupported || !browser) {
@@ -282,23 +336,30 @@
 			micPreviewContext = new AudioContextCtor();
 			const source = micPreviewContext.createMediaStreamSource(stream);
 			const inputGain = micPreviewContext.createGain();
-			const analyser = micPreviewContext.createAnalyser();
-			const outputGain = micPreviewContext.createGain();
-			const destination = micPreviewContext.createMediaStreamDestination();
+                        const analyser = micPreviewContext.createAnalyser();
+                        const outputGain = micPreviewContext.createGain();
+                        const gateGain = micPreviewContext.createGain();
+                        const destination = micPreviewContext.createMediaStreamDestination();
 			source.connect(inputGain);
 			inputGain.connect(analyser);
-			analyser.connect(outputGain);
-			outputGain.connect(destination);
+                        analyser.connect(outputGain);
+                        outputGain.connect(gateGain);
+                        gateGain.connect(destination);
 			micPreviewSource = source;
 			micPreviewInputGain = inputGain;
-			micPreviewAnalyser = analyser;
-			micPreviewOutputGain = outputGain;
-			micPreviewDestination = destination;
+                        micPreviewAnalyser = analyser;
+                        micPreviewOutputGain = outputGain;
+                        micPreviewGateGain = gateGain;
+                        micPreviewDestination = destination;
                         micPreviewAnalyser.fftSize = 2048;
                         micPreviewAnalyser.smoothingTimeConstant = 0.6;
                         micPreviewBuffer = new Uint8Array(new ArrayBuffer(micPreviewAnalyser.fftSize));
-			updateMicPreviewInputGain();
-			updateMicPreviewOutputGain();
+                        micPreviewGateOpen = false;
+                        micPreviewLastGateOpenAt = 0;
+                        micPreviewSpeaking = false;
+                        updateMicPreviewInputGain();
+                        updateMicPreviewOutputGain();
+                        applyMicPreviewGateGain(false);
 			if (micPreviewAudioElement) {
 				micPreviewAudioElement.srcObject = destination.stream;
 				ensureMicPreviewPlayback();
@@ -347,12 +408,18 @@
 			} catch {}
 			micPreviewAnalyser = null;
 		}
-		if (micPreviewOutputGain) {
-			try {
-				micPreviewOutputGain.disconnect();
-			} catch {}
-			micPreviewOutputGain = null;
-		}
+                if (micPreviewOutputGain) {
+                        try {
+                                micPreviewOutputGain.disconnect();
+                        } catch {}
+                        micPreviewOutputGain = null;
+                }
+                if (micPreviewGateGain) {
+                        try {
+                                micPreviewGateGain.disconnect();
+                        } catch {}
+                        micPreviewGateGain = null;
+                }
 		if (micPreviewDestination) {
 			try {
 				micPreviewDestination.disconnect?.();
@@ -376,34 +443,37 @@
 			micPreviewAudioElement.srcObject = null;
 			micPreviewAudioElement.muted = true;
 		}
-		micPreviewStream = null;
-		micPreviewContext = null;
-		micPreviewBuffer = null;
-		micPreviewActive = false;
-		micPreviewSignature = '';
-		micPreviewLevel = 0;
-		micPreviewSpeaking = false;
-		micPreviewAppliedSink = null;
-		micPreviewSinkErrorLogged = false;
-	}
+                micPreviewStream = null;
+                micPreviewContext = null;
+                micPreviewBuffer = null;
+                micPreviewActive = false;
+                micPreviewSignature = '';
+                micPreviewLevel = 0;
+                micPreviewSpeaking = false;
+                micPreviewGateOpen = false;
+                micPreviewLastGateOpenAt = 0;
+                applyMicPreviewGateGain(false);
+                micPreviewAppliedSink = null;
+                micPreviewSinkErrorLogged = false;
+        }
 
-	function animateMicPreview() {
-		if (!micPreviewAnalyser || !micPreviewBuffer) return;
+        function animateMicPreview() {
+                if (!micPreviewAnalyser || !micPreviewBuffer) return;
                 micPreviewAnalyser.getByteTimeDomainData(micPreviewBuffer);
                 const measurement = analyzeTimeDomainLevel(micPreviewBuffer, {
-                        gain: 1,
+                        gain: clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX),
                         previous: micPreviewLevel,
                         smoothing: 0.35
                 });
-                micPreviewLevel = measurement.normalized;
-                micPreviewSpeaking = micPreviewLevel >= form.audioInputThreshold;
-		micPreviewRaf = requestAnimationFrame(animateMicPreview);
-	}
+                micPreviewLevel = clamp(measurement.normalized, 0, THRESHOLD_MAX);
+                evaluateMicPreviewGate(micPreviewLevel);
+                micPreviewRaf = requestAnimationFrame(animateMicPreview);
+        }
 
-	function updateMicPreviewInputGain() {
-		if (!micPreviewInputGain) return;
-		micPreviewInputGain.gain.value = clamp(form.audioInputLevel, 0, INPUT_VOLUME_MAX);
-	}
+        function updateMicPreviewInputGain(level: number = form.audioInputLevel) {
+                if (!micPreviewInputGain) return;
+                micPreviewInputGain.gain.value = clamp(level, 0, INPUT_VOLUME_MAX);
+        }
 
 	function ensureMicPreviewPlayback() {
 		if (!micPreviewAudioElement) return;
@@ -417,17 +487,91 @@
 		}
 	}
 
-	function updateMicPreviewOutputGain() {
-		if (!micPreviewOutputGain) return;
-		const level = clamp(form.audioOutputLevel, 0, OUTPUT_VOLUME_MAX);
-		micPreviewOutputGain.gain.value = level;
-		if (micPreviewAudioElement) {
-			micPreviewAudioElement.muted = level <= 0;
-			if (level > 0) {
-				ensureMicPreviewPlayback();
-			}
-		}
-	}
+        function updateMicPreviewOutputGain(level: number = form.audioOutputLevel) {
+                if (!micPreviewOutputGain) return;
+                const clampedLevel = clamp(level, 0, OUTPUT_VOLUME_MAX);
+                micPreviewOutputGain.gain.value = clampedLevel;
+                if (micPreviewAudioElement) {
+                        micPreviewAudioElement.muted = clampedLevel <= 0;
+                        if (clampedLevel > 0) {
+                                ensureMicPreviewPlayback();
+                        }
+                }
+        }
+
+        function applyMicPreviewGateGain(active: boolean) {
+                if (!micPreviewGateGain || !micPreviewContext) return;
+                const target = active ? 1 : 0;
+                try {
+                        micPreviewGateGain.gain.setTargetAtTime(target, micPreviewContext.currentTime, 0.05);
+                } catch {
+                        micPreviewGateGain.gain.value = target;
+                }
+        }
+
+        function setMicPreviewGateState(open: boolean) {
+                if (micPreviewGateOpen === open) return;
+                micPreviewGateOpen = open;
+                micPreviewSpeaking = open;
+                applyMicPreviewGateGain(open);
+        }
+
+        function evaluateMicPreviewGate(level: number) {
+                const threshold = clampThreshold(form.audioInputThreshold);
+                const now = getNow();
+                const openThreshold = threshold;
+                const closeThreshold = clampThreshold(openThreshold * MIC_PREVIEW_GATE_CLOSE_RATIO);
+
+                if (level >= openThreshold) {
+                        micPreviewLastGateOpenAt = now;
+                        setMicPreviewGateState(true);
+                        return;
+                }
+
+                if (!micPreviewGateOpen) {
+                        setMicPreviewGateState(false);
+                        return;
+                }
+
+                const holdExpired = now - micPreviewLastGateOpenAt > MIC_PREVIEW_GATE_HOLD_MS;
+                if (holdExpired && level <= closeThreshold) {
+                        setMicPreviewGateState(false);
+                }
+        }
+
+        function setThresholdFromPercent(percent: number) {
+                updateForm({ audioInputThreshold: sliderPercentToNormalized(percent) });
+        }
+
+        function updateThresholdFromPointer(clientX: number) {
+                if (!thresholdSliderElement) return;
+                const rect = thresholdSliderElement.getBoundingClientRect();
+                if (!rect || rect.width <= 0) return;
+                const percent = ((clientX - rect.left) / rect.width) * 100;
+                setThresholdFromPercent(percent);
+        }
+
+        function handleThresholdPointerDown(event: PointerEvent) {
+                thresholdDragging = true;
+                event.preventDefault();
+                (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
+                updateThresholdFromPointer(event.clientX);
+        }
+
+        function handleThresholdPointerMove(event: PointerEvent) {
+                if (!thresholdDragging) return;
+                event.preventDefault();
+                updateThresholdFromPointer(event.clientX);
+        }
+
+        function handleThresholdPointerUp(event: PointerEvent) {
+                if (thresholdDragging) {
+                        thresholdDragging = false;
+                }
+                try {
+                        (event.currentTarget as HTMLElement | null)?.releasePointerCapture?.(event.pointerId);
+                } catch {}
+        }
 
 	async function applyMicPreviewSink(deviceId: string | null) {
 		if (!micPreviewAudioElement || !sinkIdSupported) return;
@@ -445,17 +589,29 @@
 		}
 	}
 
-	$: if (micPreviewActive) {
-		updateMicPreviewInputGain();
-	}
+        $: micPreviewThresholdPercent = normalizedToSliderPercent(form.audioInputThreshold);
+        $: micPreviewLevelPercent = normalizedToSliderPercent(micPreviewLevel);
+        $: micPreviewDisplayPercent =
+                micPreviewGateOpen && micPreviewLevelPercent < micPreviewThresholdPercent
+                        ? micPreviewThresholdPercent
+                        : micPreviewLevelPercent;
 
-	$: if (micPreviewActive) {
-		updateMicPreviewOutputGain();
-	}
+        $: if (micPreviewActive && browser) {
+                evaluateMicPreviewGate(micPreviewLevel);
+        }
 
-	$: if (micPreviewActive) {
-		void applyMicPreviewSink(form.audioOutputDevice ?? null);
-	}
+        $: if (micPreviewActive) {
+                updateMicPreviewInputGain(form.audioInputLevel);
+        }
+
+        $: if (micPreviewActive) {
+                updateMicPreviewOutputGain(form.audioOutputLevel);
+        }
+
+        $: if (micPreviewActive) {
+                const sink = form.audioOutputDevice ?? null;
+                void applyMicPreviewSink(sink);
+        }
 
 	async function startCameraPreview() {
 		if (!cameraPreviewSupported || !browser) {
@@ -669,44 +825,85 @@
 			</div>
 		</div>
 
-		<div>
-			<label class="flex justify-between text-sm font-medium" for={thresholdId}>
-				<span>{m.settings_input_threshold()}</span>
-                                <span>{formatDecibels(normalizedToDecibels(form.audioInputThreshold))}</span>
-			</label>
-			<input
-				id={thresholdId}
-				type="range"
-				min={THRESHOLD_DB_MIN}
-				max={THRESHOLD_DB_MAX}
-				step="1"
-                                value={normalizedToDecibels(form.audioInputThreshold)}
-				oninput={(event) =>
-					updateForm({
-						audioInputThreshold: clamp(
-							decibelsToNormalized(
-								Number((event.currentTarget as HTMLInputElement).value) || THRESHOLD_DB_MIN
-							),
-							0,
-							THRESHOLD_MAX
-						)
-					})}
-				class="mt-2 w-full"
-			/>
-			<div class="relative mt-3 h-3 w-full overflow-hidden rounded-full bg-[var(--panel-strong)]">
+                <label
+                        class="block rounded border border-[var(--stroke)] bg-[var(--panel)] p-4"
+                        for={thresholdId}
+                >
+                        <div class="flex flex-wrap items-end justify-between gap-2">
+                                <span class="text-sm font-medium">{m.settings_input_threshold()}</span>
+                                <span class="text-xs font-medium text-[var(--muted)]">
+                                        {formatDecibels(normalizedToDecibels(form.audioInputThreshold))}
+                                </span>
+                        </div>
+                        <div
+                                bind:this={thresholdSliderElement}
+                                class="relative mt-4 h-8 w-full cursor-crosshair select-none overflow-hidden rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)]"
+                                role="presentation"
+                                onpointerdown={handleThresholdPointerDown}
+                                onpointermove={handleThresholdPointerMove}
+                                onpointerup={handleThresholdPointerUp}
+                                onpointercancel={handleThresholdPointerUp}
+                        >
                                 <div
-                                        class={`absolute inset-y-0 left-0 rounded-full transition-[width] ${
-                                                micPreviewSpeaking ? 'bg-[var(--success)]' : 'bg-[var(--brand)]/60'
+                                        aria-hidden="true"
+                                        class="pointer-events-none absolute inset-y-0 left-0 bg-gradient-to-r from-[var(--success)] to-[var(--warning)] transition-[width] duration-75 ease-linear"
+                                        style={`width: ${micPreviewDisplayPercent.toFixed(2)}%`}
+                                ></div>
+                                <div
+                                        class={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-[left] duration-75 ease-linear ${
+                                                thresholdDragging ? 'cursor-grabbing' : 'cursor-grab'
                                         }`}
-                                        style={`width: ${normalizedToPercent(micPreviewLevel).toFixed(2)}%`}
-                                ></div>
+                                        style={`left: ${micPreviewThresholdPercent.toFixed(2)}%`}
+                                >
+                                        <div class="relative h-8 w-px bg-white">
+                                                <div class="absolute left-1/2 top-1/2 h-7 w-3 -translate-x-1/2 -translate-y-1/2 rounded-md bg-white shadow-[0_8px_16px_rgba(0,0,0,0.45)]"></div>
+                                        </div>
+                                </div>
+                        </div>
+                        <input
+                                id={thresholdId}
+                                type="range"
+                                min={THRESHOLD_UI_DB_MIN}
+                                max={THRESHOLD_UI_DB_MAX}
+                                step="1"
+                                class="sr-only"
+                                value={Math.round(clampDecibelsToUiRange(normalizedToDecibels(form.audioInputThreshold)))}
+                                oninput={(event) => {
+                                        const value = Number((event.currentTarget as HTMLInputElement).value);
+                                        const clamped = Number.isFinite(value) ? clampDecibelsToUiRange(value) : THRESHOLD_UI_DB_MIN;
+                                        const percent =
+                                                THRESHOLD_UI_DB_RANGE > 0
+                                                        ? ((clamped - THRESHOLD_UI_DB_MIN) / THRESHOLD_UI_DB_RANGE) * 100
+                                                        : 0;
+                                        setThresholdFromPercent(percent);
+                                }}
+                        />
+                        <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
                                 <div
-                                        class="absolute inset-y-0 w-0.5 bg-[var(--stroke-strong)]"
-                                        style={`left: ${normalizedToPercent(form.audioInputThreshold).toFixed(2)}%`}
-                                ></div>
-			</div>
-			<p class="mt-2 text-xs text-[var(--muted)]">{m.settings_voice_preview_description()}</p>
-		</div>
+                                        class={`flex items-center gap-2 rounded-full border px-2 py-1 transition-colors ${
+                                                micPreviewActive && micPreviewGateOpen
+                                                        ? 'border-[var(--success)] text-[var(--success)] shadow-[0_0_8px_rgba(59,165,93,0.25)]'
+                                                        : 'border-[var(--stroke)]'
+                                        }`}
+                                >
+                                        <span
+                                                class={`h-2 w-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.6)] ${
+                                                        micPreviewActive && micPreviewGateOpen
+                                                                ? 'bg-[var(--success)] shadow-[0_0_8px_rgba(59,165,93,0.6)]'
+                                                                : 'bg-[var(--stroke-strong)]'
+                                                }`}
+                                        ></span>
+                                        <span>
+                                                {micPreviewActive
+                                                        ? micPreviewGateOpen
+                                                                ? m.settings_voice_preview_detected()
+                                                                : m.settings_voice_preview_listening()
+                                                        : m.settings_voice_preview_help()}
+                                        </span>
+                                </div>
+                                <p>{m.settings_voice_preview_description()}</p>
+                        </div>
+                </label>
 
 		<div class="grid gap-4 md:grid-cols-3">
 			<label class="flex items-center gap-3 text-sm">
