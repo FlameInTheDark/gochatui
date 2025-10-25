@@ -3,6 +3,7 @@
         import { selectedChannelId, selectedGuildId, channelsByGuild } from '$lib/stores/appState';
         import AttachmentUploader from './AttachmentUploader.svelte';
         import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+        import { get } from 'svelte/store';
         import { m } from '$lib/paraglide/messages.js';
         import { Send, X, Paperclip } from 'lucide-svelte';
         import {
@@ -13,6 +14,7 @@
                 type PendingAttachment,
                 type PendingMessage
         } from '$lib/stores/pendingMessages';
+        import { computeApiBase } from '$lib/runtime/api';
 
         let content = $state('');
         let attachments = $state<PendingAttachment[]>([]);
