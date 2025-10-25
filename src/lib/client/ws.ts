@@ -906,32 +906,26 @@ export function connectWS() {
 
 		handleGuildMembershipEvent(data);
 
-                if (data?.op === 0 && typeof data?.t === 'number') {
-                        if (data.t === 300) {
-                                const payload = (data?.d as AnyRecord) ?? {};
-                                const message = (payload?.message as AnyRecord) ?? payload;
-                                const guildId =
-                                        normalizeSnowflake(payload?.guild_id) ??
-                                        normalizeSnowflake(message?.guild_id) ??
-                                        normalizeSnowflake(payload?.guild?.id) ??
-                                        normalizeSnowflake(message?.guild?.id);
+                if (data?.op === 0) {
+                        const payload = (data?.d as AnyRecord) ?? {};
+                        const messagePayload = (payload?.message as AnyRecord | undefined) ?? undefined;
+                        const messageLike =
+                                messagePayload ?? (payload?.message_id != null ? payload : undefined);
+                        if (messageLike) {
                                 const channelId =
                                         normalizeSnowflake(payload?.channel_id) ??
-                                        normalizeSnowflake(message?.channel_id) ??
+                                        normalizeSnowflake(messageLike?.channel_id) ??
                                         normalizeSnowflake(payload?.channel?.id) ??
-                                        normalizeSnowflake(message?.channel?.id);
-                                const messageId =
-                                        normalizeSnowflake(payload?.message_id) ??
-                                        normalizeSnowflake(message?.message_id) ??
-                                        normalizeSnowflake(message?.id) ??
-                                        normalizeSnowflake(payload?.id);
+                                        normalizeSnowflake(messageLike?.channel?.id) ??
+                                        normalizeSnowflake(payload?.channelId) ??
+                                        normalizeSnowflake(messageLike?.channelId);
                                 const authorPayload =
-                                        (message?.author as AnyRecord | undefined) ??
+                                        (messageLike?.author as AnyRecord | undefined) ??
                                         (payload?.author as AnyRecord | undefined) ??
                                         (payload?.member?.user as AnyRecord | undefined);
                                 const authorId =
-                                        normalizeSnowflake(message?.author_id) ??
-                                        normalizeSnowflake(message?.authorId) ??
+                                        normalizeSnowflake(messageLike?.author_id) ??
+                                        normalizeSnowflake(messageLike?.authorId) ??
                                         normalizeSnowflake(authorPayload?.id) ??
                                         normalizeSnowflake(payload?.user_id) ??
                                         normalizeSnowflake(payload?.userId) ??
@@ -939,24 +933,57 @@ export function connectWS() {
                                 if (channelId && authorId) {
                                         clearChannelTyping(channelId, authorId);
                                 }
-                                if (guildId && channelId && messageId) {
-                                        let shouldMarkUnread = true;
-                                        if (browser) {
-                                                const focused = Boolean(get(appHasFocus));
-                                                if (focused) {
-                                                        const activeGuildId = normalizeSnowflake(get(selectedGuildId));
-                                                        const activeChannelId = normalizeSnowflake(get(selectedChannelId));
-                                                        if (guildId === activeGuildId && channelId === activeChannelId) {
-                                                                shouldMarkUnread = false;
+                        }
+
+                        if (typeof data?.t === 'number') {
+                                if (data.t === 300) {
+                                        const message = (payload?.message as AnyRecord) ?? payload;
+                                        const guildId =
+                                                normalizeSnowflake(payload?.guild_id) ??
+                                                normalizeSnowflake(message?.guild_id) ??
+                                                normalizeSnowflake(payload?.guild?.id) ??
+                                                normalizeSnowflake(message?.guild?.id);
+                                        const channelId =
+                                                normalizeSnowflake(payload?.channel_id) ??
+                                                normalizeSnowflake(message?.channel_id) ??
+                                                normalizeSnowflake(payload?.channel?.id) ??
+                                                normalizeSnowflake(message?.channel?.id) ??
+                                                normalizeSnowflake(payload?.channelId) ??
+                                                normalizeSnowflake(message?.channelId);
+                                        const messageId =
+                                                normalizeSnowflake(payload?.message_id) ??
+                                                normalizeSnowflake(message?.message_id) ??
+                                                normalizeSnowflake(message?.id) ??
+                                                normalizeSnowflake(payload?.id);
+                                        if (guildId && channelId && messageId) {
+                                                let shouldMarkUnread = true;
+                                                if (browser) {
+                                                        const focused = Boolean(get(appHasFocus));
+                                                        if (focused) {
+                                                                const activeGuildId = normalizeSnowflake(get(selectedGuildId));
+                                                                const activeChannelId = normalizeSnowflake(get(selectedChannelId));
+                                                                if (guildId === activeGuildId && channelId === activeChannelId) {
+                                                                        shouldMarkUnread = false;
+                                                                }
                                                         }
                                                 }
-                                        }
 
-                                        if (shouldMarkUnread) {
-                                                markChannelUnread(guildId, channelId, messageId);
-                                        }
+                                                if (shouldMarkUnread) {
+                                                        markChannelUnread(guildId, channelId, messageId);
+                                                }
 
-                                        updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
+                                                updateChannelLastMessageMetadata(guildId, channelId, messageId, message);
+                                        }
+                                } else if (data.t === WS_EVENT_CHANNEL_TYPING) {
+                                        const channelId =
+                                                normalizeSnowflake(payload?.channel_id) ??
+                                                normalizeSnowflake(payload?.channelId);
+                                        const userId =
+                                                normalizeSnowflake(payload?.user_id) ??
+                                                normalizeSnowflake(payload?.userId);
+                                        if (channelId && userId) {
+                                                markChannelTyping(channelId, userId, { durationMs: 10_000 });
+                                        }
                                 }
                         } else if (data.t === WS_EVENT_CHANNEL_TYPING) {
                                 const payload = (data?.d as AnyRecord) ?? {};
