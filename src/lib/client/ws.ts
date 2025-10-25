@@ -19,7 +19,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { getRuntimeConfig } from '$lib/runtime/config';
 import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 import { addVisibleDmChannel } from '$lib/stores/settings';
-import { markChannelTyping } from '$lib/stores/channelTyping';
+import { clearChannelTyping, markChannelTyping } from '$lib/stores/channelTyping';
 import {
         isFriendId,
         markFriendAdded,
@@ -925,6 +925,20 @@ export function connectWS() {
                                         normalizeSnowflake(message?.message_id) ??
                                         normalizeSnowflake(message?.id) ??
                                         normalizeSnowflake(payload?.id);
+                                const authorPayload =
+                                        (message?.author as AnyRecord | undefined) ??
+                                        (payload?.author as AnyRecord | undefined) ??
+                                        (payload?.member?.user as AnyRecord | undefined);
+                                const authorId =
+                                        normalizeSnowflake(message?.author_id) ??
+                                        normalizeSnowflake(message?.authorId) ??
+                                        normalizeSnowflake(authorPayload?.id) ??
+                                        normalizeSnowflake(payload?.user_id) ??
+                                        normalizeSnowflake(payload?.userId) ??
+                                        normalizeSnowflake((payload?.user as AnyRecord | undefined)?.id);
+                                if (channelId && authorId) {
+                                        clearChannelTyping(channelId, authorId);
+                                }
                                 if (guildId && channelId && messageId) {
                                         let shouldMarkUnread = true;
                                         if (browser) {
@@ -994,7 +1008,23 @@ export function connectWS() {
                                         return;
                                 }
 
+                                const rawMessage = (payload?.message as AnyRecord | undefined) ?? null;
                                 const senderId = normalizeSnowflake(payload?.from?.id);
+                                const rawAuthor =
+                                        (rawMessage?.author as AnyRecord | undefined) ??
+                                        (payload?.from as AnyRecord | undefined) ??
+                                        (payload?.author as AnyRecord | undefined);
+                                const typingAuthorId =
+                                        senderId ??
+                                        normalizeSnowflake(rawMessage?.author_id) ??
+                                        normalizeSnowflake(rawMessage?.authorId) ??
+                                        normalizeSnowflake(rawAuthor?.id) ??
+                                        normalizeSnowflake(payload?.user_id) ??
+                                        normalizeSnowflake(payload?.userId) ??
+                                        normalizeSnowflake((payload?.user as AnyRecord | undefined)?.id);
+                                if (channelId && typingAuthorId) {
+                                        clearChannelTyping(channelId, typingAuthorId);
+                                }
                                 if (senderId) {
                                         addVisibleDmChannel(channelId, senderId);
                                 } else {
@@ -1007,16 +1037,12 @@ export function connectWS() {
                                         minimalMessage.authorId = senderId;
                                 }
 
-                                const rawMessage = (payload?.message as AnyRecord | undefined) ?? null;
                                 if (rawMessage && typeof rawMessage === 'object') {
                                         if (rawMessage.content != null && minimalMessage.content == null) {
                                                 minimalMessage.content = rawMessage.content;
                                         }
                                 }
 
-                                const rawAuthor =
-                                        (rawMessage?.author as AnyRecord | undefined) ??
-                                        (payload?.from as AnyRecord | undefined);
                                 if (rawAuthor && typeof rawAuthor === 'object') {
                                         const author: AnyRecord = { ...rawAuthor };
                                         if (!author.id && senderId) {

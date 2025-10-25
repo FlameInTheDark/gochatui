@@ -476,7 +476,7 @@
                                                                                 >
                                                                                         {#if entry.isTyping}
                                                                                                 <Ellipsis
-                                                                                                        class="h-2 w-2 text-[var(--bg)]"
+                                                                                                        class="h-2.5 w-2.5 text-white"
                                                                                                         stroke-width={3}
                                                                                                         aria-hidden="true"
                                                                                                 />
