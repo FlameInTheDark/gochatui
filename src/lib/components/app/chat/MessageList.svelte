@@ -6,7 +6,8 @@
                 channelsByGuild,
                 selectedGuildId,
                 channelReady,
-                messageJumpRequest
+                messageJumpRequest,
+                membersByGuild
         } from '$lib/stores/appState';
         import MessageItem from './MessageItem.svelte';
         import MessagePlaceholder from './MessagePlaceholder.svelte';
@@ -28,6 +29,9 @@
         } from '$lib/stores/settings';
         import { acknowledgeChannelRead } from '$lib/stores/unread';
         import { isMessageNewer } from './readStateUtils';
+        import { channelTypingUsers } from '$lib/stores/channelTyping';
+        import { tooltip } from '$lib/actions/tooltip';
+        import { memberPrimaryName, toSnowflakeString } from '$lib/utils/members';
 
 	let messages = $state<DtoMessage[]>([]);
         let loading = $state(false);
@@ -44,6 +48,8 @@
         let jumpRequestToken = 0;
 
         const READ_STATE_FLUSH_INTERVAL = 60_000;
+        const me = auth.user;
+        const typingUsersLookup = channelTypingUsers;
 
         interface PendingReadState {
                 guildId: string;
@@ -564,6 +570,47 @@
         const PLACEHOLDER_COUNT = 3;
         const placeholders = Array.from({ length: PLACEHOLDER_COUNT }, (_, i) => i);
 
+        const typingIndicator = $derived.by(() => {
+                const channelId = $selectedChannelId ?? '';
+                if (!channelId) return null;
+                const lookup = $typingUsersLookup;
+                const rawIds = Array.isArray(lookup?.[channelId]) ? lookup[channelId] : [];
+                if (rawIds.length === 0) return null;
+
+                const normalizedIds: string[] = [];
+                for (const value of rawIds) {
+                        const normalized = toSnowflakeString(value);
+                        if (!normalized) continue;
+                        if (!normalizedIds.includes(normalized)) {
+                                normalizedIds.push(normalized);
+                        }
+                }
+
+                if (!normalizedIds.length) return null;
+                const selfId = toSnowflakeString(($me as any)?.id);
+                const filtered = normalizedIds.filter((id) => id !== selfId);
+                if (!filtered.length) return null;
+
+                const names: string[] = [];
+                for (const id of filtered) {
+                        const name = resolveTypingName(channelId, id);
+                        if (!name) continue;
+                        names.push(name);
+                }
+                if (!names.length) return null;
+
+                const visible = names.slice(0, 3);
+                const hidden = names.slice(3);
+                const text = formatTypingText(visible, hidden.length);
+                if (!text) return null;
+
+                return {
+                        text,
+                        tooltip: names.join(', '),
+                        hasTooltip: hidden.length > 0
+                };
+        });
+
         function extractId(value: any): string | null {
                 if (value == null) return null;
                 const raw = typeof value === 'object' ? ((value as any)?.id ?? value) : value;
@@ -622,6 +669,129 @@
                         .sort((a, b) => compareMessageIds(a[0], b[0]))
                         .map(([, value]) => value);
                 return merged;
+        }
+
+        function formatUserDisplayName(candidate: any): string | null {
+                if (!candidate || typeof candidate !== 'object') return null;
+                const fields = [
+                        candidate.global_name,
+                        candidate.globalName,
+                        candidate.display_name,
+                        candidate.displayName,
+                        candidate.username,
+                        candidate.name,
+                        candidate.nick,
+                        candidate.nickname
+                ];
+                for (const field of fields) {
+                        if (typeof field !== 'string') continue;
+                        const trimmed = field.trim();
+                        if (trimmed) {
+                                return trimmed;
+                        }
+                }
+                return null;
+        }
+
+        function resolveNameFromGuildMembers(guildId: string, userId: string): string | null {
+                if (!guildId || guildId === '@me') return null;
+                const list = $membersByGuild[guildId];
+                if (!Array.isArray(list)) return null;
+                for (const entry of list) {
+                        const memberId =
+                                toSnowflakeString((entry as any)?.user?.id) ?? toSnowflakeString((entry as any)?.id);
+                        if (memberId !== userId) continue;
+                        const name = memberPrimaryName(entry);
+                        if (name) return name;
+                        const fallback = formatUserDisplayName((entry as any)?.user);
+                        if (fallback) return fallback;
+                        break;
+                }
+                return null;
+        }
+
+        function resolveNameFromDmChannel(channelId: string, userId: string): string | null {
+                if (!channelId) return null;
+                const dmChannels = $channelsByGuild['@me'] ?? [];
+                const channel = dmChannels.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId);
+                if (!channel) return null;
+                const recipients = Array.isArray((channel as any)?.recipients)
+                        ? ((channel as any).recipients as any[])
+                        : [];
+                for (const recipient of recipients) {
+                        const rid = toSnowflakeString((recipient as any)?.id);
+                        if (rid === userId) {
+                                const name = formatUserDisplayName(recipient);
+                                if (name) return name;
+                        }
+                }
+                const directRecipient = toSnowflakeString(
+                        (channel as any)?.recipient_id ?? (channel as any)?.recipientId
+                );
+                if (directRecipient === userId) {
+                        const name = formatUserDisplayName((channel as any)?.recipient);
+                        if (name) return name;
+                }
+                return null;
+        }
+
+        function resolveNameFromMessages(channelId: string, userId: string): string | null {
+                for (let i = messages.length - 1; i >= 0; i--) {
+                        const entry = messages[i] as any;
+                        const authorId =
+                                toSnowflakeString(entry?.author_id) ??
+                                toSnowflakeString(entry?.authorId) ??
+                                toSnowflakeString(entry?.author?.id);
+                        if (authorId !== userId) continue;
+                        const name = formatUserDisplayName(entry?.author);
+                        if (name) return name;
+                }
+                return null;
+        }
+
+        function fallbackTypingName(userId: string): string {
+                if (!userId) return 'Someone';
+                const suffix = userId.slice(-4);
+                return `User ${suffix}`;
+        }
+
+        function resolveTypingName(channelId: string, userId: string): string {
+                const guildId = $selectedGuildId ?? '';
+                if (guildId && guildId !== '@me') {
+                        const fromMembers = resolveNameFromGuildMembers(guildId, userId);
+                        if (fromMembers) return fromMembers;
+                } else {
+                        const dmName = resolveNameFromDmChannel(channelId, userId);
+                        if (dmName) return dmName;
+                }
+                const fromMessages = resolveNameFromMessages(channelId, userId);
+                if (fromMessages) return fromMessages;
+                return fallbackTypingName(userId);
+        }
+
+        function formatTypingText(visible: string[], hiddenCount: number): string {
+                const total = visible.length + hiddenCount;
+                if (total === 0) return '';
+                if (total === 1) {
+                        return `${visible[0]} is typing…`;
+                }
+                if (hiddenCount === 0) {
+                        if (visible.length === 2) {
+                                return `${visible[0]} and ${visible[1]} are typing…`;
+                        }
+                        if (visible.length === 3) {
+                                return `${visible[0]}, ${visible[1]}, and ${visible[2]} are typing…`;
+                        }
+                        return `${visible.join(', ')} are typing…`;
+                }
+                const othersLabel = `${hiddenCount} other${hiddenCount === 1 ? '' : 's'}`;
+                if (visible.length === 1) {
+                        return `${visible[0]} and ${othersLabel} are typing…`;
+                }
+                if (visible.length === 2) {
+                        return `${visible[0]}, ${visible[1]}, and ${othersLabel} are typing…`;
+                }
+                return `${visible[0]}, ${visible[1]}, ${visible[2]}, and ${othersLabel} are typing…`;
         }
 
         async function scrollToMessageId(id: string, smooth = true): Promise<boolean> {
@@ -1065,10 +1235,27 @@
         {/if}
 </div>
 
+{#if typingIndicator}
+        {#if typingIndicator.hasTooltip}
+                <div
+                        class="px-4 pb-3 pt-1 text-xs italic text-[var(--muted)]"
+                        use:tooltip={{
+                                content: () => typingIndicator.tooltip,
+                                placement: 'top',
+                                align: 'start'
+                        }}
+                >
+                        {typingIndicator.text}
+                </div>
+        {:else}
+                <div class="px-4 pb-3 pt-1 text-xs italic text-[var(--muted)]">{typingIndicator.text}</div>
+        {/if}
+{/if}
+
 {#if !wasAtBottom && initialLoaded}
-	<div class="pointer-events-none relative">
-		<div
-			class="gradient-blur absolute inset-x-0 bottom-0 h-16"
+        <div class="pointer-events-none relative">
+                <div
+                        class="gradient-blur absolute inset-x-0 bottom-0 h-16"
 			transition:fly={{ y: 16, duration: 200 }}
 		>
 			<div></div>
