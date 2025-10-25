@@ -8,6 +8,8 @@ type ChannelTypingState = Record<string, Record<string, number>>;
 const typingState = writable<ChannelTypingState>({});
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const suppressionExpirations = new Map<string, number>();
+const MESSAGE_SUPPRESSION_MS = 1_500;
 
 function makeKey(channelId: string, userId: string): string {
         return `${channelId}:${userId}`;
@@ -23,6 +25,7 @@ function scheduleExpiry(channelId: string, userId: string, durationMs: number) {
                 key,
                 setTimeout(() => {
                         timers.delete(key);
+                        suppressionExpirations.delete(key);
                         typingState.update((state) => {
                                 const channelEntry = state[channelId];
                                 if (!channelEntry || channelEntry[userId] == null) {
@@ -51,6 +54,19 @@ function clearTimer(channelId: string, userId: string) {
         }
 }
 
+function shouldSuppressTyping(channelId: string, userId: string): boolean {
+        const key = makeKey(channelId, userId);
+        const expiry = suppressionExpirations.get(key);
+        if (!expiry) {
+                return false;
+        }
+        if (expiry > Date.now()) {
+                return true;
+        }
+        suppressionExpirations.delete(key);
+        return false;
+}
+
 export function markChannelTyping(
         rawChannelId: unknown,
         rawUserId: unknown,
@@ -60,6 +76,10 @@ export function markChannelTyping(
         const userId = toSnowflakeString(rawUserId);
         if (!channelId || !userId) return;
         const durationMs = Math.max(0, options?.durationMs ?? DEFAULT_DURATION_MS);
+
+        if (shouldSuppressTyping(channelId, userId)) {
+                return;
+        }
 
         typingState.update((state) => {
                 const next = { ...state };
@@ -77,6 +97,7 @@ export function clearChannelTyping(rawChannelId: unknown, rawUserId: unknown): v
         const userId = toSnowflakeString(rawUserId);
         if (!channelId || !userId) return;
         clearTimer(channelId, userId);
+        suppressionExpirations.set(makeKey(channelId, userId), Date.now() + MESSAGE_SUPPRESSION_MS);
         typingState.update((state) => {
                 const channelEntry = state[channelId];
                 if (!channelEntry || channelEntry[userId] == null) {

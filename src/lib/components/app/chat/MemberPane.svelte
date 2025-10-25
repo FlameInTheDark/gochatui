@@ -470,13 +470,13 @@
                                                                                                 {memberInitial(entry.member)}
                                                                                         {/if}
                                                                                 </div>
-                                                                        <span
-                                                                                        class={`absolute -right-0.5 -bottom-0.5 flex h-3 items-center justify-center rounded-full border-2 border-[var(--panel)] transition-all duration-150 ease-out ${presenceIndicatorClass(entry.presenceStatus)} ${entry.isTyping ? 'px-[0.125rem]' : 'w-3'}`}
+                                                                                <span
+                                                                                        class={`absolute -right-0.5 -bottom-0.5 flex h-[0.9rem] items-center justify-center rounded-full border-2 border-[var(--panel)] transition-all duration-150 ease-out ${presenceIndicatorClass(entry.presenceStatus)} ${entry.isTyping ? 'px-[0.2rem]' : 'w-[0.9rem]'}`}
                                                                                         class:opacity-0={!entry.hasPresence && !entry.isTyping}
                                                                                 >
                                                                                         {#if entry.isTyping}
                                                                                                 <Ellipsis
-                                                                                                        class="h-2.5 w-2.5 text-white"
+                                                                                                        class="h-3 w-3 text-white"
                                                                                                         stroke-width={3}
                                                                                                         aria-hidden="true"
                                                                                                 />
