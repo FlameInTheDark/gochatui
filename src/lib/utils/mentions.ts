@@ -1,11 +1,17 @@
 export type MentionType = 'user' | 'channel' | 'role';
 
 export type MentionMatch = {
-	type: MentionType;
-	id: string;
-	start: number;
-	end: number;
-	raw: string;
+        type: MentionType;
+        id: string;
+        start: number;
+        end: number;
+        raw: string;
+};
+
+export const MENTION_ACCENT_COLORS: Record<MentionType, string> = {
+        user: '#5865F2',
+        role: '#5865F2',
+        channel: '#4F545C'
 };
 
 const MENTION_PATTERN = /<(@&|@!|@|#)([0-9]{1,})>/g;

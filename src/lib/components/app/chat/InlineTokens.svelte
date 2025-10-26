@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { InlineToken } from './MessageItem.svelte';
+        import { Volume2 } from 'lucide-svelte';
+        import type { InlineToken } from './MessageItem.svelte';
 
 	export let tokens: InlineToken[] = [];
 </script>
@@ -30,28 +31,38 @@
 		</a>
 	{:else if token.type === 'mention'}
 		{#if token.onClick}
-			<button
-				type="button"
-				class={`mention-pill ${token.mentionType === 'user' ? 'mention-user' : ''} ${
-					token.mentionType === 'role' ? 'mention-role' : ''
-				} ${token.mentionType === 'channel' ? 'mention-channel' : ''}`}
-				style={token.accentColor ? `--mention-accent: ${token.accentColor}` : undefined}
-				onclick={token.onClick}
-				data-user-menu={token.mentionType === 'user' ? 'true' : undefined}
-			>
-				{token.label}
-			</button>
+                        <button
+                                type="button"
+                                class={`mention-pill ${token.mentionType === 'user' ? 'mention-user' : ''} ${
+                                        token.mentionType === 'role' ? 'mention-role' : ''
+                                } ${token.mentionType === 'channel' ? 'mention-channel' : ''}`}
+                                style={token.accentColor ? `--mention-accent: ${token.accentColor}` : undefined}
+                                onclick={token.onClick}
+                                data-user-menu={token.mentionType === 'user' ? 'true' : undefined}
+                        >
+                                {#if token.mentionType === 'channel' && token.channelKind === 'voice'}
+                                        <span class="icon" aria-hidden="true">
+                                                <Volume2 class="h-3.5 w-3.5" stroke-width={2} />
+                                        </span>
+                                {/if}
+                                <span class="label">{token.label}</span>
+                        </button>
 		{:else}
-			<span
-				class={`mention-pill ${token.mentionType === 'user' ? 'mention-user' : ''} ${
-					token.mentionType === 'role' ? 'mention-role' : ''
-				} ${token.mentionType === 'channel' ? 'mention-channel' : ''}`}
-				style={token.accentColor ? `--mention-accent: ${token.accentColor}` : undefined}
-				data-user-menu={token.mentionType === 'user' ? 'true' : undefined}
-			>
-				{token.label}
-			</span>
-		{/if}
+                        <span
+                                class={`mention-pill ${token.mentionType === 'user' ? 'mention-user' : ''} ${
+                                        token.mentionType === 'role' ? 'mention-role' : ''
+                                } ${token.mentionType === 'channel' ? 'mention-channel' : ''}`}
+                                style={token.accentColor ? `--mention-accent: ${token.accentColor}` : undefined}
+                                data-user-menu={token.mentionType === 'user' ? 'true' : undefined}
+                        >
+                                {#if token.mentionType === 'channel' && token.channelKind === 'voice'}
+                                        <span class="icon" aria-hidden="true">
+                                                <Volume2 class="h-3.5 w-3.5" stroke-width={2} />
+                                        </span>
+                                {/if}
+                                <span class="label">{token.label}</span>
+                        </span>
+                {/if}
 	{:else}
 		<code
 			class="rounded border border-[var(--stroke)] bg-[var(--panel-strong)] px-1 py-0.5 font-mono whitespace-pre-wrap"
@@ -72,21 +83,36 @@
                 font-weight: 500;
                 font-size: inherit;
                 border: none;
-                background-color: rgba(88, 101, 242, 0.16);
-                background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);
-                color: var(--mention-accent, var(--brand));
+                background-color: color-mix(in srgb, var(--mention-accent, #5865f2) 16%, transparent);
+                color: var(--mention-accent, #5865f2);
                 line-height: 1.2;
                 white-space: nowrap;
         }
 
-	.mention-pill.mention-channel {
-		color: var(--brand);
-	}
+        .mention-pill .icon {
+                display: inline-flex;
+                flex-shrink: 0;
+        }
 
-	.mention-pill.mention-role,
-	.mention-pill.mention-user {
-		color: var(--mention-accent, var(--brand));
-	}
+        .mention-pill .icon :global(svg) {
+                width: 1em;
+                height: 1em;
+        }
+
+        .mention-pill .label {
+                display: inline-flex;
+                align-items: center;
+        }
+
+        .mention-pill.mention-channel {
+                background-color: color-mix(in srgb, var(--mention-accent, #4f545c) 35%, transparent);
+                color: #f2f3f5;
+        }
+
+        .mention-pill.mention-role,
+        .mention-pill.mention-user {
+                color: var(--mention-accent, #5865f2);
+        }
 
 	button.mention-pill {
 		cursor: pointer;
