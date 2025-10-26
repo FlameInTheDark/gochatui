@@ -1309,7 +1309,7 @@
 		</div>
 	{/if}
         <div
-                class="chat-input relative flex min-h-[2.75rem] items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+                class="chat-input relative flex min-h-[2.625rem] items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
         >
                 {#if mentionMenuOpen}
                         <div
@@ -1371,7 +1371,7 @@
                 </div>
                 <div class="relative flex flex-1 items-center">
                         <div
-                                class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-[0.625rem] leading-[1.5]"
+                                class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-2 leading-[1.5]"
                                 aria-hidden="true"
                         >
                                 <div class="overlay-layer">
@@ -1380,11 +1380,20 @@
                                                         {#if token.type === 'text'}
                                                                 <span class="input-text">{token.value}</span>
                                                         {:else if token.type === 'mention'}
-                                                                <span
-                                                                        class="mention-pill-input"
-                                                                        style={token.accentColor ? `--mention-accent: ${token.accentColor}` : undefined}
-                                                                >
-                                                                        {token.label}
+                                                                <span class="mention-wrapper">
+                                                                        <span class="mention-ghost">
+                                                                                {mentionPlaceholder(token.mention.type, token.mention.id)}
+                                                                        </span>
+                                                                        <span
+                                                                                class="mention-pill-input"
+                                                                                style={
+                                                                                        token.accentColor
+                                                                                                ? `--mention-accent: ${token.accentColor}`
+                                                                                                : undefined
+                                                                                }
+                                                                        >
+                                                                                {token.label}
+                                                                        </span>
                                                                 </span>
                                                         {/if}
                                                 {/each}
@@ -1398,7 +1407,7 @@
                         </div>
                         <textarea
                                 bind:this={ta}
-                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.75rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-[0.625rem] text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.625rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-2 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
                                 style:caretColor="var(--fg, #fff)"
                                 rows={1}
                                 aria-label={m.message_placeholder({ channel: channelName() })}
@@ -1480,12 +1489,30 @@
                 z-index: 0;
         }
 
+        .mention-wrapper {
+                display: inline-grid;
+                grid-auto-flow: column;
+                align-items: center;
+        }
+
+        .mention-wrapper .mention-ghost,
+        .mention-wrapper .mention-pill-input {
+                grid-area: 1 / 1;
+        }
+
+        .mention-wrapper .mention-ghost {
+                visibility: hidden;
+                white-space: pre;
+        }
+
         .mention-pill-input {
                 display: inline-flex;
                 align-items: center;
+                justify-content: center;
                 padding: 0 0.5rem;
                 border-radius: 9999px;
                 font-weight: 500;
+                white-space: nowrap;
                 background-color: rgba(88, 101, 242, 0.16);
                 background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);
                 color: var(--mention-accent, var(--brand));
