@@ -96,6 +96,8 @@
         let typingChannelId: string | null = null;
 
         let mentionRoleMap = $state<Record<string, DtoRole>>({});
+        const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
+        const ZERO_WIDTH_SPACE_REGEX = new RegExp(ZERO_WIDTH_SPACE, 'g');
 
         const mentionMatches = $derived.by(() => parseMentions(content));
         const mentionMemberMap = $derived.by(() => {
@@ -468,7 +470,7 @@
         function serializeNode(node: Node | null): string {
                 if (!node) return '';
                 if (node.nodeType === Node.TEXT_NODE) {
-                        return node.nodeValue ?? '';
+                        return (node.nodeValue ?? '').replace(ZERO_WIDTH_SPACE_REGEX, '');
                 }
                 if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
                         let result = '';
@@ -551,7 +553,6 @@
                                 const details = mentionDisplayDetails(segment.mention);
                                 const badge = createMentionBadge(segment.mention, details);
                                 editorEl.appendChild(badge);
-                                editorEl.appendChild(document.createTextNode(' '));
                         }
                 }
         }
@@ -632,9 +633,13 @@
                 };
         }
 
+        function clamp(value: number, min: number, max: number): number {
+                return Math.min(Math.max(value, min), max);
+        }
+
         function updateMentionMenuPosition() {
-                if (!mentionMenuEl || !editorWrapperEl) return;
-                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                if (typeof window === 'undefined') return;
+                const selection = window.getSelection();
                 if (!selection || selection.rangeCount === 0) return;
                 if (!selectionInsideEditor(selection)) return;
                 const range = selection.getRangeAt(0).cloneRange();
@@ -647,11 +652,40 @@
                         }
                 }
                 if (!rect) return;
-                const wrapperRect = editorWrapperEl.getBoundingClientRect();
-                mentionMenuPosition = {
-                        left: rect.left - wrapperRect.left,
-                        top: rect.bottom - wrapperRect.top + (editorEl?.scrollTop ?? 0)
-                };
+
+                if (!mentionMenuEl) {
+                        void tick().then(() => {
+                                if (mentionMenuOpen) {
+                                        updateMentionMenuPosition();
+                                }
+                        });
+                }
+
+                const viewportPadding = 12;
+                const menuEl = mentionMenuEl;
+                const menuWidth = menuEl?.offsetWidth ?? 0;
+                const menuHeight = menuEl?.offsetHeight ?? 0;
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                let left = rect.left;
+                let top = rect.bottom;
+
+                if (menuWidth > 0) {
+                        const maxLeft = Math.max(viewportPadding, viewportWidth - menuWidth - viewportPadding);
+                        left = Math.min(Math.max(viewportPadding, left), maxLeft);
+                } else {
+                        left = clamp(left, viewportPadding, viewportWidth - viewportPadding);
+                }
+
+                if (menuHeight > 0) {
+                        const maxTop = Math.max(viewportPadding, viewportHeight - menuHeight - viewportPadding);
+                        top = Math.min(Math.max(viewportPadding, top), maxTop);
+                } else {
+                        top = clamp(top, viewportPadding, viewportHeight - viewportPadding);
+                }
+
+                mentionMenuPosition = { left, top };
         }
 
         function refreshMentionState() {
@@ -685,7 +719,6 @@
                 };
                 const details = { label: suggestion.label, accentColor: suggestion.accentColor };
                 const badge = createMentionBadge(mention, details);
-                const spaceNode = document.createTextNode(' ');
 
                 if (info) {
                         const node = info.node;
@@ -697,7 +730,6 @@
                                 fragment.appendChild(document.createTextNode(before));
                         }
                         fragment.appendChild(badge);
-                        fragment.appendChild(spaceNode);
                         if (after) {
                                 fragment.appendChild(document.createTextNode(after));
                         }
@@ -708,19 +740,24 @@
                                 range.deleteContents();
                                 const fragment = document.createDocumentFragment();
                                 fragment.appendChild(badge);
-                                fragment.appendChild(spaceNode);
                                 range.insertNode(fragment);
                         } else {
                                 editorEl.appendChild(badge);
-                                editorEl.appendChild(spaceNode);
                         }
                 }
 
-                const range = document.createRange();
-                range.setStart(spaceNode, 1);
-                range.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(range);
+                if (badge.parentNode) {
+                        const range = document.createRange();
+                        const nextSibling = badge.nextSibling;
+                        if (nextSibling && nextSibling.nodeType === Node.TEXT_NODE) {
+                                range.setStart(nextSibling, 0);
+                        } else {
+                                range.setStartAfter(badge);
+                        }
+                        range.collapse(true);
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                }
                 editorEl.focus();
 
                 syncContentFromEditor();
@@ -743,10 +780,16 @@
                 el.remove();
                 if (next && next.nodeType === Node.TEXT_NODE) {
                         const text = next as Text;
-                        if ((text.nodeValue ?? '').startsWith(' ')) {
-                                text.deleteData(0, 1);
+                        // Strip any spacer characters we may have injected after the mention
+                        while (true) {
+                                const value = text.nodeValue ?? '';
+                                if (value.startsWith(' ') || value.startsWith(ZERO_WIDTH_SPACE)) {
+                                        text.deleteData(0, 1);
+                                        continue;
+                                }
+                                break;
                         }
-                        if ((text.nodeValue ?? '').length === 0) {
+                        if (((text.nodeValue ?? '').replace(ZERO_WIDTH_SPACE_REGEX, '')).length === 0) {
                                 next.parentNode?.removeChild(next);
                         }
                 }
@@ -1429,10 +1472,19 @@
                         refreshMentionState();
                         updateMentionMenuPosition();
                 };
+                const repositionListener = () => {
+                        if (mentionMenuOpen) {
+                                updateMentionMenuPosition();
+                        }
+                };
                 win.addEventListener('selectionchange', selectionListener);
+                win.addEventListener('resize', repositionListener);
+                document.addEventListener('scroll', repositionListener, true);
 
                 return () => {
                         win.removeEventListener('selectionchange', selectionListener);
+                        win.removeEventListener('resize', repositionListener);
+                        document.removeEventListener('scroll', repositionListener, true);
                 };
         });
 
@@ -1454,6 +1506,12 @@
                 if (channelId !== typingChannelId) {
                         resetTypingState();
                         typingChannelId = channelId ?? null;
+                }
+        });
+
+        $effect(() => {
+                if (mentionMenuOpen) {
+                        void tick().then(() => updateMentionMenuPosition());
                 }
         });
 </script>
@@ -1546,9 +1604,9 @@
                         ></div>
                         {#if mentionMenuOpen}
                                 <div
-                                        class="mention-menu absolute z-20 w-72 max-w-[min(18rem,calc(100vw-4rem))]"
+                                        class="mention-menu fixed z-40 w-72 max-w-[min(18rem,calc(100vw-4rem))]"
                                         bind:this={mentionMenuEl}
-                                        style={`left: ${mentionMenuPosition?.left ?? 0}px; top: ${mentionMenuPosition?.top ?? 0}px;`}
+                                        style={`left: ${mentionMenuPosition?.left ?? 0}px; top: ${mentionMenuPosition?.top ?? 0}px; visibility: ${mentionMenuPosition ? 'visible' : 'hidden'};`}
                                 >
                                         <div class="rounded-lg backdrop-blur-md">
                                                 <div class="menu-surface overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] shadow-lg">
@@ -1637,13 +1695,13 @@
                 display: inline-flex;
                 align-items: center;
                 border-radius: 4px;
-                padding: 0 4px;
-                margin: 0 1px;
+                padding: 0 0.15em;
+                margin: 0;
                 background: var(--mention-accent, var(--panel));
                 color: var(--mention-accent, var(--fg));
                 font-weight: 500;
                 font-size: 0.95em;
-                line-height: 1.3;
+                line-height: 1.2;
         }
 
         :global(.mention-badge[style*='--mention-accent']) {
