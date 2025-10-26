@@ -66,6 +66,8 @@
 		strike?: boolean;
 	};
 
+        type ChannelKind = 'text' | 'voice';
+
         export type InlineToken =
                 | { type: 'text'; content: string; styles?: FormatStyles }
                 | { type: 'link'; label: string; url: string; styles?: FormatStyles; embed?: MessageEmbed }
@@ -78,6 +80,7 @@
                                 raw: string;
                                 accentColor?: string | null;
                                 onClick?: ((event: MouseEvent) => void) | null;
+                                channelKind?: ChannelKind;
                         };
 
 	type Block =
@@ -445,6 +448,16 @@
                 return null;
         }
 
+        const VOICE_CHANNEL_TYPES = new Set([1, 3]);
+
+        function detectChannelKind(channel: DtoChannel | null | undefined): ChannelKind {
+                const type = Number((channel as any)?.type ?? 0);
+                if (VOICE_CHANNEL_TYPES.has(type)) {
+                        return 'voice';
+                }
+                return 'text';
+        }
+
         function resolveUserMentionDetails(userId: string): {
                 label: string;
                 accentColor: string | null;
@@ -477,18 +490,26 @@
                 };
         }
 
-        function resolveChannelMentionLabel(channelId: string): string {
+        function resolveChannelMentionDetails(
+                channelId: string,
+                channel?: DtoChannel | null
+        ): { label: string; accentColor: string | null; channelKind: ChannelKind } {
                 const guildId = $selectedGuildId ?? '';
                 const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
-                const channel = list.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId);
-                if (!channel) {
-                        return `#channel-${channelId}`;
-                }
-                const name = (channel as any)?.name;
-                if (typeof name === 'string' && name.trim()) {
-                        return `#${name.trim()}`;
-                }
-                return `#channel-${channelId}`;
+                const resolvedChannel = channel ?? list.find((candidate) => {
+                        return toSnowflakeString((candidate as any)?.id) === channelId;
+                });
+                const kind = detectChannelKind(resolvedChannel);
+                const rawName = (resolvedChannel as any)?.name;
+                const baseName =
+                        typeof rawName === 'string' && rawName.trim() ? rawName.trim() : `channel-${channelId}`;
+                const sanitized = baseName.replace(/^#+/, '');
+                const label = kind === 'voice' ? sanitized : `#${sanitized}`;
+                return {
+                        label,
+                        accentColor: MENTION_ACCENT_COLORS.channel,
+                        channelKind: kind
+                };
         }
 
         function createMentionToken(mention: MentionMatch): InlineToken | null {
@@ -536,7 +557,7 @@
                         };
                 }
                 if (mention.type === 'channel') {
-                        const label = resolveChannelMentionLabel(id);
+                        const details = resolveChannelMentionDetails(id);
                         const onClick = () => {
                                 const guildId = $selectedGuildId;
                                 if (guildId && guildId !== '@me') {
@@ -547,10 +568,11 @@
                                 type: 'mention',
                                 mentionType: 'channel',
                                 id,
-                                label,
+                                label: details.label,
                                 raw: mention.raw,
-                                accentColor: MENTION_ACCENT_COLORS.channel,
-                                onClick
+                                accentColor: details.accentColor,
+                                onClick,
+                                channelKind: details.channelKind
                         };
                 }
                 return null;

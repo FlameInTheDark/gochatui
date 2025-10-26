@@ -13,7 +13,7 @@
         import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
         import { get } from 'svelte/store';
         import { m } from '$lib/paraglide/messages.js';
-        import { Send, X, Paperclip, Smile, AtSign, Hash, BadgeCheck } from 'lucide-svelte';
+        import { Send, X, Paperclip, Smile, AtSign, Hash, BadgeCheck, Volume2 } from 'lucide-svelte';
         import {
                 addPendingMessage,
                 removePendingMessage,
@@ -47,6 +47,8 @@
                 end: number;
         };
 
+        type ChannelKind = 'text' | 'voice';
+
         type MentionSuggestion = {
                 id: string;
                 type: MentionType;
@@ -55,6 +57,7 @@
                 accentColor: string | null;
                 member?: DtoMember | null;
                 user?: DtoUser | null;
+                channelKind?: ChannelKind;
         };
 
         const dispatch = createEventDispatcher<{ sent: void }>();
@@ -118,6 +121,20 @@
                 return (
                         toSnowflakeString((member as any)?.user?.id) ?? toSnowflakeString((member as any)?.id) ?? null
                 );
+        }
+
+        const VOICE_CHANNEL_TYPES = new Set([1, 3]);
+
+        function detectChannelKind(channel: DtoChannel | null | undefined): ChannelKind {
+                const type = Number((channel as any)?.type ?? 0);
+                if (VOICE_CHANNEL_TYPES.has(type)) {
+                        return 'voice';
+                }
+                return 'text';
+        }
+
+        function isCategoryChannel(channel: DtoChannel | null | undefined): boolean {
+                return Number((channel as any)?.type ?? 0) === 2;
         }
 
         function formatUserDisplayName(candidate: any): string | null {
@@ -216,21 +233,31 @@
                 };
         }
 
-        function resolveChannelMentionLabel(channelId: string): string {
+        function resolveChannelMentionDetails(
+                channelId: string,
+                channel?: DtoChannel | null
+        ): { label: string; accentColor: string | null; channelKind: ChannelKind } {
                 const guildId = $selectedGuildId ?? '';
                 const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
-                const channel = list.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId);
-                if (!channel) {
-                        return `#channel-${channelId}`;
-                }
-                const name = (channel as any)?.name;
-                if (typeof name === 'string' && name.trim()) {
-                        return `#${name.trim()}`;
-                }
-                return `#channel-${channelId}`;
+                const resolvedChannel = channel ?? list.find((candidate) => {
+                        return toSnowflakeString((candidate as any)?.id) === channelId;
+                });
+                const kind = detectChannelKind(resolvedChannel);
+                const rawName = (resolvedChannel as any)?.name;
+                const baseName =
+                        typeof rawName === 'string' && rawName.trim() ? rawName.trim() : `channel-${channelId}`;
+                const sanitized = baseName.replace(/^#+/, '');
+                const label = kind === 'voice' ? sanitized : `#${sanitized}`;
+                return {
+                        label,
+                        accentColor: MENTION_ACCENT_COLORS.channel,
+                        channelKind: kind
+                };
         }
 
-        function mentionDisplayDetails(mention: MentionMatch): { label: string; accentColor: string | null } {
+        function mentionDisplayDetails(
+                mention: MentionMatch
+        ): { label: string; accentColor: string | null; channelKind?: ChannelKind } {
                 if (mention.type === 'user') {
                         const details = resolveUserMentionDetails(mention.id);
                         return { label: details.label, accentColor: details.accentColor };
@@ -239,9 +266,11 @@
                         const details = resolveRoleMentionDetails(mention.id);
                         return { label: details.label, accentColor: details.accentColor };
                 }
+                const details = resolveChannelMentionDetails(mention.id);
                 return {
-                        label: resolveChannelMentionLabel(mention.id),
-                        accentColor: MENTION_ACCENT_COLORS.channel
+                        label: details.label,
+                        accentColor: details.accentColor,
+                        channelKind: details.channelKind
                 };
         }
 
@@ -326,19 +355,19 @@
                 const suggestions: MentionSuggestion[] = [];
                 const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
                 for (const channel of list) {
+                        if (isCategoryChannel(channel)) continue;
                         const id = toSnowflakeString((channel as any)?.id);
                         if (!id) continue;
-                        const type = Number((channel as any)?.type ?? 0);
-                        if (type === 2) continue;
-                        const name = resolveChannelMentionLabel(id);
+                        const details = resolveChannelMentionDetails(id, channel);
                         suggestions.push({
                                 id,
                                 type: 'channel',
-                                label: name,
+                                label: details.label,
                                 description: (channel as any)?.topic ?? null,
-                                accentColor: MENTION_ACCENT_COLORS.channel,
+                                accentColor: details.accentColor,
                                 member: null,
-                                user: null
+                                user: null,
+                                channelKind: details.channelKind
                         });
                 }
                 return suggestions;
@@ -413,7 +442,8 @@
                                         previous.type !== suggestion.type ||
                                         previous.label !== suggestion.label ||
                                         previous.description !== suggestion.description ||
-                                        previous.accentColor !== suggestion.accentColor
+                                        previous.accentColor !== suggestion.accentColor ||
+                                        previous.channelKind !== suggestion.channelKind
                                 );
                         });
 
@@ -518,16 +548,63 @@
                 });
         }
 
+        type IconNode = [string, Record<string, string>][];
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        const VOLUME2_ICON_NODE: IconNode = [
+                [
+                        'path',
+                        {
+                                d: 'M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z'
+                        }
+                ],
+                ['path', { d: 'M16 9a5 5 0 0 1 0 6' }],
+                ['path', { d: 'M19.364 18.364a9 9 0 0 0 0-12.728' }]
+        ];
+
+        function createSvgIcon(node: IconNode): SVGSVGElement {
+                const svg = document.createElementNS(SVG_NS, 'svg');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('fill', 'none');
+                svg.setAttribute('stroke', 'currentColor');
+                svg.setAttribute('stroke-width', '2');
+                svg.setAttribute('stroke-linecap', 'round');
+                svg.setAttribute('stroke-linejoin', 'round');
+                svg.setAttribute('aria-hidden', 'true');
+                svg.classList.add('mention-badge__icon');
+                for (const [tag, attrs] of node) {
+                        const child = document.createElementNS(SVG_NS, tag);
+                        for (const [name, value] of Object.entries(attrs)) {
+                                child.setAttribute(name, value);
+                        }
+                        svg.appendChild(child);
+                }
+                return svg;
+        }
+
         function createMentionBadge(
                 mention: MentionMatch,
-                details: { label: string; accentColor: string | null }
+                details: { label: string; accentColor: string | null; channelKind?: ChannelKind }
         ): HTMLSpanElement {
                 const badge = document.createElement('span');
                 badge.className = 'mention-badge';
                 badge.contentEditable = 'false';
                 badge.dataset.mentionType = mention.type;
                 badge.dataset.mentionId = mention.id;
-                badge.textContent = details.label;
+                badge.textContent = '';
+                if (mention.type === 'channel') {
+                        const kind = details.channelKind ?? 'text';
+                        badge.dataset.channelKind = kind;
+                        if (kind === 'voice') {
+                                const icon = createSvgIcon(VOLUME2_ICON_NODE);
+                                badge.appendChild(icon);
+                        }
+                } else {
+                        badge.removeAttribute('data-channel-kind');
+                }
+                const labelEl = document.createElement('span');
+                labelEl.className = 'mention-badge__label';
+                labelEl.textContent = details.label;
+                badge.appendChild(labelEl);
                 if (details.accentColor) {
                         badge.style.setProperty('--mention-accent', details.accentColor);
                 }
@@ -742,7 +819,14 @@
                         end: 0,
                         raw: mentionPlaceholder(suggestion.type, suggestion.id)
                 };
-                const details = { label: suggestion.label, accentColor: suggestion.accentColor };
+                const details =
+                        suggestion.type === 'channel'
+                                ? {
+                                          label: suggestion.label,
+                                          accentColor: suggestion.accentColor,
+                                          channelKind: suggestion.channelKind ?? 'text'
+                                  }
+                                : { label: suggestion.label, accentColor: suggestion.accentColor };
                 const badge = createMentionBadge(mention, details);
 
                 if (info) {
@@ -1660,7 +1744,11 @@
                                                                                                 {:else if suggestion.type === 'role'}
                                                                                                         <BadgeCheck class="h-4 w-4" stroke-width={2} />
                                                                                                 {:else}
-                                                                                                        <Hash class="h-4 w-4" stroke-width={2} />
+                                                                                                        {#if suggestion.channelKind === 'voice'}
+                                                                                                                <Volume2 class="h-4 w-4" stroke-width={2} />
+                                                                                                        {:else}
+                                                                                                                <Hash class="h-4 w-4" stroke-width={2} />
+                                                                                                        {/if}
                                                                                                 {/if}
                                                                                         </span>
                                                                                         <span class="flex min-w-0 flex-1 flex-col">
@@ -1721,6 +1809,7 @@
         :global(.mention-badge) {
                 display: inline-flex;
                 align-items: center;
+                gap: 0.3em;
                 border-radius: 4px;
                 padding: 0 0.35em;
                 margin: 0;
@@ -1729,6 +1818,17 @@
                 font-weight: 500;
                 font-size: 0.95em;
                 line-height: 1.3;
+        }
+
+        :global(.mention-badge__icon) {
+                width: 1em;
+                height: 1em;
+                flex-shrink: 0;
+        }
+
+        :global(.mention-badge__label) {
+                display: inline-flex;
+                align-items: center;
         }
 
         :global(.mention-badge[data-mention-type='channel']) {
