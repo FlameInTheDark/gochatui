@@ -2108,7 +2108,9 @@
 
 <div
         role="listitem"
-        class={`group/message flex gap-3 px-4 ${compact && !isJoinMessage ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
+        class={`group/message flex gap-3 px-4 ${compact && !isJoinMessage ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30 ${
+                isJoinMessage ? 'items-center' : ''
+        }`}
         use:customContextMenuTarget
         onpointerup={handleRootPointerUp}
         oncontextmenu={openMessageMenu}
@@ -2116,10 +2118,7 @@
         bind:this={messageRoot}
 >
         {#if isJoinMessage}
-                <div
-                        class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                        aria-hidden="true"
-                >
+                <div class="flex w-10 shrink-0 items-center justify-center text-emerald-400" aria-hidden="true">
                         <MoveRight class="h-5 w-5" stroke-width={2} />
                 </div>
         {:else if compact}
@@ -2172,7 +2171,10 @@
                                         <span class="text-[var(--muted)]">{joinPhrase ?? ''}</span>
                                 </div>
                                 {#if joinTime}
-                                        <div class="mt-1 text-xs text-[var(--muted)]" use:tooltip={() => fmtMsgFull(message)}>
+                                        <div
+                                                class="mt-1 inline-flex w-max text-xs text-[var(--muted)]"
+                                                use:tooltip={() => fmtMsgFull(message)}
+                                        >
                                                 {joinTime}
                                         </div>
                                 {/if}
@@ -2218,7 +2220,10 @@
                                         >
                                                 {message.author?.name ?? 'User'}
                                         </button>
-                                        <div class="text-xs text-[var(--muted)]" use:tooltip={() => fmtMsgFull(message)}>
+                                        <div
+                                                class="inline-flex w-max text-xs text-[var(--muted)]"
+                                                use:tooltip={() => fmtMsgFull(message)}
+                                        >
                                                 {fmtMsgTime(message)}
                                         </div>
                                 </div>
