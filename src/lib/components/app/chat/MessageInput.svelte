@@ -1309,7 +1309,7 @@
 		</div>
 	{/if}
         <div
-                class="chat-input relative flex min-h-[2.75rem] items-end gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+                class="chat-input relative flex min-h-[2.5rem] items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
         >
                 {#if mentionMenuOpen}
                         <div
@@ -1359,7 +1359,7 @@
                                 </div>
                         </div>
                 {/if}
-                <div class="flex items-center gap-1 self-end">
+                <div class="flex items-center gap-1">
                         <AttachmentUploader
                                 bind:this={uploaderRef}
                                 {attachments}
@@ -1369,9 +1369,9 @@
                                 }}
                         />
                 </div>
-                <div class="relative flex flex-1 items-center self-end">
+                <div class="relative flex flex-1 items-center">
                         <div
-                                class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-[0.625rem] leading-[1.5]"
+                                class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-[0.5rem] leading-[1.5]"
                                 aria-hidden="true"
                         >
                                 <div class="overlay-layer">
@@ -1398,7 +1398,8 @@
                         </div>
                         <textarea
                                 bind:this={ta}
-                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.75rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-[0.625rem] text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.5rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-[0.5rem] text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                style:caretColor="var(--fg, #fff)"
                                 rows={1}
                                 aria-label={m.message_placeholder({ channel: channelName() })}
                                 bind:value={content}
@@ -1463,7 +1464,7 @@
         .textarea-editor {
                 position: relative;
                 z-index: 1;
-                caret-color: var(--fg);
+                caret-color: var(--fg, #fff);
         }
 
         .input-overlay .input-text {
