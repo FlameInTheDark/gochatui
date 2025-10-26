@@ -996,9 +996,9 @@
 			</div>
 		</div>
 		<div class="mt-3">
-			<video
-				bind:this={cameraPreviewElement}
-				class={`h-48 w-full rounded bg-black object-cover ${cameraPreviewActive ? '' : 'hidden'}`}
+                        <video
+                                bind:this={cameraPreviewElement}
+                                class={`h-48 w-full rounded bg-black object-contain object-center ${cameraPreviewActive ? '' : 'hidden'}`}
 				autoplay
 				muted
 				playsinline
