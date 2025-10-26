@@ -1329,7 +1329,7 @@
 				}}
 			/>
 		</div>
-                <div class="relative flex-1 self-stretch">
+                <div class="relative flex-1">
                         <div
                                 class="input-overlay pointer-events-none absolute inset-0 overflow-hidden px-1 py-1 leading-[1.5]"
                                 aria-hidden="true"
@@ -1355,7 +1355,8 @@
                         </div>
                         <textarea
                                 bind:this={ta}
-                                class="textarea-editor relative z-[1] max-h-[40vh] min-h-[2.125rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent caret-[var(--fg)] leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                class="textarea-editor relative z-[1] max-h-[40vh] min-h-[2.125rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                style:caret-color="var(--fg)"
                                 rows={1}
                                 aria-label={m.message_placeholder({ channel: channelName() })}
                                 bind:value={content}
