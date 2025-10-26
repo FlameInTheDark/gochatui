@@ -1319,21 +1319,16 @@
                                 </div>
                         </div>
                 {/if}
-		<div class="flex items-center gap-1 self-stretch">
-			<AttachmentUploader
-				bind:this={uploaderRef}
-				{attachments}
-				inline
-				on:updated={(event: CustomEvent<PendingAttachment[]>) => {
-					mergeAttachments(event.detail);
-				}}
-			/>
-		</div>
+                <AttachmentUploader
+                        bind:this={uploaderRef}
+                        {attachments}
+                        inline
+                        on:updated={(event: CustomEvent<PendingAttachment[]>) => {
+                                mergeAttachments(event.detail);
+                        }}
+                />
                 <div class="relative flex-1">
-                        <div
-                                class="input-overlay pointer-events-none absolute inset-0 overflow-hidden px-1 py-1 leading-[1.5]"
-                                aria-hidden="true"
-                        >
+                        <div class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-1 py-1 leading-[1.5]" aria-hidden="true">
                                 {#if !content}
                                         <span class="placeholder text-[var(--muted)]"
                                                 >{m.message_placeholder({ channel: channelName() })}</span
@@ -1355,8 +1350,8 @@
                         </div>
                         <textarea
                                 bind:this={ta}
-                                class="textarea-editor relative z-[1] max-h-[40vh] min-h-[2.125rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
-                                style:caret-color="var(--fg)"
+                                class="textarea-editor relative z-[1] max-h-[40vh] min-h-[2.125rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none caret-[var(--fg)]"
+                                style:caret-color="'var(--fg, #fff)'"
                                 rows={1}
                                 aria-label={m.message_placeholder({ channel: channelName() })}
                                 bind:value={content}
@@ -1401,6 +1396,7 @@
                 white-space: pre-wrap;
                 word-break: break-word;
                 user-select: none;
+                box-sizing: border-box;
                 z-index: 0;
         }
 
