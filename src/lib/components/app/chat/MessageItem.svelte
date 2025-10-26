@@ -837,14 +837,14 @@
 
         const me = auth.user;
         let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
-        const isJoinMessage = $derived(() => Number((message as any)?.type ?? 0) === 2);
-        const joinPhrase = $derived(() => {
-                if (!isJoinMessage) return null;
+        const isJoinMessage = $derived.by(() => Number((message as any)?.type ?? 0) === 2);
+        const joinPhrase = $derived.by(() => {
+                if (Number((message as any)?.type ?? 0) !== 2) return null;
                 const index = selectJoinPhraseIndex(message);
                 const resolver = JOIN_MESSAGE_PHRASES[index] ?? JOIN_MESSAGE_PHRASES[0];
                 return resolver ? resolver() : '';
         });
-        const joinDisplayName = $derived(() => {
+        const joinDisplayName = $derived.by(() => {
                 const raw = message.author?.name;
                 if (!raw) return 'Unknown user';
                 const trimmed = raw.trim();
