@@ -764,6 +764,12 @@ export interface DtoMessage {
      */
     'id'?: number;
     /**
+     * 
+     * @type {number}
+     * @memberof DtoMessage
+     */
+    'type'?: number;
+    /**
      * Timestamp of the last message edit
      * @type {string}
      * @memberof DtoMessage
@@ -1182,6 +1188,19 @@ export interface GuildPatchGuildRoleRequest {
      * @memberof GuildPatchGuildRoleRequest
      */
     'permissions'?: number;
+}
+/**
+ * 
+ * @export
+ * @interface GuildSetGuildSystemMessagesChannelRequest
+ */
+export interface GuildSetGuildSystemMessagesChannelRequest {
+    /**
+     * Channel ID
+     * @type {number}
+     * @memberof GuildSetGuildSystemMessagesChannelRequest
+     */
+    'channel_id'?: number;
 }
 /**
  * 
@@ -3158,6 +3177,46 @@ export const GuildApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
+         * 
+         * @summary Set system messages channel
+         * @param {number} guildId Guild ID
+         * @param {GuildSetGuildSystemMessagesChannelRequest} guildSetGuildSystemMessagesChannelRequest Set system messages channel
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdSystemchPatch: async (guildId: number, guildSetGuildSystemMessagesChannelRequest: GuildSetGuildSystemMessagesChannelRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'guildId' is not null or undefined
+            assertParamExists('guildGuildIdSystemchPatch', 'guildId', guildId)
+            // verify required parameter 'guildSetGuildSystemMessagesChannelRequest' is not null or undefined
+            assertParamExists('guildGuildIdSystemchPatch', 'guildSetGuildSystemMessagesChannelRequest', guildSetGuildSystemMessagesChannelRequest)
+            const localVarPath = `/guild/{guild_id}/systemch`
+                .replace(`{${"guild_id"}}`, encodeURIComponent(String(guildId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PATCH', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(guildSetGuildSystemMessagesChannelRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Returns signaling path and a short-lived SFU token to connect to the SFU for this channel.
          * @summary Join voice channel (get SFU signaling info)
          * @param {number} guildId Guild ID
@@ -3532,6 +3591,20 @@ export const GuildApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 
+         * @summary Set system messages channel
+         * @param {number} guildId Guild ID
+         * @param {GuildSetGuildSystemMessagesChannelRequest} guildSetGuildSystemMessagesChannelRequest Set system messages channel
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async guildGuildIdSystemchPatch(guildId: number, guildSetGuildSystemMessagesChannelRequest: GuildSetGuildSystemMessagesChannelRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DtoGuild>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.guildGuildIdSystemchPatch(guildId, guildSetGuildSystemMessagesChannelRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['GuildApi.guildGuildIdSystemchPatch']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Returns signaling path and a short-lived SFU token to connect to the SFU for this channel.
          * @summary Join voice channel (get SFU signaling info)
          * @param {number} guildId Guild ID
@@ -3748,6 +3821,16 @@ export const GuildApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.guildGuildIdPatch(requestParameters.guildId, requestParameters.guildUpdateGuildRequest, options).then((request) => request(axios, basePath));
         },
         /**
+         * 
+         * @summary Set system messages channel
+         * @param {GuildApiGuildGuildIdSystemchPatchRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        guildGuildIdSystemchPatch(requestParameters: GuildApiGuildGuildIdSystemchPatchRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoGuild> {
+            return localVarFp.guildGuildIdSystemchPatch(requestParameters.guildId, requestParameters.guildSetGuildSystemMessagesChannelRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
          * Returns signaling path and a short-lived SFU token to connect to the SFU for this channel.
          * @summary Join voice channel (get SFU signaling info)
          * @param {GuildApiGuildGuildIdVoiceChannelIdJoinPostRequest} requestParameters Request parameters.
@@ -3945,6 +4028,16 @@ export interface GuildApiInterface {
      * @memberof GuildApiInterface
      */
     guildGuildIdPatch(requestParameters: GuildApiGuildGuildIdPatchRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoGuild>;
+
+    /**
+     * 
+     * @summary Set system messages channel
+     * @param {GuildApiGuildGuildIdSystemchPatchRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApiInterface
+     */
+    guildGuildIdSystemchPatch(requestParameters: GuildApiGuildGuildIdSystemchPatchRequest, options?: RawAxiosRequestConfig): AxiosPromise<DtoGuild>;
 
     /**
      * Returns signaling path and a short-lived SFU token to connect to the SFU for this channel.
@@ -4276,6 +4369,27 @@ export interface GuildApiGuildGuildIdPatchRequest {
 }
 
 /**
+ * Request parameters for guildGuildIdSystemchPatch operation in GuildApi.
+ * @export
+ * @interface GuildApiGuildGuildIdSystemchPatchRequest
+ */
+export interface GuildApiGuildGuildIdSystemchPatchRequest {
+    /**
+     * Guild ID
+     * @type {number}
+     * @memberof GuildApiGuildGuildIdSystemchPatch
+     */
+    readonly guildId: number
+
+    /**
+     * Set system messages channel
+     * @type {GuildSetGuildSystemMessagesChannelRequest}
+     * @memberof GuildApiGuildGuildIdSystemchPatch
+     */
+    readonly guildSetGuildSystemMessagesChannelRequest: GuildSetGuildSystemMessagesChannelRequest
+}
+
+/**
  * Request parameters for guildGuildIdVoiceChannelIdJoinPost operation in GuildApi.
  * @export
  * @interface GuildApiGuildGuildIdVoiceChannelIdJoinPostRequest
@@ -4544,6 +4658,18 @@ export class GuildApi extends BaseAPI implements GuildApiInterface {
      */
     public guildGuildIdPatch(requestParameters: GuildApiGuildGuildIdPatchRequest, options?: RawAxiosRequestConfig) {
         return GuildApiFp(this.configuration).guildGuildIdPatch(requestParameters.guildId, requestParameters.guildUpdateGuildRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary Set system messages channel
+     * @param {GuildApiGuildGuildIdSystemchPatchRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof GuildApi
+     */
+    public guildGuildIdSystemchPatch(requestParameters: GuildApiGuildGuildIdSystemchPatchRequest, options?: RawAxiosRequestConfig) {
+        return GuildApiFp(this.configuration).guildGuildIdSystemchPatch(requestParameters.guildId, requestParameters.guildSetGuildSystemMessagesChannelRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
