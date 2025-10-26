@@ -1503,15 +1503,20 @@
         .mention-wrapper .mention-ghost {
                 visibility: hidden;
                 white-space: pre;
+                padding: 0.125rem 0.5rem;
+                font-size: inherit;
+                line-height: 1.2;
         }
 
         .mention-pill-input {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                padding: 0 0.5rem;
+                padding: 0.125rem 0.5rem;
                 border-radius: 9999px;
                 font-weight: 500;
+                font-size: inherit;
+                line-height: 1.2;
                 white-space: nowrap;
                 background-color: rgba(88, 101, 242, 0.16);
                 background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);

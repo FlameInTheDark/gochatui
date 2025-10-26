@@ -62,22 +62,22 @@
 {/each}
 
 <style>
-	.mention-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0 0.5rem;
-		margin: 0 0.125rem 0 0.125rem;
-		border-radius: 9999px;
-		font-weight: 500;
-		font-size: 0.9em;
-		border: none;
-		background-color: rgba(88, 101, 242, 0.16);
-		background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);
-		color: var(--mention-accent, var(--brand));
-		line-height: 1.4;
-		white-space: nowrap;
-	}
+        .mention-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.25rem;
+                padding: 0.125rem 0.5rem;
+                margin: 0 0.125rem 0 0.125rem;
+                border-radius: 9999px;
+                font-weight: 500;
+                font-size: inherit;
+                border: none;
+                background-color: rgba(88, 101, 242, 0.16);
+                background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);
+                color: var(--mention-accent, var(--brand));
+                line-height: 1.2;
+                white-space: nowrap;
+        }
 
 	.mention-pill.mention-channel {
 		color: var(--brand);
