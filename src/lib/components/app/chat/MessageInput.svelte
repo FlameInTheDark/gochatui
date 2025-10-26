@@ -1250,116 +1250,68 @@
 	}
 </script>
 
-<div class="relative border-t border-[var(--stroke)] p-3">
-	{#if dropActive}
-		<div
-			class="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-[var(--brand)]/70 bg-[var(--panel-strong)]/80 text-center text-sm font-semibold text-[var(--fg)]"
-		>
-			<Paperclip class="h-5 w-5" stroke-width={2} />
-			<span>{m.chat_drop_to_attach()}</span>
-		</div>
-	{/if}
-	{#if showEmojiPicker}
-		<div class="absolute right-3 bottom-[calc(100%+0.75rem)] z-30" bind:this={emojiMenuEl}>
-			<EmojiPicker
-				bind:this={emojiPickerRef}
-				on:select={(event) => {
-					void handleEmojiSelection(event.detail.emoji);
-				}}
-			/>
-		</div>
-	{/if}
-	{#if attachments.length}
-		<div class="mb-3 flex flex-wrap gap-3">
-			{#each attachments as attachment (attachment.localId)}
-				<div
-					class="relative inline-flex max-w-full flex-col overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
-					style={visualAttachmentWrapperStyle}
-				>
-					{#if attachment.isImage && attachment.previewUrl}
-						<img
-							src={attachment.previewUrl}
-							alt={attachment.filename}
-							class="block select-none"
-							style={visualAttachmentMediaStyle}
-						/>
-					{:else}
-						<div
-							class="grid place-items-center bg-[var(--panel-strong)] text-[var(--muted)]"
-							style={`${visualAttachmentMediaStyle} ${visualAttachmentPlaceholderStyle}`}
-						>
-							<Paperclip class="h-6 w-6" stroke-width={2} />
-						</div>
-					{/if}
-					<div class="flex items-start gap-2 px-2 py-2">
-						<div class="flex-1 truncate text-xs text-[var(--fg)]">
-							{attachment.filename}
-						</div>
-					</div>
-					<button
-						class="absolute top-1 right-1 grid h-6 w-6 place-items-center rounded-full bg-[var(--panel-strong)] text-[var(--muted)] hover:text-[var(--fg)]"
-						type="button"
-						onclick={() => removeAttachment(attachment.localId)}
-						aria-label="Remove attachment"
-					>
-						<X class="h-3.5 w-3.5" stroke-width={2} />
-					</button>
-				</div>
-			{/each}
-		</div>
-	{/if}
-        <div
-                class="chat-input relative flex min-h-[2.625rem] items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
-        >
-                {#if mentionMenuOpen}
-                        <div
-                                class="mention-menu absolute bottom-full left-0 mb-2 w-72 max-w-[min(18rem,calc(100vw-4rem))]"
-                        >
-                                <div class="rounded-lg backdrop-blur-md">
-                                        <div
-                                                class="menu-surface overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] shadow-lg"
-                                        >
-                                                <div class="max-h-60 overflow-y-auto" bind:this={mentionListEl}>
-                                                        {#if mentionSuggestions.length === 0}
-                                                                <div class="px-3 py-2 text-sm text-[var(--muted)]">{m.no_results()}</div>
-                                                        {:else}
-                                                                {#each mentionSuggestions as suggestion, index}
-                                                                        <button
-                                                                                type="button"
-                                                                                class={`mention-option flex w-full items-center gap-3 px-3 py-2 text-left text-sm ${
-                                                                                        index === mentionActiveIndex ? 'is-active' : ''
-                                                                                }`}
-                                                                                data-mention-index={index}
-                                                                                style={suggestion.accentColor
-                                                                                        ? `--mention-accent: ${suggestion.accentColor}`
-                                                                                        : undefined}
-                                                                                onpointerdown={(event) => event.preventDefault()}
-                                                                                onclick={() => handleMentionClick(index)}
-                                                                        >
-                                                                                <span class="icon text-[var(--muted)]">
-                                                                                        {#if suggestion.type === 'user'}
-                                                                                                <AtSign class="h-4 w-4" stroke-width={2} />
-                                                                                        {:else if suggestion.type === 'role'}
-                                                                                                <BadgeCheck class="h-4 w-4" stroke-width={2} />
-                                                                                        {:else}
-                                                                                                <Hash class="h-4 w-4" stroke-width={2} />
-                                                                                        {/if}
-                                                                                </span>
-                                                                                <span class="flex min-w-0 flex-1 flex-col">
-                                                                                        <span class="label truncate">{suggestion.label}</span>
-                                                                                        {#if suggestion.description}
-                                                                                                <span class="description truncate">{suggestion.description}</span>
-                                                                                        {/if}
-                                                                                </span>
-                                                                        </button>
-                                                                {/each}
-                                                        {/if}
+<div class="composer relative border-t border-[var(--stroke)] px-4 py-3">
+        {#if dropActive}
+                <div
+                        class="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-[var(--brand)]/70 bg-[var(--panel-strong)]/80 text-center text-sm font-semibold text-[var(--fg)]"
+                >
+                        <Paperclip class="h-5 w-5" stroke-width={2} />
+                        <span>{m.chat_drop_to_attach()}</span>
+                </div>
+        {/if}
+        {#if showEmojiPicker}
+                <div class="absolute right-4 bottom-[calc(100%+0.75rem)] z-30" bind:this={emojiMenuEl}>
+                        <EmojiPicker
+                                bind:this={emojiPickerRef}
+                                on:select={(event) => {
+                                        void handleEmojiSelection(event.detail.emoji);
+                                }}
+                        />
+                </div>
+        {/if}
+        {#if attachments.length}
+                <div class="mb-3 flex flex-wrap gap-3">
+                        {#each attachments as attachment (attachment.localId)}
+                                <div
+                                        class="relative inline-flex max-w-full flex-col overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)]"
+                                        style={visualAttachmentWrapperStyle}
+                                >
+                                        {#if attachment.isImage && attachment.previewUrl}
+                                                <img
+                                                        src={attachment.previewUrl}
+                                                        alt={attachment.filename}
+                                                        class="block select-none"
+                                                        style={visualAttachmentMediaStyle}
+                                                />
+                                        {:else}
+                                                <div
+                                                        class="grid place-items-center bg-[var(--panel-strong)] text-[var(--muted)]"
+                                                        style={`${visualAttachmentMediaStyle} ${visualAttachmentPlaceholderStyle}`}
+                                                >
+                                                        <Paperclip class="h-6 w-6" stroke-width={2} />
+                                                </div>
+                                        {/if}
+                                        <div class="flex items-start gap-2 px-2 py-2">
+                                                <div class="flex-1 truncate text-xs text-[var(--fg)]">
+                                                        {attachment.filename}
                                                 </div>
                                         </div>
+                                        <button
+                                                class="absolute top-1 right-1 grid h-6 w-6 place-items-center rounded-full bg-[var(--panel-strong)] text-[var(--muted)] hover:text-[var(--fg)]"
+                                                type="button"
+                                                onclick={() => removeAttachment(attachment.localId)}
+                                                aria-label="Remove attachment"
+                                        >
+                                                <X class="h-3.5 w-3.5" stroke-width={2} />
+                                        </button>
                                 </div>
-                        </div>
-                {/if}
-                <div class="flex items-center gap-1">
+                        {/each}
+                </div>
+        {/if}
+        <div
+                class="composer-shell relative flex w-full items-end gap-3 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+        >
+                <div class="flex items-end pb-1">
                         <AttachmentUploader
                                 bind:this={uploaderRef}
                                 {attachments}
@@ -1369,81 +1321,133 @@
                                 }}
                         />
                 </div>
-                <div class="relative flex flex-1 items-center">
-                        <div
-                                class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-2 leading-[1.5]"
-                                aria-hidden="true"
-                        >
-                                <div class="overlay-layer">
-                                        <span class="overlay-text">
-                                                {#each mentionDisplayTokens as token, index}
-                                                        {#if token.type === 'text'}
-                                                                <span class="input-text">{token.value}</span>
-                                                        {:else if token.type === 'mention'}
-                                                                <span class="mention-wrapper">
-                                                                        <span class="mention-ghost">
-                                                                                {mentionPlaceholder(token.mention.type, token.mention.id)}
-                                                                        </span>
-                                                                        <span
-                                                                                class="mention-pill-input"
-                                                                                style={
-                                                                                        token.accentColor
-                                                                                                ? `--mention-accent: ${token.accentColor}`
-                                                                                                : undefined
-                                                                                }
-                                                                        >
-                                                                                {token.label}
-                                                                        </span>
-                                                                </span>
-                                                        {/if}
-                                                {/each}
-                                        </span>
-                                        {#if !content && !editorFocused}
-                                                <span class="placeholder text-[var(--muted)]"
-                                                        >{m.message_placeholder({ channel: channelName() })}</span
+                <div class="relative flex min-h-[2.75rem] flex-1">
+                        {#if mentionMenuOpen}
+                                <div
+                                        class="mention-menu absolute bottom-[calc(100%+0.5rem)] left-0 w-72 max-w-[min(18rem,calc(100vw-4rem))]"
+                                >
+                                        <div class="rounded-lg backdrop-blur-md">
+                                                <div
+                                                        class="menu-surface overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] shadow-lg"
                                                 >
-                                        {/if}
+                                                        <div class="max-h-60 overflow-y-auto" bind:this={mentionListEl}>
+                                                                {#if mentionSuggestions.length === 0}
+                                                                        <div class="px-3 py-2 text-sm text-[var(--muted)]">{m.no_results()}</div>
+                                                                {:else}
+                                                                        {#each mentionSuggestions as suggestion, index}
+                                                                                <button
+                                                                                        type="button"
+                                                                                        class={`mention-option flex w-full items-center gap-3 px-3 py-2 text-left text-sm ${
+                                                                                                index === mentionActiveIndex ? 'is-active' : ''
+                                                                                        }`}
+                                                                                        data-mention-index={index}
+                                                                                        style={suggestion.accentColor
+                                                                                                ? `--mention-accent: ${suggestion.accentColor}`
+                                                                                                : undefined}
+                                                                                        onpointerdown={(event) => event.preventDefault()}
+                                                                                        onclick={() => handleMentionClick(index)}
+                                                                                >
+                                                                                        <span class="icon text-[var(--muted)]">
+                                                                                                {#if suggestion.type === 'user'}
+                                                                                                        <AtSign class="h-4 w-4" stroke-width={2} />
+                                                                                                {:else if suggestion.type === 'role'}
+                                                                                                        <BadgeCheck class="h-4 w-4" stroke-width={2} />
+                                                                                                {:else}
+                                                                                                        <Hash class="h-4 w-4" stroke-width={2} />
+                                                                                                {/if}
+                                                                                        </span>
+                                                                                        <span class="flex min-w-0 flex-1 flex-col">
+                                                                                                <span class="label truncate">{suggestion.label}</span>
+                                                                                                {#if suggestion.description}
+                                                                                                        <span class="description truncate">{suggestion.description}</span>
+                                                                                                {/if}
+                                                                                        </span>
+                                                                                </button>
+                                                                        {/each}
+                                                                {/if}
+                                                        </div>
+                                                </div>
+                                        </div>
                                 </div>
+                        {/if}
+                        <div class="editor-stack relative flex w-full">
+                                <div
+                                        class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-2 leading-[1.5]"
+                                        aria-hidden="true"
+                                >
+                                        <div class="overlay-layer">
+                                                <span class="overlay-text">
+                                                        {#each mentionDisplayTokens as token, index}
+                                                                {#if token.type === 'text'}
+                                                                        <span class="input-text">{token.value}</span>
+                                                                {:else if token.type === 'mention'}
+                                                                        <span class="mention-wrapper">
+                                                                                <span class="mention-ghost">
+                                                                                        {mentionPlaceholder(token.mention.type, token.mention.id)}
+                                                                                </span>
+                                                                                <span
+                                                                                        class="mention-pill-input"
+                                                                                        style={
+                                                                                                token.accentColor
+                                                                                                        ? `--mention-accent: ${token.accentColor}`
+                                                                                                        : undefined
+                                                                                        }
+                                                                                >
+                                                                                        {token.label}
+                                                                                </span>
+                                                                        </span>
+                                                                {/if}
+                                                        {/each}
+                                                </span>
+                                                {#if !content && !editorFocused}
+                                                        <span class="placeholder text-[var(--muted)]"
+                                                                >{m.message_placeholder({ channel: channelName() })}</span
+                                                        >
+                                                {/if}
+                                        </div>
+                                </div>
+                                <textarea
+                                        bind:this={ta}
+                                        class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.5rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-2 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                        style:caretColor="var(--fg, #fff)"
+                                        rows={1}
+                                        aria-label={m.message_placeholder({ channel: channelName() })}
+                                        bind:value={content}
+                                        oninput={handleInput}
+                                        onkeydown={handleTextareaKeydown}
+                                        onkeyup={handleTextareaSelectionChange}
+                                        onmouseup={handleTextareaSelectionChange}
+                                        onfocus={handleTextareaFocus}
+                                        onblur={handleTextareaBlur}
+                                        onselect={handleTextareaSelectionChange}
+                                ></textarea>
                         </div>
-                        <textarea
-                                bind:this={ta}
-                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.625rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-2 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
-                                style:caretColor="var(--fg, #fff)"
-                                rows={1}
-                                aria-label={m.message_placeholder({ channel: channelName() })}
-                                bind:value={content}
-                                oninput={handleInput}
-                                onkeydown={handleTextareaKeydown}
-                                onkeyup={handleTextareaSelectionChange}
-                                onmouseup={handleTextareaSelectionChange}
-                                onfocus={handleTextareaFocus}
-                                onblur={handleTextareaBlur}
-                                onselect={handleTextareaSelectionChange}
-                        ></textarea>
                 </div>
-		<button
-			bind:this={emojiButton}
-			class={`grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-colors hover:text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
-				showEmojiPicker ? 'bg-[var(--panel)] text-[var(--fg)]' : ''
-			}`}
-			type="button"
-			aria-label="Insert emoji"
-			aria-pressed={showEmojiPicker}
-			onclick={() => {
-				void toggleEmojiMenu();
-			}}
-		>
-			<Smile class="h-[18px] w-[18px]" stroke-width={2} />
-		</button>
-		<button
-			class="grid h-8 w-8 place-items-center rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50"
-			disabled={sending || (!content.trim() && attachments.length === 0)}
-			onclick={send}
-			aria-label={m.send()}
-		>
-			<Send class="h-[18px] w-[18px]" stroke-width={2} />
-		</button>
-	</div>
+                <div class="flex items-center gap-2 pb-1">
+                        <button
+                                bind:this={emojiButton}
+                                class={`grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-colors hover:text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
+                                        showEmojiPicker ? 'bg-[var(--panel)] text-[var(--fg)]' : ''
+                                }`}
+                                type="button"
+                                aria-label="Insert emoji"
+                                aria-pressed={showEmojiPicker}
+                                onclick={() => {
+                                        void toggleEmojiMenu();
+                                }}
+                        >
+                                <Smile class="h-[18px] w-[18px]" stroke-width={2} />
+                        </button>
+                        <button
+                                class="grid h-8 w-8 place-items-center rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50"
+                                disabled={sending || (!content.trim() && attachments.length === 0)}
+                                onclick={send}
+                                aria-label={m.send()}
+                        >
+                                <Send class="h-[18px] w-[18px]" stroke-width={2} />
+                        </button>
+                </div>
+        </div>
 </div>
 
 <style>
@@ -1503,7 +1507,7 @@
         .mention-wrapper .mention-ghost {
                 visibility: hidden;
                 white-space: pre;
-                padding: 0.125rem 0.5rem;
+                padding: 0.125rem 0.375rem;
                 font-size: inherit;
                 line-height: 1.2;
         }
@@ -1512,7 +1516,7 @@
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                padding: 0.125rem 0.5rem;
+                padding: 0.125rem 0.375rem;
                 border-radius: 9999px;
                 font-weight: 500;
                 font-size: inherit;
