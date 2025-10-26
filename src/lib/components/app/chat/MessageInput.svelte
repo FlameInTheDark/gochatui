@@ -60,9 +60,10 @@
 	let emojiPickerRef = $state<EmojiPickerComponent | null>(null);
 	let removeEmojiMenuListeners: (() => void) | null = null;
 
-	type InputDisplayToken =
-		| { type: 'text'; value: string }
-		| { type: 'mention'; mention: MentionMatch; label: string; accentColor: string | null };
+        type InputDisplayToken =
+                | { type: 'text'; value: string }
+                | { type: 'mention'; mention: MentionMatch; label: string; accentColor: string | null }
+                | { type: 'caret' };
 
 	type MentionSuggestion = {
 		id: string;
@@ -75,7 +76,17 @@
 	};
 
 	const mentionMatches = $derived.by(() => parseMentions(content));
-	const mentionDisplayTokens = $derived.by(() => computeDisplayTokens(content));
+        let selectionStart = $state(0);
+        let selectionEnd = $state(0);
+        let editorFocused = $state(false);
+
+        const mentionDisplayTokens = $derived.by(() => {
+                const tokens = computeDisplayTokens(content, selectionStart, selectionEnd);
+                if (editorFocused) {
+                        return tokens;
+                }
+                return tokens.filter((token) => token.type !== 'caret');
+        });
 	const mentionMemberMap = $derived.by(() => {
 		const guildId = $selectedGuildId ?? '';
 		const list = ($membersByGuild[guildId] ?? []) as DtoMember[] | undefined;
@@ -336,12 +347,12 @@
 		};
 	}
 
-	function resolveChannelMentionLabel(channelId: string): string {
-		const guildId = $selectedGuildId ?? '';
-		const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
-		const channel = list.find(
-			(candidate) => toSnowflakeString((candidate as any)?.id) === channelId
-		);
+        function resolveChannelMentionLabel(channelId: string): string {
+                const guildId = $selectedGuildId ?? '';
+                const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
+                const channel = list.find(
+                        (candidate) => toSnowflakeString((candidate as any)?.id) === channelId
+                );
 		if (!channel) {
 			return `#channel-${channelId}`;
 		}
@@ -352,45 +363,108 @@
 		return `#channel-${channelId}`;
 	}
 
-	function computeDisplayTokens(current: string): InputDisplayToken[] {
-		if (!current) return [];
-		const segments = splitTextWithMentions(current);
-		const tokens: InputDisplayToken[] = [];
-		for (const segment of segments) {
-			if (segment.type === 'text') {
-				if (segment.value) {
-					tokens.push({ type: 'text', value: segment.value });
-				}
-				continue;
-			}
-			const mention = segment.mention;
-			if (mention.type === 'user') {
-				const details = resolveUserMentionDetails(mention.id);
-				tokens.push({
-					type: 'mention',
-					mention,
-					label: details.label,
-					accentColor: details.accentColor
-				});
-			} else if (mention.type === 'role') {
-				const details = resolveRoleMentionDetails(mention.id);
-				tokens.push({
-					type: 'mention',
-					mention,
-					label: details.label,
-					accentColor: details.accentColor
-				});
-			} else if (mention.type === 'channel') {
-				tokens.push({
-					type: 'mention',
-					mention,
-					label: resolveChannelMentionLabel(mention.id),
-					accentColor: null
-				});
-			}
-		}
-		return tokens;
-	}
+        function buildMentionDisplayToken(mention: MentionMatch): InputDisplayToken {
+                if (mention.type === 'user') {
+                        const details = resolveUserMentionDetails(mention.id);
+                        return {
+                                type: 'mention',
+                                mention,
+                                label: details.label,
+                                accentColor: details.accentColor
+                        };
+                }
+
+                if (mention.type === 'role') {
+                        const details = resolveRoleMentionDetails(mention.id);
+                        return {
+                                type: 'mention',
+                                mention,
+                                label: details.label,
+                                accentColor: details.accentColor
+                        };
+                }
+
+                return {
+                        type: 'mention',
+                        mention,
+                        label: resolveChannelMentionLabel(mention.id),
+                        accentColor: null
+                };
+        }
+
+        function clampSelectionIndex(value: number, limit: number): number {
+                if (!Number.isFinite(value)) return limit;
+                if (value < 0) return 0;
+                if (value > limit) return limit;
+                return value;
+        }
+
+        function computeDisplayTokens(
+                current: string,
+                caretStart: number,
+                caretEnd: number
+        ): InputDisplayToken[] {
+                const length = current.length;
+                const startIndex = clampSelectionIndex(caretStart, length);
+                const endIndex = clampSelectionIndex(caretEnd, length);
+                const collapsed = startIndex === endIndex;
+
+                if (!current) {
+                        return collapsed ? [{ type: 'caret' }] : [];
+                }
+
+                const segments = splitTextWithMentions(current);
+                const tokens: InputDisplayToken[] = [];
+                let position = 0;
+
+                for (const segment of segments) {
+                        const segmentLength =
+                                segment.type === 'text'
+                                        ? segment.value.length
+                                        : segment.mention.raw.length;
+                        const segmentStart = position;
+                        const segmentEnd = segmentStart + segmentLength;
+
+                        if (collapsed && startIndex >= segmentStart && startIndex <= segmentEnd) {
+                                if (segment.type === 'text') {
+                                        const offset = startIndex - segmentStart;
+                                        const before = segment.value.slice(0, offset);
+                                        const after = segment.value.slice(offset);
+                                        if (before) {
+                                                tokens.push({ type: 'text', value: before });
+                                        }
+                                        tokens.push({ type: 'caret' });
+                                        if (after) {
+                                                tokens.push({ type: 'text', value: after });
+                                        }
+                                } else {
+                                        if (startIndex === segmentStart) {
+                                                tokens.push({ type: 'caret' });
+                                        }
+                                        tokens.push(buildMentionDisplayToken(segment.mention));
+                                        if (startIndex === segmentEnd) {
+                                                tokens.push({ type: 'caret' });
+                                        }
+                                }
+                        } else {
+                                if (segment.type === 'text') {
+                                        if (segment.value) {
+                                                tokens.push({ type: 'text', value: segment.value });
+                                        }
+                                } else {
+                                        tokens.push(buildMentionDisplayToken(segment.mention));
+                                }
+                        }
+
+                        position = segmentEnd;
+                }
+
+                if (collapsed && startIndex === position) {
+                        tokens.push({ type: 'caret' });
+                }
+
+                return tokens;
+        }
 
 	function formatUserDescriptor(user: DtoUser | null | undefined): string | null {
 		if (!user) return null;
@@ -611,25 +685,36 @@
 		})();
 	});
 
-	function refreshMentionState() {
-		if (!ta) return;
-		const start = ta.selectionStart ?? content.length;
-		const end = ta.selectionEnd ?? start;
+        function refreshMentionState() {
+                const target = ta;
+                const fallback = content.length;
+                const rawStart = target?.selectionStart ?? fallback;
+                const rawEnd = target?.selectionEnd ?? rawStart;
+                const start = clampSelectionIndex(rawStart, fallback);
+                const end = clampSelectionIndex(rawEnd, fallback);
 
-		if (start !== end) {
-			updateMentionSuggestionList(null);
-			return;
-		}
+                selectionStart = start;
+                selectionEnd = end;
 
-		const inside = mentionMatches.find((mention) => start > mention.start && start < mention.end);
-		if (inside) {
-			try {
-				ta.setSelectionRange(inside.end, inside.end);
-			} catch {
-				/* ignore */
-			}
-			updateMentionSuggestionList(null);
-			return;
+                if (!target) {
+                        updateMentionSuggestionList(null);
+                        return;
+                }
+
+                if (start !== end) {
+                        updateMentionSuggestionList(null);
+                        return;
+                }
+
+                const inside = mentionMatches.find((mention) => start > mention.start && start < mention.end);
+                if (inside) {
+                        try {
+                                target.setSelectionRange(inside.end, inside.end);
+                        } catch {
+                                /* ignore */
+                        }
+                        updateMentionSuggestionList(null);
+                        return;
 		}
 
 		const trigger = detectMentionTrigger(content, start);
@@ -750,9 +835,19 @@
 		}
 	}
 
-	function handleTextareaSelectionChange() {
-		refreshMentionState();
-	}
+        function handleTextareaSelectionChange() {
+                refreshMentionState();
+        }
+
+        function handleTextareaFocus() {
+                editorFocused = true;
+                refreshMentionState();
+        }
+
+        function handleTextareaBlur() {
+                editorFocused = false;
+                refreshMentionState();
+        }
 
 	function handleMentionClick(index: number) {
 		const suggestion = mentionSuggestions[index];
@@ -1054,22 +1149,28 @@
 
 		addPendingMessage(pendingMessage);
 
-		content = '';
-		updateMentionSuggestionList(null);
-		resetTypingState();
-		typingChannelId = $selectedChannelId ?? null;
-		clearLocalAttachments({ releasePreviews: true });
-		// wait for DOM to reflect cleared content, then collapse height
-		await tick();
-		if (ta) {
-			ta.style.height = 'auto';
-			ta.style.overflowY = 'hidden';
-		}
-		dispatch('sent');
-		sending = false;
+                content = '';
+                updateMentionSuggestionList(null);
+                resetTypingState();
+                typingChannelId = $selectedChannelId ?? null;
+                clearLocalAttachments({ releasePreviews: true });
+                // wait for DOM to reflect cleared content, then collapse height
+                await tick();
+                if (ta) {
+                        ta.style.height = 'auto';
+                        ta.style.overflowY = 'hidden';
+                        try {
+                                ta.setSelectionRange(0, 0);
+                        } catch {
+                                /* ignore */
+                        }
+                }
+                refreshMentionState();
+                dispatch('sent');
+                sending = false;
 
-		await processPendingMessage(pendingMessage);
-	}
+                await processPendingMessage(pendingMessage);
+        }
 
 	function getErrorMessage(err: unknown): string {
 		const error = err as { response?: { data?: { message?: string } }; message?: string };
@@ -1269,7 +1370,7 @@
 		</div>
 	{/if}
         <div
-                class="chat-input relative flex items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+                class="chat-input relative flex min-h-[2.75rem] items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
         >
                 {#if mentionMenuOpen}
                         <div
@@ -1330,29 +1431,37 @@
                         />
                 </div>
                 <div class="relative flex-1 self-stretch">
-                        <div class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-1 py-1 leading-[1.5]" aria-hidden="true">
-                                {#if !content}
-                                        <span class="placeholder text-[var(--muted)]"
-                                                >{m.message_placeholder({ channel: channelName() })}</span
-                                        >
-                                {:else}
-					{#each mentionDisplayTokens as token, index}
-						{#if token.type === 'text'}
-							<span class="input-text">{token.value}</span>
-						{:else}
-							<span
-								class="mention-pill-input"
-								style={token.accentColor ? `--mention-accent: ${token.accentColor}` : undefined}
-							>
-								{token.label}
-							</span>
-						{/if}
-                                        {/each}
-                                {/if}
+                        <div
+                                class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-[0.625rem] leading-[1.5]"
+                                aria-hidden="true"
+                        >
+                                <div class="overlay-layer">
+                                        <span class="overlay-text">
+                                                {#each mentionDisplayTokens as token, index}
+                                                        {#if token.type === 'text'}
+                                                                <span class="input-text">{token.value}</span>
+                                                        {:else if token.type === 'mention'}
+                                                                <span
+                                                                        class="mention-pill-input"
+                                                                        style={token.accentColor ? `--mention-accent: ${token.accentColor}` : undefined}
+                                                                >
+                                                                        {token.label}
+                                                                </span>
+                                                        {:else}
+                                                                <span class="visual-caret" aria-hidden="true"></span>
+                                                        {/if}
+                                                {/each}
+                                        </span>
+                                        {#if !content && !editorFocused}
+                                                <span class="placeholder text-[var(--muted)]"
+                                                        >{m.message_placeholder({ channel: channelName() })}</span
+                                                >
+                                        {/if}
+                                </div>
                         </div>
                         <textarea
                                 bind:this={ta}
-                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.75rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-[0.625rem] text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
                                 style:caret-color="var(--fg)"
                                 rows={1}
                                 aria-label={m.message_placeholder({ channel: channelName() })}
@@ -1361,7 +1470,8 @@
                                 onkeydown={handleTextareaKeydown}
                                 onkeyup={handleTextareaSelectionChange}
                                 onmouseup={handleTextareaSelectionChange}
-                                onfocus={handleTextareaSelectionChange}
+                                onfocus={handleTextareaFocus}
+                                onblur={handleTextareaBlur}
                                 onselect={handleTextareaSelectionChange}
                         ></textarea>
                 </div>
@@ -1402,18 +1512,56 @@
                 z-index: 0;
         }
 
+        .overlay-layer {
+                position: relative;
+                min-height: 100%;
+        }
+
+        .overlay-text {
+                position: relative;
+                z-index: 1;
+                display: inline-block;
+                min-height: 1.25em;
+        }
+
         .textarea-editor {
                 position: relative;
                 z-index: 1;
         }
 
-	.input-overlay .input-text {
-		white-space: pre-wrap;
-	}
+        .input-overlay .input-text {
+                white-space: pre-wrap;
+        }
 
-	.input-overlay .placeholder {
-		pointer-events: none;
-	}
+        .input-overlay .placeholder {
+                position: absolute;
+                left: 0;
+                top: 0;
+                white-space: pre-wrap;
+                pointer-events: none;
+                z-index: 0;
+        }
+
+        .visual-caret {
+                display: inline-block;
+                width: 1px;
+                height: 1.35em;
+                margin-left: -0.5px;
+                background-color: var(--fg);
+                vertical-align: text-bottom;
+                animation: input-caret-blink 1s steps(1) infinite;
+        }
+
+        @keyframes input-caret-blink {
+                0%,
+                50% {
+                        opacity: 1;
+                }
+                50.01%,
+                100% {
+                        opacity: 0;
+                }
+        }
 
 	.mention-pill-input {
 		display: inline-flex;
