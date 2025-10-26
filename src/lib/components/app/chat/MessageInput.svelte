@@ -1268,9 +1268,9 @@
 			{/each}
 		</div>
 	{/if}
-	<div
-		class="chat-input relative flex items-end gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
-	>
+        <div
+                class="chat-input relative flex items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+        >
                 {#if mentionMenuOpen}
                         <div
                                 class="mention-menu absolute bottom-full left-0 mb-2 w-72 max-w-[min(18rem,calc(100vw-4rem))]"
@@ -1319,15 +1319,17 @@
                                 </div>
                         </div>
                 {/if}
-                <AttachmentUploader
-                        bind:this={uploaderRef}
-                        {attachments}
-                        inline
-                        on:updated={(event: CustomEvent<PendingAttachment[]>) => {
-                                mergeAttachments(event.detail);
-                        }}
-                />
-                <div class="relative flex-1">
+                <div class="flex items-center gap-1 self-stretch">
+                        <AttachmentUploader
+                                bind:this={uploaderRef}
+                                {attachments}
+                                inline
+                                on:updated={(event: CustomEvent<PendingAttachment[]>) => {
+                                        mergeAttachments(event.detail);
+                                }}
+                        />
+                </div>
+                <div class="relative flex-1 self-stretch">
                         <div class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-1 py-1 leading-[1.5]" aria-hidden="true">
                                 {#if !content}
                                         <span class="placeholder text-[var(--muted)]"
@@ -1350,8 +1352,8 @@
                         </div>
                         <textarea
                                 bind:this={ta}
-                                class="textarea-editor relative z-[1] max-h-[40vh] min-h-[2.125rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none caret-[var(--fg)]"
-                                style:caret-color="'var(--fg, #fff)'"
+                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                style:caret-color="var(--fg)"
                                 rows={1}
                                 aria-label={m.message_placeholder({ channel: channelName() })}
                                 bind:value={content}
