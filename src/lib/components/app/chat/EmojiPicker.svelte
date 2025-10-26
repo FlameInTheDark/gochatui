@@ -87,7 +87,9 @@
 	const RECENT_STORAGE_KEY = 'gochat_recent_emojis';
 	let recent: string[] = $state([]);
 	let searchTerm = $state('');
-	let hoveredEmoji: EmojiEntry | null = $state(null);
+        let hoveredEmoji: EmojiEntry | null = $state(null);
+        let hasHovered = $state(false);
+        let previewEmoji = $state<EmojiEntry | null>(null);
 	let activeCategory = $state<string>(categories[0]?.slug ?? '');
 	let scrollContainer: HTMLDivElement | null = null;
 	let recentSection = $state<HTMLElement | null>(null);
@@ -147,15 +149,17 @@
 		recent = next;
 	}
 
-	function handlePointerEnter(emoji: EmojiEntry) {
-		hoveredEmoji = emoji;
-	}
+        function handlePointerEnter(emoji: EmojiEntry) {
+                hoveredEmoji = emoji;
+                hasHovered = true;
+                previewEmoji = emoji;
+        }
 
-	function handlePointerLeave(emoji: EmojiEntry) {
-		if (hoveredEmoji?.emoji === emoji.emoji) {
-			hoveredEmoji = null;
-		}
-	}
+        function handlePointerLeave(emoji: EmojiEntry) {
+                if (hoveredEmoji?.emoji === emoji.emoji) {
+                        hoveredEmoji = null;
+                }
+        }
 
 	function scrollToCategory(slug: string) {
 		if (slug === 'recent') {
@@ -185,16 +189,33 @@
 			: []
 	);
 
-	const previewEmoji = $derived(
-		hoveredEmoji ?? (trimmedSearch ? (searchResults[0] ?? null) : null)
-	);
+        $effect(() => {
+                if (scrollContainer && trimmedSearch !== previousSearch) {
+                        scrollContainer.scrollTop = 0;
+                        previousSearch = trimmedSearch;
+                }
+        });
 
-	$effect(() => {
-		if (scrollContainer && trimmedSearch !== previousSearch) {
-			scrollContainer.scrollTop = 0;
-			previousSearch = trimmedSearch;
-		}
-	});
+        $effect(() => {
+                if (hoveredEmoji) {
+                        previewEmoji = hoveredEmoji;
+                        return;
+                }
+
+                if (trimmedSearch && searchResults.length > 0 && !hasHovered) {
+                        previewEmoji = searchResults[0];
+                        return;
+                }
+
+                if (!previewEmoji) {
+                        const fallback = trimmedSearch
+                                ? searchResults[0] ?? resolveDefaultSelection()
+                                : resolveDefaultSelection();
+                        if (fallback) {
+                                previewEmoji = fallback;
+                        }
+                }
+        });
 
 	$effect(() => {
 		if (!trimmedSearch) {
@@ -425,23 +446,23 @@
 			Clear
 		</button>
 	</div>
-	<div class="border-t border-[var(--stroke)] px-3 py-3">
-		{#if previewEmoji}
-			<div class="flex items-center gap-3">
-				<div class="text-4xl leading-none">{previewEmoji.emoji}</div>
-				<div class="min-w-0">
-					<div class="truncate text-sm font-medium text-[var(--fg)]">
-						{formatName(previewEmoji.name ?? previewEmoji.emoji)}
-					</div>
-					<div class="truncate text-xs text-[var(--muted)]">
-						:{previewEmoji.slug.replace(/\s+/g, '_')}:
-					</div>
-				</div>
-			</div>
-		{:else}
-			<div class="text-xs text-[var(--muted)]">Hover an emoji to preview it here.</div>
-		{/if}
-	</div>
+        <div class="border-t border-[var(--stroke)] px-3 py-3">
+                <div class="flex min-h-[72px] items-center gap-3">
+                        {#if previewEmoji}
+                                <div class="text-4xl leading-none">{previewEmoji.emoji}</div>
+                                <div class="min-w-0">
+                                        <div class="truncate text-sm font-medium text-[var(--fg)]">
+                                                {formatName(previewEmoji.name ?? previewEmoji.emoji)}
+                                        </div>
+                                        <div class="truncate text-xs text-[var(--muted)]">
+                                                :{previewEmoji.slug.replace(/\s+/g, '_')}:
+                                        </div>
+                                </div>
+                        {:else}
+                                <div class="text-xs text-[var(--muted)]">Hover an emoji to preview it here.</div>
+                        {/if}
+                </div>
+        </div>
 </div>
 
 <style>

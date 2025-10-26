@@ -641,50 +641,50 @@
 			{/each}
 		</div>
 	{/if}
-	<div
-		class="chat-input flex items-end gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
-	>
-		<div class="flex items-center gap-1 self-stretch">
-			<AttachmentUploader
-				bind:this={uploaderRef}
-				{attachments}
-				inline
-				on:updated={(event: CustomEvent<PendingAttachment[]>) => {
-					mergeAttachments(event.detail);
-				}}
-			/>
-			<button
-				bind:this={emojiButton}
-				class={`grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-colors hover:text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
-					showEmojiPicker ? 'bg-[var(--panel)] text-[var(--fg)]' : ''
-				}`}
-				type="button"
-				aria-label="Insert emoji"
-				aria-pressed={showEmojiPicker}
-				onclick={() => {
-					void toggleEmojiMenu();
-				}}
-			>
-				<Smile class="h-[18px] w-[18px]" stroke-width={2} />
-			</button>
-		</div>
-		<textarea
-			bind:this={ta}
-			class="max-h-[40vh] min-h-[2.125rem] flex-1 resize-none appearance-none border-0 bg-transparent px-1 py-1 shadow-none ring-0 outline-none focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
-			rows={1}
-			placeholder={m.message_placeholder({ channel: channelName() })}
-			bind:value={content}
-			oninput={handleInput}
-			onkeydown={(e) => {
-				if (e.key === 'Enter' && !e.shiftKey) {
-					e.preventDefault();
-					send();
-				}
-			}}
-		></textarea>
-		<button
-			class="grid h-8 w-8 place-items-center rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50"
-			disabled={sending || (!content.trim() && attachments.length === 0)}
+        <div
+                class="chat-input flex items-end gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 py-1 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+        >
+                <div class="flex items-center gap-1 self-stretch">
+                        <AttachmentUploader
+                                bind:this={uploaderRef}
+                                {attachments}
+                                inline
+                                on:updated={(event: CustomEvent<PendingAttachment[]>) => {
+                                        mergeAttachments(event.detail);
+                                }}
+                        />
+                </div>
+                <textarea
+                        bind:this={ta}
+                        class="max-h-[40vh] min-h-[2.125rem] flex-1 resize-none appearance-none border-0 bg-transparent px-1 py-1 shadow-none ring-0 outline-none focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                        rows={1}
+                        placeholder={m.message_placeholder({ channel: channelName() })}
+                        bind:value={content}
+                        oninput={handleInput}
+                        onkeydown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        send();
+                                }
+                        }}
+                ></textarea>
+                <button
+                        bind:this={emojiButton}
+                        class={`grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-colors hover:text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
+                                showEmojiPicker ? 'bg-[var(--panel)] text-[var(--fg)]' : ''
+                        }`}
+                        type="button"
+                        aria-label="Insert emoji"
+                        aria-pressed={showEmojiPicker}
+                        onclick={() => {
+                                void toggleEmojiMenu();
+                        }}
+                >
+                        <Smile class="h-[18px] w-[18px]" stroke-width={2} />
+                </button>
+                <button
+                        class="grid h-8 w-8 place-items-center rounded-md bg-[var(--brand)] text-[var(--bg)] disabled:opacity-50"
+                        disabled={sending || (!content.trim() && attachments.length === 0)}
 			onclick={send}
 			aria-label={m.send()}
 		>
