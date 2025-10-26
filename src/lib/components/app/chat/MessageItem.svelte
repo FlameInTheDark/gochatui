@@ -187,18 +187,18 @@
                 return segments;
         }
 
-        const JOIN_MESSAGE_PHRASES = [
-                'just joined the party.',
-                'has entered the guild hall.',
-                'slid into the server.',
-                'just touched down. Say hello!',
-                'popped into chat.',
-                'joined the adventure.',
-                'is here. Roll out the welcome mat!',
-                'just connected. Give them a wave!',
-                'has stepped into the lobby.',
-                'spawned in nearby.'
-        ] as const;
+        const JOIN_MESSAGE_PHRASES: readonly (() => string)[] = [
+                () => m.system_join_phrase_party(),
+                () => m.system_join_phrase_guild_hall(),
+                () => m.system_join_phrase_slid_in(),
+                () => m.system_join_phrase_touched_down(),
+                () => m.system_join_phrase_popped_in(),
+                () => m.system_join_phrase_joined_adventure(),
+                () => m.system_join_phrase_roll_out_mat(),
+                () => m.system_join_phrase_connected_wave(),
+                () => m.system_join_phrase_stepped_lobby(),
+                () => m.system_join_phrase_spawned_nearby()
+        ];
 
         function hashString(value: string): number {
                 let hash = 0;
@@ -841,7 +841,8 @@
         const joinPhrase = $derived(() => {
                 if (!isJoinMessage) return null;
                 const index = selectJoinPhraseIndex(message);
-                return JOIN_MESSAGE_PHRASES[index] ?? JOIN_MESSAGE_PHRASES[0] ?? '';
+                const resolver = JOIN_MESSAGE_PHRASES[index] ?? JOIN_MESSAGE_PHRASES[0];
+                return resolver ? resolver() : '';
         });
         const joinDisplayName = $derived(() => {
                 const raw = message.author?.name;
