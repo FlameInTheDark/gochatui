@@ -62,8 +62,7 @@
 
         type InputDisplayToken =
                 | { type: 'text'; value: string }
-                | { type: 'mention'; mention: MentionMatch; label: string; accentColor: string | null }
-                | { type: 'caret' };
+                | { type: 'mention'; mention: MentionMatch; label: string; accentColor: string | null };
 
 	type MentionSuggestion = {
 		id: string;
@@ -75,17 +74,25 @@
 		user?: DtoUser | null;
 	};
 
-	const mentionMatches = $derived.by(() => parseMentions(content));
-        let selectionStart = $state(0);
-        let selectionEnd = $state(0);
+        const mentionMatches = $derived.by(() => parseMentions(content));
         let editorFocused = $state(false);
 
         const mentionDisplayTokens = $derived.by(() => {
-                const tokens = computeDisplayTokens(content, selectionStart, selectionEnd);
-                if (editorFocused) {
-                        return tokens;
+                const segments = splitTextWithMentions(content);
+                const tokens: InputDisplayToken[] = [];
+
+                for (const segment of segments) {
+                        if (segment.type === 'text') {
+                                if (segment.value) {
+                                        tokens.push({ type: 'text', value: segment.value });
+                                }
+                                continue;
+                        }
+
+                        tokens.push(buildMentionDisplayToken(segment.mention));
                 }
-                return tokens.filter((token) => token.type !== 'caret');
+
+                return tokens;
         });
 	const mentionMemberMap = $derived.by(() => {
 		const guildId = $selectedGuildId ?? '';
@@ -399,76 +406,9 @@
                 return value;
         }
 
-        function computeDisplayTokens(
-                current: string,
-                caretStart: number,
-                caretEnd: number
-        ): InputDisplayToken[] {
-                const length = current.length;
-                const startIndex = clampSelectionIndex(caretStart, length);
-                const endIndex = clampSelectionIndex(caretEnd, length);
-                const collapsed = startIndex === endIndex;
-
-                if (!current) {
-                        return collapsed ? [{ type: 'caret' }] : [];
-                }
-
-                const segments = splitTextWithMentions(current);
-                const tokens: InputDisplayToken[] = [];
-                let position = 0;
-
-                for (const segment of segments) {
-                        const segmentLength =
-                                segment.type === 'text'
-                                        ? segment.value.length
-                                        : segment.mention.raw.length;
-                        const segmentStart = position;
-                        const segmentEnd = segmentStart + segmentLength;
-
-                        if (collapsed && startIndex >= segmentStart && startIndex <= segmentEnd) {
-                                if (segment.type === 'text') {
-                                        const offset = startIndex - segmentStart;
-                                        const before = segment.value.slice(0, offset);
-                                        const after = segment.value.slice(offset);
-                                        if (before) {
-                                                tokens.push({ type: 'text', value: before });
-                                        }
-                                        tokens.push({ type: 'caret' });
-                                        if (after) {
-                                                tokens.push({ type: 'text', value: after });
-                                        }
-                                } else {
-                                        if (startIndex === segmentStart) {
-                                                tokens.push({ type: 'caret' });
-                                        }
-                                        tokens.push(buildMentionDisplayToken(segment.mention));
-                                        if (startIndex === segmentEnd) {
-                                                tokens.push({ type: 'caret' });
-                                        }
-                                }
-                        } else {
-                                if (segment.type === 'text') {
-                                        if (segment.value) {
-                                                tokens.push({ type: 'text', value: segment.value });
-                                        }
-                                } else {
-                                        tokens.push(buildMentionDisplayToken(segment.mention));
-                                }
-                        }
-
-                        position = segmentEnd;
-                }
-
-                if (collapsed && startIndex === position) {
-                        tokens.push({ type: 'caret' });
-                }
-
-                return tokens;
-        }
-
-	function formatUserDescriptor(user: DtoUser | null | undefined): string | null {
-		if (!user) return null;
-		const name = formatUserDisplayName(user);
+        function formatUserDescriptor(user: DtoUser | null | undefined): string | null {
+                if (!user) return null;
+                const name = formatUserDisplayName(user);
 		const discriminator = (user as any)?.discriminator;
 		if (typeof name === 'string' && typeof discriminator === 'string' && discriminator.trim()) {
 			return `${name}#${discriminator.trim()}`;
@@ -693,9 +633,6 @@
                 const start = clampSelectionIndex(rawStart, fallback);
                 const end = clampSelectionIndex(rawEnd, fallback);
 
-                selectionStart = start;
-                selectionEnd = end;
-
                 if (!target) {
                         updateMentionSuggestionList(null);
                         return;
@@ -740,10 +677,12 @@
 		refreshMentionState();
 	}
 
-	async function applyMentionSuggestion(suggestion: MentionSuggestion) {
-		if (!ta) return;
-		const start = mentionQuery ? mentionQuery.start : (ta.selectionStart ?? content.length);
-		const end = ta.selectionStart ?? content.length;
+        async function applyMentionSuggestion(suggestion: MentionSuggestion) {
+                if (!ta) return;
+                const currentStart = ta.selectionStart ?? content.length;
+                const currentEnd = ta.selectionEnd ?? content.length;
+                const start = mentionQuery ? mentionQuery.start : currentStart;
+                const end = currentEnd;
 		const before = content.slice(0, start);
 		const after = content.slice(end);
 		const placeholder = mentionPlaceholder(suggestion.type, suggestion.id);
@@ -1370,7 +1309,7 @@
 		</div>
 	{/if}
         <div
-                class="chat-input relative flex min-h-[2.75rem] items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+                class="chat-input relative flex min-h-[2.75rem] items-end gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
         >
                 {#if mentionMenuOpen}
                         <div
@@ -1420,7 +1359,7 @@
                                 </div>
                         </div>
                 {/if}
-                <div class="flex items-center gap-1 self-stretch">
+                <div class="flex items-center gap-1 self-end">
                         <AttachmentUploader
                                 bind:this={uploaderRef}
                                 {attachments}
@@ -1430,7 +1369,7 @@
                                 }}
                         />
                 </div>
-                <div class="relative flex-1 self-stretch">
+                <div class="relative flex flex-1 items-center self-end">
                         <div
                                 class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-[0.625rem] leading-[1.5]"
                                 aria-hidden="true"
@@ -1447,8 +1386,6 @@
                                                                 >
                                                                         {token.label}
                                                                 </span>
-                                                        {:else}
-                                                                <span class="visual-caret" aria-hidden="true"></span>
                                                         {/if}
                                                 {/each}
                                         </span>
@@ -1462,7 +1399,6 @@
                         <textarea
                                 bind:this={ta}
                                 class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.75rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-[0.625rem] text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
-                                style:caret-color="var(--fg)"
                                 rows={1}
                                 aria-label={m.message_placeholder({ channel: channelName() })}
                                 bind:value={content}
@@ -1527,6 +1463,7 @@
         .textarea-editor {
                 position: relative;
                 z-index: 1;
+                caret-color: var(--fg);
         }
 
         .input-overlay .input-text {
@@ -1542,30 +1479,9 @@
                 z-index: 0;
         }
 
-        .visual-caret {
-                display: inline-block;
-                width: 1px;
-                height: 1.35em;
-                margin-left: -0.5px;
-                background-color: var(--fg);
-                vertical-align: text-bottom;
-                animation: input-caret-blink 1s steps(1) infinite;
-        }
-
-        @keyframes input-caret-blink {
-                0%,
-                50% {
-                        opacity: 1;
-                }
-                50.01%,
-                100% {
-                        opacity: 0;
-                }
-        }
-
-	.mention-pill-input {
-		display: inline-flex;
-		align-items: center;
+        .mention-pill-input {
+                display: inline-flex;
+                align-items: center;
 		padding: 0 0.5rem;
 		margin: 0 0.1rem;
 		border-radius: 9999px;
