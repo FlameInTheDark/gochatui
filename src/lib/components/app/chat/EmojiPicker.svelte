@@ -328,139 +328,141 @@
 	}
 </script>
 
-<div
-	class="w-[360px] rounded-xl border border-[var(--stroke)] bg-[var(--panel)] text-[var(--fg)] shadow-xl"
->
-	<div class="border-b border-[var(--stroke)] px-3 py-2">
-		<input
-			bind:this={searchInput}
-			class="h-9 w-full rounded-md border border-transparent bg-[var(--panel-strong)] px-3 text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:border-[var(--stroke)] focus:ring-0 focus:outline-none"
-			type="search"
-			placeholder="Search emoji"
-			bind:value={searchTerm}
-			aria-label="Search emoji"
-			onkeydown={handleSearchKeydown}
-		/>
-	</div>
-	<div class="max-h-[320px] overflow-hidden">
-		<div class="relative max-h-[320px] overflow-y-auto px-3" bind:this={scrollContainer}>
-			{#if trimmedSearch}
-				<div class="py-3 text-xs tracking-wide text-[var(--muted)] uppercase">Search Results</div>
-				{#if searchResults.length === 0}
-					<div class="pb-6 text-sm text-[var(--muted)]">
-						No emoji found for “{searchTerm}”.
-					</div>
-				{:else}
-					<div class="grid grid-cols-8 gap-1 pb-4">
-						{#each searchResults as emoji (emoji.emoji)}
-							<button
-								type="button"
-								class="emoji-button grid h-10 w-10 place-items-center rounded-md text-2xl transition-colors hover:bg-[var(--panel-strong)]"
-								title={formatName(emoji.name)}
-								onpointerenter={() => handlePointerEnter(emoji)}
-								onpointerleave={() => handlePointerLeave(emoji)}
-								onclick={() => handleSelect(emoji)}
-							>
-								{emoji.emoji}
-							</button>
-						{/each}
-					</div>
-				{/if}
-			{:else}
-				{#if recentEntries.length > 0}
-					<section
-						class="pt-3"
-						data-slug="recent"
-						bind:this={recentSection}
-						use:observeSection={'recent'}
-					>
-						<div class="pb-2 text-xs tracking-wide text-[var(--muted)] uppercase">
-							Frequently Used
-						</div>
-						<div class="grid grid-cols-8 gap-1 pb-4">
-							{#each recentEntries as emoji (emoji.emoji)}
-								<button
-									type="button"
-									class="emoji-button grid h-10 w-10 place-items-center rounded-md text-2xl transition-colors hover:bg-[var(--panel-strong)]"
-									title={formatName(emoji.name ?? emoji.emoji)}
-									onpointerenter={() => handlePointerEnter(emoji)}
-									onpointerleave={() => handlePointerLeave(emoji)}
-									onclick={() => handleSelect(emoji)}
-								>
-									{emoji.emoji}
-								</button>
-							{/each}
-						</div>
-					</section>
-				{/if}
-				{#each categories as category (category.slug)}
-					<section class="pt-3" data-slug={category.slug} use:observeSection={category.slug}>
-						<div class="pb-2 text-xs tracking-wide text-[var(--muted)] uppercase">
-							{category.name}
-						</div>
-						<div class="grid grid-cols-8 gap-1 pb-4">
-							{#each category.emojis as emoji (emoji.emoji)}
-								<button
-									type="button"
-									class="emoji-button grid h-10 w-10 place-items-center rounded-md text-2xl transition-colors hover:bg-[var(--panel-strong)]"
-									title={formatName(emoji.name)}
-									onpointerenter={() => handlePointerEnter(emoji)}
-									onpointerleave={() => handlePointerLeave(emoji)}
-									onclick={() => handleSelect(emoji)}
-								>
-									{emoji.emoji}
-								</button>
-							{/each}
-						</div>
-					</section>
-				{/each}
-			{/if}
-		</div>
-	</div>
-	<div class="flex items-center justify-between gap-2 border-t border-[var(--stroke)] px-2 py-2">
-		<div class="flex flex-1 items-center justify-center gap-1">
-			{#each navCategories as category (category.slug)}
-				<button
-					type="button"
-					class={`grid h-9 w-9 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:text-[var(--fg)] ${
-						activeCategory === category.slug && trimmedSearch === ''
-							? 'bg-[var(--panel-strong)] text-[var(--fg)]'
-							: ''
-					}`}
-					onclick={() => {
-						searchTerm = '';
-						scrollToCategory(category.slug);
-					}}
-					aria-label={category.name}
-				>
-					<category.icon class="h-4 w-4" stroke-width={2} />
-				</button>
-			{/each}
-		</div>
-		<button
-			type="button"
-			class="rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50 disabled:hover:text-[var(--muted)]"
-			onclick={clearRecent}
-			disabled={recent.length === 0}
-		>
-			Clear
-		</button>
-	</div>
-        <div class="border-t border-[var(--stroke)] px-3 py-3">
-                <div class="flex min-h-[72px] items-center gap-3">
-                        {#if previewEmoji}
-                                <div class="text-4xl leading-none">{previewEmoji.emoji}</div>
-                                <div class="min-w-0">
-                                        <div class="truncate text-sm font-medium text-[var(--fg)]">
-                                                {formatName(previewEmoji.name ?? previewEmoji.emoji)}
+<div class="rounded-xl backdrop-blur-md">
+        <div
+                class="w-[360px] rounded-xl border border-[var(--stroke)] bg-[var(--panel)] text-[var(--fg)] shadow-xl"
+        >
+                <div class="border-b border-[var(--stroke)] px-3 py-2">
+                        <input
+                                bind:this={searchInput}
+                                class="h-9 w-full rounded-md border border-transparent bg-[var(--panel-strong)] px-3 text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:border-[var(--stroke)] focus:ring-0 focus:outline-none"
+                                type="search"
+                                placeholder="Search emoji"
+                                bind:value={searchTerm}
+                                aria-label="Search emoji"
+                                onkeydown={handleSearchKeydown}
+                        />
+                </div>
+                <div class="max-h-[320px] overflow-hidden">
+                        <div class="relative max-h-[320px] overflow-y-auto px-3" bind:this={scrollContainer}>
+                                {#if trimmedSearch}
+                                        <div class="py-3 text-xs tracking-wide text-[var(--muted)] uppercase">Search Results</div>
+                                        {#if searchResults.length === 0}
+                                                <div class="pb-6 text-sm text-[var(--muted)]">
+                                                        No emoji found for “{searchTerm}”.
+                                                </div>
+                                        {:else}
+                                                <div class="grid grid-cols-8 gap-1 pb-4">
+                                                        {#each searchResults as emoji (emoji.emoji)}
+                                                                <button
+                                                                        type="button"
+                                                                        class="emoji-button grid h-10 w-10 place-items-center rounded-md text-2xl transition-colors hover:bg-[var(--panel-strong)]"
+                                                                        title={formatName(emoji.name)}
+                                                                        onpointerenter={() => handlePointerEnter(emoji)}
+                                                                        onpointerleave={() => handlePointerLeave(emoji)}
+                                                                        onclick={() => handleSelect(emoji)}
+                                                                >
+                                                                        {emoji.emoji}
+                                                                </button>
+                                                        {/each}
+                                                </div>
+                                        {/if}
+                                {:else}
+                                        {#if recentEntries.length > 0}
+                                                <section
+                                                        class="pt-3"
+                                                        data-slug="recent"
+                                                        bind:this={recentSection}
+                                                        use:observeSection={'recent'}
+                                                >
+                                                        <div class="pb-2 text-xs tracking-wide text-[var(--muted)] uppercase">
+                                                                Frequently Used
+                                                        </div>
+                                                        <div class="grid grid-cols-8 gap-1 pb-4">
+                                                                {#each recentEntries as emoji (emoji.emoji)}
+                                                                        <button
+                                                                                type="button"
+                                                                                class="emoji-button grid h-10 w-10 place-items-center rounded-md text-2xl transition-colors hover:bg-[var(--panel-strong)]"
+                                                                                title={formatName(emoji.name ?? emoji.emoji)}
+                                                                                onpointerenter={() => handlePointerEnter(emoji)}
+                                                                                onpointerleave={() => handlePointerLeave(emoji)}
+                                                                                onclick={() => handleSelect(emoji)}
+                                                                        >
+                                                                                {emoji.emoji}
+                                                                        </button>
+                                                                {/each}
+                                                        </div>
+                                                </section>
+                                        {/if}
+                                        {#each categories as category (category.slug)}
+                                                <section class="pt-3" data-slug={category.slug} use:observeSection={category.slug}>
+                                                        <div class="pb-2 text-xs tracking-wide text-[var(--muted)] uppercase">
+                                                                {category.name}
+                                                        </div>
+                                                        <div class="grid grid-cols-8 gap-1 pb-4">
+                                                                {#each category.emojis as emoji (emoji.emoji)}
+                                                                        <button
+                                                                                type="button"
+                                                                                class="emoji-button grid h-10 w-10 place-items-center rounded-md text-2xl transition-colors hover:bg-[var(--panel-strong)]"
+                                                                                title={formatName(emoji.name)}
+                                                                                onpointerenter={() => handlePointerEnter(emoji)}
+                                                                                onpointerleave={() => handlePointerLeave(emoji)}
+                                                                                onclick={() => handleSelect(emoji)}
+                                                                        >
+                                                                                {emoji.emoji}
+                                                                        </button>
+                                                                {/each}
+                                                        </div>
+                                                </section>
+                                        {/each}
+                                {/if}
+                        </div>
+                </div>
+                <div class="flex items-center justify-between gap-2 border-t border-[var(--stroke)] px-2 py-2">
+                        <div class="flex flex-1 items-center justify-center gap-1">
+                                {#each navCategories as category (category.slug)}
+                                        <button
+                                                type="button"
+                                                class={`grid h-9 w-9 place-items-center rounded-lg text-[var(--muted)] transition-colors hover:text-[var(--fg)] ${
+                                                        activeCategory === category.slug && trimmedSearch === ''
+                                                                ? 'bg-[var(--panel-strong)] text-[var(--fg)]'
+                                                                : ''
+                                                }`}
+                                                onclick={() => {
+                                                        searchTerm = '';
+                                                        scrollToCategory(category.slug);
+                                                }}
+                                                aria-label={category.name}
+                                        >
+                                                <category.icon class="h-4 w-4" stroke-width={2} />
+                                        </button>
+                                {/each}
+                        </div>
+                        <button
+                                type="button"
+                                class="rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50 disabled:hover:text-[var(--muted)]"
+                                onclick={clearRecent}
+                                disabled={recent.length === 0}
+                        >
+                                Clear
+                        </button>
+                </div>
+                <div class="border-t border-[var(--stroke)] px-3 py-3">
+                        <div class="flex min-h-[72px] items-center gap-3">
+                                {#if previewEmoji}
+                                        <div class="text-4xl leading-none">{previewEmoji.emoji}</div>
+                                        <div class="min-w-0">
+                                                <div class="truncate text-sm font-medium text-[var(--fg)]">
+                                                        {formatName(previewEmoji.name ?? previewEmoji.emoji)}
+                                                </div>
+                                                <div class="truncate text-xs text-[var(--muted)]">
+                                                        :{previewEmoji.slug.replace(/\s+/g, '_')}:
+                                                </div>
                                         </div>
-                                        <div class="truncate text-xs text-[var(--muted)]">
-                                                :{previewEmoji.slug.replace(/\s+/g, '_')}:
-                                        </div>
-                                </div>
-                        {:else}
-                                <div class="text-xs text-[var(--muted)]">Hover an emoji to preview it here.</div>
-                        {/if}
+                                {:else}
+                                        <div class="text-xs text-[var(--muted)]">Hover an emoji to preview it here.</div>
+                                {/if}
+                        </div>
                 </div>
         </div>
 </div>
