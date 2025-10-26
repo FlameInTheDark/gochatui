@@ -490,21 +490,36 @@
 	}
 
         function updateMentionSuggestionList(trigger: MentionTrigger | null) {
+                if (!trigger) {
+                        const hadQuery = mentionQuery !== null;
+                        const hadSuggestions = mentionSuggestions.length > 0;
+                        const hadIndex = mentionActiveIndex !== 0;
+
+                        if (!hadQuery && !hadSuggestions && !hadIndex) {
+                                return;
+                        }
+
+                        if (hadQuery) {
+                                mentionQuery = null;
+                        }
+                        if (hadSuggestions) {
+                                mentionSuggestions = [];
+                        }
+                        if (hadIndex) {
+                                mentionActiveIndex = 0;
+                        }
+                        return;
+                }
+
                 const previousQuery = mentionQuery;
                 const previousSuggestions = mentionSuggestions;
                 const previousIndex = mentionActiveIndex;
-
-                if (!trigger) {
-                        mentionQuery = null;
-                        mentionSuggestions = [];
-                        mentionActiveIndex = 0;
-                        return;
-                }
 
                 const previousKey = previousQuery
                         ? `${previousQuery.trigger}:${previousQuery.start}:${previousQuery.query}`
                         : null;
                 const nextKey = `${trigger.trigger}:${trigger.start}:${trigger.query}`;
+                const queryChanged = previousKey !== nextKey;
 
                 const normalizedQuery = trigger.query.replace(/^&/, '').trim().toLowerCase();
 
@@ -537,24 +552,34 @@
                                 if (!previous) return true;
                                 return (
                                         previous.id !== suggestion.id ||
-                                        previous.type !== suggestion.type
+                                        previous.type !== suggestion.type ||
+                                        previous.label !== suggestion.label ||
+                                        previous.description !== suggestion.description ||
+                                        previous.accentColor !== suggestion.accentColor
                                 );
                         });
 
-                mentionQuery = trigger;
-                mentionSuggestions = nextSuggestions;
+                if (!queryChanged && !suggestionsChanged) {
+                        return;
+                }
 
-                if (previousKey !== nextKey || suggestionsChanged) {
-                        if (previousKey !== nextKey) {
-                                mentionActiveIndex = 0;
-                        } else if (mentionSuggestions.length === 0) {
-                                mentionActiveIndex = 0;
-                        } else {
-                                mentionActiveIndex = Math.min(
-                                        previousIndex,
-                                        Math.max(mentionSuggestions.length - 1, 0)
-                                );
-                        }
+                if (queryChanged) {
+                        mentionQuery = trigger;
+                }
+
+                if (suggestionsChanged) {
+                        mentionSuggestions = nextSuggestions;
+                }
+
+                if (queryChanged) {
+                        mentionActiveIndex = 0;
+                } else if (nextSuggestions.length === 0) {
+                        mentionActiveIndex = 0;
+                } else {
+                        mentionActiveIndex = Math.min(
+                                previousIndex,
+                                Math.max(nextSuggestions.length - 1, 0)
+                        );
                 }
         }
 
