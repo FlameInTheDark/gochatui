@@ -28,6 +28,7 @@
                 Hash,
                 Image as ImageIcon,
                 ImageOff,
+                MoveRight,
                 Paperclip,
                 Pencil,
                 Play,
@@ -154,11 +155,11 @@
 		return lines.map((line) => line.replace(pattern, '')).join('\n');
 	}
 
-	function parseMessageContent(content: string | null | undefined): MessageSegment[] {
-		if (!content) return [];
-		const segments: MessageSegment[] = [];
-		const pattern = /```([^\r\n`]*)?(?:\r?\n)?([\s\S]*?)```/g;
-		let lastIndex = 0;
+        function parseMessageContent(content: string | null | undefined): MessageSegment[] {
+                if (!content) return [];
+                const segments: MessageSegment[] = [];
+                const pattern = /```([^\r\n`]*)?(?:\r?\n)?([\s\S]*?)```/g;
+                let lastIndex = 0;
 		let match: RegExpExecArray | null;
 
 		while ((match = pattern.exec(content)) !== null) {
@@ -179,15 +180,53 @@
 			segments.push({ type: 'text', content: content.slice(lastIndex) });
 		}
 
-		if (segments.length === 0) {
-			return [{ type: 'text', content }];
-		}
+                if (segments.length === 0) {
+                        return [{ type: 'text', content }];
+                }
 
-		return segments;
-	}
+                return segments;
+        }
 
-	const urlPattern =
-		/((?:https?:\/\/|ftp:\/\/)[^\s<>()]+|www\.[^\s<>()]+|[\w.-]+\.[a-zA-Z]{2,}(?:\/[^\s<>()]+)*)/gi;
+        const JOIN_MESSAGE_PHRASES: readonly (() => string)[] = [
+                () => m.system_join_phrase_party(),
+                () => m.system_join_phrase_guild_hall(),
+                () => m.system_join_phrase_slid_in(),
+                () => m.system_join_phrase_touched_down(),
+                () => m.system_join_phrase_popped_in(),
+                () => m.system_join_phrase_joined_adventure(),
+                () => m.system_join_phrase_roll_out_mat(),
+                () => m.system_join_phrase_connected_wave(),
+                () => m.system_join_phrase_stepped_lobby(),
+                () => m.system_join_phrase_spawned_nearby()
+        ];
+
+        function hashString(value: string): number {
+                let hash = 0;
+                for (let index = 0; index < value.length; index += 1) {
+                        hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+                }
+                return hash >>> 0;
+        }
+
+        function selectJoinPhraseIndex(msg: DtoMessage): number {
+                const phrasesLength = JOIN_MESSAGE_PHRASES.length;
+                if (phrasesLength === 0) return 0;
+                const rawId = (msg as any)?.id;
+                if (rawId == null) return 0;
+                try {
+                        const big = typeof rawId === 'bigint' ? rawId : BigInt(String(rawId));
+                        const mod = big % BigInt(phrasesLength);
+                        const normalized = mod < 0 ? mod + BigInt(phrasesLength) : mod;
+                        return Number(normalized);
+                } catch {
+                        const str = String(rawId);
+                        if (!str) return 0;
+                        return hashString(str) % phrasesLength;
+                }
+        }
+
+        const urlPattern =
+                /((?:https?:\/\/|ftp:\/\/)[^\s<>()]+|www\.[^\s<>()]+|[\w.-]+\.[a-zA-Z]{2,}(?:\/[^\s<>()]+)*)/gi;
 
 	function normalizeUrl(raw: string): string {
 		if (!raw) return raw;
@@ -798,7 +837,20 @@
 
         const me = auth.user;
         let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
-	let isEditing = $state(false);
+        const isJoinMessage = $derived(() => Number((message as any)?.type ?? 0) === 2);
+        const joinPhrase = $derived(() => {
+                if (!isJoinMessage) return null;
+                const index = selectJoinPhraseIndex(message);
+                const resolver = JOIN_MESSAGE_PHRASES[index] ?? JOIN_MESSAGE_PHRASES[0];
+                return resolver ? resolver() : '';
+        });
+        const joinDisplayName = $derived(() => {
+                const raw = message.author?.name;
+                if (!raw) return 'Unknown user';
+                const trimmed = raw.trim();
+                return trimmed || raw;
+        });
+        let isEditing = $state(false);
         let draft = $state(message.content ?? '');
         let saving = $state(false);
         let editTextarea = $state<HTMLTextAreaElement | null>(null);
@@ -1018,6 +1070,11 @@
                 const perms = resolveChannelPermissions();
                 const own = currentId != null && authorStr != null && currentId === authorStr;
                 const manage = Boolean(perms & PERMISSION_MANAGE_MESSAGES);
+                if (isJoinMessage) {
+                        canEditMessage = false;
+                        canDeleteMessage = manage;
+                        return;
+                }
                 const attachments = (message.attachments ?? []) as MessageAttachment[];
                 const hasTextContent =
                         typeof message.content === 'string' && message.content.trim().length > 0;
@@ -2051,20 +2108,27 @@
 
 <div
         role="listitem"
-        class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
+        class={`group/message flex gap-3 px-4 ${compact && !isJoinMessage ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
         use:customContextMenuTarget
         onpointerup={handleRootPointerUp}
         oncontextmenu={openMessageMenu}
         data-message-id={messageDomId((message as any)?.id)}
         bind:this={messageRoot}
 >
-	{#if compact}
-		<div
-			class="w-10 shrink-0 pt-0.5 pr-1 text-right text-[10px] leading-tight text-[var(--muted)] opacity-0 transition-opacity group-hover/message:opacity-100"
-			use:tooltip={() => fmtMsgFull(message)}
-		>
-			{fmtMsgTime(message)}
-		</div>
+        {#if isJoinMessage}
+                <div
+                        class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                        aria-hidden="true"
+                >
+                        <MoveRight class="h-5 w-5" stroke-width={2} />
+                </div>
+        {:else if compact}
+                <div
+                        class="w-10 shrink-0 pt-0.5 pr-1 text-right text-[10px] leading-tight text-[var(--muted)] opacity-0 transition-opacity group-hover/message:opacity-100"
+                        use:tooltip={() => fmtMsgFull(message)}
+                >
+                        {fmtMsgTime(message)}
+                </div>
         {:else}
                 <button
                         type="button"
@@ -2088,75 +2152,100 @@
                         {/if}
                 </button>
         {/if}
-	<div class="relative min-w-0 flex-1">
-		{#if !isEditing && (canEditMessage || canDeleteMessage)}
-			<div
-				class="absolute top-1 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
-			>
-				{#if canEditMessage}
+        <div class="relative min-w-0 flex-1">
+                {#if isJoinMessage}
+                        {@const joinTime = fmtMsgTime(message)}
+                        <div class="flex flex-col gap-1 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm">
+                                <div class="flex flex-wrap items-center gap-1 text-sm text-[var(--foreground)]">
                                         <button
-                                                class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
-                                                aria-label="Edit"
-						onclick={() => {
-							void startEditing();
-						}}
-					>
-						<Pencil class="h-3.5 w-3.5" stroke-width={2} />
-					</button>
-				{/if}
-				{#if canDeleteMessage}
-                                        <button
-                                                class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
-                                                aria-label="Delete"
-						onclick={deleteMsg}
-					>
-						<Trash2 class="h-3.5 w-3.5" stroke-width={2} />
-					</button>
-				{/if}
-			</div>
-		{/if}
-		{#if !compact}
-			<div class="flex items-baseline gap-2 pr-20">
-                                <button
-                                        type="button"
-                                        use:customContextMenuTarget
-                                        class="truncate font-semibold text-[var(--muted)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                                        style:color={primaryRoleColor ?? null}
-                                        data-user-menu="true"
-                                        data-tooltip-disabled
-                                        oncontextmenu={openUserMenu}
-                                        onclick={openAuthorProfile}
-                                >
-                                        {message.author?.name ?? 'User'}
-                                </button>
-                                <div class="text-xs text-[var(--muted)]" use:tooltip={() => fmtMsgFull(message)}>
-                                        {fmtMsgTime(message)}
+                                                type="button"
+                                                use:customContextMenuTarget
+                                                class="font-semibold text-[var(--foreground)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                                style:color={primaryRoleColor ?? null}
+                                                data-user-menu="true"
+                                                data-tooltip-disabled
+                                                oncontextmenu={openUserMenu}
+                                                onclick={openAuthorProfile}
+                                        >
+                                                {joinDisplayName}
+                                        </button>
+                                        <span class="text-[var(--muted)]">{joinPhrase ?? ''}</span>
                                 </div>
-			</div>
-		{/if}
-		{#if isEditing}
-			<div class="mt-1">
-				<textarea
-					class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					bind:this={editTextarea}
-					bind:value={draft}
-					style:overflow-y={'hidden'}
-					oninput={autoSizeEditTextarea}
-				></textarea>
-				<div class="mt-1 flex gap-2 text-sm">
-					<button
-						class="rounded-md bg-[var(--brand)] px-2 py-1 text-[var(--bg)]"
-						disabled={saving}
-						onclick={saveEdit}>{saving ? 'Saving…' : 'Save'}</button
-					>
-					<button
-						class="rounded-md border border-[var(--stroke)] px-2 py-1"
-						onclick={() => (isEditing = false)}>Cancel</button
-					>
-				</div>
-			</div>
-		{:else}
-			<div class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}>
+                                {#if joinTime}
+                                        <div class="mt-1 text-xs text-[var(--muted)]" use:tooltip={() => fmtMsgFull(message)}>
+                                                {joinTime}
+                                        </div>
+                                {/if}
+                        </div>
+                {:else}
+                        {#if !isEditing && (canEditMessage || canDeleteMessage)}
+                                <div
+                                        class="absolute top-1 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
+                                >
+                                        {#if canEditMessage}
+                                                <button
+                                                        class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
+                                                        aria-label="Edit"
+                                                        onclick={() => {
+                                                                void startEditing();
+                                                        }}
+                                                >
+                                                        <Pencil class="h-3.5 w-3.5" stroke-width={2} />
+                                                </button>
+                                        {/if}
+                                        {#if canDeleteMessage}
+                                                <button
+                                                        class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
+                                                        aria-label="Delete"
+                                                        onclick={deleteMsg}
+                                                >
+                                                        <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
+                                                </button>
+                                        {/if}
+                                </div>
+                        {/if}
+                        {#if !compact}
+                                <div class="flex items-baseline gap-2 pr-20">
+                                        <button
+                                                type="button"
+                                                use:customContextMenuTarget
+                                                class="truncate font-semibold text-[var(--muted)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                                style:color={primaryRoleColor ?? null}
+                                                data-user-menu="true"
+                                                data-tooltip-disabled
+                                                oncontextmenu={openUserMenu}
+                                                onclick={openAuthorProfile}
+                                        >
+                                                {message.author?.name ?? 'User'}
+                                        </button>
+                                        <div class="text-xs text-[var(--muted)]" use:tooltip={() => fmtMsgFull(message)}>
+                                                {fmtMsgTime(message)}
+                                        </div>
+                                </div>
+                        {/if}
+                        {#if isEditing}
+                                <div class="mt-1">
+                                        <textarea
+                                                class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                bind:this={editTextarea}
+                                                bind:value={draft}
+                                                style:overflow-y={'hidden'}
+                                                oninput={autoSizeEditTextarea}
+                                        ></textarea>
+                                        <div class="mt-1 flex gap-2 text-sm">
+                                                <button
+                                                        class="rounded-md bg-[var(--brand)] px-2 py-1 text-[var(--bg)]"
+                                                        disabled={saving}
+                                                        onclick={saveEdit}>{saving ? 'Saving…' : 'Save'}</button
+                                                >
+                                                <button
+                                                        class="rounded-md border border-[var(--stroke)] px-2 py-1"
+                                                        onclick={() => (isEditing = false)}>Cancel</button
+                                                >
+                                        </div>
+                                </div>
+                        {:else}
+                                <div class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}>
 				{#if renderedSegments.length === 0}
 					<span class="break-words whitespace-pre-wrap">{message.content}</span>
 				{:else}
@@ -2540,8 +2629,9 @@
                                                 {/each}
                                         </div>
                                 {/if}
-			</div>
-		{/if}
+                        </div>
+                {/if}
+        {/if}
         </div>
 </div>
 
