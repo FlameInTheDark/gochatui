@@ -539,6 +539,36 @@
                 return badge;
         }
 
+        function pruneTriggerBeforeBadge(badge: HTMLElement) {
+                let sibling: ChildNode | null = badge.previousSibling;
+                while (sibling && sibling.nodeType !== Node.TEXT_NODE) {
+                        sibling = sibling.previousSibling;
+                }
+                if (!sibling || sibling.nodeType !== Node.TEXT_NODE) return;
+                const textNode = sibling as Text;
+                const rawValue = textNode.nodeValue ?? '';
+                if (!rawValue) return;
+                const cleanedValue = rawValue.replace(ZERO_WIDTH_SPACE_REGEX, '');
+                if (cleanedValue !== rawValue) {
+                        textNode.nodeValue = cleanedValue;
+                }
+                const value = textNode.nodeValue ?? '';
+                if (!value) {
+                        textNode.parentNode?.removeChild(textNode);
+                        return;
+                }
+                const match = value.match(/(^|[\s>"'([{])([@#])([^\s@#<>{}]*)$/);
+                if (!match) return;
+                const token = match[2] + match[3];
+                const tokenLength = token.length;
+                if (tokenLength === 0) return;
+                const startIndex = value.length - tokenLength;
+                textNode.deleteData(startIndex, tokenLength);
+                if ((textNode.nodeValue ?? '').length === 0) {
+                        textNode.parentNode?.removeChild(textNode);
+                }
+        }
+
         function renderContentToEditor(text: string) {
                 if (!editorEl) return;
                 editorEl.innerHTML = '';
@@ -745,6 +775,8 @@
                                 editorEl.appendChild(badge);
                         }
                 }
+
+                pruneTriggerBeforeBadge(badge);
 
                 if (badge.parentNode) {
                         const range = document.createRange();
@@ -1575,9 +1607,9 @@
                 </div>
         {/if}
         <div
-                class="composer-shell relative flex items-end gap-3 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+                class="composer-shell relative flex items-end gap-3 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
         >
-                <div class="flex items-end pb-1">
+                <div class="flex items-end">
                         <AttachmentUploader
                                 bind:this={uploaderRef}
                                 {attachments}
@@ -1587,9 +1619,9 @@
                                 }}
                         />
                 </div>
-                <div class="relative flex min-h-[2.75rem] flex-1" bind:this={editorWrapperEl}>
+                <div class="relative flex min-h-[1.75rem] flex-1" bind:this={editorWrapperEl}>
                         <div
-                                class="editor-body w-full rounded-md px-2 py-2 text-sm leading-[1.4] text-[var(--fg)] caret-[var(--fg)] outline-none"
+                                class="editor-body w-full rounded-md px-2 py-1 text-sm leading-[1.4] text-[var(--fg)] caret-[var(--fg)] outline-none"
                                 contenteditable="true"
                                 role="textbox"
                                 aria-multiline="true"
@@ -1651,7 +1683,7 @@
                                 </div>
                         {/if}
                 </div>
-                <div class="flex items-center gap-2 pb-1">
+                <div class="flex items-center gap-2">
                         <button
                                 bind:this={emojiButton}
                                 class={`grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] transition-colors hover:text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
@@ -1686,7 +1718,7 @@
         }
 
         :global(.editor-body) {
-                min-height: 2.25rem;
+                min-height: 1.75rem;
                 white-space: pre-wrap;
                 word-break: break-word;
         }
