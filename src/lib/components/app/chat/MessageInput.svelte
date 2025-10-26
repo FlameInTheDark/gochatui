@@ -8,7 +8,8 @@
 		membersByGuild
 	} from '$lib/stores/appState';
 	import AttachmentUploader from './AttachmentUploader.svelte';
-	import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+        import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+        import type { ActionReturn } from 'svelte/action';
 	import { get } from 'svelte/store';
 	import { m } from '$lib/paraglide/messages.js';
 	import { Send, X, Paperclip, Smile, AtSign, Hash, BadgeCheck } from 'lucide-svelte';
@@ -47,7 +48,53 @@
 	let sending = $state(false);
 	const dispatch = createEventDispatcher<{ sent: void }>();
 
-	let ta: HTMLTextAreaElement | null = null;
+        let ta: HTMLTextAreaElement | null = null;
+        let overlayRootEl: HTMLDivElement | null = null;
+        let overlayGhostEl: HTMLSpanElement | null = null;
+        let caretStyle = $state({ left: 0, top: 0, height: 0 });
+        let caretVisible = $state(false);
+        let ghostMentionRefs: Array<HTMLElement | null> = [];
+        let visualMentionRefs: Array<HTMLElement | null> = [];
+
+        function registerGhostMention(order: number, el: HTMLElement | null) {
+                ghostMentionRefs[order] = el;
+        }
+
+        function registerVisualMention(order: number, el: HTMLElement | null) {
+                visualMentionRefs[order] = el;
+        }
+
+        function ghostMentionAction(node: HTMLElement, order: number): ActionReturn<number> {
+                registerGhostMention(order, node);
+                return {
+                        update(nextOrder: number) {
+                                if (nextOrder !== order) {
+                                        registerGhostMention(order, null);
+                                        order = nextOrder;
+                                        registerGhostMention(order, node);
+                                }
+                        },
+                        destroy() {
+                                registerGhostMention(order, null);
+                        }
+                };
+        }
+
+        function visualMentionAction(node: HTMLElement, order: number): ActionReturn<number> {
+                registerVisualMention(order, node);
+                return {
+                        update(nextOrder: number) {
+                                if (nextOrder !== order) {
+                                        registerVisualMention(order, null);
+                                        order = nextOrder;
+                                        registerVisualMention(order, node);
+                                }
+                        },
+                        destroy() {
+                                registerVisualMention(order, null);
+                        }
+                };
+        }
 	let uploaderRef: {
 		addFiles?: (files: FileList | File[] | null | undefined) => Promise<PendingAttachment[] | void>;
 	} | null = null;
@@ -62,7 +109,17 @@
 
         type InputDisplayToken =
                 | { type: 'text'; value: string }
-                | { type: 'mention'; mention: MentionMatch; label: string; accentColor: string | null };
+                | {
+                                type: 'mention';
+                                mention: MentionMatch;
+                                label: string;
+                                accentColor: string | null;
+                                order: number;
+                        };
+
+        type GhostToken =
+                | { type: 'text'; value: string }
+                | { type: 'mention'; placeholder: string; order: number };
 
 	type MentionSuggestion = {
 		id: string;
@@ -77,19 +134,46 @@
         const mentionMatches = $derived.by(() => parseMentions(content));
         let editorFocused = $state(false);
 
-        const mentionDisplayTokens = $derived.by(() => {
+        $effect(() => {
+                const count = mentionMatches.length;
+                ghostMentionRefs.length = count;
+                visualMentionRefs.length = count;
+        });
+
+        const ghostTokens = $derived.by(() => {
                 const segments = splitTextWithMentions(content);
-                const tokens: InputDisplayToken[] = [];
+                const tokens: GhostToken[] = [];
+                let mentionOrder = 0;
 
                 for (const segment of segments) {
                         if (segment.type === 'text') {
-                                if (segment.value) {
-                                        tokens.push({ type: 'text', value: segment.value });
-                                }
+                                tokens.push({ type: 'text', value: segment.value });
                                 continue;
                         }
 
-                        tokens.push(buildMentionDisplayToken(segment.mention));
+                        tokens.push({
+                                type: 'mention',
+                                placeholder: mentionPlaceholder(segment.mention.type, segment.mention.id),
+                                order: mentionOrder++
+                        });
+                }
+
+                return tokens;
+        });
+
+        const mentionDisplayTokens = $derived.by(() => {
+                const segments = splitTextWithMentions(content);
+                const tokens: InputDisplayToken[] = [];
+                let mentionOrder = 0;
+
+                for (const segment of segments) {
+                        if (segment.type === 'text') {
+                                tokens.push({ type: 'text', value: segment.value });
+                                continue;
+                        }
+
+                        tokens.push(buildMentionDisplayToken(segment.mention, mentionOrder));
+                        mentionOrder += 1;
                 }
 
                 return tokens;
@@ -370,14 +454,15 @@
 		return `#channel-${channelId}`;
 	}
 
-        function buildMentionDisplayToken(mention: MentionMatch): InputDisplayToken {
+        function buildMentionDisplayToken(mention: MentionMatch, order: number): InputDisplayToken {
                 if (mention.type === 'user') {
                         const details = resolveUserMentionDetails(mention.id);
                         return {
                                 type: 'mention',
                                 mention,
                                 label: details.label,
-                                accentColor: details.accentColor
+                                accentColor: details.accentColor,
+                                order
                         };
                 }
 
@@ -387,7 +472,8 @@
                                 type: 'mention',
                                 mention,
                                 label: details.label,
-                                accentColor: details.accentColor
+                                accentColor: details.accentColor,
+                                order
                         };
                 }
 
@@ -395,7 +481,8 @@
                         type: 'mention',
                         mention,
                         label: resolveChannelMentionLabel(mention.id),
-                        accentColor: null
+                        accentColor: null,
+                        order
                 };
         }
 
@@ -647,6 +734,7 @@
                 if (inside) {
                         try {
                                 target.setSelectionRange(inside.end, inside.end);
+                                updateCustomCaret();
                         } catch {
                                 /* ignore */
                         }
@@ -666,11 +754,12 @@
 		if (ta) {
 			const pos = before.length;
 			ta.focus();
-			try {
-				ta.setSelectionRange(pos, pos);
-			} catch {
-				/* ignore */
-			}
+                        try {
+                                ta.setSelectionRange(pos, pos);
+                                updateCustomCaret();
+                        } catch {
+                                /* ignore */
+                        }
 		}
 		autoResize();
 		handleTypingActivity(content);
@@ -696,11 +785,12 @@
 		if (ta) {
 			const cursor = before.length + insertion.length;
 			ta.focus();
-			try {
-				ta.setSelectionRange(cursor, cursor);
-			} catch {
-				/* ignore */
-			}
+                        try {
+                                ta.setSelectionRange(cursor, cursor);
+                                updateCustomCaret();
+                        } catch {
+                                /* ignore */
+                        }
 		}
 		autoResize();
 		handleTypingActivity(content);
@@ -776,16 +866,19 @@
 
         function handleTextareaSelectionChange() {
                 refreshMentionState();
+                updateCustomCaret();
         }
 
         function handleTextareaFocus() {
                 editorFocused = true;
                 refreshMentionState();
+                updateCustomCaret();
         }
 
         function handleTextareaBlur() {
                 editorFocused = false;
                 refreshMentionState();
+                updateCustomCaret();
         }
 
 	function handleMentionClick(index: number) {
@@ -810,12 +903,13 @@
 		content = next;
 		await tick();
 		const cursor = start + emoji.length;
-		target.focus();
-		try {
-			target.setSelectionRange(cursor, cursor);
-		} catch {
-			/* ignore */
-		}
+                        target.focus();
+                        try {
+                                target.setSelectionRange(cursor, cursor);
+                                updateCustomCaret();
+                        } catch {
+                                /* ignore */
+                        }
 		autoResize();
 		handleTypingActivity(next);
 		refreshMentionState();
@@ -937,29 +1031,121 @@
 		return (ch?.name ?? '').toString();
 	}
 
-	function autoResize() {
-		if (!ta) return;
-		ta.style.height = 'auto';
-		const max = Math.floor((window?.innerHeight || 800) * 0.4);
-		const next = Math.min(ta.scrollHeight, max);
-		ta.style.height = next + 'px';
-		ta.style.overflowY = ta.scrollHeight > next ? 'auto' : 'hidden';
-	}
+        function autoResize() {
+                if (!ta) return;
+                ta.style.height = 'auto';
+                const max = Math.floor((window?.innerHeight || 800) * 0.4);
+                const next = Math.min(ta.scrollHeight, max);
+                ta.style.height = next + 'px';
+                ta.style.overflowY = ta.scrollHeight > next ? 'auto' : 'hidden';
+        }
 
-	function handleInput(event: Event) {
-		autoResize();
-		const target = event.currentTarget as HTMLTextAreaElement | null;
-		const value = target?.value ?? '';
-		handleTypingActivity(value);
-		refreshMentionState();
-	}
+        function updateCustomCaret() {
+                if (!ta || !overlayGhostEl || !overlayRootEl) {
+                        caretVisible = false;
+                        return;
+                }
 
-	onMount(() => {
-		autoResize();
+                const rawStart = ta.selectionStart ?? content.length;
+                const rawEnd = ta.selectionEnd ?? content.length;
+                const start = clampSelectionIndex(rawStart, content.length);
+                const end = clampSelectionIndex(rawEnd, content.length);
+                const collapsed = start === end;
+                caretVisible = collapsed && editorFocused;
 
-		if (typeof window === 'undefined') {
-			return;
-		}
+                if (!collapsed) {
+                        return;
+                }
+
+                const range = document.createRange();
+                range.setStart(overlayGhostEl, 0);
+                range.collapse(true);
+                let remaining = start;
+                const walker = document.createTreeWalker(
+                        overlayGhostEl,
+                        NodeFilter.SHOW_TEXT,
+                        null
+                );
+                let positioned = false;
+
+                while (walker.nextNode()) {
+                        const node = walker.currentNode as Text;
+                        const length = node.textContent?.length ?? 0;
+                        if (remaining <= length) {
+                                range.setStart(node, remaining);
+                                range.collapse(true);
+                                positioned = true;
+                                break;
+                        }
+                        remaining -= length;
+                }
+
+                if (!positioned) {
+                        const lastChild = overlayGhostEl.lastChild;
+                        if (lastChild) {
+                                range.setStartAfter(lastChild);
+                                range.collapse(true);
+                                positioned = true;
+                        }
+                }
+
+                const fallbackLine = parseFloat(getComputedStyle(ta).lineHeight || '0') || 16;
+
+                if (!positioned) {
+                        caretStyle = { left: 0, top: 0, height: fallbackLine };
+                        caretVisible = editorFocused;
+                        return;
+                }
+
+                const containerRect = overlayRootEl.getBoundingClientRect();
+                const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+                if (!rect) {
+                        caretStyle = { left: 0, top: 0, height: fallbackLine };
+                        caretVisible = editorFocused;
+                        return;
+                }
+
+                let offsetAdjustment = 0;
+                if (mentionMatches.length > 0) {
+                        for (let i = 0; i < mentionMatches.length; i += 1) {
+                                const mention = mentionMatches[i];
+                                if (mention.end <= start) {
+                                        const ghostEl = ghostMentionRefs[i];
+                                        const visualEl = visualMentionRefs[i];
+                                        if (ghostEl && visualEl) {
+                                                const ghostRect = ghostEl.getBoundingClientRect();
+                                                const visualRect = visualEl.getBoundingClientRect();
+                                                offsetAdjustment += Math.max(0, ghostRect.width - visualRect.width);
+                                        }
+                                        continue;
+                                }
+                                break;
+                        }
+                }
+
+                caretStyle = {
+                        left: Math.max(0, rect.left - containerRect.left - offsetAdjustment),
+                        top: rect.top - containerRect.top,
+                        height: rect.height || fallbackLine
+                };
+        }
+
+        function handleInput(event: Event) {
+                autoResize();
+                const target = event.currentTarget as HTMLTextAreaElement | null;
+                const value = target?.value ?? '';
+                handleTypingActivity(value);
+                refreshMentionState();
+                updateCustomCaret();
+        }
+
+        onMount(() => {
+                autoResize();
+                updateCustomCaret();
+
+                if (typeof window === 'undefined') {
+                        return;
+                }
 
 		const win = window;
 		const listeners: Array<[keyof WindowEventMap, (event: DragEvent) => void]> = [
@@ -972,7 +1158,11 @@
 		const opts: boolean = true;
 		listeners.forEach(([event, handler]) => {
 			win.addEventListener(event, handler as EventListener, opts);
-		});
+        });
+
+        $effect(() => {
+                void tick().then(() => updateCustomCaret());
+        });
 		removeGlobalDragListeners = () => {
 			listeners.forEach(([event, handler]) => {
 				win.removeEventListener(event, handler as EventListener, opts);
@@ -1100,6 +1290,7 @@
                         ta.style.overflowY = 'hidden';
                         try {
                                 ta.setSelectionRange(0, 0);
+                                updateCustomCaret();
                         } catch {
                                 /* ignore */
                         }
@@ -1375,26 +1566,33 @@
                                         class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-2 leading-[1.5]"
                                         aria-hidden="true"
                                 >
-                                        <div class="overlay-layer">
-                                                <span class="overlay-text">
+                                        <div class="overlay-layer" bind:this={overlayRootEl}>
+                                                <span class="overlay-ghost" bind:this={overlayGhostEl}>
+                                                        {#each ghostTokens as segment}
+                                                                {#if segment.type === 'text'}
+                                                                        <span>{segment.value}</span>
+                                                                {:else}
+                                                                        <span use:ghostMentionAction={segment.order}>
+                                                                                {segment.placeholder}
+                                                                        </span>
+                                                                {/if}
+                                                        {/each}
+                                                </span>
+                                                <span class="overlay-visual">
                                                         {#each mentionDisplayTokens as token, index}
                                                                 {#if token.type === 'text'}
                                                                         <span class="input-text">{token.value}</span>
                                                                 {:else if token.type === 'mention'}
-                                                                        <span class="mention-wrapper">
-                                                                                <span class="mention-ghost">
-                                                                                        {mentionPlaceholder(token.mention.type, token.mention.id)}
-                                                                                </span>
-                                                                                <span
-                                                                                        class="mention-pill-input"
-                                                                                        style={
-                                                                                                token.accentColor
-                                                                                                        ? `--mention-accent: ${token.accentColor}`
-                                                                                                        : undefined
-                                                                                        }
-                                                                                >
-                                                                                        {token.label}
-                                                                                </span>
+                                                                        <span
+                                                                                class="mention-pill-input"
+                                                                                use:visualMentionAction={token.order}
+                                                                                style={
+                                                                                        token.accentColor
+                                                                                                ? `--mention-accent: ${token.accentColor}`
+                                                                                                : undefined
+                                                                                }
+                                                                        >
+                                                                                <span class="mention-pill-label">{token.label}</span>
                                                                         </span>
                                                                 {/if}
                                                         {/each}
@@ -1404,12 +1602,16 @@
                                                                 >{m.message_placeholder({ channel: channelName() })}</span
                                                         >
                                                 {/if}
+                                                <span
+                                                        class={`custom-caret ${caretVisible ? 'is-visible' : ''}`}
+                                                        style={`transform: translate(${caretStyle.left}px, ${caretStyle.top}px); height: ${caretStyle.height}px;`}
+                                                ></span>
                                         </div>
                                 </div>
                                 <textarea
                                         bind:this={ta}
                                         class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.5rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-2 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
-                                        style:caretColor="var(--fg, #fff)"
+                                        style:caretColor="transparent"
                                         rows={1}
                                         aria-label={m.message_placeholder({ channel: channelName() })}
                                         bind:value={content}
@@ -1467,20 +1669,25 @@
                 min-height: 100%;
         }
 
-        .overlay-text {
-                position: relative;
-                z-index: 1;
-                display: inline-block;
+        .overlay-ghost {
+                visibility: hidden;
+                display: block;
+                white-space: pre-wrap;
+                word-break: break-word;
                 min-height: 1.25em;
         }
 
-        .textarea-editor {
-                position: relative;
-                z-index: 1;
-                caret-color: var(--fg, #fff);
+        .overlay-visual {
+                position: absolute;
+                inset: 0;
+                display: block;
+                white-space: pre-wrap;
+                word-break: break-word;
+                pointer-events: none;
+                z-index: 2;
         }
 
-        .input-overlay .input-text {
+        .overlay-visual .input-text {
                 white-space: pre-wrap;
         }
 
@@ -1490,41 +1697,60 @@
                 top: 0;
                 white-space: pre-wrap;
                 pointer-events: none;
-                z-index: 0;
+                z-index: 1;
         }
 
-        .mention-wrapper {
-                display: inline-grid;
-                grid-auto-flow: column;
-                align-items: center;
-        }
-
-        .mention-wrapper .mention-ghost,
-        .mention-wrapper .mention-pill-input {
-                grid-area: 1 / 1;
-        }
-
-        .mention-wrapper .mention-ghost {
-                visibility: hidden;
-                white-space: pre;
-                padding: 0.125rem 0.375rem;
-                font-size: inherit;
-                line-height: 1.2;
+        .textarea-editor {
+                position: relative;
+                z-index: 1;
+                caret-color: transparent;
         }
 
         .mention-pill-input {
                 display: inline-flex;
                 align-items: center;
-                justify-content: center;
-                padding: 0.125rem 0.375rem;
+                justify-content: flex-start;
+                white-space: nowrap;
+        }
+
+        .mention-pill-label {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.1rem 0.35rem;
                 border-radius: 9999px;
                 font-weight: 500;
                 font-size: inherit;
                 line-height: 1.2;
-                white-space: nowrap;
                 background-color: rgba(88, 101, 242, 0.16);
                 background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);
                 color: var(--mention-accent, var(--brand));
+        }
+
+        .custom-caret {
+                position: absolute;
+                width: 1px;
+                background-color: var(--fg);
+                animation: caretBlink 1.05s steps(2, start) infinite;
+                animation-play-state: paused;
+                opacity: 0;
+                z-index: 3;
+        }
+
+        .custom-caret.is-visible {
+                animation-play-state: running;
+                opacity: 1;
+        }
+
+        @keyframes caretBlink {
+                0% {
+                        opacity: 1;
+                }
+                50% {
+                        opacity: 0;
+                }
+                100% {
+                        opacity: 1;
+                }
         }
 
 	.mention-menu {
