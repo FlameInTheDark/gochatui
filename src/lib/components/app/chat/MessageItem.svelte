@@ -1071,6 +1071,7 @@
         let messageRoot = $state<HTMLElement | null>(null);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
         const segments = $derived(parseMessageContent(message.content ?? ''));
+        const fallbackInlineTokens = $derived(parseInline(message.content ?? ''));
         const authorAvatarUrl = $derived.by(() =>
                 resolveAvatarUrl(
                         (message as any)?.author,
@@ -2470,10 +2471,14 @@
                                 </div>
                         {:else}
                                 <div class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}>
-				{#if renderedSegments.length === 0}
-					<span class="break-words whitespace-pre-wrap">{message.content}</span>
-				{:else}
-					{#each renderedSegments as segment, index (index)}
+                                {#if renderedSegments.length === 0}
+                                        {#if fallbackInlineTokens.length === 0}
+                                                <span class="break-words whitespace-pre-wrap">{message.content}</span>
+                                        {:else}
+                                                <InlineTokens tokens={fallbackInlineTokens} />
+                                        {/if}
+                                {:else}
+                                        {#each renderedSegments as segment, index (index)}
 						{#if segment.type === 'code'}
 							<div class="my-2 whitespace-normal first:mt-0 last:mb-0">
 								<CodeBlock code={segment.content} language={segment.language} />

@@ -489,40 +489,74 @@
 		return suggestions;
 	}
 
-	function updateMentionSuggestionList(trigger: MentionTrigger | null) {
-		mentionQuery = trigger;
-		if (!trigger) {
-			mentionSuggestions = [];
-			mentionActiveIndex = 0;
-			return;
-		}
+        function updateMentionSuggestionList(trigger: MentionTrigger | null) {
+                const previousQuery = mentionQuery;
+                const previousSuggestions = mentionSuggestions;
+                const previousIndex = mentionActiveIndex;
 
-		const normalizedQuery = trigger.query.replace(/^&/, '').trim().toLowerCase();
+                if (!trigger) {
+                        mentionQuery = null;
+                        mentionSuggestions = [];
+                        mentionActiveIndex = 0;
+                        return;
+                }
 
-		let pool: MentionSuggestion[] = [];
-		if (trigger.trigger === '@') {
-			const combined = [...buildUserSuggestions(), ...buildRoleSuggestions()];
-			const deduped = new Map<string, MentionSuggestion>();
-			for (const suggestion of combined) {
-				deduped.set(`${suggestion.type}:${suggestion.id}`, suggestion);
-			}
-			pool = Array.from(deduped.values());
-		} else {
-			pool = buildChannelSuggestions();
-		}
+                const previousKey = previousQuery
+                        ? `${previousQuery.trigger}:${previousQuery.start}:${previousQuery.query}`
+                        : null;
+                const nextKey = `${trigger.trigger}:${trigger.start}:${trigger.query}`;
 
-		if (normalizedQuery) {
-			pool = pool.filter((suggestion) => {
-				const label = suggestion.label.toLowerCase();
-				if (label.includes(normalizedQuery)) return true;
-				const desc = suggestion.description?.toLowerCase() ?? '';
-				return desc.includes(normalizedQuery);
-			});
-		}
+                const normalizedQuery = trigger.query.replace(/^&/, '').trim().toLowerCase();
 
-		mentionSuggestions = pool.slice(0, 50);
-		mentionActiveIndex = 0;
-	}
+                let pool: MentionSuggestion[] = [];
+                if (trigger.trigger === '@') {
+                        const combined = [...buildUserSuggestions(), ...buildRoleSuggestions()];
+                        const deduped = new Map<string, MentionSuggestion>();
+                        for (const suggestion of combined) {
+                                deduped.set(`${suggestion.type}:${suggestion.id}`, suggestion);
+                        }
+                        pool = Array.from(deduped.values());
+                } else {
+                        pool = buildChannelSuggestions();
+                }
+
+                if (normalizedQuery) {
+                        pool = pool.filter((suggestion) => {
+                                const label = suggestion.label.toLowerCase();
+                                if (label.includes(normalizedQuery)) return true;
+                                const desc = suggestion.description?.toLowerCase() ?? '';
+                                return desc.includes(normalizedQuery);
+                        });
+                }
+
+                const nextSuggestions = pool.slice(0, 50);
+                const suggestionsChanged =
+                        nextSuggestions.length !== previousSuggestions.length ||
+                        nextSuggestions.some((suggestion, index) => {
+                                const previous = previousSuggestions[index];
+                                if (!previous) return true;
+                                return (
+                                        previous.id !== suggestion.id ||
+                                        previous.type !== suggestion.type
+                                );
+                        });
+
+                mentionQuery = trigger;
+                mentionSuggestions = nextSuggestions;
+
+                if (previousKey !== nextKey || suggestionsChanged) {
+                        if (previousKey !== nextKey) {
+                                mentionActiveIndex = 0;
+                        } else if (mentionSuggestions.length === 0) {
+                                mentionActiveIndex = 0;
+                        } else {
+                                mentionActiveIndex = Math.min(
+                                        previousIndex,
+                                        Math.max(mentionSuggestions.length - 1, 0)
+                                );
+                        }
+                }
+        }
 
 	$effect(() => {
 		const guildId = $selectedGuildId;
@@ -1262,13 +1296,13 @@
 				}}
 			/>
 		</div>
-		<div class="relative flex-1 self-stretch">
-			<textarea
-				bind:this={ta}
-				class="textarea-editor max-h-[40vh] min-h-[2.125rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent caret-[var(--fg)] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
-				rows={1}
-				aria-label={m.message_placeholder({ channel: channelName() })}
-				bind:value={content}
+                <div class="relative flex-1 self-stretch">
+                        <textarea
+                                bind:this={ta}
+                                class="textarea-editor relative z-[1] max-h-[40vh] min-h-[2.125rem] w-full resize-none appearance-none border-0 bg-transparent px-1 py-1 text-transparent caret-[var(--fg)] leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                rows={1}
+                                aria-label={m.message_placeholder({ channel: channelName() })}
+                                bind:value={content}
 				oninput={handleInput}
 				onkeydown={handleTextareaKeydown}
 				onkeyup={handleTextareaSelectionChange}
@@ -1276,7 +1310,10 @@
 				onfocus={handleTextareaSelectionChange}
 				onselect={handleTextareaSelectionChange}
 			></textarea>
-			<div class="input-overlay pointer-events-none absolute inset-0 overflow-hidden px-1 py-1">
+                        <div
+                                class="input-overlay pointer-events-none absolute inset-0 overflow-hidden px-1 py-1 leading-[1.5]"
+                                aria-hidden="true"
+                        >
 				{#if !content}
 					<span class="placeholder text-[var(--muted)]"
 						>{m.message_placeholder({ channel: channelName() })}</span
@@ -1323,13 +1360,20 @@
 </div>
 
 <style>
-	.input-overlay {
-		color: var(--fg);
-		font-size: inherit;
-		line-height: 1.5;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
+        .input-overlay {
+                color: var(--fg);
+                font-size: inherit;
+                line-height: inherit;
+                white-space: pre-wrap;
+                word-break: break-word;
+                user-select: none;
+                z-index: 0;
+        }
+
+        .textarea-editor {
+                position: relative;
+                z-index: 1;
+        }
 
 	.input-overlay .input-text {
 		white-space: pre-wrap;
