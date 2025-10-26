@@ -1210,6 +1210,7 @@
 		})()}
                 {@const withinMinute =
                         pd && d ? Math.abs((d as Date).getTime() - (pd as Date).getTime()) <= 60000 : false}
+                {@const isJoinMessage = Number((m as any)?.type ?? 0) === 2}
                 {@const compact = pk != null && ck != null && pk === ck && withinMinute}
                 {@const showNewSeparator = shouldShowNewSeparator(m, prev)}
                 {#if showNewSeparator}
@@ -1221,7 +1222,7 @@
                                 <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
                         </div>
                 {/if}
-                <MessageItem message={m} {compact} on:deleted={loadLatest} />
+                <MessageItem message={m} compact={isJoinMessage ? false : compact} on:deleted={loadLatest} />
         {/each}
         {#each $pendingMessages.filter((msg) => msg.channelId === ($selectedChannelId ?? '')) as pending (pending.localId)}
                 <PendingMessageItem message={pending} />
