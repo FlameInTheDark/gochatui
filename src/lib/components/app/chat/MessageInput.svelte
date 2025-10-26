@@ -1309,7 +1309,7 @@
 		</div>
 	{/if}
         <div
-                class="chat-input relative flex min-h-[2.5rem] items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+                class="chat-input relative flex min-h-[2.75rem] items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
         >
                 {#if mentionMenuOpen}
                         <div
@@ -1371,7 +1371,7 @@
                 </div>
                 <div class="relative flex flex-1 items-center">
                         <div
-                                class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-[0.5rem] leading-[1.5]"
+                                class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-[0.625rem] leading-[1.5]"
                                 aria-hidden="true"
                         >
                                 <div class="overlay-layer">
@@ -1398,7 +1398,7 @@
                         </div>
                         <textarea
                                 bind:this={ta}
-                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.5rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-[0.5rem] text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
+                                class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.75rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-[0.625rem] text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
                                 style:caretColor="var(--fg, #fff)"
                                 rows={1}
                                 aria-label={m.message_placeholder({ channel: channelName() })}
@@ -1483,14 +1483,13 @@
         .mention-pill-input {
                 display: inline-flex;
                 align-items: center;
-		padding: 0 0.5rem;
-		margin: 0 0.1rem;
-		border-radius: 9999px;
-		font-weight: 500;
-		background-color: rgba(88, 101, 242, 0.16);
-		background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);
-		color: var(--mention-accent, var(--brand));
-	}
+                padding: 0 0.5rem;
+                border-radius: 9999px;
+                font-weight: 500;
+                background-color: rgba(88, 101, 242, 0.16);
+                background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);
+                color: var(--mention-accent, var(--brand));
+        }
 
 	.mention-menu {
 		z-index: 20;
