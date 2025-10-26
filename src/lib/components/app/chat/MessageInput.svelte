@@ -1,576 +1,331 @@
 <script lang="ts">
-	import { auth } from '$lib/stores/auth';
-	import type { DtoChannel, DtoMember, DtoRole, DtoUser } from '$lib/api';
-	import {
-		selectedChannelId,
-		selectedGuildId,
-		channelsByGuild,
-		membersByGuild
-	} from '$lib/stores/appState';
-	import AttachmentUploader from './AttachmentUploader.svelte';
+        import { auth } from '$lib/stores/auth';
+        import type { DtoChannel, DtoMember, DtoRole, DtoUser } from '$lib/api';
+        import {
+                selectedChannelId,
+                selectedGuildId,
+                channelsByGuild,
+                membersByGuild
+        } from '$lib/stores/appState';
+        import AttachmentUploader from './AttachmentUploader.svelte';
+        import EmojiPicker from './EmojiPicker.svelte';
+        import type EmojiPickerComponent from './EmojiPicker.svelte';
         import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
-        import type { ActionReturn } from 'svelte/action';
-	import { get } from 'svelte/store';
-	import { m } from '$lib/paraglide/messages.js';
-	import { Send, X, Paperclip, Smile, AtSign, Hash, BadgeCheck } from 'lucide-svelte';
-	import {
-		addPendingMessage,
-		removePendingMessage,
-		updatePendingAttachment,
-		updatePendingMessage,
-		type PendingAttachment,
-		type PendingMessage
-	} from '$lib/stores/pendingMessages';
-	import { computeApiBase } from '$lib/runtime/api';
-	import EmojiPicker from './EmojiPicker.svelte';
-	import type EmojiPickerComponent from './EmojiPicker.svelte';
-	import {
-		detectMentionTrigger,
-		findMentionAtIndex,
-		mentionPlaceholder,
-		parseMentions,
-		splitTextWithMentions,
-		type MentionTrigger,
-		type MentionMatch,
-		type MentionType
-	} from '$lib/utils/mentions';
-	import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
-	import {
-		buildRoleMap,
-		memberPrimaryName,
-		resolveMemberRoleColor,
-		toSnowflakeString
-	} from '$lib/utils/members';
-	import { colorIntToHex } from '$lib/utils/color';
+        import { get } from 'svelte/store';
+        import { m } from '$lib/paraglide/messages.js';
+        import { Send, X, Paperclip, Smile, AtSign, Hash, BadgeCheck } from 'lucide-svelte';
+        import {
+                addPendingMessage,
+                removePendingMessage,
+                updatePendingAttachment,
+                updatePendingMessage,
+                type PendingAttachment,
+                type PendingMessage
+        } from '$lib/stores/pendingMessages';
+        import {
+                detectMentionTrigger,
+                mentionPlaceholder,
+                parseMentions,
+                splitTextWithMentions,
+                type MentionTrigger,
+                type MentionMatch,
+                type MentionType
+        } from '$lib/utils/mentions';
+        import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import {
+                buildRoleMap,
+                memberPrimaryName,
+                resolveMemberRoleColor,
+                toSnowflakeString
+        } from '$lib/utils/members';
+        import { colorIntToHex } from '$lib/utils/color';
 
-	let content = $state('');
-	let attachments = $state<PendingAttachment[]>([]);
-	let sending = $state(false);
-	const dispatch = createEventDispatcher<{ sent: void }>();
+        type EditorTokenInfo = {
+                trigger: '@' | '#';
+                query: string;
+                node: Text;
+                start: number;
+                end: number;
+        };
 
-        let ta: HTMLTextAreaElement | null = null;
-        let overlayRootEl: HTMLDivElement | null = null;
-        let overlayGhostEl: HTMLSpanElement | null = null;
-        let caretStyle = $state({ left: 0, top: 0, height: 0 });
-        let caretVisible = $state(false);
-        let ghostMentionRefs: Array<HTMLElement | null> = [];
-        let visualMentionRefs: Array<HTMLElement | null> = [];
+        type MentionSuggestion = {
+                id: string;
+                type: MentionType;
+                label: string;
+                description: string | null;
+                accentColor: string | null;
+                member?: DtoMember | null;
+                user?: DtoUser | null;
+        };
 
-        function registerGhostMention(order: number, el: HTMLElement | null) {
-                ghostMentionRefs[order] = el;
-        }
+        const dispatch = createEventDispatcher<{ sent: void }>();
 
-        function registerVisualMention(order: number, el: HTMLElement | null) {
-                visualMentionRefs[order] = el;
-        }
+        let content = $state('');
+        let attachments = $state<PendingAttachment[]>([]);
+        let sending = $state(false);
 
-        function ghostMentionAction(node: HTMLElement, order: number): ActionReturn<number> {
-                registerGhostMention(order, node);
-                return {
-                        update(nextOrder: number) {
-                                if (nextOrder !== order) {
-                                        registerGhostMention(order, null);
-                                        order = nextOrder;
-                                        registerGhostMention(order, node);
-                                }
-                        },
-                        destroy() {
-                                registerGhostMention(order, null);
-                        }
-                };
-        }
+        let editorEl: HTMLDivElement | null = null;
+        let editorWrapperEl: HTMLDivElement | null = null;
+        let mentionMenuEl = $state<HTMLDivElement | null>(null);
 
-        function visualMentionAction(node: HTMLElement, order: number): ActionReturn<number> {
-                registerVisualMention(order, node);
-                return {
-                        update(nextOrder: number) {
-                                if (nextOrder !== order) {
-                                        registerVisualMention(order, null);
-                                        order = nextOrder;
-                                        registerVisualMention(order, node);
-                                }
-                        },
-                        destroy() {
-                                registerVisualMention(order, null);
-                        }
-                };
-        }
-	let uploaderRef: {
-		addFiles?: (files: FileList | File[] | null | undefined) => Promise<PendingAttachment[] | void>;
-	} | null = null;
-	let dropActive = $state(false);
-	let dragCounter = $state(0);
-	let removeGlobalDragListeners: (() => void) | null = null;
-	let showEmojiPicker = $state(false);
-	let emojiButton = $state<HTMLButtonElement | null>(null);
-	let emojiMenuEl = $state<HTMLDivElement | null>(null);
-	let emojiPickerRef = $state<EmojiPickerComponent | null>(null);
-	let removeEmojiMenuListeners: (() => void) | null = null;
+        let uploaderRef: {
+                addFiles?: (files: FileList | File[] | null | undefined) => Promise<PendingAttachment[] | void>;
+        } | null = null;
+        let dropActive = $state(false);
+        let dragCounter = $state(0);
+        let removeGlobalDragListeners: (() => void) | null = null;
 
-        type InputDisplayToken =
-                | { type: 'text'; value: string }
-                | {
-                                type: 'mention';
-                                mention: MentionMatch;
-                                label: string;
-                                accentColor: string | null;
-                                order: number;
-                        };
+        let showEmojiPicker = $state(false);
+        let emojiButton = $state<HTMLButtonElement | null>(null);
+        let emojiMenuEl = $state<HTMLDivElement | null>(null);
+        let emojiPickerRef = $state<EmojiPickerComponent | null>(null);
+        let removeEmojiMenuListeners: (() => void) | null = null;
 
-        type GhostToken =
-                | { type: 'text'; value: string }
-                | { type: 'mention'; placeholder: string; order: number };
-
-	type MentionSuggestion = {
-		id: string;
-		type: MentionType;
-		label: string;
-		description: string | null;
-		accentColor: string | null;
-		member?: DtoMember | null;
-		user?: DtoUser | null;
-	};
-
-        const mentionMatches = $derived.by(() => parseMentions(content));
+        let mentionQuery = $state<MentionTrigger | null>(null);
+        let mentionSuggestions = $state<MentionSuggestion[]>([]);
+        let mentionActiveIndex = $state(0);
+        const mentionMenuOpen = $derived.by(() => Boolean(mentionQuery && mentionSuggestions.length > 0));
+        let mentionListEl = $state<HTMLDivElement | null>(null);
+        let mentionMenuPosition = $state<{ left: number; top: number } | null>(null);
+        let activeTokenInfo: EditorTokenInfo | null = null;
         let editorFocused = $state(false);
 
-        $effect(() => {
-                const count = mentionMatches.length;
-                ghostMentionRefs.length = count;
-                visualMentionRefs.length = count;
-        });
+        let typingResetTimer: ReturnType<typeof setTimeout> | null = null;
+        let typingLastSentAt = 0;
+        let typingActive = false;
+        let typingChannelId: string | null = null;
 
-        const ghostTokens = $derived.by(() => {
-                const segments = splitTextWithMentions(content);
-                const tokens: GhostToken[] = [];
-                let mentionOrder = 0;
+        let mentionRoleMap = $state<Record<string, DtoRole>>({});
 
-                for (const segment of segments) {
-                        if (segment.type === 'text') {
-                                tokens.push({ type: 'text', value: segment.value });
-                                continue;
+        const mentionMatches = $derived.by(() => parseMentions(content));
+        const mentionMemberMap = $derived.by(() => {
+                const guildId = $selectedGuildId ?? '';
+                const list = ($membersByGuild[guildId] ?? []) as DtoMember[] | undefined;
+                const map = new Map<string, DtoMember>();
+                if (Array.isArray(list)) {
+                        for (const entry of list) {
+                                const id = memberUserId(entry);
+                                if (id) {
+                                        map.set(id, entry);
+                                }
                         }
-
-                        tokens.push({
-                                type: 'mention',
-                                placeholder: mentionPlaceholder(segment.mention.type, segment.mention.id),
-                                order: mentionOrder++
-                        });
                 }
-
-                return tokens;
+                return map;
         });
+        function memberUserId(member: DtoMember | null | undefined): string | null {
+                if (!member) return null;
+                return (
+                        toSnowflakeString((member as any)?.user?.id) ?? toSnowflakeString((member as any)?.id) ?? null
+                );
+        }
 
-        const mentionDisplayTokens = $derived.by(() => {
-                const segments = splitTextWithMentions(content);
-                const tokens: InputDisplayToken[] = [];
-                let mentionOrder = 0;
-
-                for (const segment of segments) {
-                        if (segment.type === 'text') {
-                                tokens.push({ type: 'text', value: segment.value });
-                                continue;
-                        }
-
-                        tokens.push(buildMentionDisplayToken(segment.mention, mentionOrder));
-                        mentionOrder += 1;
+        function formatUserDisplayName(candidate: any): string | null {
+                if (!candidate || typeof candidate !== 'object') return null;
+                const fields = [
+                        candidate.global_name,
+                        candidate.globalName,
+                        candidate.display_name,
+                        candidate.displayName,
+                        candidate.username,
+                        candidate.name,
+                        candidate.nick,
+                        candidate.nickname
+                ];
+                for (const field of fields) {
+                        if (typeof field !== 'string') continue;
+                        const trimmed = field.trim();
+                        if (trimmed) return trimmed;
                 }
+                return null;
+        }
 
-                return tokens;
-        });
-	const mentionMemberMap = $derived.by(() => {
-		const guildId = $selectedGuildId ?? '';
-		const list = ($membersByGuild[guildId] ?? []) as DtoMember[] | undefined;
-		const map = new Map<string, DtoMember>();
-		if (Array.isArray(list)) {
-			for (const entry of list) {
-				const id = memberUserId(entry);
-				if (id) {
-					map.set(id, entry);
-				}
-			}
-		}
-		return map;
-	});
-	let mentionRoleMap = $state<Record<string, DtoRole>>({});
-	let mentionQuery = $state<MentionTrigger | null>(null);
-	let mentionSuggestions = $state<MentionSuggestion[]>([]);
-	let mentionActiveIndex = $state(0);
-	const mentionMenuOpen = $derived.by(() => Boolean(mentionQuery && mentionSuggestions.length > 0));
-	let mentionListEl = $state<HTMLDivElement | null>(null);
+        function fallbackUserLabel(userId: string): string {
+                if (!userId) return '@Unknown';
+                const suffix = userId.length > 4 ? userId.slice(-4) : userId;
+                return `@User ${suffix}`;
+        }
 
-	$effect(() => {
-		const container = mentionListEl;
-		if (!container) return;
-		const target = container.querySelector<HTMLElement>(
-			`[data-mention-index="${mentionActiveIndex}"]`
-		);
-		if (!target) return;
-		const top = target.offsetTop;
-		const bottom = top + target.offsetHeight;
-		const viewTop = container.scrollTop;
-		const viewBottom = viewTop + container.clientHeight;
-		if (top < viewTop) {
-			container.scrollTop = top;
-			return;
-		}
-		if (bottom > viewBottom) {
-			container.scrollTop = bottom - container.clientHeight;
-		}
-	});
+        function activeDmChannel(): DtoChannel | null {
+                const channelId = $selectedChannelId;
+                if (!channelId) return null;
+                const dmChannels = ($channelsByGuild['@me'] ?? []) as DtoChannel[];
+                return (
+                        dmChannels.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId) ??
+                        null
+                );
+        }
 
-	$effect(() => {
-		const _memberMap = mentionMemberMap;
-		void _memberMap;
-		refreshMentionState();
-	});
+        function gatherDmRecipients(): DtoUser[] {
+                const channel = activeDmChannel();
+                if (!channel) return [];
+                const recipients = Array.isArray((channel as any)?.recipients)
+                        ? ((channel as any)?.recipients as DtoUser[])
+                        : [];
+                const direct = (channel as any)?.recipient;
+                if (direct) {
+                        recipients.push(direct as DtoUser);
+                }
+                const seen = new Set<string>();
+                const result: DtoUser[] = [];
+                for (const entry of recipients) {
+                        const id = toSnowflakeString((entry as any)?.id);
+                        if (!id || seen.has(id)) continue;
+                        seen.add(id);
+                        result.push(entry);
+                }
+                return result;
+        }
 
-	const TYPING_RENEWAL_INTERVAL_MS = 10_000;
-	let typingResetTimer: ReturnType<typeof setTimeout> | null = null;
-	let typingLastSentAt = 0;
-	let typingActive = false;
-	let typingChannelId: string | null = null;
+        function resolveUserMentionDetails(userId: string): {
+                label: string;
+                accentColor: string | null;
+                member: DtoMember | null;
+                user: DtoUser | null;
+        } {
+                const guildId = $selectedGuildId;
+                const member = guildId && guildId !== '@me' ? (mentionMemberMap.get(userId) ?? null) : null;
+                const userFromMember = (member as any)?.user as DtoUser | undefined;
+                let dmUser: DtoUser | null = null;
+                if (!member) {
+                        const dmCandidates = gatherDmRecipients();
+                        dmUser = dmCandidates.find((entry) => toSnowflakeString((entry as any)?.id) === userId) ?? null;
+                }
+                const user: DtoUser | null = (userFromMember ?? dmUser ?? null) as DtoUser | null;
+                const name = memberPrimaryName(member) || formatUserDisplayName(user) || fallbackUserLabel(userId);
+                let accentColor: string | null = null;
+                if (guildId && guildId !== '@me' && member) {
+                        accentColor = resolveMemberRoleColor(member, guildId, mentionRoleMap) ?? null;
+                }
+                return {
+                        label: `@${name.replace(/^@+/, '').trim()}`,
+                        accentColor,
+                        member,
+                        user
+                };
+        }
 
-	function hasFileTransfer(event: DragEvent): boolean {
-		const dt = event.dataTransfer;
-		if (!dt) return false;
-		if (dt.files && dt.files.length > 0) return true;
-		const types = dt.types ? Array.from(dt.types) : [];
-		return types.includes('Files');
-	}
-
-	function mergeAttachments(added: readonly PendingAttachment[] | null | undefined) {
-		if (!added || added.length === 0) {
-			return;
-		}
-
-		const next: PendingAttachment[] = attachments.slice();
-
-		for (const incoming of added) {
-			const index = next.findIndex((attachment) => attachment.localId === incoming.localId);
-			const isOversizeError =
-				incoming.status === 'error' && incoming.error === 'File size is too big';
-
-			if (isOversizeError) {
-				if (index !== -1) {
-					const [removed] = next.splice(index, 1);
-					if (removed) {
-						releasePreviewUrl(removed);
-					}
-				}
-				continue;
-			}
-
-			if (index !== -1) {
-				const previous = next[index];
-				if (previous.previewUrl && previous.previewUrl !== incoming.previewUrl) {
-					releasePreviewUrl(previous);
-				}
-				next[index] = incoming;
-				continue;
-			}
-
-			next.push(incoming);
-		}
-
-		attachments = next;
-	}
-
-	async function handleDroppedFiles(files: FileList | null | undefined) {
-		if (!files || files.length === 0) return;
-		if (!uploaderRef?.addFiles) return;
-		try {
-			const added = await uploaderRef.addFiles(files);
-			mergeAttachments(added ?? []);
-		} catch (err) {
-			console.error('Failed to add dropped files', err);
-		}
-	}
-
-	function handleDragEnter(event: DragEvent) {
-		if (!hasFileTransfer(event)) return;
-		event.preventDefault();
-		dragCounter += 1;
-		dropActive = true;
-	}
-
-	function handleDragOver(event: DragEvent) {
-		if (!hasFileTransfer(event)) return;
-		event.preventDefault();
-		if (event.dataTransfer) {
-			event.dataTransfer.dropEffect = 'copy';
-		}
-	}
-
-	function handleDragLeave(event: DragEvent) {
-		if (!hasFileTransfer(event)) return;
-		event.preventDefault();
-		dragCounter = Math.max(0, dragCounter - 1);
-		if (dragCounter === 0) {
-			dropActive = false;
-		}
-	}
-
-	function handleDragEnd(event: DragEvent) {
-		if (!hasFileTransfer(event)) return;
-		dragCounter = 0;
-		dropActive = false;
-	}
-
-	async function handleDrop(event: DragEvent) {
-		if (!hasFileTransfer(event)) return;
-		event.preventDefault();
-		dragCounter = 0;
-		dropActive = false;
-		await handleDroppedFiles(event.dataTransfer?.files ?? null);
-		event.dataTransfer?.clearData();
-	}
-
-	function memberUserId(member: DtoMember | null | undefined): string | null {
-		if (!member) return null;
-		return (
-			toSnowflakeString((member as any)?.user?.id) ?? toSnowflakeString((member as any)?.id) ?? null
-		);
-	}
-
-	function formatUserDisplayName(candidate: any): string | null {
-		if (!candidate || typeof candidate !== 'object') return null;
-		const fields = [
-			candidate.global_name,
-			candidate.globalName,
-			candidate.display_name,
-			candidate.displayName,
-			candidate.username,
-			candidate.name,
-			candidate.nick,
-			candidate.nickname
-		];
-		for (const field of fields) {
-			if (typeof field !== 'string') continue;
-			const trimmed = field.trim();
-			if (trimmed) return trimmed;
-		}
-		return null;
-	}
-
-	function fallbackUserLabel(userId: string): string {
-		if (!userId) return '@Unknown';
-		const suffix = userId.length > 4 ? userId.slice(-4) : userId;
-		return `@User ${suffix}`;
-	}
-
-	function activeDmChannel(): DtoChannel | null {
-		const channelId = $selectedChannelId;
-		if (!channelId) return null;
-		const dmChannels = ($channelsByGuild['@me'] ?? []) as DtoChannel[];
-		return (
-			dmChannels.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId) ??
-			null
-		);
-	}
-
-	function gatherDmRecipients(): DtoUser[] {
-		const channel = activeDmChannel();
-		if (!channel) return [];
-		const recipients = Array.isArray((channel as any)?.recipients)
-			? ((channel as any)?.recipients as DtoUser[])
-			: [];
-		const direct = (channel as any)?.recipient;
-		if (direct) {
-			recipients.push(direct as DtoUser);
-		}
-		const seen = new Set<string>();
-		const result: DtoUser[] = [];
-		for (const entry of recipients) {
-			const id = toSnowflakeString((entry as any)?.id);
-			if (!id || seen.has(id)) continue;
-			seen.add(id);
-			result.push(entry);
-		}
-		return result;
-	}
-
-	function resolveUserMentionDetails(userId: string): {
-		label: string;
-		accentColor: string | null;
-		member: DtoMember | null;
-		user: DtoUser | null;
-	} {
-		const guildId = $selectedGuildId;
-		const member = guildId && guildId !== '@me' ? (mentionMemberMap.get(userId) ?? null) : null;
-		const userFromMember = (member as any)?.user as DtoUser | undefined;
-		let dmUser: DtoUser | null = null;
-		if (!member) {
-			const dmCandidates = gatherDmRecipients();
-			dmUser =
-				dmCandidates.find((entry) => toSnowflakeString((entry as any)?.id) === userId) ?? null;
-		}
-		const user: DtoUser | null = (userFromMember ?? dmUser ?? null) as DtoUser | null;
-		const name =
-			memberPrimaryName(member) || formatUserDisplayName(user) || fallbackUserLabel(userId);
-		let accentColor: string | null = null;
-		if (guildId && guildId !== '@me' && member) {
-			accentColor = resolveMemberRoleColor(member, guildId, mentionRoleMap) ?? null;
-		}
-		return {
-			label: `@${name.replace(/^@+/, '').trim()}`,
-			accentColor,
-			member,
-			user
-		};
-	}
-
-	function resolveRoleMentionDetails(roleId: string): {
-		label: string;
-		accentColor: string | null;
-	} {
-		const role = mentionRoleMap[roleId] ?? null;
-		if (!role) {
-			return { label: `@Role ${roleId}`, accentColor: null };
-		}
-		const name = typeof (role as any)?.name === 'string' ? (role as any).name : `Role ${roleId}`;
-		const colorValue = (role as any)?.color;
-		const accentColor =
-			colorValue != null ? colorIntToHex(colorValue as number | string | bigint | null) : null;
-		return {
-			label: `@${String(name)}`,
-			accentColor
-		};
-	}
+        function resolveRoleMentionDetails(roleId: string): {
+                label: string;
+                accentColor: string | null;
+        } {
+                const role = mentionRoleMap[roleId] ?? null;
+                if (!role) {
+                        return { label: `@Role ${roleId}`, accentColor: null };
+                }
+                const name = typeof (role as any)?.name === 'string' ? (role as any).name : `Role ${roleId}`;
+                const colorValue = (role as any)?.color;
+                const accentColor =
+                        colorValue != null ? colorIntToHex(colorValue as number | string | bigint | null) : null;
+                return {
+                        label: `@${String(name)}`,
+                        accentColor
+                };
+        }
 
         function resolveChannelMentionLabel(channelId: string): string {
                 const guildId = $selectedGuildId ?? '';
                 const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
-                const channel = list.find(
-                        (candidate) => toSnowflakeString((candidate as any)?.id) === channelId
-                );
-		if (!channel) {
-			return `#channel-${channelId}`;
-		}
-		const name = (channel as any)?.name;
-		if (typeof name === 'string' && name.trim()) {
-			return `#${name.trim()}`;
-		}
-		return `#channel-${channelId}`;
-	}
-
-        function buildMentionDisplayToken(mention: MentionMatch, order: number): InputDisplayToken {
-                if (mention.type === 'user') {
-                        const details = resolveUserMentionDetails(mention.id);
-                        return {
-                                type: 'mention',
-                                mention,
-                                label: details.label,
-                                accentColor: details.accentColor,
-                                order
-                        };
+                const channel = list.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId);
+                if (!channel) {
+                        return `#channel-${channelId}`;
                 }
-
-                if (mention.type === 'role') {
-                        const details = resolveRoleMentionDetails(mention.id);
-                        return {
-                                type: 'mention',
-                                mention,
-                                label: details.label,
-                                accentColor: details.accentColor,
-                                order
-                        };
+                const name = (channel as any)?.name;
+                if (typeof name === 'string' && name.trim()) {
+                        return `#${name.trim()}`;
                 }
-
-                return {
-                        type: 'mention',
-                        mention,
-                        label: resolveChannelMentionLabel(mention.id),
-                        accentColor: null,
-                        order
-                };
+                return `#channel-${channelId}`;
         }
 
-        function clampSelectionIndex(value: number, limit: number): number {
-                if (!Number.isFinite(value)) return limit;
-                if (value < 0) return 0;
-                if (value > limit) return limit;
-                return value;
+        function mentionDisplayDetails(mention: MentionMatch): { label: string; accentColor: string | null } {
+                if (mention.type === 'user') {
+                        const details = resolveUserMentionDetails(mention.id);
+                        return { label: details.label, accentColor: details.accentColor };
+                }
+                if (mention.type === 'role') {
+                        const details = resolveRoleMentionDetails(mention.id);
+                        return { label: details.label, accentColor: details.accentColor };
+                }
+                return { label: resolveChannelMentionLabel(mention.id), accentColor: null };
         }
 
         function formatUserDescriptor(user: DtoUser | null | undefined): string | null {
                 if (!user) return null;
                 const name = formatUserDisplayName(user);
-		const discriminator = (user as any)?.discriminator;
-		if (typeof name === 'string' && typeof discriminator === 'string' && discriminator.trim()) {
-			return `${name}#${discriminator.trim()}`;
-		}
-		return name;
-	}
+                const discriminator = (user as any)?.discriminator;
+                if (typeof name === 'string' && typeof discriminator === 'string' && discriminator.trim()) {
+                        return `${name}#${discriminator.trim()}`;
+                }
+                return name;
+        }
 
-	function buildUserSuggestions(): MentionSuggestion[] {
-		const suggestions: MentionSuggestion[] = [];
-		const seen = new Set<string>();
-		const guildId = $selectedGuildId;
+        function buildUserSuggestions(): MentionSuggestion[] {
+                const suggestions: MentionSuggestion[] = [];
+                const seen = new Set<string>();
+                const guildId = $selectedGuildId;
 
-		if (guildId && guildId !== '@me') {
-			for (const [id, member] of mentionMemberMap.entries()) {
-				if (!id || seen.has(`user:${id}`)) continue;
-				seen.add(`user:${id}`);
-				const details = resolveUserMentionDetails(id);
-				suggestions.push({
-					id,
-					type: 'user',
-					label: details.label,
-					description: formatUserDescriptor(details.user),
-					accentColor: details.accentColor,
-					member,
-					user: details.user
-				});
-			}
-		} else {
-			for (const user of gatherDmRecipients()) {
-				const id = toSnowflakeString((user as any)?.id);
-				if (!id || seen.has(`user:${id}`)) continue;
-				seen.add(`user:${id}`);
-				const name = formatUserDisplayName(user) || fallbackUserLabel(id);
-				suggestions.push({
-					id,
-					type: 'user',
-					label: `@${name.replace(/^@+/, '').trim()}`,
-					description: formatUserDescriptor(user),
-					accentColor: null,
-					member: null,
-					user
-				});
-			}
-		}
+                if (guildId && guildId !== '@me') {
+                        for (const [id, member] of mentionMemberMap.entries()) {
+                                if (!id || seen.has(`user:${id}`)) continue;
+                                seen.add(`user:${id}`);
+                                const details = resolveUserMentionDetails(id);
+                                suggestions.push({
+                                        id,
+                                        type: 'user',
+                                        label: details.label,
+                                        description: formatUserDescriptor(details.user),
+                                        accentColor: details.accentColor,
+                                        member,
+                                        user: details.user
+                                });
+                        }
+                } else {
+                        for (const user of gatherDmRecipients()) {
+                                const id = toSnowflakeString((user as any)?.id);
+                                if (!id || seen.has(`user:${id}`)) continue;
+                                seen.add(`user:${id}`);
+                                const name = formatUserDisplayName(user) || fallbackUserLabel(id);
+                                suggestions.push({
+                                        id,
+                                        type: 'user',
+                                        label: `@${name.replace(/^@+/, '').trim()}`,
+                                        description: formatUserDescriptor(user),
+                                        accentColor: null,
+                                        member: null,
+                                        user
+                                });
+                        }
+                }
 
-		return suggestions;
-	}
+                return suggestions;
+        }
 
-	function buildRoleSuggestions(): MentionSuggestion[] {
-		const guildId = $selectedGuildId;
-		if (!guildId || guildId === '@me') {
-			return [];
-		}
-		const suggestions: MentionSuggestion[] = [];
-		for (const [roleId, role] of Object.entries(mentionRoleMap)) {
-			if (!roleId) continue;
-			const details = resolveRoleMentionDetails(roleId);
-			suggestions.push({
-				id: roleId,
-				type: 'role',
-				label: details.label,
-				description: (role as any)?.description ?? null,
-				accentColor: details.accentColor,
-				member: null,
-				user: null
-			});
-		}
-		return suggestions;
-	}
+        function buildRoleSuggestions(): MentionSuggestion[] {
+                const guildId = $selectedGuildId;
+                if (!guildId || guildId === '@me') {
+                        return [];
+                }
+                const suggestions: MentionSuggestion[] = [];
+                for (const [roleId, role] of Object.entries(mentionRoleMap)) {
+                        if (!roleId) continue;
+                        const details = resolveRoleMentionDetails(roleId);
+                        suggestions.push({
+                                id: roleId,
+                                type: 'role',
+                                label: details.label,
+                                description: (role as any)?.description ?? null,
+                                accentColor: details.accentColor,
+                                member: null,
+                                user: null
+                        });
+                }
+                return suggestions;
+        }
 
-	function buildChannelSuggestions(): MentionSuggestion[] {
-		const guildId = $selectedGuildId;
-		if (!guildId || guildId === '@me') {
-			return [];
-		}
+        function buildChannelSuggestions(): MentionSuggestion[] {
+                const guildId = $selectedGuildId;
+                if (!guildId || guildId === '@me') {
+                        return [];
+                }
                 const suggestions: MentionSuggestion[] = [];
                 const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
                 for (const channel of list) {
@@ -582,16 +337,15 @@
                         suggestions.push({
                                 id,
                                 type: 'channel',
-				label: name,
-				description: (channel as any)?.topic ?? null,
-				accentColor: null,
-				member: null,
-				user: null
-			});
-		}
-		return suggestions;
-	}
-
+                                label: name,
+                                description: (channel as any)?.topic ?? null,
+                                accentColor: null,
+                                member: null,
+                                user: null
+                        });
+                }
+                return suggestions;
+        }
         function updateMentionSuggestionList(trigger: MentionTrigger | null) {
                 if (!trigger) {
                         const hadQuery = mentionQuery !== null;
@@ -599,6 +353,8 @@
                         const hadIndex = mentionActiveIndex !== 0;
 
                         if (!hadQuery && !hadSuggestions && !hadIndex) {
+                                mentionMenuPosition = null;
+                                activeTokenInfo = null;
                                 return;
                         }
 
@@ -611,6 +367,8 @@
                         if (hadIndex) {
                                 mentionActiveIndex = 0;
                         }
+                        mentionMenuPosition = null;
+                        activeTokenInfo = null;
                         return;
                 }
 
@@ -679,769 +437,1028 @@
                 } else if (nextSuggestions.length === 0) {
                         mentionActiveIndex = 0;
                 } else {
-                        mentionActiveIndex = Math.min(
-                                previousIndex,
-                                Math.max(nextSuggestions.length - 1, 0)
-                        );
+                        mentionActiveIndex = Math.min(previousIndex, Math.max(nextSuggestions.length - 1, 0));
                 }
         }
-
-	$effect(() => {
-		const guildId = $selectedGuildId;
-		const revision = $guildRoleCacheState;
-		void revision;
-		if (!guildId || guildId === '@me') {
-			mentionRoleMap = {};
-			return;
-		}
-		const activeGuild = guildId;
-		void (async () => {
-			try {
-				const roles = await loadGuildRolesCached(activeGuild);
-				if ($selectedGuildId !== activeGuild) {
-					return;
-				}
-				mentionRoleMap = buildRoleMap(roles);
-				refreshMentionState();
-			} catch {
-				if ($selectedGuildId === activeGuild) {
-					mentionRoleMap = {};
-					refreshMentionState();
-				}
-			}
-		})();
-	});
-
-        function refreshMentionState() {
-                const target = ta;
-                const fallback = content.length;
-                const rawStart = target?.selectionStart ?? fallback;
-                const rawEnd = target?.selectionEnd ?? rawStart;
-                const start = clampSelectionIndex(rawStart, fallback);
-                const end = clampSelectionIndex(rawEnd, fallback);
-
-                if (!target) {
-                        updateMentionSuggestionList(null);
+        $effect(() => {
+                const guildId = $selectedGuildId;
+                const revision = $guildRoleCacheState;
+                void revision;
+                if (!guildId || guildId === '@me') {
+                        mentionRoleMap = {};
                         return;
                 }
-
-                if (start !== end) {
-                        updateMentionSuggestionList(null);
-                        return;
-                }
-
-                const inside = mentionMatches.find((mention) => start > mention.start && start < mention.end);
-                if (inside) {
+                const activeGuild = guildId;
+                void (async () => {
                         try {
-                                target.setSelectionRange(inside.end, inside.end);
-                                updateCustomCaret();
-                        } catch {
-                                /* ignore */
-                        }
-                        updateMentionSuggestionList(null);
-                        return;
-		}
-
-		const trigger = detectMentionTrigger(content, start);
-		updateMentionSuggestionList(trigger);
-	}
-
-	async function removeMention(match: MentionMatch) {
-		const before = content.slice(0, match.start);
-		const after = content.slice(match.end);
-		content = before + after;
-		await tick();
-		if (ta) {
-			const pos = before.length;
-			ta.focus();
-                        try {
-                                ta.setSelectionRange(pos, pos);
-                                updateCustomCaret();
-                        } catch {
-                                /* ignore */
-                        }
-		}
-		autoResize();
-		handleTypingActivity(content);
-		refreshMentionState();
-	}
-
-        async function applyMentionSuggestion(suggestion: MentionSuggestion) {
-                if (!ta) return;
-                const currentStart = ta.selectionStart ?? content.length;
-                const currentEnd = ta.selectionEnd ?? content.length;
-                const start = mentionQuery ? mentionQuery.start : currentStart;
-                const end = currentEnd;
-		const before = content.slice(0, start);
-		const after = content.slice(end);
-		const placeholder = mentionPlaceholder(suggestion.type, suggestion.id);
-		const needsSpace = after.startsWith(' ') || after.startsWith('\n') || after.length === 0;
-		const insertion = needsSpace ? `${placeholder} ` : placeholder;
-		content = `${before}${insertion}${after}`;
-		mentionQuery = null;
-		mentionSuggestions = [];
-		mentionActiveIndex = 0;
-		await tick();
-		if (ta) {
-			const cursor = before.length + insertion.length;
-			ta.focus();
-                        try {
-                                ta.setSelectionRange(cursor, cursor);
-                                updateCustomCaret();
-                        } catch {
-                                /* ignore */
-                        }
-		}
-		autoResize();
-		handleTypingActivity(content);
-		refreshMentionState();
-	}
-
-	async function handleMentionDeletion(event: KeyboardEvent): Promise<boolean> {
-		if (!ta) return false;
-		const start = ta.selectionStart ?? 0;
-		const end = ta.selectionEnd ?? 0;
-		if (start !== end) {
-			return false;
-		}
-		if (event.key === 'Backspace') {
-			const match = mentionMatches.find((entry) => entry.end === start);
-			if (match) {
-				event.preventDefault();
-				await removeMention(match);
-				return true;
-			}
-		}
-		if (event.key === 'Delete') {
-			const match = mentionMatches.find((entry) => entry.start === start);
-			if (match) {
-				event.preventDefault();
-				await removeMention(match);
-				return true;
-			}
-		}
-		return false;
-	}
-
-	async function handleTextareaKeydown(event: KeyboardEvent) {
-		if (mentionMenuOpen && mentionSuggestions.length > 0) {
-			if (event.key === 'ArrowDown') {
-				event.preventDefault();
-				mentionActiveIndex = (mentionActiveIndex + 1) % mentionSuggestions.length;
-				return;
-			}
-			if (event.key === 'ArrowUp') {
-				event.preventDefault();
-				mentionActiveIndex =
-					(mentionActiveIndex - 1 + mentionSuggestions.length) % mentionSuggestions.length;
-				return;
-			}
-			if (event.key === 'Enter' || event.key === 'Tab') {
-				event.preventDefault();
-				const selected = mentionSuggestions[mentionActiveIndex];
-				if (selected) {
-					await applyMentionSuggestion(selected);
-				}
-				return;
-			}
-			if (event.key === 'Escape') {
-				event.preventDefault();
-				updateMentionSuggestionList(null);
-				return;
-			}
-		}
-
-		if (event.key === 'Backspace' || event.key === 'Delete') {
-			if (await handleMentionDeletion(event)) {
-				return;
-			}
-		}
-
-		if (event.key === 'Enter' && !event.shiftKey) {
-			event.preventDefault();
-			send();
-			return;
-		}
-	}
-
-        function handleTextareaSelectionChange() {
-                refreshMentionState();
-                updateCustomCaret();
-        }
-
-        function handleTextareaFocus() {
-                editorFocused = true;
-                refreshMentionState();
-                updateCustomCaret();
-        }
-
-        function handleTextareaBlur() {
-                editorFocused = false;
-                refreshMentionState();
-                updateCustomCaret();
-        }
-
-	function handleMentionClick(index: number) {
-		const suggestion = mentionSuggestions[index];
-		if (!suggestion) return;
-		void applyMentionSuggestion(suggestion);
-	}
-
-	async function insertEmoji(emoji: string) {
-		if (!emoji) return;
-		const target = ta;
-		if (!target) {
-			content = `${content}${emoji}`;
-			handleTypingActivity(content);
-			refreshMentionState();
-			return;
-		}
-
-		const start = target.selectionStart ?? content.length;
-		const end = target.selectionEnd ?? content.length;
-		const next = content.slice(0, start) + emoji + content.slice(end);
-		content = next;
-		await tick();
-		const cursor = start + emoji.length;
-                        target.focus();
-                        try {
-                                target.setSelectionRange(cursor, cursor);
-                                updateCustomCaret();
-                        } catch {
-                                /* ignore */
-                        }
-		autoResize();
-		handleTypingActivity(next);
-		refreshMentionState();
-	}
-
-	async function openEmojiMenu() {
-		showEmojiPicker = true;
-		await tick();
-		emojiPickerRef?.clearSearch?.();
-		emojiPickerRef?.scrollToTop?.();
-		emojiPickerRef?.focusSearch?.();
-	}
-
-	function closeEmojiMenu() {
-		showEmojiPicker = false;
-	}
-
-	async function toggleEmojiMenu() {
-		if (showEmojiPicker) {
-			closeEmojiMenu();
-			return;
-		}
-		await openEmojiMenu();
-	}
-
-	async function handleEmojiSelection(value: string) {
-		await insertEmoji(value);
-		closeEmojiMenu();
-	}
-
-	function handleGlobalPointerDown(event: PointerEvent) {
-		if (!showEmojiPicker) return;
-		const path = event.composedPath();
-		if (emojiMenuEl && path.includes(emojiMenuEl)) return;
-		if (emojiButton && path.includes(emojiButton)) return;
-		closeEmojiMenu();
-	}
-
-	function handleGlobalKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && showEmojiPicker) {
-			event.preventDefault();
-			event.stopPropagation();
-			closeEmojiMenu();
-		}
-	}
-
-	function clearTypingTimer() {
-		if (typingResetTimer) {
-			clearTimeout(typingResetTimer);
-			typingResetTimer = null;
-		}
-	}
-
-	function resetTypingState() {
-		typingActive = false;
-		typingLastSentAt = 0;
-		typingChannelId = null;
-		clearTypingTimer();
-	}
-
-	async function postTypingIndicator(channelId: string) {
-		const messageApi = auth.api.message;
-		if (!messageApi?.messageChannelChannelIdTypingPost) {
-			return;
-		}
-		await messageApi.messageChannelChannelIdTypingPost({
-			channelId: channelId as any
-		});
-	}
-
-	async function dispatchTypingIndicator(channelId: string) {
-		typingChannelId = channelId;
-		typingActive = true;
-		typingLastSentAt = Date.now();
-		clearTypingTimer();
-		typingResetTimer = setTimeout(() => {
-			typingActive = false;
-			typingResetTimer = null;
-		}, TYPING_RENEWAL_INTERVAL_MS);
-		try {
-			await postTypingIndicator(channelId);
-		} catch (error) {
-			console.debug('Failed to send typing indicator', error);
-		}
-	}
-
-	function handleTypingActivity(value: string) {
-		const trimmed = value.trim();
-		if (!trimmed) {
-			resetTypingState();
-			return;
-		}
-		const channelId = $selectedChannelId;
-		if (!channelId) {
-			return;
-		}
-		const now = Date.now();
-		const shouldSend =
-			!typingActive ||
-			channelId !== typingChannelId ||
-			now - typingLastSentAt >= TYPING_RENEWAL_INTERVAL_MS;
-		if (shouldSend) {
-			void dispatchTypingIndicator(channelId);
-		}
-	}
-
-	const VISUAL_ATTACHMENT_PREVIEW_SIZE = 218;
-	const visualAttachmentWrapperStyle = `width: min(100%, ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px); max-width: min(100%, ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px);`;
-	const visualAttachmentMediaStyle = `width: 100%; height: ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px; object-fit: contain;`;
-	const visualAttachmentPlaceholderStyle = `height: ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px;`;
-
-	// Derive current channel name to show in placeholder
-	function currentChannel() {
-		const gid = $selectedGuildId ?? '';
-		return ($channelsByGuild[gid] ?? []).find((c) => String((c as any).id) === $selectedChannelId);
-	}
-	function channelName() {
-		const ch = currentChannel() as any;
-		return (ch?.name ?? '').toString();
-	}
-
-        function autoResize() {
-                if (!ta) return;
-                ta.style.height = 'auto';
-                const max = Math.floor((window?.innerHeight || 800) * 0.4);
-                const next = Math.min(ta.scrollHeight, max);
-                ta.style.height = next + 'px';
-                ta.style.overflowY = ta.scrollHeight > next ? 'auto' : 'hidden';
-        }
-
-        function updateCustomCaret() {
-                if (!ta || !overlayGhostEl || !overlayRootEl) {
-                        caretVisible = false;
-                        return;
-                }
-
-                const rawStart = ta.selectionStart ?? content.length;
-                const rawEnd = ta.selectionEnd ?? content.length;
-                const start = clampSelectionIndex(rawStart, content.length);
-                const end = clampSelectionIndex(rawEnd, content.length);
-                const collapsed = start === end;
-                caretVisible = collapsed && editorFocused;
-
-                if (!collapsed) {
-                        return;
-                }
-
-                const range = document.createRange();
-                range.setStart(overlayGhostEl, 0);
-                range.collapse(true);
-                let remaining = start;
-                const walker = document.createTreeWalker(
-                        overlayGhostEl,
-                        NodeFilter.SHOW_TEXT,
-                        null
-                );
-                let positioned = false;
-
-                while (walker.nextNode()) {
-                        const node = walker.currentNode as Text;
-                        const length = node.textContent?.length ?? 0;
-                        if (remaining <= length) {
-                                range.setStart(node, remaining);
-                                range.collapse(true);
-                                positioned = true;
-                                break;
-                        }
-                        remaining -= length;
-                }
-
-                if (!positioned) {
-                        const lastChild = overlayGhostEl.lastChild;
-                        if (lastChild) {
-                                range.setStartAfter(lastChild);
-                                range.collapse(true);
-                                positioned = true;
-                        }
-                }
-
-                const fallbackLine = parseFloat(getComputedStyle(ta).lineHeight || '0') || 16;
-
-                if (!positioned) {
-                        caretStyle = { left: 0, top: 0, height: fallbackLine };
-                        caretVisible = editorFocused;
-                        return;
-                }
-
-                const containerRect = overlayRootEl.getBoundingClientRect();
-                const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
-                if (!rect) {
-                        caretStyle = { left: 0, top: 0, height: fallbackLine };
-                        caretVisible = editorFocused;
-                        return;
-                }
-
-                let offsetAdjustment = 0;
-                if (mentionMatches.length > 0) {
-                        for (let i = 0; i < mentionMatches.length; i += 1) {
-                                const mention = mentionMatches[i];
-                                if (mention.end <= start) {
-                                        const ghostEl = ghostMentionRefs[i];
-                                        const visualEl = visualMentionRefs[i];
-                                        if (ghostEl && visualEl) {
-                                                const ghostRect = ghostEl.getBoundingClientRect();
-                                                const visualRect = visualEl.getBoundingClientRect();
-                                                offsetAdjustment += Math.max(0, ghostRect.width - visualRect.width);
-                                        }
-                                        continue;
+                                const roles = await loadGuildRolesCached(activeGuild);
+                                if ($selectedGuildId !== activeGuild) {
+                                        return;
                                 }
-                                break;
+                                mentionRoleMap = buildRoleMap(roles);
+                                refreshMentionState();
+                        } catch {
+                                if ($selectedGuildId === activeGuild) {
+                                        mentionRoleMap = {};
+                                        refreshMentionState();
+                                }
+                        }
+                })();
+        });
+        function serializeNode(node: Node | null): string {
+                if (!node) return '';
+                if (node.nodeType === Node.TEXT_NODE) {
+                        return node.nodeValue ?? '';
+                }
+                if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                        let result = '';
+                        node.childNodes.forEach((child) => {
+                                result += serializeNode(child);
+                        });
+                        return result;
+                }
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                        const el = node as HTMLElement;
+                        if (el.dataset.mentionType && el.dataset.mentionId) {
+                                const type = el.dataset.mentionType as MentionType;
+                                const id = el.dataset.mentionId ?? '';
+                                return mentionPlaceholder(type, id);
+                        }
+                        const tag = el.tagName.toLowerCase();
+                        if (tag === 'br') {
+                                return '\n';
+                        }
+                        let result = '';
+                        el.childNodes.forEach((child) => {
+                                result += serializeNode(child);
+                        });
+                        if (tag === 'div' || tag === 'p') {
+                                return `${result}\n`;
+                        }
+                        return result;
+                }
+                return '';
+        }
+
+        function serializeEditorContent(): string {
+                if (!editorEl) return '';
+                let result = '';
+                editorEl.childNodes.forEach((child) => {
+                        result += serializeNode(child);
+                });
+                return result;
+        }
+
+        function appendTextContent(container: HTMLElement, text: string) {
+                const parts = text.split('\n');
+                parts.forEach((part, index) => {
+                        if (part) {
+                                container.appendChild(document.createTextNode(part));
+                        }
+                        if (index < parts.length - 1) {
+                                container.appendChild(document.createElement('br'));
+                        }
+                });
+        }
+
+        function createMentionBadge(
+                mention: MentionMatch,
+                details: { label: string; accentColor: string | null }
+        ): HTMLSpanElement {
+                const badge = document.createElement('span');
+                badge.className = 'mention-badge';
+                badge.contentEditable = 'false';
+                badge.dataset.mentionType = mention.type;
+                badge.dataset.mentionId = mention.id;
+                badge.textContent = details.label;
+                if (details.accentColor) {
+                        badge.style.setProperty('--mention-accent', details.accentColor);
+                }
+                return badge;
+        }
+
+        function renderContentToEditor(text: string) {
+                if (!editorEl) return;
+                editorEl.innerHTML = '';
+                if (!text) {
+                        return;
+                }
+                const segments = splitTextWithMentions(text);
+                for (const segment of segments) {
+                        if (segment.type === 'text') {
+                                appendTextContent(editorEl, segment.value);
+                        } else {
+                                const details = mentionDisplayDetails(segment.mention);
+                                const badge = createMentionBadge(segment.mention, details);
+                                editorEl.appendChild(badge);
+                                editorEl.appendChild(document.createTextNode(' '));
+                        }
+                }
+        }
+
+        function syncContentFromEditor() {
+                const serialized = serializeEditorContent();
+                content = serialized;
+        }
+        function selectionInsideEditor(selection: Selection | null): boolean {
+                if (!selection) return false;
+                if (!editorEl) return false;
+                const anchor = selection.anchorNode;
+                const focus = selection.focusNode;
+                if (!anchor || !focus) return false;
+                return editorEl.contains(anchor) && editorEl.contains(focus);
+        }
+
+        function getCaretIndex(): number {
+                if (!editorEl) return content.length;
+                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0) {
+                        return content.length;
+                }
+                if (!selectionInsideEditor(selection)) {
+                        return content.length;
+                }
+                const range = selection.getRangeAt(0).cloneRange();
+                range.collapse(true);
+                const preRange = range.cloneRange();
+                preRange.selectNodeContents(editorEl);
+                preRange.setEnd(range.startContainer, range.startOffset);
+                const fragment = preRange.cloneContents();
+                return serializeNode(fragment).length;
+        }
+
+        function getCurrentTokenInfo(): EditorTokenInfo | null {
+                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0) return null;
+                if (!selectionInsideEditor(selection)) return null;
+                const range = selection.getRangeAt(0);
+                if (!range.collapsed) return null;
+                let container = range.startContainer;
+                let offset = range.startOffset;
+
+                if (container.nodeType !== Node.TEXT_NODE) {
+                        if (container.childNodes.length > 0 && offset > 0) {
+                                const candidate = container.childNodes[offset - 1];
+                                if (candidate && candidate.nodeType === Node.TEXT_NODE) {
+                                        container = candidate;
+                                        offset = (candidate.textContent ?? '').length;
+                                } else {
+                                        return null;
+                                }
+                        } else {
+                                return null;
                         }
                 }
 
-                caretStyle = {
-                        left: Math.max(0, rect.left - containerRect.left - offsetAdjustment),
-                        top: rect.top - containerRect.top,
-                        height: rect.height || fallbackLine
+                const textNode = container as Text;
+                const text = textNode.nodeValue ?? '';
+                let start = offset;
+                while (start > 0) {
+                        const ch = text[start - 1];
+                        if (/\s/.test(ch)) break;
+                        start -= 1;
+                }
+                const token = text.slice(start, offset);
+                if (!token || token.length < 2) return null;
+                const trigger = token[0];
+                if (trigger !== '@' && trigger !== '#') return null;
+                if (/\s/.test(trigger)) return null;
+                return {
+                        trigger,
+                        query: token.slice(1),
+                        node: textNode,
+                        start,
+                        end: offset
                 };
         }
 
-        function handleInput(event: Event) {
-                autoResize();
-                const target = event.currentTarget as HTMLTextAreaElement | null;
-                const value = target?.value ?? '';
-                handleTypingActivity(value);
-                refreshMentionState();
-                updateCustomCaret();
+        function updateMentionMenuPosition() {
+                if (!mentionMenuEl || !editorWrapperEl) return;
+                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0) return;
+                if (!selectionInsideEditor(selection)) return;
+                const range = selection.getRangeAt(0).cloneRange();
+                range.collapse(true);
+                let rect = range.getBoundingClientRect();
+                if (!rect || (rect.x === 0 && rect.y === 0 && rect.width === 0 && rect.height === 0)) {
+                        const rects = range.getClientRects();
+                        if (rects.length > 0) {
+                                rect = rects[0];
+                        }
+                }
+                if (!rect) return;
+                const wrapperRect = editorWrapperEl.getBoundingClientRect();
+                mentionMenuPosition = {
+                        left: rect.left - wrapperRect.left,
+                        top: rect.bottom - wrapperRect.top + (editorEl?.scrollTop ?? 0)
+                };
         }
 
-        onMount(() => {
-                autoResize();
-                updateCustomCaret();
+        function refreshMentionState() {
+                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0 || !selectionInsideEditor(selection)) {
+                        updateMentionSuggestionList(null);
+                        return;
+                }
+                const cursor = getCaretIndex();
+                const trigger = detectMentionTrigger(content, cursor);
+                if (!trigger) {
+                        updateMentionSuggestionList(null);
+                        return;
+                }
+                activeTokenInfo = getCurrentTokenInfo();
+                updateMentionSuggestionList(trigger);
+                updateMentionMenuPosition();
+                scrollActiveSuggestionIntoView();
+        }
+        async function applyMentionSuggestion(suggestion: MentionSuggestion) {
+                if (!editorEl) return;
+                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                if (!selection) return;
+                const info = activeTokenInfo ?? getCurrentTokenInfo();
+                const mention: MentionMatch = {
+                        type: suggestion.type,
+                        id: suggestion.id,
+                        start: 0,
+                        end: 0,
+                        raw: mentionPlaceholder(suggestion.type, suggestion.id)
+                };
+                const details = { label: suggestion.label, accentColor: suggestion.accentColor };
+                const badge = createMentionBadge(mention, details);
+                const spaceNode = document.createTextNode(' ');
 
-                if (typeof window === 'undefined') {
+                if (info) {
+                        const node = info.node;
+                        const text = node.nodeValue ?? '';
+                        const before = text.slice(0, info.start);
+                        const after = text.slice(info.end);
+                        const fragment = document.createDocumentFragment();
+                        if (before) {
+                                fragment.appendChild(document.createTextNode(before));
+                        }
+                        fragment.appendChild(badge);
+                        fragment.appendChild(spaceNode);
+                        if (after) {
+                                fragment.appendChild(document.createTextNode(after));
+                        }
+                        node.parentNode?.replaceChild(fragment, node);
+                } else {
+                        const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+                        if (range) {
+                                range.deleteContents();
+                                const fragment = document.createDocumentFragment();
+                                fragment.appendChild(badge);
+                                fragment.appendChild(spaceNode);
+                                range.insertNode(fragment);
+                        } else {
+                                editorEl.appendChild(badge);
+                                editorEl.appendChild(spaceNode);
+                        }
+                }
+
+                const range = document.createRange();
+                range.setStart(spaceNode, 1);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                editorEl.focus();
+
+                syncContentFromEditor();
+                updateMentionSuggestionList(null);
+                handleTypingActivity(content);
+                await tick();
+                refreshMentionState();
+        }
+
+        function handleMentionClick(index: number) {
+                const suggestion = mentionSuggestions[index];
+                if (!suggestion) return;
+                void applyMentionSuggestion(suggestion);
+        }
+        function removeMentionElement(el: HTMLElement): { node: Node; offset: number } | null {
+                const parent = el.parentNode;
+                if (!parent) return null;
+                const index = Array.prototype.indexOf.call(parent.childNodes, el);
+                const next = el.nextSibling;
+                el.remove();
+                if (next && next.nodeType === Node.TEXT_NODE) {
+                        const text = next as Text;
+                        if ((text.nodeValue ?? '').startsWith(' ')) {
+                                text.deleteData(0, 1);
+                        }
+                        if ((text.nodeValue ?? '').length === 0) {
+                                next.parentNode?.removeChild(next);
+                        }
+                }
+
+                const before = parent.childNodes[index - 1];
+                const after = parent.childNodes[index] ?? null;
+
+                if (before && before.nodeType === Node.TEXT_NODE) {
+                        const text = before as Text;
+                        return { node: text, offset: (text.nodeValue ?? '').length };
+                }
+
+                if (after && after.nodeType === Node.TEXT_NODE) {
+                        return { node: after, offset: 0 };
+                }
+
+                return { node: parent, offset: index }; 
+        }
+
+        function handleMentionDeletion(event: KeyboardEvent): boolean {
+                if (!editorEl) return false;
+                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0) return false;
+                if (!selectionInsideEditor(selection)) return false;
+                if (!selection.isCollapsed) return false;
+                const range = selection.getRangeAt(0);
+
+                if (event.key === 'Backspace') {
+                        if (range.startContainer.nodeType === Node.TEXT_NODE && range.startOffset > 0) {
+                                return false;
+                        }
+                        let container = range.startContainer;
+                        let offset = range.startOffset;
+                        if (container.nodeType === Node.TEXT_NODE) {
+                                container = container.parentNode as Node;
+                                offset = Array.prototype.indexOf.call(container.childNodes, range.startContainer);
+                        }
+                        if (!container || container.nodeType !== Node.ELEMENT_NODE) return false;
+                        const target = (container.childNodes[offset - 1] ?? container.previousSibling) as Node | null;
+                        const element =
+                                target?.nodeType === Node.ELEMENT_NODE
+                                        ? (target as HTMLElement)
+                                        : null;
+                        if (element && element.dataset?.mentionType && element.dataset?.mentionId) {
+                                event.preventDefault();
+                                const caret = removeMentionElement(element);
+                                syncContentFromEditor();
+                                refreshMentionState();
+                                handleTypingActivity(content);
+                                if (caret) {
+                                        const sel = window.getSelection();
+                                        const caretRange = document.createRange();
+                                        caretRange.setStart(caret.node, caret.offset);
+                                        caretRange.collapse(true);
+                                        sel?.removeAllRanges();
+                                        sel?.addRange(caretRange);
+                                }
+                                return true;
+                        }
+                }
+
+                if (event.key === 'Delete') {
+                        if (
+                                range.startContainer.nodeType === Node.TEXT_NODE &&
+                                range.startOffset < (range.startContainer.nodeValue ?? '').length
+                        ) {
+                                return false;
+                        }
+                        let container = range.startContainer;
+                        let offset = range.startOffset;
+                        if (container.nodeType === Node.TEXT_NODE) {
+                                container = container.parentNode as Node;
+                                offset = Array.prototype.indexOf.call(container.childNodes, range.startContainer) + 1;
+                        }
+                        if (!container || container.nodeType !== Node.ELEMENT_NODE) return false;
+                        const target = container.childNodes[offset] ?? container.nextSibling;
+                        const element =
+                                target && target.nodeType === Node.ELEMENT_NODE
+                                        ? (target as HTMLElement)
+                                        : null;
+                        if (element && element.dataset?.mentionType && element.dataset?.mentionId) {
+                                event.preventDefault();
+                                const caret = removeMentionElement(element);
+                                syncContentFromEditor();
+                                refreshMentionState();
+                                handleTypingActivity(content);
+                                if (caret) {
+                                        const sel = window.getSelection();
+                                        const caretRange = document.createRange();
+                                        caretRange.setStart(caret.node, caret.offset);
+                                        caretRange.collapse(true);
+                                        sel?.removeAllRanges();
+                                        sel?.addRange(caretRange);
+                                }
+                                return true;
+                        }
+                }
+
+                return false;
+        }
+        function handleEditorInput() {
+                syncContentFromEditor();
+                handleTypingActivity(content);
+                refreshMentionState();
+        }
+
+        async function handleEditorKeydown(event: KeyboardEvent) {
+                if (mentionMenuOpen && mentionSuggestions.length > 0) {
+                        if (event.key === 'ArrowDown') {
+                                event.preventDefault();
+                                mentionActiveIndex = (mentionActiveIndex + 1) % mentionSuggestions.length;
+                                scrollActiveSuggestionIntoView();
+                                return;
+                        }
+                        if (event.key === 'ArrowUp') {
+                                event.preventDefault();
+                                mentionActiveIndex =
+                                        (mentionActiveIndex - 1 + mentionSuggestions.length) % mentionSuggestions.length;
+                                scrollActiveSuggestionIntoView();
+                                return;
+                        }
+                        if (event.key === 'Enter' || event.key === 'Tab') {
+                                event.preventDefault();
+                                const selected = mentionSuggestions[mentionActiveIndex];
+                                if (selected) {
+                                        await applyMentionSuggestion(selected);
+                                }
+                                return;
+                        }
+                        if (event.key === 'Escape') {
+                                event.preventDefault();
+                                updateMentionSuggestionList(null);
+                                return;
+                        }
+                }
+
+                if (event.key === 'Backspace' || event.key === 'Delete') {
+                        if (handleMentionDeletion(event)) {
+                                return;
+                        }
+                }
+
+                if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        send();
+                        return;
+                }
+        }
+
+        function handleEditorFocus() {
+                editorFocused = true;
+                refreshMentionState();
+        }
+
+        function handleEditorBlur() {
+                editorFocused = false;
+                updateMentionSuggestionList(null);
+        }
+
+        function insertTextAtSelection(text: string) {
+                if (!editorEl) {
+                        content = `${content}${text}`;
+                        return;
+                }
+                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0) {
+                        editorEl.appendChild(document.createTextNode(text));
+                        syncContentFromEditor();
+                        handleTypingActivity(content);
+                        refreshMentionState();
+                        return;
+                }
+                const range = selection.getRangeAt(0);
+                if (!range) {
+                        editorEl.appendChild(document.createTextNode(text));
+                        syncContentFromEditor();
+                        handleTypingActivity(content);
+                        refreshMentionState();
+                        return;
+                }
+                range.deleteContents();
+                const node = document.createTextNode(text);
+                range.insertNode(node);
+                const caret = document.createRange();
+                caret.setStart(node, node.length);
+                caret.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(caret);
+                editorEl.focus();
+                syncContentFromEditor();
+                handleTypingActivity(content);
+                refreshMentionState();
+        }
+        function scrollActiveSuggestionIntoView() {
+                const container = mentionListEl;
+                if (!container) return;
+                const target = container.querySelector<HTMLElement>(
+                        `[data-mention-index="${mentionActiveIndex}"]`
+                );
+                if (!target) return;
+                const top = target.offsetTop;
+                const bottom = top + target.offsetHeight;
+                const viewTop = container.scrollTop;
+                const viewBottom = viewTop + container.clientHeight;
+                if (top < viewTop) {
+                        container.scrollTop = top;
+                        return;
+                }
+                if (bottom > viewBottom) {
+                        container.scrollTop = bottom - container.clientHeight;
+                }
+        }
+        const TYPING_RENEWAL_INTERVAL_MS = 10_000;
+
+        function clearTypingTimer() {
+                if (typingResetTimer) {
+                        clearTimeout(typingResetTimer);
+                        typingResetTimer = null;
+                }
+        }
+
+        function resetTypingState() {
+                typingActive = false;
+                typingLastSentAt = 0;
+                typingChannelId = null;
+                clearTypingTimer();
+        }
+
+        async function postTypingIndicator(channelId: string) {
+                const messageApi = auth.api.message;
+                if (!messageApi?.messageChannelChannelIdTypingPost) {
+                        return;
+                }
+                await messageApi.messageChannelChannelIdTypingPost({
+                        channelId: channelId as any
+                });
+        }
+
+        async function dispatchTypingIndicator(channelId: string) {
+                typingChannelId = channelId;
+                typingActive = true;
+                typingLastSentAt = Date.now();
+                clearTypingTimer();
+                typingResetTimer = setTimeout(() => {
+                        typingActive = false;
+                        typingResetTimer = null;
+                }, TYPING_RENEWAL_INTERVAL_MS);
+                try {
+                        await postTypingIndicator(channelId);
+                } catch (error) {
+                        console.debug('Failed to send typing indicator', error);
+                }
+        }
+
+        function handleTypingActivity(value: string) {
+                const trimmed = value.trim();
+                if (!trimmed) {
+                        resetTypingState();
+                        return;
+                }
+                const channelId = $selectedChannelId;
+                if (!channelId) {
+                        return;
+                }
+                const now = Date.now();
+                const shouldSend =
+                        !typingActive || channelId !== typingChannelId || now - typingLastSentAt >= TYPING_RENEWAL_INTERVAL_MS;
+                if (shouldSend) {
+                        void dispatchTypingIndicator(channelId);
+                }
+        }
+        function hasFileTransfer(event: DragEvent): boolean {
+                const dt = event.dataTransfer;
+                if (!dt) return false;
+                if (dt.files && dt.files.length > 0) return true;
+                const types = dt.types ? Array.from(dt.types) : [];
+                return types.includes('Files');
+        }
+
+        function mergeAttachments(added: readonly PendingAttachment[] | null | undefined) {
+                if (!added || added.length === 0) {
                         return;
                 }
 
-		const win = window;
-		const listeners: Array<[keyof WindowEventMap, (event: DragEvent) => void]> = [
-			['dragenter', handleDragEnter],
-			['dragover', handleDragOver],
-			['dragleave', handleDragLeave],
-			['drop', handleDrop],
-			['dragend', handleDragEnd]
-		];
-		const opts: boolean = true;
-		listeners.forEach(([event, handler]) => {
-			win.addEventListener(event, handler as EventListener, opts);
-        });
+                const next: PendingAttachment[] = attachments.slice();
 
-        $effect(() => {
-                void tick().then(() => updateCustomCaret());
-        });
-		removeGlobalDragListeners = () => {
-			listeners.forEach(([event, handler]) => {
-				win.removeEventListener(event, handler as EventListener, opts);
-			});
-		};
+                for (const incoming of added) {
+                        const index = next.findIndex((attachment) => attachment.localId === incoming.localId);
+                        const isOversizeError =
+                                incoming.status === 'error' && incoming.error === 'File size is too big';
 
-		const pointerListener = (event: PointerEvent) => {
-			handleGlobalPointerDown(event);
-		};
-		const keyListener = (event: KeyboardEvent) => {
-			handleGlobalKeydown(event);
-		};
-		win.addEventListener('pointerdown', pointerListener, true);
-		win.addEventListener('keydown', keyListener);
-		removeEmojiMenuListeners = () => {
-			win.removeEventListener('pointerdown', pointerListener, true);
-			win.removeEventListener('keydown', keyListener);
-		};
-	});
+                        if (isOversizeError) {
+                                if (index !== -1) {
+                                        const [removed] = next.splice(index, 1);
+                                        if (removed) {
+                                                releasePreviewUrl(removed);
+                                        }
+                                }
+                                continue;
+                        }
 
-	onDestroy(() => {
-		clearLocalAttachments({ releasePreviews: true });
-		if (removeGlobalDragListeners) {
-			removeGlobalDragListeners();
-			removeGlobalDragListeners = null;
-		}
-		if (removeEmojiMenuListeners) {
-			removeEmojiMenuListeners();
-			removeEmojiMenuListeners = null;
-		}
-		resetTypingState();
-	});
+                        if (index !== -1) {
+                                const previous = next[index];
+                                if (previous.previewUrl && previous.previewUrl !== incoming.previewUrl) {
+                                        releasePreviewUrl(previous);
+                                }
+                                next[index] = incoming;
+                                continue;
+                        }
 
-	$effect(() => {
-		const channelId = $selectedChannelId;
-		if (channelId !== typingChannelId) {
-			resetTypingState();
-			typingChannelId = channelId ?? null;
-		}
-	});
+                        next.push(incoming);
+                }
 
-	function releasePreviewUrl(attachment: PendingAttachment | undefined) {
-		if (!attachment?.previewUrl) return;
-		if (!attachment.previewUrl.startsWith('blob:')) return;
-		try {
-			URL.revokeObjectURL(attachment.previewUrl);
-		} catch {
-			/* ignore */
-		}
-	}
+                attachments = next;
+        }
 
-	function clearLocalAttachments(options?: { releasePreviews?: boolean }) {
-		const shouldRelease = options?.releasePreviews ?? false;
-		if (shouldRelease) {
-			for (const attachment of attachments) {
-				releasePreviewUrl(attachment);
-			}
-		}
-		attachments = [];
-	}
+        async function handleDroppedFiles(files: FileList | null | undefined) {
+                if (!files || files.length === 0) return;
+                if (!uploaderRef?.addFiles) return;
+                try {
+                        const added = await uploaderRef.addFiles(files);
+                        mergeAttachments(added ?? []);
+                } catch (err) {
+                        console.error('Failed to add dropped files', err);
+                }
+        }
 
-	function removeAttachment(localId: string) {
-		const index = attachments.findIndex((attachment) => attachment.localId === localId);
-		if (index === -1) return;
-		const [removed] = attachments.splice(index, 1);
-		attachments = [...attachments];
-		releasePreviewUrl(removed);
-	}
+        function handleDragEnter(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                event.preventDefault();
+                dragCounter += 1;
+                dropActive = true;
+        }
 
-	function createLocalMessageId(): string {
-		if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-			return crypto.randomUUID();
-		}
-		return `message-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-	}
+        function handleDragOver(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                event.preventDefault();
+                if (event.dataTransfer) {
+                        event.dataTransfer.dropEffect = 'copy';
+                }
+        }
 
-	function cloneAttachmentForSend(attachment: PendingAttachment): PendingAttachment {
-		let previewUrl = attachment.previewUrl;
-		if (previewUrl && previewUrl.startsWith('blob:')) {
-			try {
-				previewUrl = URL.createObjectURL(attachment.file);
-			} catch {
-				previewUrl = attachment.previewUrl;
-			}
-		}
-		return {
-			...attachment,
-			previewUrl,
-			status: 'queued',
-			progress: 0,
-			uploadedBytes: 0,
-			error: null
-		};
-	}
+        function handleDragLeave(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                event.preventDefault();
+                dragCounter = Math.max(0, dragCounter - 1);
+                if (dragCounter === 0) {
+                        dropActive = false;
+                }
+        }
 
-	async function send() {
-		const channelId = $selectedChannelId;
-		const trimmedContent = content.trim();
-		if (!channelId || (!trimmedContent && attachments.length === 0)) return;
-		sending = true;
+        function handleDragEnd(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                dragCounter = 0;
+                dropActive = false;
+        }
 
-		const localMessageId = createLocalMessageId();
-		const attachmentsForSend = attachments.map(cloneAttachmentForSend);
-		const pendingMessage: PendingMessage = {
-			localId: localMessageId,
-			channelId,
-			content: trimmedContent,
-			createdAt: new Date(),
-			attachments: attachmentsForSend,
-			status: 'pending',
-			error: null
-		};
+        async function handleDrop(event: DragEvent) {
+                if (!hasFileTransfer(event)) return;
+                event.preventDefault();
+                dragCounter = 0;
+                dropActive = false;
+                await handleDroppedFiles(event.dataTransfer?.files ?? null);
+                event.dataTransfer?.clearData();
+        }
 
-		addPendingMessage(pendingMessage);
+        function releasePreviewUrl(attachment: PendingAttachment | undefined) {
+                if (!attachment?.previewUrl) return;
+                if (!attachment.previewUrl.startsWith('blob:')) return;
+                try {
+                        URL.revokeObjectURL(attachment.previewUrl);
+                } catch {
+                        /* ignore */
+                }
+        }
+
+        function clearLocalAttachments(options?: { releasePreviews?: boolean }) {
+                const shouldRelease = options?.releasePreviews ?? false;
+                if (shouldRelease) {
+                        for (const attachment of attachments) {
+                                releasePreviewUrl(attachment);
+                        }
+                }
+                attachments = [];
+        }
+
+        function removeAttachment(localId: string) {
+                const index = attachments.findIndex((attachment) => attachment.localId === localId);
+                if (index === -1) return;
+                const [removed] = attachments.splice(index, 1);
+                attachments = [...attachments];
+                releasePreviewUrl(removed);
+        }
+
+        function createLocalMessageId(): string {
+                if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                        return crypto.randomUUID();
+                }
+                return `message-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
+        function cloneAttachmentForSend(attachment: PendingAttachment): PendingAttachment {
+                let previewUrl = attachment.previewUrl;
+                if (previewUrl && previewUrl.startsWith('blob:')) {
+                        try {
+                                previewUrl = URL.createObjectURL(attachment.file);
+                        } catch {
+                                previewUrl = attachment.previewUrl;
+                        }
+                }
+                return {
+                        ...attachment,
+                        previewUrl,
+                        status: 'queued',
+                        progress: 0,
+                        uploadedBytes: 0,
+                        error: null
+                };
+        }
+        async function send() {
+                const channelId = $selectedChannelId;
+                const trimmedContent = content.trim();
+                if (!channelId || (!trimmedContent && attachments.length === 0)) return;
+                sending = true;
+
+                const localMessageId = createLocalMessageId();
+                const attachmentsForSend = attachments.map(cloneAttachmentForSend);
+                const pendingMessage: PendingMessage = {
+                        localId: localMessageId,
+                        channelId,
+                        content: trimmedContent,
+                        createdAt: new Date(),
+                        attachments: attachmentsForSend,
+                        status: 'pending',
+                        error: null
+                };
+
+                addPendingMessage(pendingMessage);
 
                 content = '';
                 updateMentionSuggestionList(null);
                 resetTypingState();
                 typingChannelId = $selectedChannelId ?? null;
                 clearLocalAttachments({ releasePreviews: true });
-                // wait for DOM to reflect cleared content, then collapse height
                 await tick();
-                if (ta) {
-                        ta.style.height = 'auto';
-                        ta.style.overflowY = 'hidden';
-                        try {
-                                ta.setSelectionRange(0, 0);
-                                updateCustomCaret();
-                        } catch {
-                                /* ignore */
-                        }
+                if (editorEl) {
+                        editorEl.innerHTML = '';
+                        editorEl.focus();
                 }
-                refreshMentionState();
                 dispatch('sent');
                 sending = false;
 
                 await processPendingMessage(pendingMessage);
         }
 
-	function getErrorMessage(err: unknown): string {
-		const error = err as { response?: { data?: { message?: string } }; message?: string };
-		return error.response?.data?.message ?? error.message ?? 'Failed to send message';
-	}
+        function getErrorMessage(err: unknown): string {
+                const error = err as { response?: { data?: { message?: string } }; message?: string };
+                return error.response?.data?.message ?? error.message ?? 'Failed to send message';
+        }
 
-	async function uploadAttachmentWithProgress(
-		channelId: bigint,
-		attachment: PendingAttachment,
-		onProgress: (uploaded: number, total: number) => void
-	) {
-		if (!attachment.attachmentId) {
-			throw new Error('Missing attachment id');
-		}
+        async function uploadAttachmentWithProgress(
+                channelId: bigint,
+                attachment: PendingAttachment,
+                onProgress: (uploaded: number, total: number) => void
+        ) {
+                if (!attachment.attachmentId) {
+                        throw new Error('Missing attachment id');
+                }
 
-		const totalBytes = attachment.file.size || 0;
+                const totalBytes = attachment.file.size || 0;
 
-		await auth.api.upload.uploadAttachmentsChannelIdAttachmentIdPost(
-			{
-				channelId: channelId as any,
-				attachmentId: attachment.attachmentId as any,
-				requestBody: attachment.file as any
-			},
-			{
-				headers: {
-					'Content-Type': attachment.mimeType || 'application/octet-stream'
-				},
-				onUploadProgress: (event) => {
-					const uploaded = typeof event.loaded === 'number' ? event.loaded : 0;
-					const total =
-						typeof event.total === 'number' && event.total > 0 ? event.total : totalBytes;
-					onProgress(uploaded, total > 0 ? total : totalBytes);
-				}
-			}
-		);
-	}
+                await auth.api.upload.uploadAttachmentsChannelIdAttachmentIdPost(
+                        {
+                                channelId: channelId as any,
+                                attachmentId: attachment.attachmentId as any,
+                                requestBody: attachment.file as any
+                        },
+                        {
+                                headers: {
+                                        'Content-Type': attachment.mimeType || 'application/octet-stream'
+                                },
+                                onUploadProgress: (event) => {
+                                        const uploaded = typeof event.loaded === 'number' ? event.loaded : 0;
+                                        const total =
+                                                typeof event.total === 'number' && event.total > 0 ? event.total : totalBytes;
+                                        onProgress(uploaded, total > 0 ? total : totalBytes);
+                                }
+                        }
+                );
+        }
 
-	async function processPendingMessage(message: PendingMessage) {
-		const {
-			localId,
-			attachments: pendingAttachments,
-			content: messageContent,
-			channelId
-		} = message;
-		const successfulIds: bigint[] = [];
+        async function processPendingMessage(message: PendingMessage) {
+                const { localId, attachments: pendingAttachments, content: messageContent, channelId } = message;
+                const successfulIds: bigint[] = [];
 
-		let channelSnowflake: bigint;
-		try {
-			channelSnowflake = BigInt(channelId);
-		} catch {
-			updatePendingMessage(localId, (current) => ({
-				...current,
-				status: 'error',
-				error: 'Invalid channel id'
-			}));
-			return;
-		}
+                let channelSnowflake: bigint;
+                try {
+                        channelSnowflake = BigInt(channelId);
+                } catch {
+                        updatePendingMessage(localId, (current) => ({
+                                ...current,
+                                status: 'error',
+                                error: 'Invalid channel id'
+                        }));
+                        return;
+                }
 
-		for (const attachment of pendingAttachments) {
-			if (attachment.attachmentId == null) {
-				updatePendingAttachment(localId, attachment.localId, () => ({
-					...attachment,
-					status: 'error',
-					progress: 0,
-					uploadedBytes: 0,
-					error: 'Missing attachment metadata'
-				}));
-				continue;
-			}
+                for (const attachment of pendingAttachments) {
+                        if (attachment.attachmentId == null) {
+                                updatePendingAttachment(localId, attachment.localId, () => ({
+                                        ...attachment,
+                                        status: 'error',
+                                        progress: 0,
+                                        uploadedBytes: 0,
+                                        error: 'Missing attachment metadata'
+                                }));
+                                continue;
+                        }
 
-			updatePendingAttachment(localId, attachment.localId, () => ({
-				...attachment,
-				status: 'uploading',
-				progress: 0,
-				uploadedBytes: 0,
-				error: null
-			}));
+                        updatePendingAttachment(localId, attachment.localId, () => ({
+                                ...attachment,
+                                status: 'uploading',
+                                progress: 0,
+                                uploadedBytes: 0,
+                                error: null
+                        }));
 
-			try {
-				await uploadAttachmentWithProgress(channelSnowflake, attachment, (uploaded, total) => {
-					updatePendingAttachment(localId, attachment.localId, (current) => {
-						const fallbackTotal = current.size > 0 ? current.size : total;
-						const denominator = total > 0 ? total : fallbackTotal;
-						const ratio = denominator > 0 ? Math.min(1, uploaded / denominator) : 1;
-						return {
-							...current,
-							uploadedBytes: denominator > 0 ? Math.min(uploaded, denominator) : uploaded,
-							progress: ratio
-						};
-					});
-				});
-				successfulIds.push(attachment.attachmentId);
-				updatePendingAttachment(localId, attachment.localId, (current) => ({
-					...current,
-					status: 'success',
-					progress: 1,
-					uploadedBytes: current.size,
-					error: null
-				}));
-			} catch (err) {
-				const message = getErrorMessage(err);
-				updatePendingAttachment(localId, attachment.localId, (current) => ({
-					...current,
-					status: 'error',
-					error: message,
-					progress: current.progress,
-					uploadedBytes: current.uploadedBytes
-				}));
-			}
-		}
+                        try {
+                                await uploadAttachmentWithProgress(channelSnowflake, attachment, (uploaded, total) => {
+                                        updatePendingAttachment(localId, attachment.localId, (current) => ({
+                                                ...current,
+                                                status: 'uploading',
+                                                progress: total > 0 ? uploaded / total : 0,
+                                                uploadedBytes: uploaded,
+                                                error: null
+                                        }));
+                                });
+                                successfulIds.push(BigInt(attachment.attachmentId));
+                                updatePendingAttachment(localId, attachment.localId, (current) => ({
+                                        ...current,
+                                        status: 'success',
+                                        progress: 1,
+                                        uploadedBytes: attachment.file.size,
+                                        error: null
+                                }));
+                        } catch (error) {
+                                console.error('Failed to upload attachment', error);
+                                updatePendingAttachment(localId, attachment.localId, (current) => ({
+                                        ...current,
+                                        status: 'error',
+                                        progress: 0,
+                                        uploadedBytes: 0,
+                                        error: getErrorMessage(error)
+                                }));
+                        }
+                }
 
-		if (!messageContent && successfulIds.length === 0) {
-			updatePendingMessage(localId, (current) => ({
-				...current,
-				status: 'error',
-				error: 'All attachments failed to upload'
-			}));
-			return;
-		}
+                try {
+                        await auth.api.message.messageChannelChannelIdPost({
+                                channelId: channelSnowflake as any,
+                                messageSendMessageRequest: {
+                                        content: messageContent,
+                                        attachments: successfulIds as any
+                                }
+                        });
+                        removePendingMessage(localId);
+                } catch (error) {
+                        console.error('Failed to send message', error);
+                        updatePendingMessage(localId, (current) => ({
+                                ...current,
+                                status: 'error',
+                                error: getErrorMessage(error)
+                        }));
+                }
+        }
+        async function insertEmoji(emoji: string) {
+                if (!emoji) return;
+                insertTextAtSelection(emoji);
+        }
 
-		try {
-			await auth.api.message.messageChannelChannelIdPost({
-				channelId: channelId as any,
-				messageSendMessageRequest: {
-					content: messageContent,
-					attachments: successfulIds as any
-				}
-			});
-			removePendingMessage(localId);
-		} catch (err) {
-			const messageText = getErrorMessage(err);
-			updatePendingMessage(localId, (current) => ({
-				...current,
-				status: 'error',
-				error: messageText
-			}));
-		}
-	}
+        async function handleEmojiSelection(emoji: string) {
+                await insertEmoji(emoji);
+                closeEmojiMenu();
+        }
+
+        async function openEmojiMenu() {
+                showEmojiPicker = true;
+                await tick();
+                emojiPickerRef?.clearSearch?.();
+                emojiPickerRef?.scrollToTop?.();
+                emojiMenuEl?.focus?.();
+        }
+
+        function closeEmojiMenu() {
+                showEmojiPicker = false;
+        }
+
+        async function toggleEmojiMenu() {
+                if (showEmojiPicker) {
+                        closeEmojiMenu();
+                } else {
+                        await openEmojiMenu();
+                }
+        }
+
+        function handleGlobalPointerDown(event: PointerEvent) {
+                const target = event.target as Node | null;
+                if (showEmojiPicker && emojiMenuEl && !emojiMenuEl.contains(target as Node) && target !== emojiButton) {
+                        closeEmojiMenu();
+                }
+                if (mentionMenuOpen && mentionMenuEl && !mentionMenuEl.contains(target as Node) && !editorEl?.contains(target)) {
+                        updateMentionSuggestionList(null);
+                }
+        }
+
+        function handleGlobalKeydown(event: KeyboardEvent) {
+                if (event.key === 'Escape') {
+                        if (showEmojiPicker) {
+                                closeEmojiMenu();
+                        }
+                        if (mentionMenuOpen) {
+                                updateMentionSuggestionList(null);
+                        }
+                }
+        }
+        const VISUAL_ATTACHMENT_PREVIEW_SIZE = 218;
+        const visualAttachmentWrapperStyle = `width: min(100%, ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px); max-width: min(100%, ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px);`;
+        const visualAttachmentMediaStyle = `width: 100%; height: ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px; object-fit: contain;`;
+        const visualAttachmentPlaceholderStyle = `height: ${VISUAL_ATTACHMENT_PREVIEW_SIZE}px;`;
+
+        function currentChannel() {
+                const gid = $selectedGuildId ?? '';
+                return ($channelsByGuild[gid] ?? []).find((c) => String((c as any).id) === $selectedChannelId);
+        }
+
+        function channelName() {
+                const ch = currentChannel() as any;
+                return (ch?.name ?? '').toString();
+        }
+        onMount(() => {
+                renderContentToEditor(content);
+                refreshMentionState();
+
+                if (typeof window === 'undefined') {
+                        return;
+                }
+
+                const win = window;
+                const dragListeners: Array<[keyof WindowEventMap, (event: DragEvent) => void]> = [
+                        ['dragenter', handleDragEnter],
+                        ['dragover', handleDragOver],
+                        ['dragleave', handleDragLeave],
+                        ['drop', handleDrop],
+                        ['dragend', handleDragEnd]
+                ];
+                const dragOpts: boolean = true;
+                dragListeners.forEach(([event, handler]) => {
+                        win.addEventListener(event, handler as EventListener, dragOpts);
+                });
+                removeGlobalDragListeners = () => {
+                        dragListeners.forEach(([event, handler]) => {
+                                win.removeEventListener(event, handler as EventListener, dragOpts);
+                        });
+                };
+
+                const pointerListener = (event: PointerEvent) => {
+                        handleGlobalPointerDown(event);
+                };
+                const keyListener = (event: KeyboardEvent) => {
+                        handleGlobalKeydown(event);
+                };
+                win.addEventListener('pointerdown', pointerListener, true);
+                win.addEventListener('keydown', keyListener);
+                removeEmojiMenuListeners = () => {
+                        win.removeEventListener('pointerdown', pointerListener, true);
+                        win.removeEventListener('keydown', keyListener);
+                };
+
+                const selectionListener = () => {
+                        refreshMentionState();
+                        updateMentionMenuPosition();
+                };
+                win.addEventListener('selectionchange', selectionListener);
+
+                return () => {
+                        win.removeEventListener('selectionchange', selectionListener);
+                };
+        });
+
+        onDestroy(() => {
+                clearLocalAttachments({ releasePreviews: true });
+                if (removeGlobalDragListeners) {
+                        removeGlobalDragListeners();
+                        removeGlobalDragListeners = null;
+                }
+                if (removeEmojiMenuListeners) {
+                        removeEmojiMenuListeners();
+                        removeEmojiMenuListeners = null;
+                }
+                resetTypingState();
+        });
+
+        $effect(() => {
+                const channelId = $selectedChannelId;
+                if (channelId !== typingChannelId) {
+                        resetTypingState();
+                        typingChannelId = channelId ?? null;
+                }
+        });
 </script>
 
-<div class="composer relative border-t border-[var(--stroke)] px-4 py-3">
+<div class="relative border-t border-[var(--stroke)] p-3">
         {#if dropActive}
                 <div
                         class="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-[var(--brand)]/70 bg-[var(--panel-strong)]/80 text-center text-sm font-semibold text-[var(--fg)]"
@@ -1451,7 +1468,7 @@
                 </div>
         {/if}
         {#if showEmojiPicker}
-                <div class="absolute right-4 bottom-[calc(100%+0.75rem)] z-30" bind:this={emojiMenuEl}>
+                <div class="absolute right-3 bottom-[calc(100%+0.75rem)] z-30" bind:this={emojiMenuEl}>
                         <EmojiPicker
                                 bind:this={emojiPickerRef}
                                 on:select={(event) => {
@@ -1500,7 +1517,7 @@
                 </div>
         {/if}
         <div
-                class="composer-shell relative flex w-full items-end gap-3 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
+                class="composer-shell relative flex items-end gap-3 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 focus-within:border-[var(--stroke)] focus-within:shadow-none focus-within:ring-0 focus-within:ring-offset-0 focus-within:outline-none"
         >
                 <div class="flex items-end pb-1">
                         <AttachmentUploader
@@ -1512,15 +1529,29 @@
                                 }}
                         />
                 </div>
-                <div class="relative flex min-h-[2.75rem] flex-1">
+                <div class="relative flex min-h-[2.75rem] flex-1" bind:this={editorWrapperEl}>
+                        <div
+                                class="editor-body w-full rounded-md px-2 py-2 text-sm leading-[1.4] text-[var(--fg)] caret-[var(--fg)] outline-none"
+                                contenteditable="true"
+                                role="textbox"
+                                aria-multiline="true"
+                                spellcheck="true"
+                                tabindex="0"
+                                data-placeholder={m.message_placeholder({ channel: channelName() })}
+                                bind:this={editorEl}
+                                oninput={handleEditorInput}
+                                onkeydown={handleEditorKeydown}
+                                onfocus={handleEditorFocus}
+                                onblur={handleEditorBlur}
+                        ></div>
                         {#if mentionMenuOpen}
                                 <div
-                                        class="mention-menu absolute bottom-[calc(100%+0.5rem)] left-0 w-72 max-w-[min(18rem,calc(100vw-4rem))]"
+                                        class="mention-menu absolute z-20 w-72 max-w-[min(18rem,calc(100vw-4rem))]"
+                                        bind:this={mentionMenuEl}
+                                        style={`left: ${mentionMenuPosition?.left ?? 0}px; top: ${mentionMenuPosition?.top ?? 0}px;`}
                                 >
                                         <div class="rounded-lg backdrop-blur-md">
-                                                <div
-                                                        class="menu-surface overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] shadow-lg"
-                                                >
+                                                <div class="menu-surface overflow-hidden rounded-md border border-[var(--stroke)] bg-[var(--panel)] shadow-lg">
                                                         <div class="max-h-60 overflow-y-auto" bind:this={mentionListEl}>
                                                                 {#if mentionSuggestions.length === 0}
                                                                         <div class="px-3 py-2 text-sm text-[var(--muted)]">{m.no_results()}</div>
@@ -1561,69 +1592,6 @@
                                         </div>
                                 </div>
                         {/if}
-                        <div class="editor-stack relative flex w-full">
-                                <div
-                                        class="input-overlay pointer-events-none absolute inset-0 z-0 overflow-hidden px-2 py-2 leading-[1.5]"
-                                        aria-hidden="true"
-                                >
-                                        <div class="overlay-layer" bind:this={overlayRootEl}>
-                                                <span class="overlay-ghost" bind:this={overlayGhostEl}>
-                                                        {#each ghostTokens as segment}
-                                                                {#if segment.type === 'text'}
-                                                                        <span>{segment.value}</span>
-                                                                {:else}
-                                                                        <span use:ghostMentionAction={segment.order}>
-                                                                                {segment.placeholder}
-                                                                        </span>
-                                                                {/if}
-                                                        {/each}
-                                                </span>
-                                                <span class="overlay-visual">
-                                                        {#each mentionDisplayTokens as token, index}
-                                                                {#if token.type === 'text'}
-                                                                        <span class="input-text">{token.value}</span>
-                                                                {:else if token.type === 'mention'}
-                                                                        <span
-                                                                                class="mention-pill-input"
-                                                                                use:visualMentionAction={token.order}
-                                                                                style={
-                                                                                        token.accentColor
-                                                                                                ? `--mention-accent: ${token.accentColor}`
-                                                                                                : undefined
-                                                                                }
-                                                                        >
-                                                                                <span class="mention-pill-label">{token.label}</span>
-                                                                        </span>
-                                                                {/if}
-                                                        {/each}
-                                                </span>
-                                                {#if !content && !editorFocused}
-                                                        <span class="placeholder text-[var(--muted)]"
-                                                                >{m.message_placeholder({ channel: channelName() })}</span
-                                                        >
-                                                {/if}
-                                                <span
-                                                        class={`custom-caret ${caretVisible ? 'is-visible' : ''}`}
-                                                        style={`transform: translate(${caretStyle.left}px, ${caretStyle.top}px); height: ${caretStyle.height}px;`}
-                                                ></span>
-                                        </div>
-                                </div>
-                                <textarea
-                                        bind:this={ta}
-                                        class="textarea-editor relative z-[1] box-border max-h-[40vh] min-h-[2.5rem] w-full resize-none appearance-none border-0 bg-transparent px-2 py-2 text-transparent leading-[1.5] selection:bg-[var(--brand)]/20 selection:text-transparent focus:border-0 focus:border-transparent focus:shadow-none focus:ring-0 focus:ring-transparent focus:ring-offset-0 focus:outline-none"
-                                        style:caretColor="transparent"
-                                        rows={1}
-                                        aria-label={m.message_placeholder({ channel: channelName() })}
-                                        bind:value={content}
-                                        oninput={handleInput}
-                                        onkeydown={handleTextareaKeydown}
-                                        onkeyup={handleTextareaSelectionChange}
-                                        onmouseup={handleTextareaSelectionChange}
-                                        onfocus={handleTextareaFocus}
-                                        onblur={handleTextareaBlur}
-                                        onselect={handleTextareaSelectionChange}
-                                ></textarea>
-                        </div>
                 </div>
                 <div class="flex items-center gap-2 pb-1">
                         <button
@@ -1653,145 +1621,50 @@
 </div>
 
 <style>
-        .input-overlay {
-                color: var(--fg);
-                font-size: inherit;
-                line-height: inherit;
-                white-space: pre-wrap;
-                word-break: break-word;
-                user-select: none;
-                box-sizing: border-box;
-                z-index: 0;
-        }
-
-        .overlay-layer {
-                position: relative;
-                min-height: 100%;
-        }
-
-        .overlay-ghost {
-                visibility: hidden;
-                display: block;
-                white-space: pre-wrap;
-                word-break: break-word;
-                min-height: 1.25em;
-        }
-
-        .overlay-visual {
-                position: absolute;
-                inset: 0;
-                display: block;
-                white-space: pre-wrap;
-                word-break: break-word;
+        :global(.editor-body:empty)::before {
+                content: attr(data-placeholder);
+                color: var(--muted);
                 pointer-events: none;
-                z-index: 2;
         }
 
-        .overlay-visual .input-text {
+        :global(.editor-body) {
+                min-height: 2.25rem;
                 white-space: pre-wrap;
+                word-break: break-word;
         }
 
-        .input-overlay .placeholder {
-                position: absolute;
-                left: 0;
-                top: 0;
-                white-space: pre-wrap;
-                pointer-events: none;
-                z-index: 1;
-        }
-
-        .textarea-editor {
-                position: relative;
-                z-index: 1;
-                caret-color: transparent;
-        }
-
-        .mention-pill-input {
+        :global(.mention-badge) {
                 display: inline-flex;
                 align-items: center;
-                justify-content: flex-start;
-                white-space: nowrap;
-        }
-
-        .mention-pill-label {
-                display: inline-flex;
-                align-items: center;
-                padding: 0.1rem 0.35rem;
-                border-radius: 9999px;
+                border-radius: 4px;
+                padding: 0 4px;
+                margin: 0 1px;
+                background: var(--mention-accent, var(--panel));
+                color: var(--mention-accent, var(--fg));
                 font-weight: 500;
-                font-size: inherit;
-                line-height: 1.2;
-                background-color: rgba(88, 101, 242, 0.16);
-                background-color: color-mix(in srgb, var(--mention-accent, var(--brand)) 16%, transparent);
-                color: var(--mention-accent, var(--brand));
+                font-size: 0.95em;
+                line-height: 1.3;
         }
 
-        .custom-caret {
-                position: absolute;
-                width: 1px;
-                background-color: var(--fg);
-                animation: caretBlink 1.05s steps(2, start) infinite;
-                animation-play-state: paused;
-                opacity: 0;
-                z-index: 3;
+        :global(.mention-badge[style*='--mention-accent']) {
+                color: #fff;
         }
 
-        .custom-caret.is-visible {
-                animation-play-state: running;
-                opacity: 1;
+        :global(.mention-menu .mention-option) {
+                transition: background-color 0.12s ease;
         }
 
-        @keyframes caretBlink {
-                0% {
-                        opacity: 1;
-                }
-                50% {
-                        opacity: 0;
-                }
-                100% {
-                        opacity: 1;
-                }
+        :global(.mention-menu .mention-option.is-active),
+        :global(.mention-menu .mention-option:hover) {
+                background-color: rgba(255, 255, 255, 0.05);
         }
 
-	.mention-menu {
-		z-index: 20;
-	}
+        :global(.mention-menu .mention-option .label) {
+                color: var(--fg);
+        }
 
-	.mention-option {
-		background: transparent;
-		border: none;
-		color: var(--fg);
-		transition: background-color 0.15s ease;
-	}
-
-	.mention-option .icon {
-		color: var(--mention-accent, var(--muted));
-	}
-
-	.mention-option .label {
-		font-weight: 600;
-		color: var(--mention-accent, var(--fg));
-	}
-
-	.mention-option .description {
-		font-size: 0.75rem;
-		color: var(--muted);
-	}
-
-	.mention-option.is-active {
-		background-color: var(--panel-strong);
-	}
-
-	.mention-option.is-active .label {
-		color: var(--fg);
-	}
-
-	.mention-option:focus-visible {
-		outline: 2px solid var(--brand);
-		outline-offset: -2px;
-	}
-
-	.textarea-editor::placeholder {
-		color: transparent;
-	}
+        :global(.mention-menu .mention-option .description) {
+                color: var(--muted);
+                font-size: 0.875rem;
+        }
 </style>
