@@ -90,9 +90,13 @@
 		| { type: 'list'; items: InlineToken[][] }
 		| { type: 'break' };
 
-	type RenderedSegment =
-		| { type: 'code'; content: string; language?: string }
-		| { type: 'blocks'; blocks: Block[] };
+        type RenderedSegment =
+                | { type: 'code'; content: string; language?: string }
+                | { type: 'blocks'; blocks: Block[] };
+
+        const EMOJI_SEQUENCE_REGEX =
+                /(?:\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D(?:\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?))*)|(?:[#*0-9]\uFE0F?\u20E3)|(?:\p{Regional_Indicator}{2})/gu;
+        const CUSTOM_EMOJI_REGEX = /<a?:[\w-]+:\d+>/g;
 
 	function getRoleId(role?: DtoRole | null): string | null {
 		const raw = role?.id as string | number | bigint | undefined;
@@ -200,6 +204,22 @@
                 }
 
                 return segments;
+        }
+
+        function isEmojiOnly(text: string): boolean {
+                if (!text) return false;
+                const trimmed = text.trim();
+                if (!trimmed) return false;
+                const standardMatches = trimmed.match(EMOJI_SEQUENCE_REGEX) ?? [];
+                const customMatches = trimmed.match(CUSTOM_EMOJI_REGEX) ?? [];
+                if (!standardMatches.length && !customMatches.length) {
+                        return false;
+                }
+                const stripped = trimmed
+                        .replace(EMOJI_SEQUENCE_REGEX, '')
+                        .replace(CUSTOM_EMOJI_REGEX, '')
+                        .replace(/\s+/g, '');
+                return stripped.length === 0;
         }
 
         const JOIN_MESSAGE_PHRASES: readonly (() => string)[] = [
@@ -1098,6 +1118,15 @@
 	const dispatch = createEventDispatcher<{ deleted: void }>();
         const segments = $derived(parseMessageContent(message.content ?? ''));
         const fallbackInlineTokens = $derived(parseInline(message.content ?? ''));
+        const isEmojiOnlyMessage = $derived.by(() => isEmojiOnly(message.content ?? ''));
+        const messageBodyClass = $derived.by(() => {
+                const base = compact ? 'mt-0 pr-16' : 'mt-0.5 pr-16';
+                if (isEmojiOnlyMessage) {
+                        return `${base} emoji-only-message text-2xl leading-tight`;
+                }
+                const normalLineHeight = compact ? 'leading-tight' : 'leading-normal';
+                return `${base} ${normalLineHeight} text-sm`;
+        });
         const authorAvatarUrl = $derived.by(() =>
                 resolveAvatarUrl(
                         (message as any)?.author,
@@ -2496,7 +2525,7 @@
                                         </div>
                                 </div>
                         {:else}
-                                <div class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}>
+                                <div class={messageBodyClass}>
                                 {#if renderedSegments.length === 0}
                                         {#if fallbackInlineTokens.length === 0}
                                                 <span class="break-words whitespace-pre-wrap">{message.content}</span>
