@@ -33,6 +33,7 @@
 	} from '$lib/utils/permissions';
         import { guildUnreadSummary } from '$lib/stores/unread';
         import { colorIntToHex, parseColorValue } from '$lib/utils/color';
+        import { resolveIconUrl } from '$lib/utils/icon';
         import {
                 FOLDER_UNREAD_BADGE_CLASSES,
                 SERVER_UNREAD_BADGE_CLASSES
@@ -108,10 +109,7 @@
         }
 
         function guildIconUrl(guild: DtoGuild | null | undefined): string | null {
-                const url = (guild as any)?.icon?.url;
-                if (typeof url !== 'string') return null;
-                const trimmed = url.trim();
-                return trimmed.length > 0 ? trimmed : null;
+                return resolveIconUrl((guild as any)?.icon);
         }
 
 	function toSnowflakeString(value: unknown): string | null {

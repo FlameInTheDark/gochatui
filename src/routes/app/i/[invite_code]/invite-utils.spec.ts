@@ -38,13 +38,15 @@ describe('invite-utils', () => {
 		expect(getMemberCountLabel(invite)).toBe('Member count unavailable');
 	});
 
-	it('builds the guild icon URL when an icon is present', () => {
-		const inviteWithIcon = { guild: { icon: 77 } } as any;
-		const inviteWithoutIcon = { guild: {} } as any;
+        it('builds the guild icon URL when an icon is present', () => {
+                const inviteWithDirectUrl = { guild: { icon: { url: 'https://cdn.test/icon.png' } } } as any;
+                const inviteWithIdFallback = { guild: { icon: { id: 77 } } } as any;
+                const inviteWithoutIcon = { guild: {} } as any;
 
-		expect(buildGuildIconUrl(inviteWithIcon)).toBe('https://api.test/attachments/77');
-		expect(buildGuildIconUrl(inviteWithoutIcon)).toBeNull();
-	});
+                expect(buildGuildIconUrl(inviteWithDirectUrl)).toBe('https://cdn.test/icon.png');
+                expect(buildGuildIconUrl(inviteWithIdFallback)).toBe('https://api.test/attachments/77');
+                expect(buildGuildIconUrl(inviteWithoutIcon)).toBeNull();
+        });
 
 	it('provides invite availability messaging', () => {
 		expect(getInviteUnavailableMessage('ok')).toBeNull();
