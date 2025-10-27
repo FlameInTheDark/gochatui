@@ -1118,13 +1118,14 @@
 	const dispatch = createEventDispatcher<{ deleted: void }>();
         const segments = $derived(parseMessageContent(message.content ?? ''));
         const fallbackInlineTokens = $derived(parseInline(message.content ?? ''));
-        const isEmojiOnlyMessage = $derived(() => isEmojiOnly(message.content ?? ''));
-        const messageBodyClass = $derived(() => {
-                const base = compact ? 'mt-0 pr-16 leading-tight' : 'mt-0.5 pr-16 leading-normal';
+        const isEmojiOnlyMessage = $derived.by(() => isEmojiOnly(message.content ?? ''));
+        const messageBodyClass = $derived.by(() => {
+                const base = compact ? 'mt-0 pr-16' : 'mt-0.5 pr-16';
                 if (isEmojiOnlyMessage) {
-                        return `${base} emoji-only-message text-3xl leading-tight`;
+                        return `${base} emoji-only-message text-2xl leading-tight`;
                 }
-                return `${base} text-sm`;
+                const normalLineHeight = compact ? 'leading-tight' : 'leading-normal';
+                return `${base} ${normalLineHeight} text-sm`;
         });
         const authorAvatarUrl = $derived.by(() =>
                 resolveAvatarUrl(
