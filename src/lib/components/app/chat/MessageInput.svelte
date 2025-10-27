@@ -10,6 +10,7 @@
         import AttachmentUploader from './AttachmentUploader.svelte';
         import EmojiPicker from './EmojiPicker.svelte';
         import type EmojiPickerComponent from './EmojiPicker.svelte';
+        import emojiGroupsData from 'unicode-emoji-json/data-by-group.json';
         import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
         import { get } from 'svelte/store';
         import { m } from '$lib/paraglide/messages.js';
@@ -42,7 +43,7 @@
         } from '$lib/utils/members';
 
         type EditorTokenInfo = {
-                trigger: '@' | '#';
+                trigger: '@' | '#' | ':';
                 query: string;
                 node: Text;
                 start: number;
@@ -53,7 +54,7 @@
 
         type MentionSuggestion = {
                 id: string;
-                type: MentionType;
+                type: MentionType | 'emoji';
                 label: string;
                 description: string | null;
                 accentColor: string | null;
@@ -61,6 +62,8 @@
                 user?: DtoUser | null;
                 channelKind?: ChannelKind;
                 special?: SpecialMention | null;
+                emoji?: string | null;
+                searchTerms?: string[];
         };
 
         const dispatch = createEventDispatcher<{ sent: void }>();
@@ -86,7 +89,9 @@
         let emojiPickerRef = $state<EmojiPickerComponent | null>(null);
         let removeEmojiMenuListeners: (() => void) | null = null;
 
-        let mentionQuery = $state<MentionTrigger | null>(null);
+        type SuggestionTrigger = MentionTrigger | EmojiTrigger;
+
+        let mentionQuery = $state<SuggestionTrigger | null>(null);
         let mentionSuggestions = $state<MentionSuggestion[]>([]);
         let mentionActiveIndex = $state(0);
         const mentionMenuOpen = $derived.by(() => Boolean(mentionQuery && mentionSuggestions.length > 0));
@@ -121,6 +126,90 @@
                 }
                 return map;
         });
+
+        type EmojiDatasetEntry = {
+                emoji: string;
+                name?: string;
+                slug: string;
+        };
+
+        type EmojiDatasetGroup = {
+                emojis: EmojiDatasetEntry[];
+        };
+
+        type EmojiTrigger = {
+                trigger: ':';
+                start: number;
+                query: string;
+                hasTerminator: boolean;
+        };
+
+        const RAW_EMOJI_GROUPS = emojiGroupsData as EmojiDatasetGroup[];
+
+        function formatEmojiLabel(name: string | undefined, fallback: string): string {
+                if (!name) {
+                        return fallback;
+                }
+                const trimmed = name.trim();
+                if (!trimmed) {
+                        return fallback;
+                }
+                return trimmed
+                        .split(/\s+/)
+                        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+        }
+
+        const emojiSuggestionPool: MentionSuggestion[] = [];
+        const emojiSuggestionIndex = new Map<string, MentionSuggestion>();
+
+        for (const group of RAW_EMOJI_GROUPS) {
+                if (!group || !Array.isArray(group.emojis)) continue;
+                for (const entry of group.emojis) {
+                        if (!entry || typeof entry.emoji !== 'string' || typeof entry.slug !== 'string') {
+                                continue;
+                        }
+                        const emoji = entry.emoji;
+                        const slug = entry.slug;
+                        if (!emoji || !slug) continue;
+                        const underscoreSlug = slug.replace(/-/g, '_');
+                        const fallbackLabel = underscoreSlug.replace(/_/g, ' ');
+                        const label = formatEmojiLabel(entry.name, fallbackLabel);
+                        const description = `:${underscoreSlug}:`;
+                        const searchTerms = new Set<string>();
+                        searchTerms.add(slug.toLowerCase());
+                        searchTerms.add(underscoreSlug.toLowerCase());
+                        searchTerms.add(description.toLowerCase());
+                        const normalizedName = entry.name?.toLowerCase() ?? '';
+                        if (normalizedName) {
+                                searchTerms.add(normalizedName);
+                                normalizedName.split(/\s+/).forEach((word) => {
+                                        if (word) {
+                                                searchTerms.add(word);
+                                        }
+                                });
+                        }
+                        const suggestion: MentionSuggestion = {
+                                id: underscoreSlug,
+                                type: 'emoji',
+                                label,
+                                description,
+                                accentColor: null,
+                                special: null,
+                                emoji,
+                                searchTerms: Array.from(searchTerms)
+                        };
+                        emojiSuggestionPool.push(suggestion);
+                        const keys = [underscoreSlug.toLowerCase(), slug.toLowerCase()];
+                        for (const key of keys) {
+                                if (!emojiSuggestionIndex.has(key)) {
+                                        emojiSuggestionIndex.set(key, suggestion);
+                                }
+                        }
+                }
+        }
+
+        emojiSuggestionPool.sort((a, b) => a.label.localeCompare(b.label));
         function memberUserId(member: DtoMember | null | undefined): string | null {
                 if (!member) return null;
                 return (
@@ -416,7 +505,7 @@
                         }
                 ];
         }
-        function updateMentionSuggestionList(trigger: MentionTrigger | null) {
+        function updateMentionSuggestionList(trigger: SuggestionTrigger | null) {
                 if (!trigger) {
                         const hadQuery = mentionQuery !== null;
                         const hadSuggestions = mentionSuggestions.length > 0;
@@ -452,7 +541,10 @@
                 const nextKey = `${trigger.trigger}:${trigger.start}:${trigger.query}`;
                 const queryChanged = previousKey !== nextKey;
 
-                const normalizedQuery = trigger.query.replace(/^&/, '').trim().toLowerCase();
+                const normalizedQuery =
+                        trigger.trigger === '@'
+                                ? trigger.query.replace(/^&/, '').trim().toLowerCase()
+                                : trigger.query.trim().toLowerCase();
 
                 let pool: MentionSuggestion[] = [];
                 if (trigger.trigger === '@') {
@@ -466,8 +558,10 @@
                                 deduped.set(`${suggestion.type}:${suggestion.id}`, suggestion);
                         }
                         pool = Array.from(deduped.values());
-                } else {
+                } else if (trigger.trigger === '#') {
                         pool = buildChannelSuggestions();
+                } else {
+                        pool = emojiSuggestionPool;
                 }
 
                 if (normalizedQuery) {
@@ -475,7 +569,11 @@
                                 const label = suggestion.label.toLowerCase();
                                 if (label.includes(normalizedQuery)) return true;
                                 const desc = suggestion.description?.toLowerCase() ?? '';
-                                return desc.includes(normalizedQuery);
+                                if (desc.includes(normalizedQuery)) return true;
+                                if (suggestion.searchTerms?.length) {
+                                        return suggestion.searchTerms.some((term) => term.includes(normalizedQuery));
+                                }
+                                return false;
                         });
                 }
 
@@ -491,7 +589,8 @@
                                         previous.label !== suggestion.label ||
                                         previous.description !== suggestion.description ||
                                         previous.accentColor !== suggestion.accentColor ||
-                                        previous.channelKind !== suggestion.channelKind
+                                        previous.channelKind !== suggestion.channelKind ||
+                                        previous.emoji !== suggestion.emoji
                                 );
                         });
 
@@ -779,7 +878,7 @@
                 const token = text.slice(start, offset);
                 if (!token || token.length < 2) return null;
                 const trigger = token[0];
-                if (trigger !== '@' && trigger !== '#') return null;
+                if (trigger !== '@' && trigger !== '#' && trigger !== ':') return null;
                 if (/\s/.test(trigger)) return null;
                 return {
                         trigger,
@@ -792,6 +891,28 @@
 
         function clamp(value: number, min: number, max: number): number {
                 return Math.min(Math.max(value, min), max);
+        }
+
+        const EMOJI_TRIGGER_PATTERN = /(^|[\s>"'([{]):([a-z0-9_\-+]{1,})(:?$)/i;
+
+        function detectEmojiTrigger(content: string, cursor: number): EmojiTrigger | null {
+                if (!content) return null;
+                if (cursor < 0 || cursor > content.length) return null;
+                const before = content.slice(0, cursor);
+                const match = before.match(EMOJI_TRIGGER_PATTERN);
+                if (!match) return null;
+                const [, , rawQuery = '', terminator = ''] = match;
+                const query = rawQuery.trim();
+                if (!query) return null;
+                const hasTerminator = Boolean(terminator);
+                const start = cursor - query.length - 1 - (hasTerminator ? 1 : 0);
+                if (start < 0) return null;
+                return {
+                        trigger: ':',
+                        start,
+                        query,
+                        hasTerminator
+                };
         }
 
         function updateMentionMenuPosition() {
@@ -824,10 +945,9 @@
                 const menuHeight = menuEl?.offsetHeight ?? 0;
                 const viewportWidth = window.innerWidth;
                 const viewportHeight = window.innerHeight;
+                const spacing = 8;
 
                 let left = rect.left;
-                let top = rect.bottom;
-
                 if (menuWidth > 0) {
                         const maxLeft = Math.max(viewportPadding, viewportWidth - menuWidth - viewportPadding);
                         left = Math.min(Math.max(viewportPadding, left), maxLeft);
@@ -835,11 +955,26 @@
                         left = clamp(left, viewportPadding, viewportWidth - viewportPadding);
                 }
 
+                const maxTopWithMenu = menuHeight > 0
+                        ? Math.max(viewportPadding, viewportHeight - menuHeight - viewportPadding)
+                        : viewportHeight - viewportPadding;
+                const preferredTop = menuHeight > 0
+                        ? rect.top - spacing - menuHeight
+                        : rect.top - spacing;
+                const fallbackTop = rect.bottom + spacing;
+
+                let top = preferredTop;
                 if (menuHeight > 0) {
-                        const maxTop = Math.max(viewportPadding, viewportHeight - menuHeight - viewportPadding);
-                        top = Math.min(Math.max(viewportPadding, top), maxTop);
+                        if (preferredTop < viewportPadding && fallbackTop <= maxTopWithMenu) {
+                                top = Math.min(Math.max(viewportPadding, fallbackTop), maxTopWithMenu);
+                        } else {
+                                top = clamp(preferredTop, viewportPadding, maxTopWithMenu);
+                        }
                 } else {
-                        top = clamp(top, viewportPadding, viewportHeight - viewportPadding);
+                        top = clamp(preferredTop, viewportPadding, maxTopWithMenu);
+                        if (top === viewportPadding && fallbackTop < maxTopWithMenu) {
+                                top = Math.min(Math.max(viewportPadding, fallbackTop), maxTopWithMenu);
+                        }
                 }
 
                 mentionMenuPosition = { left, top };
@@ -858,21 +993,64 @@
                         updateMentionSuggestionList(null);
                         return;
                 }
-                const trigger = detectMentionTrigger(content, cursor);
-                if (!trigger) {
-                        updateMentionSuggestionList(null);
+                const mentionTrigger = detectMentionTrigger(content, cursor);
+                if (mentionTrigger) {
+                        activeTokenInfo = getCurrentTokenInfo();
+                        updateMentionSuggestionList(mentionTrigger);
+                        updateMentionMenuPosition();
+                        scrollActiveSuggestionIntoView();
                         return;
                 }
-                activeTokenInfo = getCurrentTokenInfo();
-                updateMentionSuggestionList(trigger);
-                updateMentionMenuPosition();
-                scrollActiveSuggestionIntoView();
+                const emojiTrigger = detectEmojiTrigger(content, cursor);
+                if (emojiTrigger) {
+                        const info = getCurrentTokenInfo();
+                        if (emojiTrigger.hasTerminator) {
+                                const normalized = emojiTrigger.query.toLowerCase();
+                                const underscore = normalized.replace(/-/g, '_');
+                                const direct = emojiSuggestionIndex.get(underscore) ??
+                                        emojiSuggestionIndex.get(normalized);
+                                if (direct) {
+                                        activeTokenInfo = info;
+                                        void applyMentionSuggestion(direct);
+                                        return;
+                                }
+                        }
+                        activeTokenInfo = info;
+                        updateMentionSuggestionList(emojiTrigger);
+                        updateMentionMenuPosition();
+                        scrollActiveSuggestionIntoView();
+                        return;
+                }
+                updateMentionSuggestionList(null);
         }
         async function applyMentionSuggestion(suggestion: MentionSuggestion) {
                 if (!editorEl) return;
                 const selection = typeof window !== 'undefined' ? window.getSelection() : null;
                 if (!selection) return;
                 const info = activeTokenInfo ?? getCurrentTokenInfo();
+                if (suggestion.type === 'emoji') {
+                        const emoji = suggestion.emoji ?? '';
+                        if (!info || !emoji) {
+                                return;
+                        }
+                        const range = selection.getRangeAt(0).cloneRange();
+                        range.setStart(info.node, info.start);
+                        range.setEnd(info.node, info.end);
+                        range.deleteContents();
+                        const textNode = document.createTextNode(emoji);
+                        range.insertNode(textNode);
+                        range.setStartAfter(textNode);
+                        range.collapse(true);
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                        editorEl.focus();
+                        syncContentFromEditor();
+                        updateMentionSuggestionList(null);
+                        handleTypingActivity(content);
+                        await tick();
+                        refreshMentionState();
+                        return;
+                }
                 const isSpecial = suggestion.special === 'everyone' || suggestion.special === 'here';
                 let mention: MentionMatch;
                 if (isSpecial) {
@@ -1816,11 +1994,19 @@
                                                                                         onpointerdown={(event) => event.preventDefault()}
                                                                                         onclick={() => handleMentionClick(index)}
                                                                                 >
-                                                                                        <span class="icon text-[var(--muted)]">
+                                                                                        <span
+                                                                                                class={`icon flex h-5 w-5 items-center justify-center ${
+                                                                                                        suggestion.type === 'emoji'
+                                                                                                                ? ''
+                                                                                                                : 'text-[var(--muted)]'
+                                                                                                }`}
+                                                                                        >
                                                                                                 {#if suggestion.type === 'user'}
                                                                                                         <AtSign class="h-4 w-4" stroke-width={2} />
                                                                                                 {:else if suggestion.type === 'role'}
                                                                                                         <BadgeCheck class="h-4 w-4" stroke-width={2} />
+                                                                                                {:else if suggestion.type === 'emoji'}
+                                                                                                        <span class="text-lg leading-none">{suggestion.emoji}</span>
                                                                                                 {:else}
                                                                                                         {#if suggestion.channelKind === 'voice'}
                                                                                                                 <Volume2 class="h-4 w-4" stroke-width={2} />
