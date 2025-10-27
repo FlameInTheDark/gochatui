@@ -1870,12 +1870,18 @@
                 content: attr(data-placeholder);
                 color: var(--muted);
                 pointer-events: none;
+                position: absolute;
+                inset-inline-start: 0.5rem;
+                inset-inline-end: 0.5rem;
+                inset-block-start: 0.25rem;
+                white-space: pre-wrap;
         }
 
         :global(.editor-body) {
                 min-height: 1.75rem;
                 white-space: pre-wrap;
                 word-break: break-word;
+                position: relative;
         }
 
         :global(.mention-badge) {
