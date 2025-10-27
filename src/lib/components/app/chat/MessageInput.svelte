@@ -30,7 +30,8 @@
                 MENTION_ACCENT_COLORS,
                 type MentionTrigger,
                 type MentionMatch,
-                type MentionType
+                type MentionType,
+                type SpecialMention
         } from '$lib/utils/mentions';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
         import {
@@ -58,6 +59,7 @@
                 member?: DtoMember | null;
                 user?: DtoUser | null;
                 channelKind?: ChannelKind;
+                special?: SpecialMention | null;
         };
 
         const dispatch = createEventDispatcher<{ sent: void }>();
@@ -261,6 +263,12 @@
         function mentionDisplayDetails(
                 mention: MentionMatch
         ): { label: string; accentColor: string | null; channelKind?: ChannelKind } {
+                if (mention.special === 'everyone' || mention.special === 'here') {
+                        return {
+                                label: `@${mention.special}`,
+                                accentColor: MENTION_ACCENT_COLORS.user
+                        };
+                }
                 if (mention.type === 'user') {
                         const details = resolveUserMentionDetails(mention.id);
                         return { label: details.label, accentColor: details.accentColor };
@@ -304,7 +312,8 @@
                                         description: formatUserDescriptor(details.user),
                                         accentColor: details.accentColor,
                                         member,
-                                        user: details.user
+                                        user: details.user,
+                                        special: null
                                 });
                         }
                 } else {
@@ -320,7 +329,8 @@
                                         description: formatUserDescriptor(user),
                                         accentColor: MENTION_ACCENT_COLORS.user,
                                         member: null,
-                                        user
+                                        user,
+                                        special: null
                                 });
                         }
                 }
@@ -344,7 +354,8 @@
                                 description: (role as any)?.description ?? null,
                                 accentColor: details.accentColor,
                                 member: null,
-                                user: null
+                                user: null,
+                                special: null
                         });
                 }
                 return suggestions;
@@ -370,10 +381,40 @@
                                 accentColor: details.accentColor,
                                 member: null,
                                 user: null,
-                                channelKind: details.channelKind
+                                channelKind: details.channelKind,
+                                special: null
                         });
                 }
                 return suggestions;
+        }
+
+        function buildBroadcastSuggestions(): MentionSuggestion[] {
+                const guildId = $selectedGuildId;
+                if (!guildId || guildId === '@me') {
+                        return [];
+                }
+                return [
+                        {
+                                id: 'everyone',
+                                type: 'user',
+                                label: '@everyone',
+                                description: null,
+                                accentColor: MENTION_ACCENT_COLORS.user,
+                                member: null,
+                                user: null,
+                                special: 'everyone'
+                        },
+                        {
+                                id: 'here',
+                                type: 'user',
+                                label: '@here',
+                                description: null,
+                                accentColor: MENTION_ACCENT_COLORS.user,
+                                member: null,
+                                user: null,
+                                special: 'here'
+                        }
+                ];
         }
         function updateMentionSuggestionList(trigger: MentionTrigger | null) {
                 if (!trigger) {
@@ -415,7 +456,11 @@
 
                 let pool: MentionSuggestion[] = [];
                 if (trigger.trigger === '@') {
-                        const combined = [...buildUserSuggestions(), ...buildRoleSuggestions()];
+                        const combined = [
+                                ...buildBroadcastSuggestions(),
+                                ...buildUserSuggestions(),
+                                ...buildRoleSuggestions()
+                        ];
                         const deduped = new Map<string, MentionSuggestion>();
                         for (const suggestion of combined) {
                                 deduped.set(`${suggestion.type}:${suggestion.id}`, suggestion);
@@ -509,6 +554,10 @@
                 }
                 if (node.nodeType === Node.ELEMENT_NODE) {
                         const el = node as HTMLElement;
+                        const special = el.dataset.specialMention as SpecialMention | undefined;
+                        if (special === 'everyone' || special === 'here') {
+                                return `@${special}`;
+                        }
                         if (el.dataset.mentionType && el.dataset.mentionId) {
                                 const type = el.dataset.mentionType as MentionType;
                                 const id = el.dataset.mentionId ?? '';
@@ -593,6 +642,9 @@
                 badge.contentEditable = 'false';
                 badge.dataset.mentionType = mention.type;
                 badge.dataset.mentionId = mention.id;
+                if (mention.special) {
+                        badge.dataset.specialMention = mention.special;
+                }
                 badge.textContent = '';
                 if (mention.type === 'channel') {
                         const kind = details.channelKind ?? 'text';
@@ -815,21 +867,37 @@
                 const selection = typeof window !== 'undefined' ? window.getSelection() : null;
                 if (!selection) return;
                 const info = activeTokenInfo ?? getCurrentTokenInfo();
-                const mention: MentionMatch = {
-                        type: suggestion.type,
-                        id: suggestion.id,
-                        start: 0,
-                        end: 0,
-                        raw: mentionPlaceholder(suggestion.type, suggestion.id)
-                };
-                const details =
-                        suggestion.type === 'channel'
-                                ? {
-                                          label: suggestion.label,
-                                          accentColor: suggestion.accentColor,
-                                          channelKind: suggestion.channelKind ?? 'text'
-                                  }
-                                : { label: suggestion.label, accentColor: suggestion.accentColor };
+                const isSpecial = suggestion.special === 'everyone' || suggestion.special === 'here';
+                let mention: MentionMatch;
+                if (isSpecial) {
+                        const specialId = suggestion.special as SpecialMention;
+                        mention = {
+                                type: 'user',
+                                id: specialId,
+                                start: 0,
+                                end: 0,
+                                raw: `@${specialId}`,
+                                special: specialId
+                        };
+                } else {
+                        mention = {
+                                type: suggestion.type,
+                                id: suggestion.id,
+                                start: 0,
+                                end: 0,
+                                raw: mentionPlaceholder(suggestion.type, suggestion.id),
+                                special: null
+                        };
+                }
+                const details = isSpecial
+                        ? { label: `@${suggestion.special}`, accentColor: MENTION_ACCENT_COLORS.user }
+                        : suggestion.type === 'channel'
+                        ? {
+                                  label: suggestion.label,
+                                  accentColor: suggestion.accentColor,
+                                  channelKind: suggestion.channelKind ?? 'text'
+                          }
+                        : { label: suggestion.label, accentColor: suggestion.accentColor };
                 const badge = createMentionBadge(mention, details);
 
                 if (info) {
