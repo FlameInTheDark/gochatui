@@ -1605,6 +1605,7 @@
 
                 const localMessageId = createLocalMessageId();
                 const attachmentsForSend = attachments.map(cloneAttachmentForSend);
+                const hasAttachments = attachmentsForSend.length > 0;
                 const pendingMessage: PendingMessage = {
                         localId: localMessageId,
                         channelId,
@@ -1615,7 +1616,9 @@
                         error: null
                 };
 
-                addPendingMessage(pendingMessage);
+                if (hasAttachments) {
+                        addPendingMessage(pendingMessage);
+                }
 
                 content = '';
                 updateMentionSuggestionList(null);
@@ -1630,7 +1633,29 @@
                 dispatch('sent');
                 sending = false;
 
-                await processPendingMessage(pendingMessage);
+                if (hasAttachments) {
+                        await processPendingMessage(pendingMessage);
+                        return;
+                }
+
+                try {
+                        const channelSnowflake = BigInt(channelId);
+                        await auth.api.message.messageChannelChannelIdPost({
+                                channelId: channelSnowflake as any,
+                                messageSendMessageRequest: {
+                                        content: pendingMessage.content,
+                                        attachments: []
+                                }
+                        });
+                } catch (error) {
+                        console.error('Failed to send message', error);
+                        const restoredContent = pendingMessage.content;
+                        content = restoredContent;
+                        renderContentToEditor(restoredContent);
+                        if (editorEl) {
+                                editorEl.focus();
+                        }
+                }
         }
 
         function getErrorMessage(err: unknown): string {
