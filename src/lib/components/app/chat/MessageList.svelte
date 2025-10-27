@@ -47,6 +47,12 @@
         let channelSwitchToken = 0;
         let jumpRequestToken = 0;
 
+        let typingBannerEl: HTMLDivElement | null = null;
+        let typingBannerHeight = $state(24);
+        let typingBannerObserver: ResizeObserver | null = null;
+
+        const SCROLLBAR_GUTTER_PX = 10;
+
         const READ_STATE_FLUSH_INTERVAL = 60_000;
         const me = auth.user;
         const typingUsersLookup = channelTypingUsers;
@@ -251,6 +257,37 @@
                         dirtyGuilds.delete(guildId);
                 }
         }
+
+        function updateTypingBannerHeight() {
+                const measured = typingBannerEl?.offsetHeight ?? 0;
+                typingBannerHeight = Math.max(measured, 24);
+        }
+
+        onMount(() => {
+                updateTypingBannerHeight();
+                if (typeof ResizeObserver !== 'undefined') {
+                        typingBannerObserver = new ResizeObserver(() => {
+                                updateTypingBannerHeight();
+                        });
+                        if (typingBannerEl) {
+                                typingBannerObserver.observe(typingBannerEl);
+                        }
+                }
+                return () => {
+                        typingBannerObserver?.disconnect();
+                        typingBannerObserver = null;
+                };
+        });
+
+        $effect(() => {
+                const el = typingBannerEl;
+                if (!el) return;
+                updateTypingBannerHeight();
+                if (typingBannerObserver) {
+                        typingBannerObserver.disconnect();
+                        typingBannerObserver.observe(el);
+                }
+        });
 
         function buildAckKey(guildId: string, channelId: string, messageId: string | null): string | null {
                 if (!guildId || !channelId || !messageId) return null;
@@ -1238,6 +1275,7 @@
 
 <div
         class="typing-banner flex h-6 items-center px-4 text-xs italic text-[var(--muted)]"
+        bind:this={typingBannerEl}
         use:tooltip={
                 typingIndicator?.hasTooltip
                         ? {
@@ -1256,11 +1294,13 @@
 {#if !wasAtBottom && initialLoaded}
         <div class="pointer-events-none relative">
                 <div
-                        class="gradient-blur absolute inset-x-0 bottom-0 h-16"
-			transition:fly={{ y: 16, duration: 200 }}
-		>
-			<div></div>
-			<div></div>
+                        class="gradient-blur absolute left-0 h-16"
+                        style:bottom={`${typingBannerHeight}px`}
+                        style:right={`${SCROLLBAR_GUTTER_PX}px`}
+                        transition:fly={{ y: 16, duration: 200 }}
+                >
+                        <div></div>
+                        <div></div>
 			<div></div>
 			<div></div>
 			<div></div>
