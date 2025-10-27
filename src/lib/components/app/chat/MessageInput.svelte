@@ -24,6 +24,7 @@
         } from '$lib/stores/pendingMessages';
         import {
                 detectMentionTrigger,
+                findMentionAtIndex,
                 mentionPlaceholder,
                 parseMentions,
                 splitTextWithMentions,
@@ -103,7 +104,6 @@
         const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
         const ZERO_WIDTH_SPACE_REGEX = new RegExp(ZERO_WIDTH_SPACE, 'g');
 
-        const mentionMatches = $derived.by(() => parseMentions(content));
         const editorIsEmpty = $derived.by(
                 () => content.replace(ZERO_WIDTH_SPACE_REGEX, '').trim().length === 0
         );
@@ -852,6 +852,12 @@
                         return;
                 }
                 const cursor = getCaretIndex();
+                const mentions = parseMentions(content);
+                const mentionBeforeCursor = cursor > 0 ? findMentionAtIndex(mentions, cursor - 1) : null;
+                if (mentionBeforeCursor) {
+                        updateMentionSuggestionList(null);
+                        return;
+                }
                 const trigger = detectMentionTrigger(content, cursor);
                 if (!trigger) {
                         updateMentionSuggestionList(null);
