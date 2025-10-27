@@ -1125,7 +1125,7 @@
                         return `${base} emoji-only-message text-2xl leading-tight`;
                 }
                 const normalLineHeight = compact ? 'leading-tight' : 'leading-normal';
-                return `${base} ${normalLineHeight} text-sm`;
+                return `${base} ${normalLineHeight} text-base`;
         });
         const authorAvatarUrl = $derived.by(() =>
                 resolveAvatarUrl(
