@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DtoChannel, DtoMember, DtoMessage, DtoRole } from '$lib/api';
+        import type { DtoChannel, DtoMember, DtoMessage, DtoRole, DtoUser } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
 	import {
 		channelsByGuild,
@@ -35,8 +35,11 @@
                 Trash2,
                 X
         } from 'lucide-svelte';
-	import { colorIntToHex } from '$lib/utils/color';
+        import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import { splitTextWithMentions } from '$lib/utils/mentions';
+        import { MENTION_ACCENT_COLORS, type MentionMatch, type MentionType } from '$lib/utils/mentions';
+        import { buildRoleMap, memberPrimaryName, toSnowflakeString } from '$lib/utils/members';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
         import { resolveAvatarUrl } from '$lib/utils/avatar';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
@@ -63,10 +66,22 @@
 		strike?: boolean;
 	};
 
-	export type InlineToken =
-		| { type: 'text'; content: string; styles?: FormatStyles }
-		| { type: 'link'; label: string; url: string; styles?: FormatStyles; embed?: MessageEmbed }
-		| { type: 'code'; content: string };
+        type ChannelKind = 'text' | 'voice';
+
+        export type InlineToken =
+                | { type: 'text'; content: string; styles?: FormatStyles }
+                | { type: 'link'; label: string; url: string; styles?: FormatStyles; embed?: MessageEmbed }
+                | { type: 'code'; content: string }
+                | {
+                                type: 'mention';
+                                mentionType: MentionType;
+                                id: string;
+                                label: string;
+                                raw: string;
+                                accentColor?: string | null;
+                                onClick?: ((event: MouseEvent) => void) | null;
+                                channelKind?: ChannelKind;
+                        };
 
 	type Block =
 		| { type: 'paragraph'; tokens: InlineToken[] }
@@ -376,84 +391,298 @@
 		return mergeChunks(result);
 	}
 
-	function parsePlainText(content: string, tokens: InlineToken[]) {
-		if (!content) return;
+        function formatUserDisplayName(candidate: any): string | null {
+                if (!candidate || typeof candidate !== 'object') return null;
+                const fields = [
+                        candidate.global_name,
+                        candidate.globalName,
+                        candidate.display_name,
+                        candidate.displayName,
+                        candidate.username,
+                        candidate.name,
+                        candidate.nick,
+                        candidate.nickname
+                ];
+                for (const field of fields) {
+                        if (typeof field !== 'string') continue;
+                        const trimmed = field.trim();
+                        if (trimmed) return trimmed;
+                }
+                return null;
+        }
 
-		const chunks = parseFormattingChunks(content);
+        function fallbackUserMentionLabel(userId: string): string {
+                if (!userId) return '@Unknown';
+                const suffix = userId.length > 4 ? userId.slice(-4) : userId;
+                return `@User ${suffix}`;
+        }
 
-		for (const chunk of chunks) {
-			if (!chunk.text) continue;
+        function findGuildMemberById(userId: string | null): DtoMember | null {
+                if (!userId) return null;
+                return mentionMemberMap.get(userId) ?? null;
+        }
 
-			urlPattern.lastIndex = 0;
-			let lastIndex = 0;
-			let match: RegExpExecArray | null;
+        function findDmUserById(userId: string | null): DtoUser | null {
+                if (!userId) return null;
+                const channelId = $selectedChannelId;
+                if (!channelId) return null;
+                const dmChannels = ($channelsByGuild['@me'] ?? []) as DtoChannel[];
+                const active = dmChannels.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId);
+                if (!active) return null;
+                const recipients = Array.isArray((active as any)?.recipients)
+                        ? ((active as any)?.recipients as DtoUser[])
+                        : [];
+                for (const entry of recipients) {
+                        const id = toSnowflakeString((entry as any)?.id);
+                        if (id === userId) {
+                                return entry;
+                        }
+                }
+                const direct = (active as any)?.recipient;
+                const directId = toSnowflakeString(
+                        (active as any)?.recipient_id ?? (active as any)?.recipientId ?? (direct as any)?.id
+                );
+                if (direct && directId === userId) {
+                        return direct as DtoUser;
+                }
+                return null;
+        }
 
-			while ((match = urlPattern.exec(chunk.text)) !== null) {
-				const startIndex = match.index;
-				let endIndex = startIndex + match[0].length;
+        const VOICE_CHANNEL_TYPES = new Set([1, 3]);
 
-				while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(chunk.text[endIndex - 1])) {
-					endIndex--;
-				}
+        function detectChannelKind(channel: DtoChannel | null | undefined): ChannelKind {
+                const type = Number((channel as any)?.type ?? 0);
+                if (VOICE_CHANNEL_TYPES.has(type)) {
+                        return 'voice';
+                }
+                return 'text';
+        }
 
-				if (endIndex <= startIndex) {
-					continue;
-				}
+        function resolveUserMentionDetails(userId: string): {
+                label: string;
+                accentColor: string | null;
+                member: DtoMember | null;
+                user: DtoUser | null;
+        } {
+                const guildId = $selectedGuildId;
+                const member = guildId && guildId !== '@me' ? findGuildMemberById(userId) : null;
+                const userFromMember = (member as any)?.user as DtoUser | undefined;
+                const dmUser = guildId === '@me' || !guildId ? findDmUserById(userId) : null;
+                const user: DtoUser | null = (userFromMember ?? dmUser ?? null) as DtoUser | null;
+                const name = memberPrimaryName(member) || formatUserDisplayName(user) || fallbackUserMentionLabel(userId);
+                return {
+                        label: `@${name.replace(/^@+/, '').trim()}`,
+                        accentColor: MENTION_ACCENT_COLORS.user,
+                        member,
+                        user
+                };
+        }
 
-				if (startIndex > lastIndex) {
-					tokens.push({
-						type: 'text',
-						content: chunk.text.slice(lastIndex, startIndex),
-						styles: chunk.styles
-					});
-				}
+        function resolveRoleMentionLabel(roleId: string): { label: string; accentColor: string | null } {
+                const role = mentionRoleMap[roleId] ?? null;
+                if (!role) {
+                        return { label: `@Role ${roleId}`, accentColor: MENTION_ACCENT_COLORS.role };
+                }
+                const name = typeof (role as any)?.name === 'string' ? (role as any).name : `Role ${roleId}`;
+                return {
+                        label: `@${String(name)}`,
+                        accentColor: MENTION_ACCENT_COLORS.role
+                };
+        }
 
-				const rawUrl = chunk.text.slice(startIndex, endIndex);
-				const normalized = normalizeUrl(rawUrl);
-				const invite = extractInvite(normalized);
-				const youtube = extractYouTube(normalized);
+        function resolveChannelMentionDetails(
+                channelId: string,
+                channel?: DtoChannel | null
+        ): { label: string; accentColor: string | null; channelKind: ChannelKind } {
+                const guildId = $selectedGuildId ?? '';
+                const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
+                const resolvedChannel = channel ?? list.find((candidate) => {
+                        return toSnowflakeString((candidate as any)?.id) === channelId;
+                });
+                const kind = detectChannelKind(resolvedChannel);
+                const rawName = (resolvedChannel as any)?.name;
+                const baseName =
+                        typeof rawName === 'string' && rawName.trim() ? rawName.trim() : `channel-${channelId}`;
+                const sanitized = baseName.replace(/^#+/, '');
+                const label = kind === 'voice' ? sanitized : `#${sanitized}`;
+                return {
+                        label,
+                        accentColor: MENTION_ACCENT_COLORS.channel,
+                        channelKind: kind
+                };
+        }
 
-				if (invite) {
-					tokens.push({
-						type: 'link',
-						label: rawUrl,
-						url: normalized,
-						embed: { kind: 'invite', code: invite.code, url: normalized },
-						styles: chunk.styles
-					});
-				} else if (youtube) {
-					tokens.push({
-						type: 'link',
-						label: rawUrl,
-						url: normalized,
-						embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized },
-						styles: chunk.styles
-					});
-				} else {
-					tokens.push({
-						type: 'link',
-						label: rawUrl,
-						url: normalized,
-						styles: chunk.styles
-					});
-				}
+        function createMentionToken(mention: MentionMatch): InlineToken | null {
+                const id = mention.id;
+                if (!id) return null;
+                if (mention.type === 'user') {
+                        const { label, accentColor, member, user } = resolveUserMentionDetails(id);
+                        const onClick = (event: MouseEvent) => {
+                                if (!member && !user) {
+                                        return;
+                                }
+                                const target = event.currentTarget as HTMLElement | null;
+                                let anchor: { x: number; y: number; width: number; height: number } | null = null;
+                                if (target && typeof window !== 'undefined') {
+                                        const rect = target.getBoundingClientRect();
+                                        anchor = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+                                }
+                                memberProfilePanel.open({
+                                        member,
+                                        user: user ?? (member as any)?.user ?? null,
+                                        guildId: $selectedGuildId,
+                                        anchor
+                                });
+                        };
+                        return {
+                                type: 'mention',
+                                mentionType: 'user',
+                                id,
+                                label,
+                                raw: mention.raw,
+                                accentColor,
+                                onClick
+                        };
+                }
+                if (mention.type === 'role') {
+                        const { label, accentColor } = resolveRoleMentionLabel(id);
+                        return {
+                                type: 'mention',
+                                mentionType: 'role',
+                                id,
+                                label,
+                                raw: mention.raw,
+                                accentColor,
+                                onClick: null
+                        };
+                }
+                if (mention.type === 'channel') {
+                        const details = resolveChannelMentionDetails(id);
+                        const onClick = () => {
+                                const guildId = $selectedGuildId;
+                                if (guildId && guildId !== '@me') {
+                                        selectedChannelId.set(id);
+                                }
+                        };
+                        return {
+                                type: 'mention',
+                                mentionType: 'channel',
+                                id,
+                                label: details.label,
+                                raw: mention.raw,
+                                accentColor: details.accentColor,
+                                onClick,
+                                channelKind: details.channelKind
+                        };
+                }
+                return null;
+        }
 
-				lastIndex = endIndex;
+        function emitTextWithLinks(
+                text: string,
+                styles: FormatStyles | undefined,
+                tokens: InlineToken[]
+        ) {
+                if (!text) return;
 
-				if (urlPattern.lastIndex > endIndex) {
-					urlPattern.lastIndex = endIndex;
-				}
-			}
+                urlPattern.lastIndex = 0;
+                let lastIndex = 0;
+                let match: RegExpExecArray | null;
 
-			if (lastIndex < chunk.text.length) {
-				tokens.push({
-					type: 'text',
-					content: chunk.text.slice(lastIndex),
-					styles: chunk.styles
-				});
-			}
-		}
-	}
+                while ((match = urlPattern.exec(text)) !== null) {
+                        const startIndex = match.index;
+                        let endIndex = startIndex + match[0].length;
+
+                        while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(text[endIndex - 1])) {
+                                endIndex--;
+                        }
+
+                        if (endIndex <= startIndex) {
+                                continue;
+                        }
+
+                        if (startIndex > lastIndex) {
+                                tokens.push({
+                                        type: 'text',
+                                        content: text.slice(lastIndex, startIndex),
+                                        styles
+                                });
+                        }
+
+                        const rawUrl = text.slice(startIndex, endIndex);
+                        const normalized = normalizeUrl(rawUrl);
+                        const invite = extractInvite(normalized);
+                        const youtube = extractYouTube(normalized);
+
+                        if (invite) {
+                                tokens.push({
+                                        type: 'link',
+                                        label: rawUrl,
+                                        url: normalized,
+                                        embed: { kind: 'invite', code: invite.code, url: normalized },
+                                        styles
+                                });
+                        } else if (youtube) {
+                                tokens.push({
+                                        type: 'link',
+                                        label: rawUrl,
+                                        url: normalized,
+                                        embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized },
+                                        styles
+                                });
+                        } else {
+                                tokens.push({
+                                        type: 'link',
+                                        label: rawUrl,
+                                        url: normalized,
+                                        styles
+                                });
+                        }
+
+                        lastIndex = endIndex;
+
+                        if (urlPattern.lastIndex > endIndex) {
+                                urlPattern.lastIndex = endIndex;
+                        }
+                }
+
+                if (lastIndex < text.length) {
+                        tokens.push({
+                                type: 'text',
+                                content: text.slice(lastIndex),
+                                styles
+                        });
+                }
+        }
+
+        function parsePlainText(content: string, tokens: InlineToken[]) {
+                if (!content) return;
+
+                const chunks = parseFormattingChunks(content);
+
+                for (const chunk of chunks) {
+                        if (!chunk.text) continue;
+
+                        const segments = splitTextWithMentions(chunk.text);
+                        if (segments.length === 0) {
+                                emitTextWithLinks(chunk.text, chunk.styles, tokens);
+                                continue;
+                        }
+
+                        for (const segment of segments) {
+                                if (segment.type === 'text') {
+                                        emitTextWithLinks(segment.value, chunk.styles, tokens);
+                                } else {
+                                        const mentionToken = createMentionToken(segment.mention);
+                                        if (mentionToken) {
+                                                tokens.push(mentionToken);
+                                        } else {
+                                                emitTextWithLinks(segment.mention.raw, chunk.styles, tokens);
+                                        }
+                                }
+                        }
+                }
+        }
 
         function parseInline(content: string): InlineToken[] {
                 const tokens: InlineToken[] = [];
@@ -857,6 +1086,7 @@
         let messageRoot = $state<HTMLElement | null>(null);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
         const segments = $derived(parseMessageContent(message.content ?? ''));
+        const fallbackInlineTokens = $derived(parseInline(message.content ?? ''));
         const authorAvatarUrl = $derived.by(() =>
                 resolveAvatarUrl(
                         (message as any)?.author,
@@ -873,6 +1103,8 @@
 	let primaryRoleColor = $state<string | null>(null);
         let roleColorRequest = 0;
         let resolvedAuthorMember = $state<DtoMember | null>(null);
+        let mentionRoleMap = $state<Record<string, DtoRole>>({});
+        let mentionMemberMap = $state<Map<string, DtoMember>>(new Map());
         let imagePreview = $state<ImagePreviewState | null>(null);
         let imagePreviewZoom = $state(1);
         let imagePreviewFitZoom = $state(1);
@@ -1099,6 +1331,7 @@
                                 }
                         }
                 }
+                mentionMemberMap = memberIndex;
                 const directMember = ((message as any)?.member ?? null) as DtoMember | null;
                 const cachedMember = directMember ?? (authorId ? memberIndex.get(authorId) ?? null : null);
                 resolvedAuthorMember = cachedMember;
@@ -1106,8 +1339,9 @@
                 primaryRoleColor = null;
 
                 if (!guildId) {
+                        mentionRoleMap = {};
                         return;
-		}
+                }
 
 		const activeGuildId = guildId;
 
@@ -1147,12 +1381,13 @@
 					return;
 				}
 
-				const definitions = await loadGuildRolesCached(activeGuildId);
-				if (requestId !== roleColorRequest) {
-					return;
-				}
+                                const definitions = await loadGuildRolesCached(activeGuildId);
+                                if (requestId !== roleColorRequest) {
+                                        return;
+                                }
+                                mentionRoleMap = buildRoleMap(definitions);
 
-				let resolvedColor: string | null = null;
+                                let resolvedColor: string | null = null;
 				for (const roleId of orderedRoleIds) {
 					const matchedRole = definitions.find((role) => getRoleId(role) === roleId);
 					if (!matchedRole) continue;
@@ -2251,10 +2486,14 @@
                                 </div>
                         {:else}
                                 <div class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}>
-				{#if renderedSegments.length === 0}
-					<span class="break-words whitespace-pre-wrap">{message.content}</span>
-				{:else}
-					{#each renderedSegments as segment, index (index)}
+                                {#if renderedSegments.length === 0}
+                                        {#if fallbackInlineTokens.length === 0}
+                                                <span class="break-words whitespace-pre-wrap">{message.content}</span>
+                                        {:else}
+                                                <InlineTokens tokens={fallbackInlineTokens} />
+                                        {/if}
+                                {:else}
+                                        {#each renderedSegments as segment, index (index)}
 						{#if segment.type === 'code'}
 							<div class="my-2 whitespace-normal first:mt-0 last:mb-0">
 								<CodeBlock code={segment.content} language={segment.language} />
