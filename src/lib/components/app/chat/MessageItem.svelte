@@ -516,6 +516,17 @@
                 const id = mention.id;
                 if (!id) return null;
                 if (mention.type === 'user') {
+                        if (mention.special === 'everyone' || mention.special === 'here') {
+                                return {
+                                        type: 'mention',
+                                        mentionType: 'user',
+                                        id,
+                                        label: mention.raw ?? `@${mention.special}`,
+                                        raw: mention.raw,
+                                        accentColor: MENTION_ACCENT_COLORS.user,
+                                        onClick: null
+                                };
+                        }
                         const { label, accentColor, member, user } = resolveUserMentionDetails(id);
                         const onClick = (event: MouseEvent) => {
                                 if (!member && !user) {

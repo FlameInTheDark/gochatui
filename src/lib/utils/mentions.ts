@@ -1,11 +1,14 @@
 export type MentionType = 'user' | 'channel' | 'role';
 
+export type SpecialMention = 'everyone' | 'here';
+
 export type MentionMatch = {
         type: MentionType;
         id: string;
         start: number;
         end: number;
         raw: string;
+        special?: SpecialMention | null;
 };
 
 export const MENTION_ACCENT_COLORS: Record<MentionType, string> = {
@@ -15,6 +18,12 @@ export const MENTION_ACCENT_COLORS: Record<MentionType, string> = {
 };
 
 const MENTION_PATTERN = /<(@&|@!|@|#)([0-9]{1,})>/g;
+const SPECIAL_MENTION_PATTERN = /@everyone|@here/g;
+
+const SPECIAL_MENTION_MAP: Record<string, SpecialMention> = {
+        '@everyone': 'everyone',
+        '@here': 'here'
+};
 
 function normalizeMentionType(prefix: string): MentionType | null {
 	if (prefix === '#') return 'channel';
@@ -24,20 +33,62 @@ function normalizeMentionType(prefix: string): MentionType | null {
 }
 
 export function parseMentions(content: string | null | undefined): MentionMatch[] {
-	if (!content) return [];
-	const matches: MentionMatch[] = [];
-	const text = String(content);
-	MENTION_PATTERN.lastIndex = 0;
-	let match: RegExpExecArray | null;
-	while ((match = MENTION_PATTERN.exec(text)) !== null) {
-		const [raw, prefix, id] = match;
-		const type = normalizeMentionType(prefix);
-		if (!type) continue;
-		const start = match.index;
-		const end = start + raw.length;
-		matches.push({ type, id, start, end, raw });
-	}
-	return matches;
+        if (!content) return [];
+        const matches: MentionMatch[] = [];
+        const text = String(content);
+        MENTION_PATTERN.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = MENTION_PATTERN.exec(text)) !== null) {
+                const [raw, prefix, id] = match;
+                const type = normalizeMentionType(prefix);
+                if (!type) continue;
+                const start = match.index;
+                const end = start + raw.length;
+                matches.push({ type, id, start, end, raw, special: null });
+        }
+        SPECIAL_MENTION_PATTERN.lastIndex = 0;
+        let specialMatch: RegExpExecArray | null;
+        while ((specialMatch = SPECIAL_MENTION_PATTERN.exec(text)) !== null) {
+                const raw = specialMatch[0];
+                const special = SPECIAL_MENTION_MAP[raw];
+                if (!special) continue;
+                const start = specialMatch.index;
+                if (start > 0 && text[start - 1] === '<') {
+                        continue;
+                }
+                const end = start + raw.length;
+                matches.push({
+                        type: 'user',
+                        id: special,
+                        start,
+                        end,
+                        raw,
+                        special
+                });
+        }
+
+        if (matches.length <= 1) {
+                return matches;
+        }
+
+        matches.sort((a, b) => {
+                if (a.start === b.start) {
+                        return a.end - b.end;
+                }
+                return a.start - b.start;
+        });
+
+        const filtered: MentionMatch[] = [];
+        let lastEnd = -1;
+        for (const mention of matches) {
+                if (mention.start < lastEnd) {
+                        continue;
+                }
+                filtered.push(mention);
+                lastEnd = mention.end;
+        }
+
+        return filtered;
 }
 
 export type MentionSplitSegment =
