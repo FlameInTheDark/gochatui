@@ -613,6 +613,16 @@
                 } else {
                         mentionActiveIndex = Math.min(previousIndex, Math.max(nextSuggestions.length - 1, 0));
                 }
+
+                if (queryChanged || suggestionsChanged) {
+                        if (mentionMenuOpen) {
+                                void tick().then(() => {
+                                        if (mentionMenuOpen) {
+                                                updateMentionMenuPosition();
+                                        }
+                                });
+                        }
+                }
         }
         $effect(() => {
                 const guildId = $selectedGuildId;
@@ -920,16 +930,20 @@
                 const selection = window.getSelection();
                 if (!selection || selection.rangeCount === 0) return;
                 if (!selectionInsideEditor(selection)) return;
+                if (!editorWrapperEl) return;
                 const range = selection.getRangeAt(0).cloneRange();
                 range.collapse(true);
-                let rect = range.getBoundingClientRect();
-                if (!rect || (rect.x === 0 && rect.y === 0 && rect.width === 0 && rect.height === 0)) {
+                let caretRect = range.getBoundingClientRect();
+                if (
+                        !caretRect ||
+                        (caretRect.x === 0 && caretRect.y === 0 && caretRect.width === 0 && caretRect.height === 0)
+                ) {
                         const rects = range.getClientRects();
                         if (rects.length > 0) {
-                                rect = rects[0];
+                                caretRect = rects[0];
                         }
                 }
-                if (!rect) return;
+                if (!caretRect) return;
 
                 if (!mentionMenuEl) {
                         void tick().then(() => {
@@ -945,9 +959,10 @@
                 const menuHeight = menuEl?.offsetHeight ?? 0;
                 const viewportWidth = window.innerWidth;
                 const viewportHeight = window.innerHeight;
-                const spacing = 8;
+                const spacing = 4;
+                const anchorRect = editorWrapperEl.getBoundingClientRect();
 
-                let left = rect.left;
+                let left = caretRect.left;
                 if (menuWidth > 0) {
                         const maxLeft = Math.max(viewportPadding, viewportWidth - menuWidth - viewportPadding);
                         left = Math.min(Math.max(viewportPadding, left), maxLeft);
@@ -959,9 +974,9 @@
                         ? Math.max(viewportPadding, viewportHeight - menuHeight - viewportPadding)
                         : viewportHeight - viewportPadding;
                 const preferredTop = menuHeight > 0
-                        ? rect.top - spacing - menuHeight
-                        : rect.top - spacing;
-                const fallbackTop = rect.bottom + spacing;
+                        ? anchorRect.top - spacing - menuHeight
+                        : anchorRect.top - spacing;
+                const fallbackTop = anchorRect.bottom + spacing;
 
                 let top = preferredTop;
                 if (menuHeight > 0) {
