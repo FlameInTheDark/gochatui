@@ -1320,31 +1320,53 @@
                         content = `${content}${text}`;
                         return;
                 }
-                const selection = typeof window !== 'undefined' ? window.getSelection() : null;
-                if (!selection || selection.rangeCount === 0) {
-                        editorEl.appendChild(document.createTextNode(text));
-                        syncContentFromEditor();
-                        handleTypingActivity(content);
-                        refreshMentionState();
-                        return;
+
+                try {
+                        editorEl.focus({ preventScroll: true });
+                } catch {
+                        editorEl.focus();
                 }
-                const range = selection.getRangeAt(0);
+
+                const ownerDocument = editorEl.ownerDocument ?? document;
+                const selection =
+                        typeof window !== 'undefined'
+                                ? ownerDocument.getSelection?.() ?? window.getSelection()
+                                : null;
+
+                let range: Range | null = null;
+                if (selection && selection.rangeCount > 0) {
+                        const candidate = selection.getRangeAt(0);
+                        if (candidate && editorEl.contains(candidate.commonAncestorContainer)) {
+                                range = candidate;
+                        }
+                }
+
+                if (!range && selection && ownerDocument.createRange) {
+                        const fallback = ownerDocument.createRange();
+                        fallback.selectNodeContents(editorEl);
+                        fallback.collapse(false);
+                        selection.removeAllRanges();
+                        selection.addRange(fallback);
+                        range = fallback;
+                }
+
                 if (!range) {
-                        editorEl.appendChild(document.createTextNode(text));
+                        editorEl.appendChild(ownerDocument.createTextNode(text));
                         syncContentFromEditor();
                         handleTypingActivity(content);
                         refreshMentionState();
                         return;
                 }
+
                 range.deleteContents();
-                const node = document.createTextNode(text);
+                const node = ownerDocument.createTextNode(text);
                 range.insertNode(node);
-                const caret = document.createRange();
+                const caret = ownerDocument.createRange();
                 caret.setStart(node, node.length);
                 caret.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(caret);
-                editorEl.focus();
+                selection?.removeAllRanges();
+                selection?.addRange(caret);
+
                 syncContentFromEditor();
                 handleTypingActivity(content);
                 refreshMentionState();
