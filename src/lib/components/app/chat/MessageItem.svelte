@@ -2383,7 +2383,7 @@
 
 <div
         role="listitem"
-        class={`group/message flex gap-3 px-4 ${compact && !isJoinMessage ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30 ${
+        class={`group/message flex gap-3 px-4 ${compact && !isJoinMessage ? 'py-0.5 items-center' : 'py-2'} hover:bg-[var(--panel)]/30 ${
                 isJoinMessage ? 'items-center' : ''
         }`}
         use:customContextMenuTarget
