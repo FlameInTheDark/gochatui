@@ -260,25 +260,27 @@
                         {#if activeParticipant}
                                 <div class="flex-1 min-h-0">
                                         <div class="flex h-full min-h-0 items-center justify-center">
-                                                <VoiceVideoTile
-                                                        stream={activeParticipant.stream}
-                                                        videoActive={activeParticipant.videoActive}
-                                                        label={activeParticipant.label}
-                                                        badge={activeParticipant.badge}
-                                                        speaking={activeParticipant.speaking}
-                                                        avatarUrl={activeParticipant.avatarUrl}
-                                                        initial={activeParticipant.initial}
-                                                        variant="stage"
-                                                />
+                                                <div class="aspect-video w-full max-h-full">
+                                                        <VoiceVideoTile
+                                                                stream={activeParticipant.stream}
+                                                                videoActive={activeParticipant.videoActive}
+                                                                label={activeParticipant.label}
+                                                                badge={activeParticipant.badge}
+                                                                speaking={activeParticipant.speaking}
+                                                                avatarUrl={activeParticipant.avatarUrl}
+                                                                initial={activeParticipant.initial}
+                                                                variant="stage"
+                                                        />
+                                                </div>
                                         </div>
                                 </div>
                                 {#if participants.length > 1}
                                         <div class="flex-shrink-0">
-                                                <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(96px,1fr))]">
+                                                <div class="flex flex-nowrap items-center justify-center gap-3 overflow-x-auto px-1">
                                                         {#each participants as entry (entry.id)}
                                                                 <button
                                                                         type="button"
-                                                                        class="block rounded-lg p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]"
+                                                                        class="block w-[132px] flex-shrink-0 rounded-lg p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] sm:w-[150px]"
                                                                         aria-pressed={entry.id === activeParticipant.id}
                                                                         onclick={() => {
                                                                                 if (entry.id === activeParticipant.id) {
@@ -309,7 +311,7 @@
                                 {/if}
                         {:else}
                                 <div class="flex-1 overflow-hidden">
-                                        <div class="grid h-full w-full auto-rows-fr gap-4 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                                        <div class="grid h-full w-full gap-4 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
                                                 {#each participants as entry (entry.id)}
                                                         <button
                                                                 type="button"

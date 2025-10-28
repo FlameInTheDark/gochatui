@@ -150,7 +150,7 @@
                                 <div
                                         class={`flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[var(--panel-strong)] text-sm font-semibold text-[var(--fg-muted)] ${
                                                 participant.speaking
-                                                        ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-[var(--sidebar)]'
+                                                        ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-[var(--sidebar)] outline outline-2 outline-offset-2 outline-[rgba(16,185,129,0.65)]'
                                                         : ''
                                         }`}
                                 >

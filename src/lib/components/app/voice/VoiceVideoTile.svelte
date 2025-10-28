@@ -29,15 +29,19 @@
                 } else if (variant === 'grid') {
                         classes.push('aspect-video w-full');
                 } else {
-                        classes.push('aspect-video w-full max-h-[96px]');
+                        classes.push('aspect-video w-full');
                 }
                 if (interactive) {
                         classes.push('cursor-pointer transition');
                 }
                 if (selected) {
                         classes.push('ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--bg)]');
-                } else if (speaking) {
-                        classes.push('ring-2 ring-emerald-400 ring-offset-2 ring-offset-[var(--bg)]');
+                }
+                if (speaking) {
+                        if (!selected) {
+                                classes.push('ring-2 ring-emerald-400 ring-offset-2 ring-offset-[var(--bg)]');
+                        }
+                        classes.push('outline outline-2 outline-offset-2 outline-[rgba(16,185,129,0.65)]');
                 }
                 return classes.join(' ');
         });
