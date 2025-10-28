@@ -1372,23 +1372,11 @@ async function prepareLocalVideoForAnswer(
         if (!track) {
                 currentSession.localVideoSender = sender;
                 currentSession.localVideoTransceiver = transceiver;
-                try {
-                        if (transceiver.direction !== 'recvonly') {
-                                transceiver.direction = 'recvonly';
-                                logVoice('set video transceiver to recvonly before answer', {
-                                        sessionId: currentSession.id,
-                                        direction: transceiver.direction
-                                });
-                        }
-                } catch {}
-                const setDirection = (transceiver as {
-                        setDirection?: (value: RTCRtpTransceiverDirection) => void;
-                }).setDirection;
-                if (typeof setDirection === 'function') {
-                        try {
-                                setDirection.call(transceiver, 'recvonly');
-                        } catch {}
-                }
+                logVoice('no local camera track before answer', {
+                        sessionId: currentSession.id,
+                        transceiverDirection: transceiver.direction,
+                        senderHasTrack: Boolean(sender.track)
+                });
                 return;
         }
 
@@ -1435,6 +1423,21 @@ async function prepareLocalVideoForAnswer(
         if (typeof setDirection === 'function') {
                 try {
                         setDirection.call(transceiver, 'sendrecv');
+                } catch {}
+        }
+
+        if (typeof pc.getTransceivers === 'function') {
+                try {
+                        const transceiverSummary = pc.getTransceivers().map((item) => ({
+                                mid: item?.mid ?? null,
+                                direction: item?.direction ?? null,
+                                senderHasTrack: Boolean(item?.sender?.track),
+                                receiverKind: item?.receiver?.track?.kind ?? null
+                        }));
+                        logVoice('transceiver state before SFU answer', {
+                                sessionId: currentSession.id,
+                                transceivers: transceiverSummary
+                        });
                 } catch {}
         }
 }
