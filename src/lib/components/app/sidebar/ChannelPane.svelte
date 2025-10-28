@@ -28,7 +28,15 @@
 	} from '$lib/api';
         import { subscribeWS, wsEvent } from '$lib/client/ws';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-        import { updateGuildSelectedChannel } from '$lib/stores/settings';
+        import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
+        import {
+                NOTIFICATION_LEVELS,
+                appSettings,
+                resolveNotificationLevel,
+                setChannelNotificationLevel,
+                updateGuildSelectedChannel,
+                type NotificationLevel
+        } from '$lib/stores/settings';
         import { unreadChannelsByGuild } from '$lib/stores/unread';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
@@ -51,17 +59,23 @@
                 hasAnyGuildPermission,
                 normalizePermissionValue
         } from '$lib/utils/permissions';
-        import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
+        import {
+                CHANNEL_MENTION_BADGE_CLASSES,
+                CHANNEL_UNREAD_BADGE_CLASSES
+        } from '$lib/constants/unreadIndicator';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
         import { joinVoiceChannel, leaveVoiceChannel, voiceSession } from '$lib/stores/voice';
         import VoiceChannelParticipants from '$lib/components/app/sidebar/VoiceChannelParticipants.svelte';
+        import { channelMentionsByGuild } from '$lib/stores/mentions';
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadChannels = unreadChannelsByGuild;
         const voice = voiceSession;
+        const channelMentions = channelMentionsByGuild;
         const selectedGuildIdValue = $derived($selectedGuildId ? String($selectedGuildId) : '');
 
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
+        const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
 
         let dismissPanel: (() => void) | null = null;
         let creatingChannel = $state(false);
@@ -116,26 +130,38 @@
                 categoryError = null;
         }
 
-	function toSnowflakeString(value: unknown): string | null {
-		if (value == null) return null;
-		try {
-			if (typeof value === 'string') return value;
-			if (typeof value === 'bigint') return value.toString();
-			if (typeof value === 'number') return BigInt(value).toString();
-			return String(value);
-		} catch {
-			try {
-				return String(value);
-			} catch {
-				return null;
-			}
-		}
-	}
+        function toSnowflakeString(value: unknown): string | null {
+                if (value == null) return null;
+                try {
+                        if (typeof value === 'string') return value;
+                        if (typeof value === 'bigint') return value.toString();
+                        if (typeof value === 'number') return BigInt(value).toString();
+                        return String(value);
+                } catch {
+                        try {
+                                return String(value);
+                        } catch {
+                                return null;
+                        }
+                }
+        }
 
-	function myGuildRoleIds(guildId: string): Set<string> {
-		const gid = String(guildId ?? '');
-		const members = Array.isArray($membersByGuild[gid])
-			? ($membersByGuild[gid] as DtoMember[])
+        function formatMentionCount(count: number): string {
+                return count > 99 ? '99+' : String(count);
+        }
+
+        function channelMentionCountFor(guildId: unknown, channelId: unknown): number {
+                const gid = toSnowflakeString(guildId);
+                const cid = toSnowflakeString(channelId);
+                if (!gid || !cid) return 0;
+                const entry = $channelMentions?.[gid]?.[cid] ?? null;
+                return entry?.count ?? 0;
+        }
+
+        function myGuildRoleIds(guildId: string): Set<string> {
+                const gid = String(guildId ?? '');
+                const members = Array.isArray($membersByGuild[gid])
+                        ? ($membersByGuild[gid] as DtoMember[])
 			: undefined;
 		const fallbackRoles = Array.isArray($myGuildRoleIdsByGuild[gid])
 			? ($myGuildRoleIdsByGuild[gid] as string[])
@@ -289,11 +315,13 @@
                 channelId: string,
                 channel: DtoChannel,
                 channelUnread: boolean,
+                mentionCount: number,
                 voiceState?: 'none' | 'connecting' | 'connected'
         ): string {
+                const hasBadge = channelUnread || mentionCount > 0;
                 const classes = [
                         'relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)]',
-                        channelUnread ? 'pl-6' : 'pl-3'
+                        hasBadge ? 'pl-6' : 'pl-3'
                 ];
                 const state = voiceState ?? voiceStateForChannel(channelId, channel);
                 const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
@@ -693,11 +721,34 @@
 		return ordered;
 	}
 
-	function toggleCollapse(id: string) {
-		collapsed = { ...collapsed, [id]: !collapsed[id] };
-	}
+        function toggleCollapse(id: string) {
+                collapsed = { ...collapsed, [id]: !collapsed[id] };
+        }
 
-	async function createChannel() {
+        function buildNotificationMenuItems(
+                current: NotificationLevel,
+                onSelect: (level: NotificationLevel) => void
+        ): ContextMenuActionItem[] {
+                return [
+                        {
+                                label: m.ctx_notifications_all(),
+                                icon: current === NOTIFICATION_LEVELS.ALL ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.ALL)
+                        },
+                        {
+                                label: m.ctx_notifications_mentions(),
+                                icon: current === NOTIFICATION_LEVELS.MENTIONS ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.MENTIONS)
+                        },
+                        {
+                                label: m.ctx_notifications_none(),
+                                icon: current === NOTIFICATION_LEVELS.NONE ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.NONE)
+                        }
+                ];
+        }
+
+        async function createChannel() {
 		if (!newChannelName.trim() || !$selectedGuildId) return;
                 try {
                         const channelType = newChannelType === 'voice' ? 1 : 0;
@@ -745,33 +796,40 @@
         function openChannelMenu(e: MouseEvent, ch: any) {
                 const id = String(ch?.id ?? '');
                 const type = (ch as any)?.type;
-                const items = [
-                        { label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id },
-                        ...(type === 1
-                                ? [
-                                          {
-                                                  label:
-                                                          voiceStateForChannel(id, ch) === 'connected' ||
-                                                          voiceStateForChannel(id, ch) === 'connecting'
-                                                                  ? m.voice_leave_channel()
-                                                                  : m.voice_join_channel(),
-                                                  action: () => {
-                                                          const state = voiceStateForChannel(id, ch);
-                                                          if (state === 'connected' || state === 'connecting') {
-                                                                  leaveVoiceChannel();
-                                                          } else {
-                                                                  joinVoiceById(id);
-                                                          }
-                                                  }
-                                          }
-                                  ]
-                                : []),
-                        { label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 },
-                        { label: m.edit_channel(), action: () => openEditChannel(ch) },
-                        { label: m.delete_channel(), action: () => deleteChannel(id), danger: true }
-                ];
+                const items: ContextMenuItem[] = [];
+                if (type === 0 && id) {
+                        const settings = get(appSettings);
+                        const currentLevel = resolveNotificationLevel(settings.channelNotifications[id]);
+                        items.push({
+                                label: m.ctx_notifications_menu(),
+                                children: buildNotificationMenuItems(currentLevel, (level) =>
+                                        setChannelNotificationLevel(id, level)
+                                )
+                        });
+                }
+                items.push({ label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id });
+                if (type === 1) {
+                        items.push({
+                                label:
+                                        voiceStateForChannel(id, ch) === 'connected' ||
+                                        voiceStateForChannel(id, ch) === 'connecting'
+                                                ? m.voice_leave_channel()
+                                                : m.voice_join_channel(),
+                                action: () => {
+                                        const state = voiceStateForChannel(id, ch);
+                                        if (state === 'connected' || state === 'connecting') {
+                                                leaveVoiceChannel();
+                                        } else {
+                                                joinVoiceById(id);
+                                        }
+                                }
+                        });
+                }
+                items.push({ label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 });
+                items.push({ label: m.edit_channel(), action: () => openEditChannel(ch) });
+                items.push({ label: m.delete_channel(), action: () => deleteChannel(id), danger: true });
                 contextMenu.openFromEvent(e, items);
-	}
+        }
 
         function openCategoryMenu(e: MouseEvent, cat: any) {
                 const id = String(cat?.id ?? '');
@@ -1182,6 +1240,7 @@
                                         {#if sec.type === 'channel'}
                                                 {@const channelId = String((sec.ch as any).id)}
                                                 {@const channelUnread = isChannelUnread($selectedGuildId, channelId)}
+                                                {@const channelMentionCount = channelMentionCountFor($selectedGuildId, channelId)}
                                                 {@const voiceState = voiceStateForChannel(channelId, sec.ch)}
                                                 {#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
                                                         <div
@@ -1203,7 +1262,7 @@
                                                                         ></div>
                                                                 {/if}
                                                                 <div
-                                                                        class={channelRowClasses(channelId, sec.ch, channelUnread, voiceState)}
+                                                                        class={channelRowClasses(channelId, sec.ch, channelUnread, channelMentionCount, voiceState)}
                                                                         role="button"
                                                                         tabindex="0"
                                                                         use:customContextMenuTarget
@@ -1217,7 +1276,10 @@
                                                                                 openChannelMenu(e, sec.ch);
                                                                         }}
                                                                 >
-                                                                        {#if channelUnread}
+                                                                        {#if channelMentionCount > 0}
+                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: channelMentionCount })}</span>
+                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(channelMentionCount)}</span>
+                                                                        {:else if channelUnread}
                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
                                                                                 <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                         {/if}
@@ -1228,7 +1290,7 @@
                                                                                         {:else}
                                                                                                 <span class="opacity-70">#</span>
                                                                                         {/if}
-                                                                                        <span class="truncate">{sec.ch.name}</span>
+                                                                                <span class="truncate">{sec.ch.name}</span>
                                                                                 </div>
                                                                                 {#if voiceState === 'connecting' || voiceState === 'connected'}
                                                                                         <span class={`text-xs ${voiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>
@@ -1326,6 +1388,7 @@
                                                                                 .includes(filter.toLowerCase())) as ch (String((ch as any).id))}
                                                                         {@const nestedChannelId = String((ch as any).id)}
                                                                         {@const nestedChannelUnread = isChannelUnread($selectedGuildId, nestedChannelId)}
+                                                                        {@const nestedMentionCount = channelMentionCountFor($selectedGuildId, nestedChannelId)}
                                                                         {@const nestedVoiceState = voiceStateForChannel(nestedChannelId, ch)}
                                                                         <div
                                                                                 role="listitem"
@@ -1361,20 +1424,24 @@
                                                                                         }}
                                                                                 >
                                                                                         <div class="relative flex w-full items-center gap-2">
-                                                                                                <div class="flex min-w-0 flex-1 items-center gap-2 truncate pl-3">
-                                                                                                        {#if nestedChannelUnread}
+                                                                                                <div
+                                                                                                        class={`relative flex min-w-0 flex-1 items-center gap-2 truncate ${
+                                                                                                                nestedChannelUnread || nestedMentionCount > 0 ? 'pl-6' : 'pl-3'
+                                                                                                        }`}
+                                                                                                >
+                                                                                                        {#if nestedMentionCount > 0}
+                                                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: nestedMentionCount })}</span>
+                                                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedMentionCount)}</span>
+                                                                                                        {:else if nestedChannelUnread}
                                                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                                                <span
-                                                                                                                        aria-hidden="true"
-                                                                                                                        class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-                                                                                                                ></span>
+                                                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                                                         {/if}
                                                                                                         {#if isVoiceChannel(ch)}
                                                                                                                 <Volume2 class="opacity-70" size={16} />
                                                                                                         {:else}
                                                                                                                 <span class="opacity-70">#</span>
                                                                                                         {/if}
-                                                                                                        <span class="truncate">{ch.name}</span>
+                                        <span class="truncate">{ch.name}</span>
                                                                                                 </div>
                                                                                                 {#if nestedVoiceState === 'connecting' || nestedVoiceState === 'connected'}
                                                                                                         <span class={`text-xs ${nestedVoiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>

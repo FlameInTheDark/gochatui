@@ -252,7 +252,7 @@
                                 ) {
                                         activeChannelReadMarker = state.lastReadMessageId ?? null;
                                 }
-                                acknowledgeChannelRead(state.guildId, state.channelId);
+                                acknowledgeChannelRead(state.guildId, state.channelId, state.lastReadMessageId);
                         }
                         dirtyGuilds.delete(guildId);
                 }
@@ -365,7 +365,7 @@
                                 lastAckedKey = key;
                                 updateReadMarkersAfterAck(guildId, channelId, messageId);
                                 if (guildId) {
-                                        acknowledgeChannelRead(guildId, channelId);
+                                        acknowledgeChannelRead(guildId, channelId, messageId);
                                 }
                         } else if (
                                 wasAtBottom &&
