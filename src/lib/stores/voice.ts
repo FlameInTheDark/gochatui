@@ -103,6 +103,9 @@ type VoiceSessionInternal = {
         localVideoTransceiver: RTCRtpTransceiver | null;
         localGateOpen: boolean;
         localGateControllable: boolean;
+        localSpeaking: boolean;
+        lastSignaledSpeaking: boolean;
+        speakingSignalTimeout: ReturnType<typeof setTimeout> | null;
 };
 
 const initialState: VoiceState = {
@@ -653,6 +656,7 @@ const defaultDeviceSettings = cloneDeviceSettings(null);
 const REMOTE_SPEAKING_THRESHOLD = 0.08;
 const RECEIVER_SPEAKING_THRESHOLD = 0.02;
 const RECEIVER_SPEAKING_POLL_MS = 150;
+const SPEAKING_SIGNAL_DEBOUNCE_MS = 150;
 let lastDeviceSettings: DeviceSettings = defaultDeviceSettings;
 let deviceSettingsQueue: Promise<void> = Promise.resolve();
 
@@ -765,17 +769,112 @@ function pruneSpeakingUsers(activeUserIds: Set<string>) {
         if (changed) emitSpeakingUsers();
 }
 
+function scheduleSpeakingSignal(currentSession: VoiceSessionInternal, speaking: boolean) {
+        if (!browser) return;
+        if (currentSession.localSpeaking === speaking && currentSession.lastSignaledSpeaking === speaking) {
+                return;
+        }
+
+        currentSession.localSpeaking = speaking;
+        if (currentSession.speakingSignalTimeout != null) {
+                clearTimeout(currentSession.speakingSignalTimeout);
+        }
+
+        const desired = speaking;
+        const sessionId = currentSession.id;
+
+        const dispatch = () => {
+                if (!session || session.id !== sessionId) {
+                        return;
+                }
+
+                const activeSession = session;
+                if (!activeSession) return;
+
+                activeSession.speakingSignalTimeout = null;
+
+                if (activeSession.lastSignaledSpeaking === desired) {
+                        return;
+                }
+
+                const socket = activeSession.ws;
+                if (!socket || socket.readyState !== WebSocket.OPEN) {
+                        logVoice('postponing speaking signal - socket unavailable', {
+                                sessionId: activeSession.id,
+                                desired
+                        });
+                        activeSession.speakingSignalTimeout = setTimeout(dispatch, SPEAKING_SIGNAL_DEBOUNCE_MS);
+                        return;
+                }
+
+                try {
+                        socket.send(JSON.stringify({ event: 'speaking', data: desired ? '1' : '0' }));
+                        activeSession.lastSignaledSpeaking = desired;
+                        logVoice('sent speaking signal', {
+                                sessionId: activeSession.id,
+                                speaking: desired
+                        });
+                } catch (error) {
+                        console.error('Failed to send speaking signal.', error);
+                }
+        };
+
+        currentSession.speakingSignalTimeout = setTimeout(dispatch, SPEAKING_SIGNAL_DEBOUNCE_MS);
+}
+
+function parseSpeakingValue(value: any): boolean {
+        if (value && typeof value === 'object') {
+                if ('speaking' in value) {
+                        return parseSpeakingValue((value as any).speaking);
+                }
+                return false;
+        }
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') return value > 0;
+        if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (!trimmed) return false;
+                if (trimmed === '1') return true;
+                if (trimmed === '0') return false;
+                if (/^(true|false)$/i.test(trimmed)) {
+                        return trimmed.toLowerCase() === 'true';
+                }
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                        try {
+                                const parsed = JSON.parse(trimmed);
+                                return parseSpeakingValue(parsed);
+                        } catch {
+                                return false;
+                        }
+                }
+                const numeric = Number(trimmed);
+                if (Number.isFinite(numeric)) {
+                        return numeric > 0;
+                }
+        }
+        return false;
+}
+
 function setUserSpeaking(userId: string | null, speaking: boolean) {
-        if (!userId) return;
-        const has = speakingUsers.has(userId);
+        const normalized = toSnowflakeString(userId);
+        if (!normalized) return;
+        const has = speakingUsers.has(normalized);
+        let changed = false;
         if (speaking) {
                 if (!has) {
-                        speakingUsers.add(userId);
-                        emitSpeakingUsers();
+                        speakingUsers.add(normalized);
+                        changed = true;
                 }
         } else if (has) {
-                speakingUsers.delete(userId);
+                speakingUsers.delete(normalized);
+                changed = true;
+        }
+        if (changed) {
                 emitSpeakingUsers();
+                const currentSession = session;
+                if (currentSession && currentSession.selfUserId === normalized) {
+                        scheduleSpeakingSignal(currentSession, speaking);
+                }
         }
 }
 
@@ -1186,6 +1285,9 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
                 if (sendTrack && !sendIsCapture) {
                         sendTrack.enabled = !muted;
                 }
+                if (muted) {
+                        setUserSpeaking(activeSession.selfUserId, false);
+                }
                 return;
         }
 
@@ -1200,6 +1302,10 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
                 for (const track of captureTracks) {
                         track.enabled = shouldTransmit;
                 }
+        }
+
+        if (muted) {
+                setUserSpeaking(activeSession.selfUserId, false);
         }
 }
 
@@ -1865,6 +1971,13 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
         current.localVideoTransceiver = null;
         current.userStreamId = null;
 
+        if (current.speakingSignalTimeout != null) {
+                clearTimeout(current.speakingSignalTimeout);
+                current.speakingSignalTimeout = null;
+        }
+        current.localSpeaking = false;
+        current.lastSignaledSpeaking = false;
+
         session = null;
 
         stopLatencyProbe(current);
@@ -2374,7 +2487,10 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         localVideoSender: null,
                         localVideoTransceiver: null,
                         localGateOpen: true,
-                        localGateControllable: true
+                        localGateControllable: true,
+                        localSpeaking: false,
+                        lastSignaledSpeaking: false,
+                        speakingSignalTimeout: null
                 };
 
                 session = currentSession;
@@ -2574,6 +2690,23 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                 } else if (payload?.t === 512) {
                                         logVoice('received SFU channel move', { sessionId: attemptId });
                                         clearSession({ error: 'Moved to another channel.' });
+                                } else if (payload?.t === 514) {
+                                        const rawUserId = payload?.d?.user_id;
+                                        const normalizedUserId = toSnowflakeString(rawUserId);
+                                        if (!normalizedUserId) {
+                                                logVoice('received SFU speaking event with missing user id', {
+                                                        sessionId: attemptId,
+                                                        rawUserId
+                                                });
+                                        } else {
+                                                const speaking = parseSpeakingValue(payload?.d?.speaking);
+                                                logVoice('received SFU speaking event', {
+                                                        sessionId: attemptId,
+                                                        userId: normalizedUserId,
+                                                        speaking
+                                                });
+                                                setUserSpeaking(normalizedUserId, speaking);
+                                        }
                                 }
                         } else if (payload?.op === 2) {
                                 if (payload?.d?.pong) {
