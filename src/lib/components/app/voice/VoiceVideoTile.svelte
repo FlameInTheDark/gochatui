@@ -20,7 +20,7 @@
         const speaking = $derived(Boolean(props.speaking));
         const videoEnabled = $derived(Boolean(props.videoActive && props.stream));
 
-        const containerClass = $derived(() => {
+        const containerClass = $derived.by(() => {
                 const classes = [
                         'relative overflow-hidden rounded-lg border border-[var(--stroke)] bg-black text-white'
                 ];
@@ -40,11 +40,11 @@
                 return classes.join(' ');
         });
 
-        const videoClass = $derived(() =>
+        const videoClass = $derived.by(() =>
                 variant === 'primary' ? 'h-full w-full object-contain' : 'h-full w-full object-cover'
         );
 
-        const avatarWrapperClass = $derived(() => {
+        const avatarWrapperClass = $derived.by(() => {
                 const classes = [
                         'flex items-center justify-center overflow-hidden rounded-full bg-[var(--panel)] text-[var(--fg-strong)]'
                 ];
@@ -56,14 +56,14 @@
                 return classes.join(' ');
         });
 
-        const labelClass = $derived(() => {
-                const base = ['pointer-events-none absolute flex items-center gap-2 text-xs'];
+        const labelClass = $derived.by(() => {
+                const base = [
+                        'pointer-events-none absolute flex items-center gap-2 text-xs rounded-full bg-black/70 px-3 py-1.5'
+                ];
                 if (variant === 'primary') {
-                        base.push(
-                                'bottom-4 left-4 right-auto max-w-[80%] rounded-full bg-black/70 px-4 py-2 text-[0.75rem] backdrop-blur'
-                        );
+                        base.push('left-4 top-4 max-w-[80%] text-[0.75rem] backdrop-blur');
                 } else {
-                        base.push('bottom-2 left-2 right-2 rounded-md bg-black/60 px-2 py-1');
+                        base.push('left-2 top-2 max-w-[85%] text-[11px]');
                 }
                 return base.join(' ');
         });

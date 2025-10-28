@@ -263,10 +263,7 @@
                         </div>
                         {#if participants.length > 1}
                                 <div class="flex-shrink-0">
-                                        <div
-                                                class="grid gap-3"
-                                                style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));"
-                                        >
+                                        <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(120px,1fr))]">
                                                 {#each participants as entry (entry.id)}
                                                         <button
                                                                 type="button"

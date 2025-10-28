@@ -342,7 +342,18 @@ function createAudioLevelMonitor(
         if (stream.getAudioTracks().length === 0) return null;
         try {
                 const audioContext = new AudioContext();
-                const source = audioContext.createMediaStreamSource(stream);
+                let monitorStream: MediaStream = stream;
+                let disposeClone = false;
+                if (typeof stream.clone === 'function') {
+                        try {
+                                monitorStream = stream.clone();
+                                disposeClone = true;
+                        } catch {
+                                monitorStream = stream;
+                                disposeClone = false;
+                        }
+                }
+                const source = audioContext.createMediaStreamSource(monitorStream);
                 const analyser = audioContext.createAnalyser();
                 analyser.fftSize = 512;
                 const data = new Uint8Array(analyser.fftSize);
@@ -391,6 +402,13 @@ function createAudioLevelMonitor(
                                 try {
                                         source.disconnect();
                                 } catch {}
+                                if (disposeClone) {
+                                        for (const track of monitorStream.getTracks()) {
+                                                try {
+                                                        track.stop();
+                                                } catch {}
+                                        }
+                                }
                                 audioContext.close().catch(() => {});
                         }
                 };
