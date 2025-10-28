@@ -1381,6 +1381,37 @@ function sendLocalIceCandidate(
         }
 }
 
+function requestSfuRenegotiation(
+        currentSession: VoiceSessionInternal,
+        context: Record<string, unknown> = {}
+): void {
+        const socket = currentSession.ws;
+        if (!socket) {
+                logVoice('skipped SFU renegotiation request - missing socket', {
+                        sessionId: currentSession.id,
+                        ...context
+                });
+                return;
+        }
+        if (socket.readyState !== WebSocket.OPEN) {
+                logVoice('skipped SFU renegotiation request - socket not open', {
+                        sessionId: currentSession.id,
+                        readyState: socket.readyState,
+                        ...context
+                });
+                return;
+        }
+        try {
+                socket.send(JSON.stringify({ event: 'negotiate', data: '' }));
+                logVoice('sent SFU renegotiation request', {
+                        sessionId: currentSession.id,
+                        ...context
+                });
+        } catch (error) {
+                console.error('Failed to send SFU renegotiation request.', error);
+        }
+}
+
 function buildSignalUrl(rawUrl: string): string {
         try {
                 const parsed = new URL(rawUrl);
@@ -2421,6 +2452,7 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
         if (!enabled) {
                 logVoice('disabling local camera', { sessionId: currentSession.id });
                 stopLocalCamera(currentSession);
+                requestSfuRenegotiation(currentSession, { reason: 'camera-disabled' });
                 finish();
                 setState({ cameraEnabled: false, cameraError: null, localVideoStream: null });
                 return;
@@ -2626,6 +2658,11 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         streamId: stream?.id ?? null,
                         trackId: track.id
                 });
+                requestSfuRenegotiation(currentSession, {
+                        reason: 'camera-enabled',
+                        streamId: publishStream?.id ?? stream?.id ?? null,
+                        trackId: track.id
+                });
                 const sessionId = currentSession.id;
                 track.onended = () => {
                         logVoice('local camera track ended', {
@@ -2634,6 +2671,10 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         });
                         if (!session || session.id !== sessionId) return;
                         stopLocalCamera(currentSession);
+                        requestSfuRenegotiation(currentSession, {
+                                reason: 'camera-ended',
+                                trackId: track.id
+                        });
                         setState({ cameraEnabled: false, localVideoStream: null });
                 };
 
