@@ -43,7 +43,15 @@ type LocalAudioSendController = {
         stream: MediaStream;
         track: MediaStreamTrack;
         setInputLevel: (level: number) => void;
-        setTransmit: (active: boolean, meta?: { muted: boolean; gateOpen: boolean }) => void;
+        setMuted: (muted: boolean) => void;
+        configure: (options: {
+                threshold: number;
+                closeThreshold: number;
+                holdMs: number;
+                levelMultiplier: number;
+                onGateChange?: (open: boolean) => void;
+                onSpeaking?: (speaking: boolean) => void;
+        }) => void;
         dispose: () => void;
 };
 
@@ -219,7 +227,7 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
                 sendTrack: nextSendTrack,
                 gateControllable,
                 controller
-        } = buildOutboundAudioResources(newStream, settings.audioInputLevel);
+        } = buildOutboundAudioResources(newStream, settings);
 
         sendStream = nextSendStream;
         sendTrack = nextSendTrack;
@@ -319,7 +327,10 @@ function getAudioContextConstructor(): typeof AudioContext | null {
         return null;
 }
 
-function createLocalAudioSendController(stream: MediaStream, gain: number): LocalAudioSendController | null {
+function createLocalAudioSendController(
+        stream: MediaStream,
+        options: { inputLevel: number }
+): LocalAudioSendController | null {
         if (!browser) return null;
         const AudioContextCtor = getAudioContextConstructor();
         if (!AudioContextCtor) return null;
@@ -327,11 +338,17 @@ function createLocalAudioSendController(stream: MediaStream, gain: number): Loca
                 const context = new AudioContextCtor();
                 const source = context.createMediaStreamSource(stream);
                 const inputGain = context.createGain();
+                const analyser = context.createAnalyser();
                 const gateGain = context.createGain();
                 const destination = context.createMediaStreamDestination();
                 source.connect(inputGain);
-                inputGain.connect(gateGain);
+                inputGain.connect(analyser);
+                analyser.connect(gateGain);
                 gateGain.connect(destination);
+
+                analyser.fftSize = LOCAL_MONITOR_FFT_SIZE;
+                analyser.smoothingTimeConstant = LOCAL_MONITOR_SMOOTHING;
+
                 const outboundStream = destination.stream;
                 const outboundTrack = outboundStream.getAudioTracks()[0] ?? null;
                 if (!outboundTrack) {
@@ -340,19 +357,29 @@ function createLocalAudioSendController(stream: MediaStream, gain: number): Loca
                 }
 
                 const clampLevel = (value: number) => clamp(Number.isFinite(value) ? Number(value) : 1, 0, 1);
-                inputGain.gain.value = clampLevel(gain);
-                gateGain.gain.value = 1;
-                outboundTrack.enabled = true;
-
-                context.resume().catch(() => {});
+                const clampThresholdValue = (value: number) => clamp(Number.isFinite(value) ? Number(value) : 0, 0, 1);
 
                 let disposed = false;
-                let lastGate = true;
-                let lastTrackEnabled = true;
+                let monitorActive = false;
+                let monitorFrame = 0;
+                let levelMultiplier = clampLevel(options.inputLevel);
+                let threshold = LOCAL_GATE_THRESHOLD_MIN;
+                let closeThreshold = LOCAL_GATE_THRESHOLD_MIN;
+                let holdDuration = LOCAL_GATE_HOLD_MS;
+                let lastGateOpenedAt = getTimestamp();
+                let desiredGate = true;
+                let effectiveGate = true;
+                let muted = false;
+                let onGateChange: ((open: boolean) => void) | null = null;
+                let onSpeaking: ((speaking: boolean) => void) | null = null;
+                let lastLevel = 0;
+                let lastSpeaking = false;
+
+                const buffer = new Uint8Array(analyser.fftSize);
 
                 const applyGate = (open: boolean) => {
-                        if (disposed || open === lastGate) {
-                                lastGate = open;
+                        if (disposed || open === effectiveGate) {
+                                effectiveGate = open;
                                 return;
                         }
                         const target = open ? 1 : 0;
@@ -361,46 +388,153 @@ function createLocalAudioSendController(stream: MediaStream, gain: number): Loca
                         } catch {
                                 gateGain.gain.value = target;
                         }
-                        lastGate = open;
-                };
-
-                const applyTrackEnabled = (enabled: boolean) => {
-                        if (disposed || enabled === lastTrackEnabled) {
-                                lastTrackEnabled = enabled;
-                                return;
+                        effectiveGate = open;
+                        if (onGateChange) {
+                                try {
+                                        onGateChange(effectiveGate);
+                                } catch {}
                         }
-                        outboundTrack.enabled = enabled;
-                        lastTrackEnabled = enabled;
                 };
 
-                applyGate(true);
-                applyTrackEnabled(true);
+                const ensureGate = () => {
+                        const shouldOpen = !muted && desiredGate;
+                        applyGate(shouldOpen);
+                };
+
+                const stopMonitor = () => {
+                        if (!monitorActive) return;
+                        monitorActive = false;
+                        if (monitorFrame) {
+                                window.cancelAnimationFrame(monitorFrame);
+                                monitorFrame = 0;
+                        }
+                };
+
+                const update = () => {
+                        if (disposed || !monitorActive) return;
+                        analyser.getByteTimeDomainData(buffer);
+                        const measurement = analyzeTimeDomainLevel(buffer, {
+                                gain: levelMultiplier,
+                                previous: lastLevel,
+                                smoothing: 0.35
+                        });
+                        const level = clampThresholdValue(measurement.normalized);
+                        lastLevel = level;
+                        const now = getTimestamp();
+                        if (level >= threshold) {
+                                desiredGate = true;
+                                lastGateOpenedAt = now;
+                        } else if (desiredGate) {
+                                const holdExpired = now - lastGateOpenedAt > holdDuration;
+                                if (holdExpired && level <= closeThreshold) {
+                                        desiredGate = false;
+                                }
+                        }
+                        const speaking = !muted && level >= threshold;
+                        if (speaking !== lastSpeaking) {
+                                lastSpeaking = speaking;
+                                if (onSpeaking) {
+                                        try {
+                                                onSpeaking(speaking);
+                                        } catch {}
+                                }
+                        }
+                        ensureGate();
+                        monitorFrame = window.requestAnimationFrame(update);
+                };
+
+                const startMonitor = () => {
+                        if (disposed || monitorActive) return;
+                        monitorActive = true;
+                        monitorFrame = window.requestAnimationFrame(update);
+                };
+
+                const configureMonitor = (config: {
+                        threshold: number;
+                        closeThreshold: number;
+                        holdMs: number;
+                        levelMultiplier: number;
+                        onGateChange?: (open: boolean) => void;
+                        onSpeaking?: (speaking: boolean) => void;
+                }) => {
+                        threshold = clampThresholdValue(config.threshold);
+                        closeThreshold = clampThresholdValue(config.closeThreshold);
+                        holdDuration = Math.max(0, Number.isFinite(config.holdMs) ? Number(config.holdMs) : LOCAL_GATE_HOLD_MS);
+                        levelMultiplier = clampLevel(config.levelMultiplier);
+                        onGateChange = typeof config.onGateChange === 'function' ? config.onGateChange : null;
+                        onSpeaking = typeof config.onSpeaking === 'function' ? config.onSpeaking : null;
+                        desiredGate = true;
+                        lastGateOpenedAt = getTimestamp();
+                        lastSpeaking = false;
+                        stopMonitor();
+                        ensureGate();
+                        if (onGateChange) {
+                                try {
+                                        onGateChange(effectiveGate);
+                                } catch {}
+                        }
+                        if (onSpeaking) {
+                                try {
+                                        onSpeaking(false);
+                                } catch {}
+                        }
+                        startMonitor();
+                };
+
+                inputGain.gain.value = clampLevel(options.inputLevel);
+                gateGain.gain.value = 1;
+                outboundTrack.enabled = true;
+                context.resume().catch(() => {});
+                ensureGate();
 
                 return {
                         stream: outboundStream,
                         track: outboundTrack,
                         setInputLevel(level: number) {
                                 if (disposed) return;
-                                inputGain.gain.value = clampLevel(level);
+                                const clamped = clampLevel(level);
+                                inputGain.gain.value = clamped;
+                                levelMultiplier = clamped;
                         },
-                        setTransmit(active: boolean, meta?: { muted: boolean; gateOpen: boolean }) {
+                        setMuted(value: boolean) {
                                 if (disposed) return;
-                                const muted = Boolean(meta?.muted ?? !active);
-                                const gateOpen = Boolean(meta?.gateOpen ?? active);
-                                const shouldGateOpen = !muted && gateOpen;
-                                const shouldEnableTrack = !muted;
-
-                                applyGate(shouldGateOpen);
-                                applyTrackEnabled(shouldEnableTrack);
+                                muted = Boolean(value);
+                                if (muted && lastSpeaking) {
+                                        lastSpeaking = false;
+                                        if (onSpeaking) {
+                                                try {
+                                                        onSpeaking(false);
+                                                } catch {}
+                                        }
+                                }
+                                ensureGate();
+                        },
+                        configure(config) {
+                                if (disposed) return;
+                                configureMonitor(config);
                         },
                         dispose() {
                                 if (disposed) return;
                                 disposed = true;
+                                if (onGateChange) {
+                                        try {
+                                                onGateChange(false);
+                                        } catch {}
+                                }
+                                if (onSpeaking) {
+                                        try {
+                                                onSpeaking(false);
+                                        } catch {}
+                                }
+                                stopMonitor();
                                 try {
                                         source.disconnect();
                                 } catch {}
                                 try {
                                         inputGain.disconnect();
+                                } catch {}
+                                try {
+                                        analyser.disconnect();
                                 } catch {}
                                 try {
                                         gateGain.disconnect();
@@ -440,7 +574,7 @@ function applyLocalInputGain(settings: DeviceSettings) {
 
 function buildOutboundAudioResources(
         stream: MediaStream | null,
-        gain: number
+        settings: DeviceSettings
 ): {
         sendStream: MediaStream | null;
         sendTrack: MediaStreamTrack | null;
@@ -456,7 +590,9 @@ function buildOutboundAudioResources(
         }
         track.enabled = true;
 
-        const controller = createLocalAudioSendController(stream, gain);
+        const controller = createLocalAudioSendController(stream, {
+                inputLevel: settings.audioInputLevel
+        });
         if (controller) {
                 return {
                         sendStream: controller.stream,
@@ -466,7 +602,7 @@ function buildOutboundAudioResources(
                 };
         }
 
-        applyGainToTrack(track, gain);
+        applyGainToTrack(track, settings.audioInputLevel);
         let cloned: MediaStreamTrack | null = null;
         try {
                 cloned = typeof track.clone === 'function' ? track.clone() : null;
@@ -477,7 +613,7 @@ function buildOutboundAudioResources(
                 return { sendStream: stream, sendTrack: track, gateControllable: false, controller: null };
         }
         cloned.enabled = true;
-        applyGainToTrack(cloned, gain);
+        applyGainToTrack(cloned, settings.audioInputLevel);
         try {
                 const outbound = new MediaStream();
                 outbound.addTrack(cloned);
@@ -717,21 +853,44 @@ function createAudioLevelMonitor(
 
 function startLocalMonitor(currentSession: VoiceSessionInternal) {
         currentSession.localMonitor?.stop();
-        const localStream = currentSession.localStream;
-        if (!localStream) {
-                currentSession.localMonitor = null;
-                currentSession.localGateOpen = true;
-                return;
-        }
+        currentSession.localMonitor = null;
         const me = get(auth.user);
         const userId = toSnowflakeString((me as any)?.id);
-        if (!userId) {
-                currentSession.localMonitor = null;
+        const controller = currentSession.localSendController;
+        const localStream = currentSession.localStream;
+        if (!controller && !localStream) {
                 currentSession.localGateOpen = true;
                 return;
         }
         const openThreshold = normalizeLocalGateThreshold(lastDeviceSettings.audioInputThreshold);
         const closeThreshold = normalizeLocalGateThreshold(openThreshold * LOCAL_GATE_CLOSE_RATIO);
+        if (controller) {
+                const gateSupported = currentSession.localGateControllable !== false;
+                controller.configure({
+                        threshold: openThreshold,
+                        closeThreshold,
+                        holdMs: LOCAL_GATE_HOLD_MS,
+                        levelMultiplier: lastDeviceSettings.audioInputLevel,
+                        onGateChange(open) {
+                                const normalizedOpen = gateSupported ? open : true;
+                                if (currentSession.localGateOpen !== normalizedOpen) {
+                                        currentSession.localGateOpen = normalizedOpen;
+                                }
+                                applyMuteState(currentSession, get(state).muted, normalizedOpen);
+                        },
+                        onSpeaking(speaking) {
+                                setUserSpeaking(userId, speaking);
+                        }
+                });
+                return;
+        }
+
+        if (!localStream || !userId) {
+                currentSession.localMonitor = null;
+                currentSession.localGateOpen = true;
+                return;
+        }
+
         const gateSupported = currentSession.localGateControllable !== false;
         let gateOpen = gateSupported ? currentSession.localGateOpen ?? true : true;
         let lastGateOpenedAt = gateOpen ? getTimestamp() : 0;
@@ -869,11 +1028,6 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
         const activeSession = target ?? session;
         if (!activeSession) return;
 
-        const gateAvailable = activeSession.localGateControllable !== false;
-        const gateValue = typeof gateOpen === 'boolean' ? gateOpen : activeSession.localGateOpen ?? true;
-        const effectiveGate = gateAvailable ? gateValue : true;
-        const shouldTransmit = !muted && effectiveGate;
-
         const captureStream = activeSession.localStream;
         const captureTracks = captureStream ? captureStream.getAudioTracks() : [];
         const sendTrack = activeSession.localSendTrack;
@@ -887,16 +1041,23 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
         }
 
         if (controller) {
-                controller.setTransmit(shouldTransmit, { muted, gateOpen: gateValue });
+                controller.setMuted(muted);
+                if (sendTrack && !sendIsCapture) {
+                        sendTrack.enabled = !muted;
+                }
+                return;
         }
 
-        if (!controller) {
-                if (sendTrack && !sendIsCapture) {
-                        sendTrack.enabled = shouldTransmit;
-                } else {
-                        for (const track of captureTracks) {
-                                track.enabled = shouldTransmit;
-                        }
+        const gateAvailable = activeSession.localGateControllable !== false;
+        const gateValue = typeof gateOpen === 'boolean' ? gateOpen : activeSession.localGateOpen ?? true;
+        const effectiveGate = gateAvailable ? gateValue : true;
+        const shouldTransmit = !muted && effectiveGate;
+
+        if (sendTrack && !sendIsCapture) {
+                sendTrack.enabled = shouldTransmit;
+        } else {
+                for (const track of captureTracks) {
+                        track.enabled = shouldTransmit;
                 }
         }
 }
@@ -1757,7 +1918,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                 sendTrack: initialSendTrack,
                                 gateControllable,
                                 controller
-                        } = buildOutboundAudioResources(localStream, deviceSnapshot.audioInputLevel);
+                        } = buildOutboundAudioResources(localStream, deviceSnapshot);
                         currentSession.localSendStream = initialSendStream;
                         currentSession.localSendTrack = initialSendTrack;
                         currentSession.localSendController = controller;
