@@ -74,6 +74,7 @@ type VoiceSessionInternal = {
         lastRemoteOfferSdp: string | null;
         localVideoStream: MediaStream | null;
         localVideoSender: RTCRtpSender | null;
+        localVideoTransceiver: RTCRtpTransceiver | null;
         localGateOpen: boolean;
 };
 
@@ -348,6 +349,11 @@ function createAudioLevelMonitor(
                         try {
                                 monitorStream = stream.clone();
                                 disposeClone = true;
+                                for (const track of monitorStream.getAudioTracks()) {
+                                        try {
+                                                track.enabled = true;
+                                        } catch {}
+                                }
                         } catch {
                                 monitorStream = stream;
                                 disposeClone = false;
@@ -610,12 +616,21 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
         }
 
         const sender = target.localVideoSender;
-        if (sender && target.pc) {
+        if (sender) {
                 try {
-                        target.pc.removeTrack(sender);
+                        const result = sender.replaceTrack(null);
+                        if (result && typeof (result as Promise<void>).catch === 'function') {
+                                (result as Promise<void>).catch(() => {});
+                        }
                 } catch {}
         }
-        target.localVideoSender = null;
+
+        const transceiver = target.localVideoTransceiver;
+        if (transceiver) {
+                try {
+                        transceiver.direction = 'recvonly';
+                } catch {}
+        }
 
         const stream = target.localVideoStream;
         target.localVideoStream = null;
@@ -623,6 +638,33 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
 
         if (updateStore) {
                 setState({ cameraEnabled: false, localVideoStream: null });
+        }
+}
+
+function ensureLocalVideoSender(
+        currentSession: VoiceSessionInternal,
+        pcOverride?: RTCPeerConnection | null
+): RTCRtpSender | null {
+        const connection = pcOverride ?? currentSession.pc;
+        if (!connection) return null;
+
+        if (currentSession.localVideoSender) {
+                return currentSession.localVideoSender;
+        }
+
+        if (currentSession.localVideoTransceiver && currentSession.localVideoTransceiver.sender) {
+                currentSession.localVideoSender = currentSession.localVideoTransceiver.sender;
+                return currentSession.localVideoSender;
+        }
+
+        try {
+                const transceiver = connection.addTransceiver('video', { direction: 'sendrecv' });
+                currentSession.localVideoTransceiver = transceiver;
+                currentSession.localVideoSender = transceiver.sender;
+                return transceiver.sender;
+        } catch (error) {
+                console.error('Failed to create local video transceiver.', error);
+                return null;
         }
 }
 
@@ -885,6 +927,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
 
         cameraToggleInProgress = false;
         stopLocalCamera(current);
+        current.localVideoSender = null;
+        current.localVideoTransceiver = null;
 
         session = null;
 
@@ -1130,6 +1174,13 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                 applyMuteState(currentSession.localStream, currentState.muted);
         }
 
+        const sender = ensureLocalVideoSender(currentSession, pc);
+        if (sender && currentSession.localVideoTransceiver && !get(state).cameraEnabled) {
+                try {
+                        currentSession.localVideoTransceiver.direction = 'recvonly';
+                } catch {}
+        }
+
         return pc;
 }
 
@@ -1334,6 +1385,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         lastRemoteOfferSdp: null,
                         localVideoStream: null,
                         localVideoSender: null,
+                        localVideoTransceiver: null,
                         localGateOpen: true
                 };
 
@@ -1457,6 +1509,18 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                                         logVoice('SFU join acknowledged', { sessionId: attemptId });
                                                         await createPeerConnection(currentSession);
                                                         startLatencyProbe(currentSession);
+                                                        const socket = currentSession.ws;
+                                                        if (socket && socket.readyState === WebSocket.OPEN) {
+                                                                try {
+                                                                        socket.send(
+                                                                                JSON.stringify({
+                                                                                        op: 7,
+                                                                                        t: 505,
+                                                                                        d: { muted: get(state).muted }
+                                                                                })
+                                                                        );
+                                                                } catch {}
+                                                        }
                                                 } catch (error: any) {
                                                         clearSession({
                                                                 error:
@@ -1624,12 +1688,17 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
 
         try {
                 try {
+                        const videoConstraints: MediaTrackConstraints = {
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 },
+                                frameRate: { ideal: 30 }
+                        };
+                        const preferredDevice = lastDeviceSettings.videoDevice;
+                        if (preferredDevice) {
+                                videoConstraints.deviceId = { exact: preferredDevice };
+                        }
                         stream = await navigator.mediaDevices.getUserMedia({
-                                video: {
-                                        width: { ideal: 1280 },
-                                        height: { ideal: 720 },
-                                        frameRate: { ideal: 30 }
-                                }
+                                video: videoConstraints
                         });
                 } catch (error: any) {
                         console.error('Failed to access camera.', error);
@@ -1659,24 +1728,30 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         return;
                 }
 
-                let sender = currentSession.localVideoSender;
-                if (sender) {
+                const sender = ensureLocalVideoSender(currentSession, pc);
+                if (!sender) {
+                        fail('peer');
+                        return;
+                }
+
+                if (currentSession.localVideoTransceiver) {
                         try {
-                                await sender.replaceTrack(track);
-                        } catch (error) {
-                                console.error('Failed to replace local video track.', error);
-                                fail('peer');
-                                return;
+                                currentSession.localVideoTransceiver.direction = 'sendrecv';
+                        } catch {}
+                }
+
+                try {
+                        if (typeof sender.setStreams === 'function') {
+                                sender.setStreams(stream);
                         }
-                } else {
-                        try {
-                                sender = pc.addTrack(track, stream);
-                        } catch (error) {
-                                console.error('Failed to attach local video track.', error);
-                                fail('peer');
-                                return;
-                        }
-                        currentSession.localVideoSender = sender;
+                } catch {}
+
+                try {
+                        await sender.replaceTrack(track);
+                } catch (error) {
+                        console.error('Failed to replace local video track.', error);
+                        fail('peer');
+                        return;
                 }
 
                 currentSession.localVideoStream = stream;
