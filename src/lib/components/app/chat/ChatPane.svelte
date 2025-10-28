@@ -7,7 +7,6 @@
 		searchAnchor,
 		membersByGuild
 	} from '$lib/stores/appState';
-	import { tick } from 'svelte';
 	import { m } from '$lib/paraglide/messages.js';
 	import MessageList from './MessageList.svelte';
 	import MessageInput from './MessageInput.svelte';
@@ -16,24 +15,37 @@
 	import MemberPane from './MemberPane.svelte';
 	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
 	import VoiceChannelView from '$lib/components/app/voice/VoiceChannelView.svelte';
+	import { voicePanelChannelId } from '$lib/stores/voice';
 	let listRef: any = $state(null);
 
-	function currentChannel() {
+	const voicePanelChannel = voicePanelChannelId;
+
+	function channelById(id: string | null | undefined) {
 		const gid = $selectedGuildId ?? '';
-		return ($channelsByGuild[gid] ?? []).find((c) => String((c as any).id) === $selectedChannelId);
+		if (!gid || !id) return undefined;
+		return ($channelsByGuild[gid] ?? []).find((c) => String((c as any).id) === String(id));
+	}
+	function currentChannel() {
+		return channelById($selectedChannelId);
 	}
 	function channelName() {
-		const ch = currentChannel();
+		const ch = activeChannelValue as any;
 		return ch?.name ?? 'Channel';
 	}
 
 	function channelTopic() {
-		const ch = currentChannel() as any;
+		const ch = activeChannelValue as any;
 		const t = (ch?.topic ?? '').toString().trim();
+		if (Number((ch as any)?.type ?? 0) !== 0) return '';
 		return t;
 	}
 
 	const selectedChannelValue = $derived.by(() => currentChannel() as any);
+	const voiceChannelValue = $derived.by(() => channelById($voicePanelChannel) as any);
+	const showVoicePanel = $derived.by(
+		() => Boolean($voicePanelChannel && Number((voiceChannelValue as any)?.type ?? 0) === 1)
+	);
+	const activeChannelValue = $derived.by(() => (showVoicePanel ? voiceChannelValue : selectedChannelValue));
 
 	$effect(() => {
 		const gid = $selectedGuildId ?? '';
@@ -74,11 +86,11 @@
 				</button>
 			</div>
 		</div>
-		{#if $selectedChannelId && $channelReady && (selectedChannelValue?.type ?? 0) === 0}
+		{#if showVoicePanel}
+			<VoiceChannelView guildId={$selectedGuildId ?? ''} channelId={$voicePanelChannel ?? ''} />
+		{:else if $selectedChannelId && $channelReady && (selectedChannelValue?.type ?? 0) === 0}
 			<MessageList bind:this={listRef} />
 			<MessageInput />
-		{:else if $selectedChannelId && selectedChannelValue?.type === 1}
-			<VoiceChannelView guildId={$selectedGuildId ?? ''} channelId={$selectedChannelId ?? ''} />
 		{:else}
 			<div class="grid flex-1 place-items-center text-[var(--muted)]">
 				{m.select_text_channel()}

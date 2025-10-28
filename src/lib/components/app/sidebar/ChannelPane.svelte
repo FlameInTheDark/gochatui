@@ -64,13 +64,20 @@
                 CHANNEL_UNREAD_BADGE_CLASSES
         } from '$lib/constants/unreadIndicator';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
-        import { joinVoiceChannel, leaveVoiceChannel, voiceSession } from '$lib/stores/voice';
+        import {
+                joinVoiceChannel,
+                leaveVoiceChannel,
+                voiceSession,
+                voicePanelChannelId,
+                setVoicePanelChannelId
+        } from '$lib/stores/voice';
         import VoiceChannelParticipants from '$lib/components/app/sidebar/VoiceChannelParticipants.svelte';
         import { channelMentionsByGuild } from '$lib/stores/mentions';
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadChannels = unreadChannelsByGuild;
         const voice = voiceSession;
+        const voicePanel = voicePanelChannelId;
         const channelMentions = channelMentionsByGuild;
         const selectedGuildIdValue = $derived($selectedGuildId ? String($selectedGuildId) : '');
 
@@ -280,9 +287,27 @@
                 return 'none';
         }
 
+        $effect(() => {
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                const focusedVoice = $voicePanel ? String($voicePanel) : '';
+                if (!focusedVoice) return;
+                if (!gid) {
+                        setVoicePanelChannelId(null);
+                        return;
+                }
+                const channels = $channelsByGuild[gid] ?? [];
+                const exists = channels.some(
+                        (channel: any) => String((channel as any)?.id ?? '') === focusedVoice && (channel as any)?.type === 1
+                );
+                if (!exists) {
+                        setVoicePanelChannelId(null);
+                }
+        });
+
         function joinVoiceById(channelId: string) {
                 const gid = $selectedGuildId ? String($selectedGuildId) : '';
                 if (!gid || !channelId) return;
+                setVoicePanelChannelId(channelId);
                 void joinVoiceChannel(gid, channelId);
         }
 
@@ -328,6 +353,9 @@
                 if (isTextChannel && $selectedChannelId === channelId) {
                         classes.push('bg-[var(--panel)]');
                 }
+                if (!isTextChannel && $voicePanel === channelId) {
+                        classes.push('bg-[var(--panel)]');
+                }
                 if (state === 'connected') {
                         classes.push('bg-[var(--panel)]', 'ring-1', 'ring-[var(--brand)]');
                 }
@@ -346,6 +374,9 @@
                 const state = voiceState ?? voiceStateForChannel(channelId, channel);
                 const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
                 if (isTextChannel && $selectedChannelId === channelId) {
+                        classes.push('bg-[var(--panel)]');
+                }
+                if (!isTextChannel && $voicePanel === channelId) {
                         classes.push('bg-[var(--panel)]');
                 }
                 if (state === 'connected') {
@@ -773,11 +804,12 @@
 		}
 	}
 
-	function selectChannel(id: string) {
-		const gid = $selectedGuildId ? String($selectedGuildId) : '';
-		if (!gid) return;
-		// validate the channel belongs to current guild and is a text channel
-		const list = $channelsByGuild[gid] ?? [];
+        function selectChannel(id: string) {
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                if (!gid) return;
+                setVoicePanelChannelId(null);
+                // validate the channel belongs to current guild and is a text channel
+                const list = $channelsByGuild[gid] ?? [];
 		const ok = list.some(
 			(c: any) =>
 				String((c as any).id) === String(id) &&

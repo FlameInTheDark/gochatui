@@ -95,6 +95,14 @@ const initialState: VoiceState = {
 const state = writable<VoiceState>(initialState);
 export const voiceSession = derived(state, (value) => value);
 
+const voicePanelChannel = writable<string | null>(null);
+export const voicePanelChannelId = derived(voicePanelChannel, (value) => value);
+
+export function setVoicePanelChannelId(channelId: string | null | undefined): void {
+        const normalized = channelId ? String(channelId).trim() : '';
+        voicePanelChannel.set(normalized ? normalized : null);
+}
+
 let session: VoiceSessionInternal | null = null;
 let sessionCounter = 0;
 let pingCounter = 0;
@@ -1115,6 +1123,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 setState({ status: 'error', error: 'Invalid channel identifier.', guildId: null, channelId: null });
                 return;
         }
+
+        setVoicePanelChannelId(normalizedChannel);
 
         if (session && session.guildId === normalizedGuild && session.channelId === normalizedChannel) {
                 logVoice('already connected to voice channel', {
