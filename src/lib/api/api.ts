@@ -1643,6 +1643,12 @@ export interface ModelUserSettingsData {
     'status'?: ModelStatus;
     /**
      * 
+     * @type {ModelUserUISounds}
+     * @memberof ModelUserSettingsData
+     */
+    'ui_sounds'?: ModelUserUISounds;
+    /**
+     * 
      * @type {Array<ModelUserSettingsUsers>}
      * @memberof ModelUserSettingsData
      */
@@ -1753,6 +1759,37 @@ export interface ModelUserSettingsUsers {
      * @memberof ModelUserSettingsUsers
      */
     'user_id'?: number;
+}
+/**
+ * 
+ * @export
+ * @interface ModelUserUISounds
+ */
+export interface ModelUserUISounds {
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ModelUserUISounds
+     */
+    'deafen'?: boolean;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ModelUserUISounds
+     */
+    'mute'?: boolean;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ModelUserUISounds
+     */
+    'notification'?: boolean;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ModelUserUISounds
+     */
+    'voice_channel'?: boolean;
 }
 /**
  * 
