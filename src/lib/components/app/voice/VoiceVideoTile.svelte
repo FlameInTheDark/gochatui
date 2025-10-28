@@ -9,7 +9,7 @@
                 speaking?: boolean;
                 avatarUrl?: string | null;
                 initial?: string | null;
-                variant?: 'primary' | 'thumbnail';
+                variant?: 'stage' | 'grid' | 'thumbnail';
                 interactive?: boolean;
                 selected?: boolean;
         }>();
@@ -24,10 +24,12 @@
                 const classes = [
                         'relative overflow-hidden rounded-lg border border-[var(--stroke)] bg-black text-white'
                 ];
-                if (variant === 'thumbnail') {
-                        classes.push('aspect-video');
-                } else {
+                if (variant === 'stage') {
                         classes.push('flex h-full w-full items-center justify-center');
+                } else if (variant === 'grid') {
+                        classes.push('aspect-video w-full');
+                } else {
+                        classes.push('aspect-video w-full max-h-[96px]');
                 }
                 if (interactive) {
                         classes.push('cursor-pointer transition');
@@ -39,19 +41,23 @@
                 }
                 return classes.join(' ');
         });
-
-        const videoClass = $derived.by(() =>
-                variant === 'primary' ? 'h-full w-full object-contain' : 'h-full w-full object-cover'
-        );
+        const videoClass = $derived.by(() => {
+                if (variant === 'stage') {
+                        return 'h-full w-full object-contain';
+                }
+                return 'h-full w-full object-cover';
+        });
 
         const avatarWrapperClass = $derived.by(() => {
                 const classes = [
                         'flex items-center justify-center overflow-hidden rounded-full bg-[var(--panel)] text-[var(--fg-strong)]'
                 ];
-                if (variant === 'primary') {
-                        classes.push('h-40 w-40 text-4xl font-semibold');
+                if (variant === 'stage') {
+                        classes.push('h-44 w-44 text-5xl font-semibold');
+                } else if (variant === 'grid') {
+                        classes.push('h-24 w-24 text-3xl font-semibold');
                 } else {
-                        classes.push('h-16 w-16 text-lg font-semibold');
+                        classes.push('h-14 w-14 text-lg font-semibold');
                 }
                 return classes.join(' ');
         });
@@ -60,10 +66,12 @@
                 const base = [
                         'pointer-events-none absolute flex items-center gap-2 text-xs rounded-full bg-black/70 px-3 py-1.5'
                 ];
-                if (variant === 'primary') {
-                        base.push('left-4 top-4 max-w-[80%] text-[0.75rem] backdrop-blur');
+                if (variant === 'stage') {
+                        base.push('left-4 top-4 max-w-[80%] text-[0.8rem] backdrop-blur');
+                } else if (variant === 'grid') {
+                        base.push('left-3 top-3 max-w-[80%] text-[0.7rem] backdrop-blur');
                 } else {
-                        base.push('left-2 top-2 max-w-[85%] text-[11px]');
+                        base.push('left-2 top-2 max-w-[85%] text-[10px]');
                 }
                 return base.join(' ');
         });

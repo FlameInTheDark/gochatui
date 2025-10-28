@@ -213,17 +213,25 @@
         });
 
         let focusedParticipantId = $state<string | null>(null);
+        let userSelectedParticipant = $state(false);
 
         $effect(() => {
                 if (!participants.length) {
                         focusedParticipantId = null;
+                        userSelectedParticipant = false;
                         return;
                 }
-                if (focusedParticipantId && participants.some((entry) => entry.id === focusedParticipantId)) {
+                if (userSelectedParticipant) {
+                        if (
+                                focusedParticipantId &&
+                                participants.some((entry) => entry.id === focusedParticipantId)
+                        ) {
+                                return;
+                        }
+                        focusedParticipantId = participants[0]?.id ?? null;
                         return;
                 }
-                const firstVideo = participants.find((entry) => entry.videoActive);
-                focusedParticipantId = (firstVideo ?? participants[0]).id;
+                focusedParticipantId = null;
         });
 
 	$effect(() => {
@@ -245,31 +253,70 @@
                 </div>
         {:else}
                 {@const activeParticipant =
-                        participants.find((entry) => entry.id === focusedParticipantId) ?? participants[0]}
+                        userSelectedParticipant && focusedParticipantId
+                                ? participants.find((entry) => entry.id === focusedParticipantId) ?? null
+                                : null}
                 <div class="flex h-full flex-1 flex-col gap-4 overflow-hidden p-4">
-                        <div class="flex-1 min-h-0">
-                                <div class="flex h-full min-h-0 items-center justify-center">
-                                        <VoiceVideoTile
-                                                stream={activeParticipant.stream}
-                                                videoActive={activeParticipant.videoActive}
-                                                label={activeParticipant.label}
-                                                badge={activeParticipant.badge}
-                                                speaking={activeParticipant.speaking}
-                                                avatarUrl={activeParticipant.avatarUrl}
-                                                initial={activeParticipant.initial}
-                                                variant="primary"
-                                        />
+                        {#if activeParticipant}
+                                <div class="flex-1 min-h-0">
+                                        <div class="flex h-full min-h-0 items-center justify-center">
+                                                <VoiceVideoTile
+                                                        stream={activeParticipant.stream}
+                                                        videoActive={activeParticipant.videoActive}
+                                                        label={activeParticipant.label}
+                                                        badge={activeParticipant.badge}
+                                                        speaking={activeParticipant.speaking}
+                                                        avatarUrl={activeParticipant.avatarUrl}
+                                                        initial={activeParticipant.initial}
+                                                        variant="stage"
+                                                />
+                                        </div>
                                 </div>
-                        </div>
-                        {#if participants.length > 1}
-                                <div class="flex-shrink-0">
-                                        <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(120px,1fr))]">
+                                {#if participants.length > 1}
+                                        <div class="flex-shrink-0">
+                                                <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(96px,1fr))]">
+                                                        {#each participants as entry (entry.id)}
+                                                                <button
+                                                                        type="button"
+                                                                        class="block rounded-lg p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]"
+                                                                        aria-pressed={entry.id === activeParticipant.id}
+                                                                        onclick={() => {
+                                                                                if (entry.id === activeParticipant.id) {
+                                                                                        userSelectedParticipant = false;
+                                                                                        focusedParticipantId = null;
+                                                                                        return;
+                                                                                }
+                                                                                userSelectedParticipant = true;
+                                                                                focusedParticipantId = entry.id;
+                                                                        }}
+                                                                >
+                                                                        <VoiceVideoTile
+                                                                                stream={entry.stream}
+                                                                                videoActive={entry.videoActive}
+                                                                                label={entry.label}
+                                                                                badge={entry.badge}
+                                                                                speaking={entry.speaking}
+                                                                                avatarUrl={entry.avatarUrl}
+                                                                                initial={entry.initial}
+                                                                                variant="thumbnail"
+                                                                                interactive
+                                                                                selected={entry.id === activeParticipant.id}
+                                                                        />
+                                                                </button>
+                                                        {/each}
+                                                </div>
+                                        </div>
+                                {/if}
+                        {:else}
+                                <div class="flex-1 overflow-hidden">
+                                        <div class="grid h-full w-full auto-rows-fr gap-4 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
                                                 {#each participants as entry (entry.id)}
                                                         <button
                                                                 type="button"
                                                                 class="block rounded-lg p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]"
-                                                                aria-pressed={entry.id === activeParticipant.id}
+                                                                aria-pressed={false}
                                                                 onclick={() => {
+                                                                        userSelectedParticipant = true;
                                                                         focusedParticipantId = entry.id;
                                                                 }}
                                                         >
@@ -281,9 +328,8 @@
                                                                         speaking={entry.speaking}
                                                                         avatarUrl={entry.avatarUrl}
                                                                         initial={entry.initial}
-                                                                        variant="thumbnail"
+                                                                        variant="grid"
                                                                         interactive
-                                                                        selected={entry.id === activeParticipant.id}
                                                                 />
                                                         </button>
                                                 {/each}
