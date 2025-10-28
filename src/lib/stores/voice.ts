@@ -4,6 +4,7 @@ import { auth } from '$lib/stores/auth';
 import { setSelfVoiceChannelId } from '$lib/stores/presence';
 import { appSettings, cloneDeviceSettings, type DeviceSettings } from '$lib/stores/settings';
 import { analyzeTimeDomainLevel, clampNormalized } from '$lib/utils/audio';
+import { playVoiceJoinSound, playVoiceOffSound, playVoiceOnSound } from '$lib/utils/sounds';
 
 const noop = () => {};
 
@@ -912,7 +913,11 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                         state: stateValue
                 });
                 if (stateValue === 'connected') {
+                        const previousStatus = get(state).status;
                         setState({ status: 'connected', error: null });
+                        if (previousStatus !== 'connected') {
+                                playVoiceJoinSound();
+                        }
                 }
                 if (stateValue === 'disconnected') {
                         setState({ status: 'connecting' });
@@ -1390,6 +1395,11 @@ export function setVoiceMuted(muted: boolean): void {
                 } catch {}
         }
         setState({ muted });
+        if (muted) {
+                playVoiceOffSound();
+        } else {
+                playVoiceOnSound();
+        }
 }
 
 export function toggleVoiceMuted(): void {
@@ -1398,7 +1408,14 @@ export function toggleVoiceMuted(): void {
 }
 
 export function setVoiceDeafened(deafened: boolean): void {
+        const current = get(state);
+        if (current.deafened === deafened) return;
         setState({ deafened });
+        if (deafened) {
+                playVoiceOffSound();
+        } else {
+                playVoiceOnSound();
+        }
 }
 
 export function toggleVoiceDeafened(): void {
