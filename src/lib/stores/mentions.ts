@@ -11,7 +11,9 @@ import {
         type NotificationLevel,
         type VisibleDmChannel
 } from '$lib/stores/settings';
-import { channelsByGuild } from '$lib/stores/appState';
+import type { ModelUserSettingsNotifications } from '$lib/api/api';
+import { playMentionSound } from '$lib/utils/sounds';
+import { appHasFocus, channelsByGuild, selectedChannelId } from '$lib/stores/appState';
 
 interface MentionEntry {
         messageId: string;
@@ -292,6 +294,103 @@ function buildDmChannelUserLookup(dmChannels: VisibleDmChannel[] | null | undefi
         return lookup;
 }
 
+function findGuildNotificationSettings(
+        layout: GuildLayoutItem[] | null | undefined,
+        guildId: string
+): ModelUserSettingsNotifications | undefined {
+        if (!Array.isArray(layout)) return undefined;
+        for (const item of layout) {
+                if (!item) continue;
+                if (item.kind === 'guild') {
+                        if (item.guildId === guildId) return item.notifications ?? undefined;
+                        continue;
+                }
+                for (const guild of item.guilds ?? []) {
+                        if (guild?.guildId === guildId) return guild.notifications ?? undefined;
+                }
+        }
+        return undefined;
+}
+
+function isNotificationEntryMuted(
+        entry: ModelUserSettingsNotifications | undefined,
+        now: number
+): boolean {
+        if (!entry || entry.muted !== true) {
+                return false;
+        }
+        const until = entry.muted_until;
+        if (typeof until !== 'string' || !until) {
+                return true;
+        }
+        const timestamp = Date.parse(until);
+        if (!Number.isFinite(timestamp)) {
+                return true;
+        }
+        return timestamp > now;
+}
+
+function shouldPlayMentionNotification(
+        guildId: string,
+        channelId: string,
+        type: number | null
+): boolean {
+        const settings = get(appSettings);
+        if (!settings) return false;
+        if (settings.uiSounds.notification === false) {
+                return false;
+        }
+        const now = Date.now();
+        const dmLookup = buildDmChannelUserLookup(settings.dmChannels);
+        const guildLevels = buildGuildNotificationLevelMap(settings);
+
+        if (get(appHasFocus) && get(selectedChannelId) === channelId) {
+                return false;
+        }
+
+        if (guildId !== '@me') {
+                const guildEntry = findGuildNotificationSettings(settings.guildLayout, guildId);
+                if (isNotificationEntryMuted(guildEntry, now)) {
+                        return false;
+                }
+                const channelEntry = settings.channelNotifications?.[channelId];
+                if (isNotificationEntryMuted(channelEntry, now)) {
+                        return false;
+                }
+        } else {
+                const dmUserId = dmLookup[channelId] ?? null;
+                if (dmUserId) {
+                        const userEntry = settings.userNotifications?.[dmUserId];
+                        if (isNotificationEntryMuted(userEntry, now)) {
+                                return false;
+                        }
+                }
+                const channelEntry = settings.channelNotifications?.[channelId];
+                if (isNotificationEntryMuted(channelEntry, now)) {
+                        return false;
+                }
+        }
+
+        const level = resolveEffectiveNotificationLevel(
+                guildId,
+                channelId,
+                guildLevels,
+                settings.channelNotifications,
+                settings.userNotifications,
+                dmLookup
+        );
+
+        if (level === NOTIFICATION_LEVELS.NONE) {
+                return false;
+        }
+
+        if (level === NOTIFICATION_LEVELS.MENTIONS && type != null && type !== CHANNEL_MENTION_TYPE_USER) {
+                return false;
+        }
+
+        return true;
+}
+
 function resolveEffectiveNotificationLevel(
         guildId: string,
         channelId: string,
@@ -414,10 +513,17 @@ export function recordChannelMention(
         const lastRead = readLookup?.[resolvedGuildId]?.[channel]?.lastReadMessageId ?? null;
         if (!isMessageNewer(message, lastRead)) return;
         const typeValue = typeof type === 'number' && Number.isInteger(type) ? type : null;
+        let added = false;
         mentionsInternal.update((state) => {
                 const existing = state[channel];
-                const messages = existing ? [...existing.messages, { messageId: message, type: typeValue }] : [{ messageId: message, type: typeValue }];
+                const previousCount = existing?.messages.length ?? 0;
+                const messages = existing
+                        ? [...existing.messages, { messageId: message, type: typeValue }]
+                        : [{ messageId: message, type: typeValue }];
                 const deduped = dedupeAndSort(messages);
+                if (deduped.length > previousCount) {
+                        added = true;
+                }
                 if (existing && deduped.length === existing.messages.length) {
                         if (existing.guildId == null && resolvedGuildId) {
                                 return {
@@ -440,6 +546,9 @@ export function recordChannelMention(
                         }
                 } satisfies MentionState;
         });
+        if (added && shouldPlayMentionNotification(resolvedGuildId, channel, typeValue)) {
+                playMentionSound();
+        }
 }
 
 export function clearChannelMentions(

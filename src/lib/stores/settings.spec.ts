@@ -11,13 +11,14 @@ vi.mock('$lib/paraglide/runtime', () => ({
 import { get } from 'svelte/store';
 
 import {
-	appSettings,
-	applyReadStatesMapToLayout,
-	cloneDeviceSettings,
-	type AppSettings,
-	type GuildLayoutItem,
-	type GuildTopLevelItem,
-	guildChannelReadStateLookup
+        appSettings,
+        applyReadStatesMapToLayout,
+        cloneDeviceSettings,
+        cloneUiSoundSettings,
+        type AppSettings,
+        type GuildLayoutItem,
+        type GuildTopLevelItem,
+        guildChannelReadStateLookup
 } from './settings';
 
 describe('applyReadStatesMapToLayout', () => {
@@ -63,7 +64,8 @@ describe('applyReadStatesMapToLayout', () => {
                         dmChannels: [],
                         channelNotifications: {},
                         userNotifications: {},
-                        devices: cloneDeviceSettings(null)
+                        devices: cloneDeviceSettings(null),
+                        uiSounds: cloneUiSoundSettings(null)
                 });
 
 		const lookup = get(guildChannelReadStateLookup);
