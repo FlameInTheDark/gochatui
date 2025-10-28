@@ -651,6 +651,8 @@ function buildOutboundAudioResources(
 
 const defaultDeviceSettings = cloneDeviceSettings(null);
 const REMOTE_SPEAKING_THRESHOLD = 0.08;
+const RECEIVER_SPEAKING_THRESHOLD = 0.02;
+const RECEIVER_SPEAKING_POLL_MS = 150;
 let lastDeviceSettings: DeviceSettings = defaultDeviceSettings;
 let deviceSettingsQueue: Promise<void> = Promise.resolve();
 
@@ -787,6 +789,85 @@ function resetRemoteState() {
 function normalizeLocalGateThreshold(value: number | null | undefined): number {
         if (!Number.isFinite(value)) return LOCAL_GATE_THRESHOLD_MIN;
         return clamp(Number(value), LOCAL_GATE_THRESHOLD_MIN, 1);
+}
+
+function createReceiverSpeakingMonitor(
+        receiver: RTCRtpReceiver | null | undefined,
+        track: MediaStreamTrack | null | undefined,
+        userId: string | null
+): StreamMonitor | null {
+        if (!browser) return null;
+        if (!receiver || !userId) return null;
+        if (receiver.track?.kind !== 'audio') return null;
+        if (track && track.kind !== 'audio') return null;
+        if (typeof receiver.getSynchronizationSources !== 'function') return null;
+
+        let disposed = false;
+        let lastSpeaking = false;
+        const normalizedUserId = String(userId);
+
+        const updateSpeaking = (speaking: boolean) => {
+                if (disposed || speaking === lastSpeaking) return;
+                lastSpeaking = speaking;
+                setUserSpeaking(normalizedUserId, speaking);
+        };
+
+        let interval = 0;
+
+        const poll = () => {
+                if (disposed) return;
+                const currentTrack = track ?? receiver.track ?? null;
+                const inactive =
+                        !currentTrack ||
+                        currentTrack.readyState !== 'live' ||
+                        currentTrack.muted ||
+                        currentTrack.enabled === false;
+                if (inactive) {
+                        updateSpeaking(false);
+                        return;
+                }
+
+                let maxLevel = 0;
+                try {
+                        const sources = receiver.getSynchronizationSources?.() ?? [];
+                        for (const source of sources) {
+                                if (typeof source.audioLevel === 'number') {
+                                        const level = Math.max(0, Math.min(1, source.audioLevel));
+                                        if (level > maxLevel) {
+                                                maxLevel = level;
+                                        }
+                                }
+                        }
+                } catch {
+                        updateSpeaking(false);
+                        if (!disposed) {
+                                disposed = true;
+                                if (interval) {
+                                        window.clearInterval(interval);
+                                }
+                        }
+                        return;
+                }
+
+                updateSpeaking(maxLevel >= RECEIVER_SPEAKING_THRESHOLD);
+        };
+
+        interval = window.setInterval(poll, RECEIVER_SPEAKING_POLL_MS);
+        poll();
+
+        return {
+                userId: normalizedUserId,
+                stop() {
+                        if (disposed) return;
+                        disposed = true;
+                        if (interval) {
+                                window.clearInterval(interval);
+                        }
+                        if (lastSpeaking) {
+                                setUserSpeaking(normalizedUserId, false);
+                        }
+                }
+        };
 }
 
 function createAudioLevelMonitor(
@@ -1949,9 +2030,18 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                         if (userId) {
                                 const existingMonitor = currentSession.remoteMonitors.get(key);
                                 existingMonitor?.stop();
-                                const monitor = createAudioLevelMonitor(stream, userId, {
-                                        threshold: REMOTE_SPEAKING_THRESHOLD
-                                });
+                                let monitor: StreamMonitor | null = null;
+                                if (event.track?.kind === 'audio') {
+                                        monitor =
+                                                createReceiverSpeakingMonitor(event.receiver, event.track, userId) ??
+                                                createAudioLevelMonitor(stream, userId, {
+                                                        threshold: REMOTE_SPEAKING_THRESHOLD
+                                                });
+                                } else if (stream.getAudioTracks().some((track) => track.kind === 'audio')) {
+                                        monitor = createAudioLevelMonitor(stream, userId, {
+                                                threshold: REMOTE_SPEAKING_THRESHOLD
+                                        });
+                                }
                                 if (monitor) {
                                         currentSession.remoteMonitors.set(key, monitor);
                                 }
