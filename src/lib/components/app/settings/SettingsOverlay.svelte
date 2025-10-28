@@ -1,6 +1,13 @@
 <script lang="ts">
-	import { settingsOpen, theme, locale } from '$lib/stores/settings';
-	import { m } from '$lib/paraglide/messages.js';
+        import {
+                appSettings,
+                mutateAppSettings,
+                settingsOpen,
+                theme,
+                locale,
+                type UiSoundSettingKey
+        } from '$lib/stores/settings';
+        import { m } from '$lib/paraglide/messages.js';
 	import ProfileEdit from '$lib/components/app/user/ProfileEdit.svelte';
 	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
 	import VoiceVideoSettings from '$lib/components/app/settings/VoiceVideoSettings.svelte';
@@ -20,11 +27,31 @@
 		{ value: 'dark', label: () => m.dark() }
 	];
 
-	let category = $state<'profile' | 'general' | 'appearance' | 'voice-video' | 'other'>('profile');
+        let category =
+                $state<'profile' | 'general' | 'appearance' | 'notifications' | 'voice-video' | 'other'>(
+                        'profile'
+                );
 
-	function closeOverlay() {
-		settingsOpen.set(false);
-	}
+        const soundToggleOptions: Array<{ key: UiSoundSettingKey; label: () => string }> = [
+                { key: 'notification', label: () => m.settings_ui_sound_notification() },
+                { key: 'mute', label: () => m.settings_ui_sound_mute() },
+                { key: 'deafen', label: () => m.settings_ui_sound_deafen() },
+                { key: 'voiceChannel', label: () => m.settings_ui_sound_voice_channel() }
+        ];
+
+        function closeOverlay() {
+                settingsOpen.set(false);
+        }
+
+        function setUiSoundEnabled(key: UiSoundSettingKey, enabled: boolean) {
+                mutateAppSettings((settings) => {
+                        if (settings.uiSounds[key] === enabled) {
+                                return false;
+                        }
+                        settings.uiSounds[key] = enabled;
+                        return true;
+                });
+        }
 </script>
 
 <SettingsPanel bind:open={$settingsOpen} on:close={closeOverlay}>
@@ -45,19 +72,27 @@
 		>
 			{m.general()}
 		</button>
-		<button
-			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'appearance'
-				? 'bg-[var(--panel)] font-semibold'
-				: ''}"
-			onclick={() => (category = 'appearance')}
-		>
-			{m.appearance()}
-		</button>
-		<button
-			class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'voice-video'
-				? 'bg-[var(--panel)] font-semibold'
-				: ''}"
-			onclick={() => (category = 'voice-video')}
+                <button
+                        class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'appearance'
+                                ? 'bg-[var(--panel)] font-semibold'
+                                : ''}"
+                        onclick={() => (category = 'appearance')}
+                >
+                        {m.appearance()}
+                </button>
+                <button
+                        class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'notifications'
+                                ? 'bg-[var(--panel)] font-semibold'
+                                : ''}"
+                        onclick={() => (category = 'notifications')}
+                >
+                        {m.notifications()}
+                </button>
+                <button
+                        class="w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] {category === 'voice-video'
+                                ? 'bg-[var(--panel)] font-semibold'
+                                : ''}"
+                        onclick={() => (category = 'voice-video')}
 		>
 			{m.voice_video()}
 		</button>
@@ -157,9 +192,35 @@
 				{/each}
 			</div>
 		</div>
-	{:else if category === 'voice-video'}
-		<VoiceVideoSettings />
-	{:else}
-		<p>{m.other()}...</p>
-	{/if}
+        {:else if category === 'notifications'}
+                <div class="space-y-4">
+                        <div class="rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
+                                <h3 class="text-sm font-semibold">{m.settings_notifications_sounds()}</h3>
+                                <p class="mt-1 text-xs text-[var(--muted)]">
+                                        {m.settings_notifications_sounds_description()}
+                                </p>
+                                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                                        {#each soundToggleOptions as option (option.key)}
+                                                <label class="flex items-center gap-3 text-sm">
+                                                        <input
+                                                                type="checkbox"
+                                                                checked={$appSettings.uiSounds[option.key]}
+                                                                onchange={(event) =>
+                                                                        setUiSoundEnabled(
+                                                                                option.key,
+                                                                                (event.currentTarget as HTMLInputElement).checked
+                                                                        )
+                                                                }
+                                                        />
+                                                        <span>{option.label()}</span>
+                                                </label>
+                                        {/each}
+                                </div>
+                        </div>
+                </div>
+        {:else if category === 'voice-video'}
+                <VoiceVideoSettings />
+        {:else}
+                <p>{m.other()}...</p>
+        {/if}
 </SettingsPanel>

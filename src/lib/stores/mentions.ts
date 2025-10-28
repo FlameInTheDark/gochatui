@@ -13,7 +13,7 @@ import {
 } from '$lib/stores/settings';
 import type { ModelUserSettingsNotifications } from '$lib/api/api';
 import { playMentionSound } from '$lib/utils/sounds';
-import { channelsByGuild } from '$lib/stores/appState';
+import { appHasFocus, channelsByGuild, selectedChannelId } from '$lib/stores/appState';
 
 interface MentionEntry {
         messageId: string;
@@ -337,9 +337,16 @@ function shouldPlayMentionNotification(
 ): boolean {
         const settings = get(appSettings);
         if (!settings) return false;
+        if (settings.uiSounds.notification === false) {
+                return false;
+        }
         const now = Date.now();
         const dmLookup = buildDmChannelUserLookup(settings.dmChannels);
         const guildLevels = buildGuildNotificationLevelMap(settings);
+
+        if (get(appHasFocus) && get(selectedChannelId) === channelId) {
+                return false;
+        }
 
         if (guildId !== '@me') {
                 const guildEntry = findGuildNotificationSettings(settings.guildLayout, guildId);

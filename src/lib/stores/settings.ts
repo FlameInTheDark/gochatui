@@ -37,6 +37,13 @@ export interface DeviceSettings {
         videoDevice: string | null;
 }
 
+export interface UiSoundSettings {
+        notification: boolean;
+        mute: boolean;
+        deafen: boolean;
+        voiceChannel: boolean;
+}
+
 const DEFAULT_AUDIO_INPUT_LEVEL = 1;
 const DEFAULT_AUDIO_INPUT_THRESHOLD = 0.1;
 const DEFAULT_AUDIO_OUTPUT_LEVEL = 1;
@@ -58,11 +65,18 @@ function createDefaultDeviceSettings(): DeviceSettings {
 
 const defaultDeviceSettings: DeviceSettings = createDefaultDeviceSettings();
 
+const defaultUiSoundSettings: UiSoundSettings = {
+        notification: true,
+        mute: true,
+        deafen: true,
+        voiceChannel: true
+};
+
 export function cloneDeviceSettings(settings: DeviceSettings | null | undefined): DeviceSettings {
-	const source = settings ?? defaultDeviceSettings;
-	return {
-		audioInputDevice: source.audioInputDevice ?? null,
-		audioInputLevel:
+        const source = settings ?? defaultDeviceSettings;
+        return {
+                audioInputDevice: source.audioInputDevice ?? null,
+                audioInputLevel:
 			typeof source.audioInputLevel === 'number' && Number.isFinite(source.audioInputLevel)
 				? clamp(source.audioInputLevel, 0, 1)
 				: DEFAULT_AUDIO_INPUT_LEVEL,
@@ -78,9 +92,21 @@ export function cloneDeviceSettings(settings: DeviceSettings | null | undefined)
 		autoGainControl: source.autoGainControl !== false,
 		echoCancellation: source.echoCancellation !== false,
 		noiseSuppression: source.noiseSuppression !== false,
-		videoDevice: source.videoDevice ?? null
-	} satisfies DeviceSettings;
+                videoDevice: source.videoDevice ?? null
+        } satisfies DeviceSettings;
 }
+
+export function cloneUiSoundSettings(settings: UiSoundSettings | null | undefined): UiSoundSettings {
+        const source = settings ?? defaultUiSoundSettings;
+        return {
+                notification: source.notification !== false,
+                mute: source.mute !== false,
+                deafen: source.deafen !== false,
+                voiceChannel: source.voiceChannel !== false
+        } satisfies UiSoundSettings;
+}
+
+export type UiSoundSettingKey = keyof UiSoundSettings;
 
 function isLocale(value: unknown): value is Locale {
 	return typeof value === 'string' && supportedLocales.includes(value as Locale);
@@ -173,12 +199,22 @@ function resolveNumberField(
 }
 
 function resolveBooleanField(payload: AnyRecord, snakeKey: string, fallback: boolean): boolean {
-	const camelKey = toCamelCase(snakeKey);
-	const candidate = payload?.[snakeKey] ?? payload?.[camelKey];
-	if (typeof candidate === 'boolean') {
-		return candidate;
-	}
-	return fallback;
+        const camelKey = toCamelCase(snakeKey);
+        const candidate = payload?.[snakeKey] ?? payload?.[camelKey];
+        if (typeof candidate === 'boolean') {
+                return candidate;
+        }
+        return fallback;
+}
+
+function normalizeUiSoundSettings(payload: AnyRecord | null | undefined): UiSoundSettings {
+        const record = (payload ?? {}) as AnyRecord;
+        return {
+                notification: resolveBooleanField(record, 'notification', true),
+                mute: resolveBooleanField(record, 'mute', true),
+                deafen: resolveBooleanField(record, 'deafen', true),
+                voiceChannel: resolveBooleanField(record, 'voice_channel', true)
+        } satisfies UiSoundSettings;
 }
 
 const initialTheme: Theme = browser
@@ -253,6 +289,7 @@ function createDefaultSettingsSnapshot(): AppSettings {
         snapshot.language = get(locale);
         snapshot.theme = get(theme);
         snapshot.devices = createDefaultDeviceSettings();
+        snapshot.uiSounds = cloneUiSoundSettings(defaultUiSoundSettings);
         return snapshot;
 }
 
@@ -312,6 +349,7 @@ export interface AppSettings {
         channelNotifications: Record<string, ModelUserSettingsNotifications | undefined>;
         userNotifications: Record<string, ModelUserSettingsNotifications | undefined>;
         devices: DeviceSettings;
+        uiSounds: UiSoundSettings;
 }
 
 function createDefaultAppSettings(): AppSettings {
@@ -330,7 +368,8 @@ function createDefaultAppSettings(): AppSettings {
                 dmChannels: [],
                 channelNotifications: {},
                 userNotifications: {},
-                devices: cloneDeviceSettings(defaultDeviceSettings)
+                devices: cloneDeviceSettings(defaultDeviceSettings),
+                uiSounds: cloneUiSoundSettings(defaultUiSoundSettings)
         } satisfies AppSettings;
 }
 
@@ -485,11 +524,12 @@ function cloneSettings(settings: AppSettings): AppSettings {
                         ])
                 ),
                 devices: cloneDeviceSettings(settings.devices),
+                uiSounds: cloneUiSoundSettings(settings.uiSounds),
                 guildLayout: settings.guildLayout.map((item) => {
                         if (item.kind === 'guild') {
                                 return {
                                         kind: 'guild',
-					guildId: item.guildId,
+                                        guildId: item.guildId,
 					notifications: item.notifications ? structuredCloneSafe(item.notifications) : undefined,
 					selectedChannelId: item.selectedChannelId ?? null,
 					readStates: item.readStates ? structuredCloneSafe(item.readStates) : undefined
@@ -952,9 +992,13 @@ function convertFromApi(
                 }
         }
 
+        const uiSounds = normalizeUiSoundSettings(
+                ((data as AnyRecord)?.ui_sounds ?? (data as AnyRecord)?.uiSounds) as AnyRecord
+        );
+
         const dmChannelEntries = Array.isArray(data.dm_channels)
-		? data.dm_channels
-				.map((entry) => {
+                ? data.dm_channels
+                                .map((entry) => {
 					const record = (entry ?? {}) as AnyRecord;
 					const channelId = toSnowflakeString(record?.channel_id ?? record?.channelId);
 					if (!channelId) return null;
@@ -1103,7 +1147,8 @@ function convertFromApi(
                         dmChannels: dmChannelEntries,
                         channelNotifications,
                         userNotifications,
-                        devices
+                        devices,
+                        uiSounds
                 },
                 correctedDeviceLevels
         };
@@ -1174,12 +1219,12 @@ export function convertAppSettingsToApi(settings: AppSettings): ModelUserSetting
                 });
         }
 
-        return {
+        const payload: ModelUserSettingsData = {
                 language: settings.language,
                 appearance: {
                         color_scheme: settings.theme,
-			chat_font_scale: settings.chatFontScale,
-			chat_spacing: settings.chatSpacing
+                        chat_font_scale: settings.chatFontScale,
+                        chat_spacing: settings.chatSpacing
 		},
                 guilds: payloadGuilds,
                 guild_folders: payloadFolders as unknown as ModelUserSettingsGuildFolders[],
@@ -1197,13 +1242,22 @@ export function convertAppSettingsToApi(settings: AppSettings): ModelUserSetting
                         audio_input_level: clamp(settings.devices.audioInputLevel, 0, 1),
                         audio_input_threshold: clamp(settings.devices.audioInputThreshold, 0, 1),
                         audio_output_device: settings.devices.audioOutputDevice ?? undefined,
-			audio_output_level: clamp(settings.devices.audioOutputLevel, 0, 1.5),
-			auto_gain_control: settings.devices.autoGainControl,
-			echo_cancellation: settings.devices.echoCancellation,
-			noise_suppression: settings.devices.noiseSuppression,
-			video_device: settings.devices.videoDevice ?? undefined
-		}
-	};
+                        audio_output_level: clamp(settings.devices.audioOutputLevel, 0, 1.5),
+                        auto_gain_control: settings.devices.autoGainControl,
+                        echo_cancellation: settings.devices.echoCancellation,
+                        noise_suppression: settings.devices.noiseSuppression,
+                        video_device: settings.devices.videoDevice ?? undefined
+                }
+        };
+
+        (payload as AnyRecord).ui_sounds = {
+                notification: settings.uiSounds.notification,
+                mute: settings.uiSounds.mute,
+                deafen: settings.uiSounds.deafen,
+                voice_channel: settings.uiSounds.voiceChannel
+        } satisfies AnyRecord;
+
+        return payload;
 }
 
 function scheduleSave() {

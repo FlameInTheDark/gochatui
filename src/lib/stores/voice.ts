@@ -1396,9 +1396,9 @@ export function setVoiceMuted(muted: boolean): void {
         }
         setState({ muted });
         if (muted) {
-                playVoiceOffSound();
+                playVoiceOffSound('mute');
         } else {
-                playVoiceOnSound();
+                playVoiceOnSound('mute');
         }
 }
 
@@ -1412,9 +1412,9 @@ export function setVoiceDeafened(deafened: boolean): void {
         if (current.deafened === deafened) return;
         setState({ deafened });
         if (deafened) {
-                playVoiceOffSound();
+                playVoiceOffSound('deafen');
         } else {
-                playVoiceOnSound();
+                playVoiceOnSound('deafen');
         }
 }
 
