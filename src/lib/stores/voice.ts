@@ -1111,6 +1111,38 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
                 } catch {}
         }
 
+        const transceiver = target.localVideoTransceiver;
+        if (transceiver) {
+                try {
+                        transceiver.direction = 'recvonly';
+                } catch {}
+                const setDirection = (transceiver as { setDirection?: (value: RTCRtpTransceiverDirection) => void }).setDirection;
+                if (typeof setDirection === 'function') {
+                        try {
+                                setDirection.call(transceiver, 'recvonly');
+                        } catch {}
+                }
+        }
+
+        const activeVideoStream = target.localVideoStream;
+        if (activeVideoStream) {
+                const activeTracks = activeVideoStream.getVideoTracks();
+                if (activeTracks.length > 0) {
+                        const publishStreams: (MediaStream | null | undefined)[] = [
+                                target.localSendStream,
+                                target.localStream
+                        ];
+                        for (const publishStream of publishStreams) {
+                                if (!publishStream) continue;
+                                for (const track of activeTracks) {
+                                        try {
+                                                publishStream.removeTrack(track);
+                                        } catch {}
+                                }
+                        }
+                }
+        }
+
         const stream = target.localVideoStream;
         target.localVideoStream = null;
         stopStream(stream);
@@ -2314,17 +2346,55 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         return;
                 }
 
-                const sender = ensureLocalVideoSender(currentSession, pc);
+                const basePublishStream = currentSession.localSendStream ?? currentSession.localStream ?? null;
+                const publishStream = basePublishStream ?? stream;
+
+                if (basePublishStream && !basePublishStream.getVideoTracks().includes(track)) {
+                        try {
+                                basePublishStream.addTrack(track);
+                        } catch {}
+                }
+
+                let sender = ensureLocalVideoSender(currentSession, pc);
+                const activeSenders = typeof pc.getSenders === 'function' ? pc.getSenders() : [];
+                if (sender && !activeSenders.includes(sender)) {
+                        sender = null;
+                }
+
+                if (!sender) {
+                        try {
+                                sender = pc.addTrack(track, publishStream ?? stream);
+                        } catch (error) {
+                                console.error('Failed to attach local video track to peer connection.', error);
+                                fail('peer');
+                                return;
+                        }
+                        currentSession.localVideoSender = sender;
+                        const inferredTransceiver =
+                                typeof pc.getTransceivers === 'function'
+                                        ? pc.getTransceivers().find((item) => item?.sender === sender) ?? null
+                                        : null;
+                        if (inferredTransceiver) {
+                                currentSession.localVideoTransceiver = inferredTransceiver;
+                        }
+                }
+
                 if (!sender) {
                         fail('peer');
                         return;
                 }
 
-                try {
-                        if (typeof sender.setStreams === 'function') {
-                                sender.setStreams(stream);
-                        }
-                } catch {}
+                const activeTransceiver =
+                        currentSession.localVideoTransceiver ??
+                        (typeof pc.getTransceivers === 'function'
+                                ? pc.getTransceivers().find((item) => item?.sender === sender) ?? null
+                                : null);
+
+                if (publishStream && typeof sender.setStreams === 'function') {
+                        try {
+                                sender.setStreams(publishStream);
+                        } catch {}
+                }
 
                 try {
                         await sender.replaceTrack(track);
@@ -2334,6 +2404,22 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         return;
                 }
 
+                if (activeTransceiver) {
+                        currentSession.localVideoTransceiver = activeTransceiver;
+                        try {
+                                activeTransceiver.direction = 'sendrecv';
+                        } catch {}
+                        const setDirection = (activeTransceiver as {
+                                setDirection?: (value: RTCRtpTransceiverDirection) => void;
+                        }).setDirection;
+                        if (typeof setDirection === 'function') {
+                                try {
+                                        setDirection.call(activeTransceiver, 'sendrecv');
+                                } catch {}
+                        }
+                }
+
+                currentSession.localVideoSender = sender;
                 currentSession.localVideoStream = stream;
                 const sessionId = currentSession.id;
                 track.onended = () => {
