@@ -1241,6 +1241,9 @@ function adoptPeerVideoTransceiver(
         }
 
         const transceivers = pc.getTransceivers();
+        let preferred: RTCRtpTransceiver | null = null;
+        let fallback: RTCRtpTransceiver | null = null;
+
         for (const candidate of transceivers) {
                 if (!candidate) continue;
                 const senderKind = candidate.sender?.track?.kind ?? null;
@@ -1264,26 +1267,49 @@ function adoptPeerVideoTransceiver(
                                 }
                         } catch {}
                 }
-                if (mediaKind === 'video') {
-                        currentSession.localVideoTransceiver = candidate;
-                        if (candidate.sender) {
-                                currentSession.localVideoSender = candidate.sender;
+
+                if (mediaKind !== 'video') continue;
+
+                const mid = candidate.mid ?? null;
+                const isCached =
+                        currentSession.localVideoTransceiver &&
+                        mid != null &&
+                        mid === currentSession.localVideoTransceiver.mid;
+
+                if (isCached) {
+                        preferred = candidate;
+                        break;
+                }
+
+                if (mid != null) {
+                        if (!preferred || preferred.mid == null || preferred.mid !== '0') {
+                                preferred = candidate;
                         }
-                        try {
-                                if (candidate.direction !== 'sendrecv') {
-                                        candidate.direction = 'sendrecv';
-                                }
-                        } catch {}
-                        logVoice('adopted peer video transceiver', {
-                                sessionId: currentSession.id,
-                                direction: candidate.direction,
-                                senderHasTrack: Boolean(candidate.sender?.track)
-                        });
-                        return candidate;
+                        if (mid === '0') {
+                                break;
+                        }
+                } else if (!fallback) {
+                        fallback = candidate;
                 }
         }
 
-        return currentSession.localVideoTransceiver;
+        const chosen = preferred ?? fallback ?? currentSession.localVideoTransceiver;
+        if (!chosen) {
+                return null;
+        }
+
+        currentSession.localVideoTransceiver = chosen;
+        if (chosen.sender) {
+                currentSession.localVideoSender = chosen.sender;
+        }
+        logVoice('adopted peer video transceiver', {
+                sessionId: currentSession.id,
+                direction: chosen.direction,
+                senderHasTrack: Boolean(chosen.sender?.track),
+                mid: chosen.mid ?? null
+        });
+
+        return chosen;
 }
 
 function ensureLocalVideoSender(
@@ -1293,17 +1319,15 @@ function ensureLocalVideoSender(
         const connection = pcOverride ?? currentSession.pc;
         if (!connection) return null;
 
+        const activeSenders = typeof connection.getSenders === 'function' ? connection.getSenders() : [];
+
         const existingSender = currentSession.localVideoSender;
-        if (existingSender) {
-                const activeSenders =
-                        typeof connection.getSenders === 'function' ? connection.getSenders() : [];
-                if (activeSenders.includes(existingSender)) {
-                        logVoice('reusing existing video sender', {
-                                sessionId: currentSession.id,
-                                hasTrack: Boolean(existingSender.track)
-                        });
-                        return existingSender;
-                }
+        if (existingSender && activeSenders.includes(existingSender)) {
+                logVoice('reusing existing video sender', {
+                        sessionId: currentSession.id,
+                        hasTrack: Boolean(existingSender.track)
+                });
+                return existingSender;
         }
 
         const adoptedTransceiver = adoptPeerVideoTransceiver(currentSession, connection);
@@ -1311,38 +1335,62 @@ function ensureLocalVideoSender(
                 currentSession.localVideoSender = adoptedTransceiver.sender;
                 logVoice('ensured video sender from adopted transceiver', {
                         sessionId: currentSession.id,
-                        hasTrack: Boolean(adoptedTransceiver.sender.track)
+                        hasTrack: Boolean(adoptedTransceiver.sender.track),
+                        mid: adoptedTransceiver.mid ?? null
                 });
                 return adoptedTransceiver.sender;
         }
 
-        if (typeof connection.getSenders === 'function') {
-                const sender = connection
-                        .getSenders()
-                        .find((item) => item?.track?.kind === 'video' || item === existingSender);
-                if (sender) {
-                        currentSession.localVideoSender = sender;
-                        logVoice('ensured video sender from connection senders', {
+        if (currentSession.localVideoTransceiver?.sender) {
+                const transceiverSender = currentSession.localVideoTransceiver.sender;
+                if (activeSenders.includes(transceiverSender)) {
+                        currentSession.localVideoSender = transceiverSender;
+                        logVoice('ensured video sender from cached transceiver', {
                                 sessionId: currentSession.id,
-                                hasTrack: Boolean(sender.track)
+                                hasTrack: Boolean(transceiverSender.track),
+                                mid: currentSession.localVideoTransceiver.mid ?? null
                         });
-                        return sender;
+                        return transceiverSender;
                 }
         }
 
-        try {
-                const transceiver = connection.addTransceiver('video', { direction: 'sendrecv' });
-                currentSession.localVideoTransceiver = transceiver;
-                currentSession.localVideoSender = transceiver.sender;
-                logVoice('created new video transceiver for sender', {
+        const fallbackSender = activeSenders.find((item) => {
+                if (!item) return false;
+                const kind = item.track?.kind ?? null;
+                if (kind === 'video') return true;
+                if (typeof connection.getTransceivers !== 'function') return false;
+                return connection.getTransceivers().some((transceiver) => transceiver?.sender === item);
+        });
+
+        if (fallbackSender) {
+                currentSession.localVideoSender = fallbackSender;
+                const parentTransceiver =
+                        typeof connection.getTransceivers === 'function'
+                                ? connection
+                                          .getTransceivers()
+                                          .find((transceiver) => transceiver?.sender === fallbackSender) ?? null
+                                : null;
+                if (parentTransceiver) {
+                        currentSession.localVideoTransceiver = parentTransceiver;
+                }
+                logVoice('ensured video sender from connection senders', {
                         sessionId: currentSession.id,
-                        hasTrack: Boolean(transceiver.sender?.track)
+                        hasTrack: Boolean(fallbackSender.track),
+                        mid: parentTransceiver?.mid ?? null
                 });
-                return transceiver.sender;
-        } catch (error) {
-                console.error('Failed to create local video transceiver.', error);
-                return null;
+                return fallbackSender;
         }
+
+        logVoice('video sender unavailable on connection', {
+                sessionId: currentSession.id,
+                transceiverCount:
+                        typeof connection.getTransceivers === 'function'
+                                ? connection.getTransceivers().length
+                                : null,
+                senderCount: activeSenders.length
+        });
+
+        return null;
 }
 
 async function prepareLocalVideoForAnswer(
@@ -2012,7 +2060,9 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                 applyMuteState(currentSession, currentState.muted);
         }
 
-        ensureLocalVideoSender(currentSession, pc);
+        if (currentSession.localVideoStream) {
+                ensureLocalVideoSender(currentSession, pc);
+        }
 
         return pc;
 }
@@ -2668,34 +2718,15 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                 }
 
                 if (!sender) {
-                        try {
-                                sender = pc.addTrack(track, publishStream ?? stream);
-                                logVoice('added camera track to peer connection', {
-                                        sessionId: currentSession.id,
-                                        publishStreamId: publishStream?.id ?? null,
-                                        trackId: track.id
-                                });
-                        } catch (error) {
-                                console.error('Failed to attach local video track to peer connection.', error);
-                                fail('peer');
-                                return;
-                        }
-                        currentSession.localVideoSender = sender;
-                        const inferredTransceiver =
-                                typeof pc.getTransceivers === 'function'
-                                        ? pc.getTransceivers().find((item) => item?.sender === sender) ?? null
-                                        : null;
-                        if (inferredTransceiver) {
-                                currentSession.localVideoTransceiver = inferredTransceiver;
-                        }
-                }
-
-                if (!sender) {
+                        logVoice('video sender unavailable while enabling camera', {
+                                sessionId: currentSession.id
+                        });
                         fail('peer');
                         return;
                 }
 
                 const activeTransceiver =
+                        adoptPeerVideoTransceiver(currentSession, pc) ??
                         currentSession.localVideoTransceiver ??
                         (typeof pc.getTransceivers === 'function'
                                 ? pc.getTransceivers().find((item) => item?.sender === sender) ?? null
