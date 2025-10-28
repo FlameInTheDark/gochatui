@@ -19,10 +19,18 @@
 		selectedChannelId,
 		selectedGuildId
 	} from '$lib/stores/appState';
-	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-	import type { ContextMenuItem } from '$lib/stores/contextMenu';
-	import type { GuildFolderItem, GuildLayoutItem, GuildLayoutGuild } from '$lib/stores/settings';
-	import { Folder, Plus, User } from 'lucide-svelte';
+        import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
+        import {
+                NOTIFICATION_LEVELS,
+                resolveNotificationLevel,
+                setGuildNotificationLevel,
+                type GuildFolderItem,
+                type GuildLayoutItem,
+                type GuildLayoutGuild,
+                type NotificationLevel
+        } from '$lib/stores/settings';
+        import { Check, Folder, Plus, User } from 'lucide-svelte';
 	import { onMount } from 'svelte';
         import { selectGuild } from '$lib/utils/guildSelection';
 	import {
@@ -372,18 +380,65 @@
                 }
         }
 
-	function openGuildMenu(event: MouseEvent, guild: DtoGuild) {
-		event.preventDefault();
-		const gid = String((guild as any)?.id ?? '');
-		const name = String((guild as any)?.name ?? 'Server');
-		const menuItems: ContextMenuItem[] = [
-			{ label: m.copy_server_id(), action: () => copyToClipboard(gid) }
-		];
-		if (canAccessGuildSettings(guild)) {
-			menuItems.push({
-				label: m.server_settings(),
-				action: () => openGuildSettings(gid)
-			});
+        function findLayoutGuildEntry(guildId: string): GuildLayoutGuild | null {
+                for (const item of $appSettings.guildLayout) {
+                        if (item.kind === 'guild') {
+                                if (item.guildId === guildId) {
+                                        return item;
+                                }
+                                continue;
+                        }
+                        for (const guild of item.guilds) {
+                                if (guild.guildId === guildId) {
+                                        return guild;
+                                }
+                        }
+                }
+                return null;
+        }
+
+        function buildNotificationMenuItems(
+                current: NotificationLevel,
+                onSelect: (level: NotificationLevel) => void
+        ): ContextMenuActionItem[] {
+                return [
+                        {
+                                label: m.ctx_notifications_all(),
+                                icon: current === NOTIFICATION_LEVELS.ALL ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.ALL)
+                        },
+                        {
+                                label: m.ctx_notifications_mentions(),
+                                icon: current === NOTIFICATION_LEVELS.MENTIONS ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.MENTIONS)
+                        },
+                        {
+                                label: m.ctx_notifications_none(),
+                                icon: current === NOTIFICATION_LEVELS.NONE ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.NONE)
+                        }
+                ];
+        }
+
+        function openGuildMenu(event: MouseEvent, guild: DtoGuild, layoutEntry: GuildLayoutGuild | null = null) {
+                event.preventDefault();
+                const gid = String((guild as any)?.id ?? '');
+                const name = String((guild as any)?.name ?? 'Server');
+                if (!gid) return;
+                const effectiveLayout = layoutEntry ?? findLayoutGuildEntry(gid);
+                const notificationItems = buildNotificationMenuItems(
+                        resolveNotificationLevel(effectiveLayout?.notifications),
+                        (level) => setGuildNotificationLevel(gid, level)
+                );
+                const menuItems: ContextMenuItem[] = [
+                        { label: m.ctx_notifications_menu(), children: notificationItems },
+                        { label: m.copy_server_id(), action: () => copyToClipboard(gid) }
+                ];
+                if (canAccessGuildSettings(guild)) {
+                        menuItems.push({
+                                label: m.server_settings(),
+                                action: () => openGuildSettings(gid)
+                        });
 		}
 		menuItems.push({
 			label: m.leave_server(),
@@ -549,7 +604,7 @@
                                                         onGuildMergeOver(event, item.guildId, item.topIndex, item.folderId)}
                                                 ondrop={(event) => onGuildMergeDrop(event, item.guildId, item.topIndex)}
                                                 onclick={() => selectGuildFromSidebar(item.guildId)}
-                                                oncontextmenu={(event) => openGuildMenu(event, item.guild)}
+                                                oncontextmenu={(event) => openGuildMenu(event, item.guild, item.layout)}
                                         >
                                                 {#if guildIcon}
                                                         <img
@@ -707,7 +762,13 @@
 											onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
 										ondrop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
                                                                 onclick={() => selectGuildFromSidebar(nestedGuild.guildId)}
-                                                                                oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
+                                                                                oncontextmenu={(event) =>
+                                                                                        openGuildMenu(
+                                                                                                event,
+                                                                                                nestedGuild.guild,
+                                                                                                nestedGuild.layout
+                                                                                        )
+                                                                                }
                                                                           >
                                                                                   {#if nestedGuildIcon}
                                                                                           <img

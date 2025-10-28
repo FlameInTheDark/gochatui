@@ -1,16 +1,19 @@
 import { browser } from '$app/environment';
 import {
-	type DtoGuild,
-	type ModelStatus,
-	type ModelUserDMChannels,
-	type ModelUserSettingsData,
-	type ModelUserSettingsGuildFolders,
-	type ModelUserSettingsGuilds,
-	type ModelUserSettingsNotifications
+        type DtoGuild,
+        type ModelStatus,
+        type ModelUserDMChannels,
+        type ModelUserSettingsChannel,
+        type ModelUserSettingsData,
+        type ModelUserSettingsGuildFolders,
+        type ModelUserSettingsGuilds,
+        type ModelUserSettingsNotifications,
+        type ModelUserSettingsUsers
 } from '$lib/api';
 import { setLocale } from '$lib/paraglide/runtime';
 import { auth } from '$lib/stores/auth';
 import { updateUnreadSnapshot } from '$lib/stores/unreadSeed';
+import { updateMentionSnapshot } from '$lib/stores/mentionSeed';
 import { derived, get, writable } from 'svelte/store';
 import { parseColorValue } from '$lib/utils/color';
 import type { PresenceMode, PresenceStatus } from '$lib/types/presence';
@@ -294,19 +297,21 @@ export interface DmChannelMetadata extends VisibleDmChannel {}
 export type DmChannelMetadataLookup = Record<string, DmChannelMetadata>;
 
 export interface AppSettings {
-	language: Locale;
-	theme: Theme;
-	chatFontScale: number;
-	chatSpacing: number;
-	guildLayout: GuildLayoutItem[];
-	selectedGuildId: string | null;
-	presenceMode: PresenceMode;
-	status: {
-		status: PresenceStatus;
-		customStatusText: string | null;
-	};
-	dmChannels: VisibleDmChannel[];
-	devices: DeviceSettings;
+        language: Locale;
+        theme: Theme;
+        chatFontScale: number;
+        chatSpacing: number;
+        guildLayout: GuildLayoutItem[];
+        selectedGuildId: string | null;
+        presenceMode: PresenceMode;
+        status: {
+                status: PresenceStatus;
+                customStatusText: string | null;
+        };
+        dmChannels: VisibleDmChannel[];
+        channelNotifications: Record<string, ModelUserSettingsNotifications | undefined>;
+        userNotifications: Record<string, ModelUserSettingsNotifications | undefined>;
+        devices: DeviceSettings;
 }
 
 function createDefaultAppSettings(): AppSettings {
@@ -323,6 +328,8 @@ function createDefaultAppSettings(): AppSettings {
                         customStatusText: null
                 },
                 dmChannels: [],
+                channelNotifications: {},
+                userNotifications: {},
                 devices: cloneDeviceSettings(defaultDeviceSettings)
         } satisfies AppSettings;
 }
@@ -446,30 +453,42 @@ function structuredCloneSafe<T>(value: T): T {
 }
 
 function cloneSettings(settings: AppSettings): AppSettings {
-	return {
-		language: settings.language,
-		theme: settings.theme,
-		chatFontScale: settings.chatFontScale,
-		chatSpacing: settings.chatSpacing,
-		selectedGuildId: settings.selectedGuildId,
-		presenceMode: settings.presenceMode,
-		status: {
-			status: settings.status.status,
-			customStatusText: settings.status.customStatusText ?? null
-		},
-		dmChannels: settings.dmChannels.map((entry) => ({
-			channelId: entry.channelId,
-			userId: entry.userId,
-			isDead: entry.isDead ?? false,
-			lastReadMessageId: entry.lastReadMessageId ?? null,
-			hidden: entry.hidden ?? false,
-			hiddenAfterMessageId: entry.hiddenAfterMessageId ?? null
-		})),
-		devices: cloneDeviceSettings(settings.devices),
-		guildLayout: settings.guildLayout.map((item) => {
-			if (item.kind === 'guild') {
-				return {
-					kind: 'guild',
+        return {
+                language: settings.language,
+                theme: settings.theme,
+                chatFontScale: settings.chatFontScale,
+                chatSpacing: settings.chatSpacing,
+                selectedGuildId: settings.selectedGuildId,
+                presenceMode: settings.presenceMode,
+                status: {
+                        status: settings.status.status,
+                        customStatusText: settings.status.customStatusText ?? null
+                },
+                dmChannels: settings.dmChannels.map((entry) => ({
+                        channelId: entry.channelId,
+                        userId: entry.userId,
+                        isDead: entry.isDead ?? false,
+                        lastReadMessageId: entry.lastReadMessageId ?? null,
+                        hidden: entry.hidden ?? false,
+                        hiddenAfterMessageId: entry.hiddenAfterMessageId ?? null
+                })),
+                channelNotifications: Object.fromEntries(
+                        Object.entries(settings.channelNotifications ?? {}).map(([key, value]) => [
+                                key,
+                                value ? structuredCloneSafe(value) : undefined
+                        ])
+                ),
+                userNotifications: Object.fromEntries(
+                        Object.entries(settings.userNotifications ?? {}).map(([key, value]) => [
+                                key,
+                                value ? structuredCloneSafe(value) : undefined
+                        ])
+                ),
+                devices: cloneDeviceSettings(settings.devices),
+                guildLayout: settings.guildLayout.map((item) => {
+                        if (item.kind === 'guild') {
+                                return {
+                                        kind: 'guild',
 					guildId: item.guildId,
 					notifications: item.notifications ? structuredCloneSafe(item.notifications) : undefined,
 					selectedChannelId: item.selectedChannelId ?? null,
@@ -976,21 +995,53 @@ function convertFromApi(
 		};
 	});
 
-	const folderByGuild = new Map<string, (typeof folderEntries)[number]>();
-	for (const entry of folderEntries) {
-		for (const gid of entry.guildIds) {
-			folderByGuild.set(gid, entry);
-		}
-	}
+        const folderByGuild = new Map<string, (typeof folderEntries)[number]>();
+        for (const entry of folderEntries) {
+                for (const gid of entry.guildIds) {
+                        folderByGuild.set(gid, entry);
+                }
+        }
 
-	const layoutWithPositions: Array<{ item: GuildLayoutItem; position: number }> = [];
-	const guildsArray = Array.isArray(data.guilds) ? data.guilds : [];
+        const layoutWithPositions: Array<{ item: GuildLayoutItem; position: number }> = [];
+        const guildsArray = Array.isArray(data.guilds) ? data.guilds : [];
 
-	for (const guildSetting of guildsArray) {
-		const guildId = toSnowflakeString(guildSetting.guild_id);
-		if (!guildId) continue;
-		const selectedChannelId = toSnowflakeString(guildSetting.selected_channel);
-		const baseGuild: GuildLayoutGuild = {
+        const channelNotifications: Record<string, ModelUserSettingsNotifications | undefined> = {};
+        if (Array.isArray(data.channels)) {
+                for (const channelSetting of data.channels) {
+                        const channelId = toSnowflakeString(
+                                (channelSetting as AnyRecord)?.channel_id ?? (channelSetting as AnyRecord)?.channelId
+                        );
+                        if (!channelId) continue;
+                        const notifications = (channelSetting as AnyRecord)?.notifications;
+                        if (notifications && typeof notifications === 'object') {
+                                channelNotifications[channelId] = structuredCloneSafe(
+                                        notifications as ModelUserSettingsNotifications
+                                );
+                        }
+                }
+        }
+
+        const userNotifications: Record<string, ModelUserSettingsNotifications | undefined> = {};
+        if (Array.isArray(data.users)) {
+                for (const userSetting of data.users) {
+                        const userId = toSnowflakeString(
+                                (userSetting as AnyRecord)?.user_id ?? (userSetting as AnyRecord)?.userId
+                        );
+                        if (!userId) continue;
+                        const notifications = (userSetting as AnyRecord)?.notifications;
+                        if (notifications && typeof notifications === 'object') {
+                                userNotifications[userId] = structuredCloneSafe(
+                                        notifications as ModelUserSettingsNotifications
+                                );
+                        }
+                }
+        }
+
+        for (const guildSetting of guildsArray) {
+                const guildId = toSnowflakeString(guildSetting.guild_id);
+                if (!guildId) continue;
+                const selectedChannelId = toSnowflakeString(guildSetting.selected_channel);
+                const baseGuild: GuildLayoutGuild = {
 			guildId,
 			notifications: guildSetting.notifications
 				? structuredCloneSafe(guildSetting.notifications)
@@ -1050,6 +1101,8 @@ function convertFromApi(
                                 customStatusText: customStatusText ?? null
                         },
                         dmChannels: dmChannelEntries,
+                        channelNotifications,
+                        userNotifications,
                         devices
                 },
                 correctedDeviceLevels
@@ -1057,16 +1110,18 @@ function convertFromApi(
 }
 
 export function convertAppSettingsToApi(settings: AppSettings): ModelUserSettingsData {
-	const payloadGuilds: ModelUserSettingsGuilds[] = [];
-	const payloadFolders: ModelUserSettingsGuildFolders[] = [];
-	const payloadDmChannels: ModelUserDMChannels[] = settings.dmChannels.map((entry) => ({
-		channel_id: toApiSnowflake(entry.channelId),
-		user_id: entry.userId ? toApiSnowflake(entry.userId) : undefined,
-		hidden: entry.hidden,
-		hidden_after: entry.hiddenAfterMessageId
-			? toApiSnowflake(entry.hiddenAfterMessageId)
-			: undefined
-	}));
+        const payloadGuilds: ModelUserSettingsGuilds[] = [];
+        const payloadFolders: ModelUserSettingsGuildFolders[] = [];
+        const payloadChannels: ModelUserSettingsChannel[] = [];
+        const payloadUsers: ModelUserSettingsUsers[] = [];
+        const payloadDmChannels: ModelUserDMChannels[] = settings.dmChannels.map((entry) => ({
+                channel_id: toApiSnowflake(entry.channelId),
+                user_id: entry.userId ? toApiSnowflake(entry.userId) : undefined,
+                hidden: entry.hidden,
+                hidden_after: entry.hiddenAfterMessageId
+                        ? toApiSnowflake(entry.hiddenAfterMessageId)
+                        : undefined
+        }));
 
 	let topPosition = 0;
 	for (const item of settings.guildLayout) {
@@ -1100,30 +1155,48 @@ export function convertAppSettingsToApi(settings: AppSettings): ModelUserSetting
 				inner++;
 			}
 			topPosition++;
-		}
-	}
+                }
+        }
 
-	return {
-		language: settings.language,
-		appearance: {
-			color_scheme: settings.theme,
+        for (const [channelId, notifications] of Object.entries(settings.channelNotifications)) {
+                if (!notifications) continue;
+                payloadChannels.push({
+                        channel_id: toApiSnowflake(channelId),
+                        notifications: structuredCloneSafe(notifications)
+                });
+        }
+
+        for (const [userId, notifications] of Object.entries(settings.userNotifications)) {
+                if (!notifications) continue;
+                payloadUsers.push({
+                        user_id: toApiSnowflake(userId),
+                        notifications: structuredCloneSafe(notifications)
+                });
+        }
+
+        return {
+                language: settings.language,
+                appearance: {
+                        color_scheme: settings.theme,
 			chat_font_scale: settings.chatFontScale,
 			chat_spacing: settings.chatSpacing
 		},
-		guilds: payloadGuilds,
-		guild_folders: payloadFolders as unknown as ModelUserSettingsGuildFolders[],
-		dm_channels: payloadDmChannels,
-		forced_presence: settings.presenceMode === 'auto' ? '' : settings.presenceMode,
-		status: {
-			status: settings.status.status,
-			custom_status_text:
-				settings.status.customStatusText != null ? settings.status.customStatusText : ''
-		},
-		devices: {
-			audio_input_device: settings.devices.audioInputDevice ?? undefined,
-			audio_input_level: clamp(settings.devices.audioInputLevel, 0, 1),
-			audio_input_threshold: clamp(settings.devices.audioInputThreshold, 0, 1),
-			audio_output_device: settings.devices.audioOutputDevice ?? undefined,
+                guilds: payloadGuilds,
+                guild_folders: payloadFolders as unknown as ModelUserSettingsGuildFolders[],
+                channels: payloadChannels.length ? payloadChannels : undefined,
+                dm_channels: payloadDmChannels,
+                forced_presence: settings.presenceMode === 'auto' ? '' : settings.presenceMode,
+                status: {
+                        status: settings.status.status,
+                        custom_status_text:
+                                settings.status.customStatusText != null ? settings.status.customStatusText : ''
+                },
+                users: payloadUsers.length ? payloadUsers : undefined,
+                devices: {
+                        audio_input_device: settings.devices.audioInputDevice ?? undefined,
+                        audio_input_level: clamp(settings.devices.audioInputLevel, 0, 1),
+                        audio_input_threshold: clamp(settings.devices.audioInputThreshold, 0, 1),
+                        audio_output_device: settings.devices.audioOutputDevice ?? undefined,
 			audio_output_level: clamp(settings.devices.audioOutputLevel, 0, 1.5),
 			auto_gain_control: settings.devices.autoGainControl,
 			echo_cancellation: settings.devices.echoCancellation,
@@ -1203,10 +1276,10 @@ export function mutateAppSettingsWithoutSaving(mutator: SettingsMutator) {
 }
 
 function findGuildLayoutGuild(layout: GuildLayoutItem[], guildId: string): GuildLayoutGuild | null {
-	for (const item of layout) {
-		if (item.kind === 'guild') {
-			if (item.guildId === guildId) return item;
-			continue;
+        for (const item of layout) {
+                if (item.kind === 'guild') {
+                        if (item.guildId === guildId) return item;
+                        continue;
 		}
 		for (const guild of item.guilds) {
 			if (guild.guildId === guildId) return guild;
@@ -1216,14 +1289,114 @@ function findGuildLayoutGuild(layout: GuildLayoutItem[], guildId: string): Guild
 }
 
 export function updateGuildSelectedChannel(guildId: string, channelId: string | null) {
-	mutateAppSettings((settings) => {
-		const entry = findGuildLayoutGuild(settings.guildLayout, guildId);
-		if (!entry) return false;
-		const nextValue = channelId ?? null;
-		if ((entry.selectedChannelId ?? null) === nextValue) return false;
-		entry.selectedChannelId = nextValue;
-		return true;
-	});
+        mutateAppSettings((settings) => {
+                const entry = findGuildLayoutGuild(settings.guildLayout, guildId);
+                if (!entry) return false;
+                const nextValue = channelId ?? null;
+                if ((entry.selectedChannelId ?? null) === nextValue) return false;
+                entry.selectedChannelId = nextValue;
+                return true;
+        });
+}
+
+export const NOTIFICATION_LEVELS = {
+        ALL: 0,
+        MENTIONS: 1,
+        NONE: 2
+} as const;
+
+export type NotificationLevel = (typeof NOTIFICATION_LEVELS)[keyof typeof NOTIFICATION_LEVELS];
+
+function normalizeNotificationLevelValue(value: unknown): NotificationLevel {
+        return value === NOTIFICATION_LEVELS.MENTIONS
+                ? NOTIFICATION_LEVELS.MENTIONS
+                : value === NOTIFICATION_LEVELS.NONE
+                        ? NOTIFICATION_LEVELS.NONE
+                        : NOTIFICATION_LEVELS.ALL;
+}
+
+function cloneNotificationSettings(
+        existing: ModelUserSettingsNotifications | undefined,
+        level: NotificationLevel
+): ModelUserSettingsNotifications {
+        const next: ModelUserSettingsNotifications = existing
+                ? structuredCloneSafe(existing)
+                : {};
+        next.notifications = level;
+        if (typeof next.muted !== 'boolean') {
+                next.muted = false;
+        }
+        if (next.muted === false && 'muted_until' in next) {
+                delete next.muted_until;
+        }
+        return next;
+}
+
+function notificationSettingsEqual(
+        a: ModelUserSettingsNotifications | undefined,
+        b: ModelUserSettingsNotifications | undefined
+): boolean {
+        if (!a && !b) return true;
+        if (!a || !b) return false;
+        const levelA = normalizeNotificationLevelValue(a.notifications);
+        const levelB = normalizeNotificationLevelValue(b.notifications);
+        if (levelA !== levelB) return false;
+        const mutedA = a.muted === true;
+        const mutedB = b.muted === true;
+        if (mutedA !== mutedB) return false;
+        const untilA = a.muted_until ?? null;
+        const untilB = b.muted_until ?? null;
+        return untilA === untilB;
+}
+
+export function resolveNotificationLevel(
+        value: ModelUserSettingsNotifications | undefined | null
+): NotificationLevel {
+        return normalizeNotificationLevelValue(value?.notifications);
+}
+
+export function setGuildNotificationLevel(guildId: string | null | undefined, level: NotificationLevel) {
+        const normalized = toSnowflakeString(guildId);
+        if (!normalized) return;
+        mutateAppSettings((settings) => {
+                const entry = findGuildLayoutGuild(settings.guildLayout, normalized);
+                if (!entry) return false;
+                const previous = entry.notifications;
+                const next = cloneNotificationSettings(previous, level);
+                if (notificationSettingsEqual(previous, next)) return false;
+                entry.notifications = next;
+                return true;
+        });
+}
+
+export function setChannelNotificationLevel(channelId: string | null | undefined, level: NotificationLevel) {
+        const normalized = toSnowflakeString(channelId);
+        if (!normalized) return;
+        mutateAppSettings((settings) => {
+                const previous = settings.channelNotifications[normalized];
+                const next = cloneNotificationSettings(previous, level);
+                if (notificationSettingsEqual(previous, next)) return false;
+                settings.channelNotifications = {
+                        ...settings.channelNotifications,
+                        [normalized]: next
+                };
+                return true;
+        });
+}
+
+export function setUserNotificationLevel(userId: string | null | undefined, level: NotificationLevel) {
+        const normalized = toSnowflakeString(userId);
+        if (!normalized) return;
+        mutateAppSettings((settings) => {
+                const previous = settings.userNotifications[normalized];
+                const next = cloneNotificationSettings(previous, level);
+                if (notificationSettingsEqual(previous, next)) return false;
+                settings.userNotifications = {
+                        ...settings.userNotifications,
+                        [normalized]: next
+                };
+                return true;
+        });
 }
 
 export function setChannelLastReadMessageId(
@@ -1699,10 +1872,11 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         settingsReady.set(false);
                         loadedSettingsToken = null;
                         auth.ingestGuilds([]);
-			updateUnreadSnapshot(null);
-			settingsLoadedOnce = false;
-			return;
-		}
+                        updateUnreadSnapshot(null);
+                        updateMentionSnapshot(null, null);
+                        settingsLoadedOnce = false;
+                        return;
+                }
 
                 let shouldPersistAudibleDefaults = false;
                 try {
@@ -1717,19 +1891,29 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
 				(responseData as any)?.guilds_list ??
 				null;
 			auth.ingestGuilds(guildListRaw);
-			const lastMessageSnapshot =
-				(responseData as any)?.guilds_last_messages ??
-				(responseData as any)?.guilds_last_message_ids ??
-				(responseData as any)?.guild_channel_last_messages ??
-				(responseData as any)?.guild_channels_last_messages ??
-				(responseData as any)?.guild_channel_last_message_ids ??
-				(responseData as any)?.guild_channels_last_message_ids ??
-				(responseData as any)?.channel_last_message_ids ??
-				(responseData as any)?.channels_last_message_ids ??
-				(responseData as any)?.channel_last_messages ??
-				(responseData as any)?.last_messages ??
-				null;
-			const channelGuildLookup = buildChannelGuildLookupFromSnapshot(lastMessageSnapshot);
+                        const lastMessageSnapshot =
+                                (responseData as any)?.guilds_last_messages ??
+                                (responseData as any)?.guilds_last_message_ids ??
+                                (responseData as any)?.guild_channel_last_messages ??
+                                (responseData as any)?.guild_channels_last_messages ??
+                                (responseData as any)?.guild_channel_last_message_ids ??
+                                (responseData as any)?.guild_channels_last_message_ids ??
+                                (responseData as any)?.channel_last_message_ids ??
+                                (responseData as any)?.channels_last_message_ids ??
+                                (responseData as any)?.channel_last_messages ??
+                                (responseData as any)?.last_messages ??
+                                null;
+                        const mentionsSnapshot =
+                                (responseData as any)?.mentions ??
+                                (responseData as any)?.user_mentions ??
+                                (responseData as any)?.userMentions ??
+                                null;
+                        const channelMentionsSnapshot =
+                                (responseData as any)?.channel_mentions ??
+                                (responseData as any)?.channelMentions ??
+                                null;
+                        const channelGuildLookup = buildChannelGuildLookupFromSnapshot(lastMessageSnapshot);
+                        updateMentionSnapshot(mentionsSnapshot, channelMentionsSnapshot);
                         if (response.status === 204 || !response.data?.settings) {
                                 suppressSave = true;
                                 const next = createDefaultSettingsSnapshot();
@@ -1761,21 +1945,22 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                                 suppressThemePropagation = false;
                                 suppressLocalePropagation = false;
                                 suppressSave = false;
-			}
-			updateUnreadSnapshot(lastMessageSnapshot);
+                        }
+                        updateUnreadSnapshot(lastMessageSnapshot);
 			if (tokenToLoad) {
 				loadedSettingsToken = tokenToLoad;
 			}
 			settingsLoadedOnce = true;
-		} catch (error) {
-			console.error('Failed to load settings', error);
+                } catch (error) {
+                        console.error('Failed to load settings', error);
                         suppressSave = true;
                         appSettings.set(createDefaultSettingsSnapshot());
                         suppressSave = false;
                         loadedSettingsToken = null;
                         updateUnreadSnapshot(null);
+                        updateMentionSnapshot(null, null);
                         settingsLoadedOnce = false;
-		}
+                }
 
                 settingsReady.set(true);
                 syncLayoutWithGuilds();
@@ -1783,9 +1968,9 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                         scheduleSave();
                 }
         } finally {
-		settingsLoadInFlight = false;
-		settingsLoadToken = null;
-		const queued = queuedSettingsToken;
+                settingsLoadInFlight = false;
+                settingsLoadToken = null;
+                const queued = queuedSettingsToken;
 		queuedSettingsToken = null;
 		if (queued !== null && queued !== tokenToLoad) {
 			void loadSettingsFromApi(queued);

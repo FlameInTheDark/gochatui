@@ -14,8 +14,12 @@
         import {
                 appSettings,
                 addVisibleDmChannel,
+                NOTIFICATION_LEVELS,
                 markDmChannelHidden,
-                markDmChannelVisible
+                markDmChannelVisible,
+                resolveNotificationLevel,
+                setUserNotificationLevel,
+                type NotificationLevel
         } from '$lib/stores/settings';
         import MessageInput from '$lib/components/app/chat/MessageInput.svelte';
         import MessageList from '$lib/components/app/chat/MessageList.svelte';
@@ -28,10 +32,13 @@
         } from '$lib/stores/presence';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
         import { applyFriendList, friendDataRefreshSignal } from '$lib/stores/friends';
-        import { X } from 'lucide-svelte';
+        import { Check, X } from 'lucide-svelte';
         import { isMessageNewer } from '$lib/components/app/chat/readStateUtils';
         import { unreadChannelsByGuild } from '$lib/stores/unread';
         import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
+        import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
+        import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
 
         type FriendEntry = {
                 id: string;
@@ -99,6 +106,29 @@
         let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
+
+        function buildNotificationMenuItems(
+                current: NotificationLevel,
+                onSelect: (level: NotificationLevel) => void
+        ): ContextMenuActionItem[] {
+                return [
+                        {
+                                label: m.ctx_notifications_all(),
+                                icon: current === NOTIFICATION_LEVELS.ALL ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.ALL)
+                        },
+                        {
+                                label: m.ctx_notifications_mentions(),
+                                icon: current === NOTIFICATION_LEVELS.MENTIONS ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.MENTIONS)
+                        },
+                        {
+                                label: m.ctx_notifications_none(),
+                                icon: current === NOTIFICATION_LEVELS.NONE ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.NONE)
+                        }
+                ];
+        }
 
 	function toSnowflakeString(value: unknown): string | null {
 		if (value == null) return null;
@@ -1561,11 +1591,11 @@
                 }
         }
 
-	async function handleAddFriendSubmit() {
-		addFriendError = null;
-		const identifier = addFriendIdentifier.trim();
-		if (!identifier) {
-			addFriendError = m.user_home_add_friend_required();
+        async function handleAddFriendSubmit() {
+                addFriendError = null;
+                const identifier = addFriendIdentifier.trim();
+                if (!identifier) {
+                        addFriendError = m.user_home_add_friend_required();
 			return;
 		}
 		isSubmittingAddFriend = true;
@@ -1586,17 +1616,38 @@
 			if (succeeded) {
 				closeAddFriendModal();
 			}
-		}
-	}
+                }
+        }
 
-	function handleWindowKeydown(event: KeyboardEvent) {
-		if (!showAddFriendModal) return;
-		if (isSubmittingAddFriend) return;
-		if (event.key === 'Escape') {
-			event.preventDefault();
-			closeAddFriendModal();
-		}
-	}
+        function handleWindowKeydown(event: KeyboardEvent) {
+                if (!showAddFriendModal) return;
+                if (isSubmittingAddFriend) return;
+                if (event.key === 'Escape') {
+                        event.preventDefault();
+                        closeAddFriendModal();
+                }
+        }
+
+        function openFriendContextMenu(event: MouseEvent, friend: FriendEntry) {
+                event.preventDefault();
+                event.stopPropagation();
+                const friendId = friend.id;
+                if (!friendId) return;
+                const currentLevel = resolveNotificationLevel($settingsStore.userNotifications[friendId]);
+                const items: ContextMenuItem[] = [
+                        {
+                                label: m.ctx_notifications_menu(),
+                                children: buildNotificationMenuItems(currentLevel, (level) =>
+                                        setUserNotificationLevel(friendId, level)
+                                )
+                        },
+                        {
+                                label: m.ctx_copy_user_id(),
+                                action: () => copyToClipboard(friendId)
+                        }
+                ];
+                contextMenu.openFromEvent(event, items);
+        }
 </script>
 
 <div class="col-span-2 flex h-full min-h-0 flex-col overflow-hidden">
@@ -1847,7 +1898,16 @@
                                                                                         {@const friendPresence = $presenceMap[friend.id] ?? null}
                                                                                         {@const friendPresenceStatus = friendPresence?.status ?? null}
                                                                                         {@const friendCustomStatus = friendPresence?.customStatusText ?? null}
-                                                                                        <div class="flex items-center gap-2">
+                                                                                        <div
+                                                                                                class="flex items-center gap-2"
+                                                                                                use:customContextMenuTarget
+                                                                                                oncontextmenu={(event) =>
+                                                                                                        openFriendContextMenu(
+                                                                                                                event,
+                                                                                                                friend
+                                                                                                        )
+                                                                                                }
+                                                                                        >
                                                                                                 <button
                                                                                                         type="button"
                                                                                                         class={`flex flex-1 items-center gap-3 rounded-md border px-3 py-2 text-left transition ${

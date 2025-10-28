@@ -28,7 +28,15 @@
 	} from '$lib/api';
         import { subscribeWS, wsEvent } from '$lib/client/ws';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-        import { updateGuildSelectedChannel } from '$lib/stores/settings';
+        import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
+        import {
+                NOTIFICATION_LEVELS,
+                appSettings,
+                resolveNotificationLevel,
+                setChannelNotificationLevel,
+                updateGuildSelectedChannel,
+                type NotificationLevel
+        } from '$lib/stores/settings';
         import { unreadChannelsByGuild } from '$lib/stores/unread';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
@@ -693,11 +701,34 @@
 		return ordered;
 	}
 
-	function toggleCollapse(id: string) {
-		collapsed = { ...collapsed, [id]: !collapsed[id] };
-	}
+        function toggleCollapse(id: string) {
+                collapsed = { ...collapsed, [id]: !collapsed[id] };
+        }
 
-	async function createChannel() {
+        function buildNotificationMenuItems(
+                current: NotificationLevel,
+                onSelect: (level: NotificationLevel) => void
+        ): ContextMenuActionItem[] {
+                return [
+                        {
+                                label: m.ctx_notifications_all(),
+                                icon: current === NOTIFICATION_LEVELS.ALL ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.ALL)
+                        },
+                        {
+                                label: m.ctx_notifications_mentions(),
+                                icon: current === NOTIFICATION_LEVELS.MENTIONS ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.MENTIONS)
+                        },
+                        {
+                                label: m.ctx_notifications_none(),
+                                icon: current === NOTIFICATION_LEVELS.NONE ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.NONE)
+                        }
+                ];
+        }
+
+        async function createChannel() {
 		if (!newChannelName.trim() || !$selectedGuildId) return;
                 try {
                         const channelType = newChannelType === 'voice' ? 1 : 0;
@@ -745,33 +776,40 @@
         function openChannelMenu(e: MouseEvent, ch: any) {
                 const id = String(ch?.id ?? '');
                 const type = (ch as any)?.type;
-                const items = [
-                        { label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id },
-                        ...(type === 1
-                                ? [
-                                          {
-                                                  label:
-                                                          voiceStateForChannel(id, ch) === 'connected' ||
-                                                          voiceStateForChannel(id, ch) === 'connecting'
-                                                                  ? m.voice_leave_channel()
-                                                                  : m.voice_join_channel(),
-                                                  action: () => {
-                                                          const state = voiceStateForChannel(id, ch);
-                                                          if (state === 'connected' || state === 'connecting') {
-                                                                  leaveVoiceChannel();
-                                                          } else {
-                                                                  joinVoiceById(id);
-                                                          }
-                                                  }
-                                          }
-                                  ]
-                                : []),
-                        { label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 },
-                        { label: m.edit_channel(), action: () => openEditChannel(ch) },
-                        { label: m.delete_channel(), action: () => deleteChannel(id), danger: true }
-                ];
+                const items: ContextMenuItem[] = [];
+                if (type === 0 && id) {
+                        const settings = get(appSettings);
+                        const currentLevel = resolveNotificationLevel(settings.channelNotifications[id]);
+                        items.push({
+                                label: m.ctx_notifications_menu(),
+                                children: buildNotificationMenuItems(currentLevel, (level) =>
+                                        setChannelNotificationLevel(id, level)
+                                )
+                        });
+                }
+                items.push({ label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id });
+                if (type === 1) {
+                        items.push({
+                                label:
+                                        voiceStateForChannel(id, ch) === 'connected' ||
+                                        voiceStateForChannel(id, ch) === 'connecting'
+                                                ? m.voice_leave_channel()
+                                                : m.voice_join_channel(),
+                                action: () => {
+                                        const state = voiceStateForChannel(id, ch);
+                                        if (state === 'connected' || state === 'connecting') {
+                                                leaveVoiceChannel();
+                                        } else {
+                                                joinVoiceById(id);
+                                        }
+                                }
+                        });
+                }
+                items.push({ label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 });
+                items.push({ label: m.edit_channel(), action: () => openEditChannel(ch) });
+                items.push({ label: m.delete_channel(), action: () => deleteChannel(id), danger: true });
                 contextMenu.openFromEvent(e, items);
-	}
+        }
 
         function openCategoryMenu(e: MouseEvent, cat: any) {
                 const id = String(cat?.id ?? '');

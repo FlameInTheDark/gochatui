@@ -48,21 +48,23 @@ describe('applyReadStatesMapToLayout', () => {
 			}
 		]);
 
-		appSettings.set({
-			language: 'en',
-			theme: 'system',
-			chatFontScale: 1,
-			chatSpacing: 1,
-			guildLayout: layout,
-			selectedGuildId: null,
-			presenceMode: 'auto',
-			status: {
-				status: 'online',
-				customStatusText: null
-			},
-			dmChannels: [],
-			devices: cloneDeviceSettings(null)
-		});
+                appSettings.set({
+                        language: 'en',
+                        theme: 'system',
+                        chatFontScale: 1,
+                        chatSpacing: 1,
+                        guildLayout: layout,
+                        selectedGuildId: null,
+                        presenceMode: 'auto',
+                        status: {
+                                status: 'online',
+                                customStatusText: null
+                        },
+                        dmChannels: [],
+                        channelNotifications: {},
+                        userNotifications: {},
+                        devices: cloneDeviceSettings(null)
+                });
 
 		const lookup = get(guildChannelReadStateLookup);
 		expect(lookup['123']).toBeDefined();
