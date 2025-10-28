@@ -39,6 +39,14 @@ type StreamMonitor = {
         userId: string;
 };
 
+type LocalAudioSendController = {
+        stream: MediaStream;
+        track: MediaStreamTrack;
+        setInputLevel: (level: number) => void;
+        setTransmit: (active: boolean) => void;
+        dispose: () => void;
+};
+
 type VoiceCameraError = 'permission' | 'acquisition' | 'peer' | 'not-connected';
 
 type VoiceState = {
@@ -67,6 +75,7 @@ type VoiceSessionInternal = {
         localStream: MediaStream | null;
         localSendStream: MediaStream | null;
         localSendTrack: MediaStreamTrack | null;
+        localSendController: LocalAudioSendController | null;
         localAudioSender: RTCRtpSender | null;
         remoteStreams: Map<string, MediaStream>;
         remoteUserIds: Map<string, string | null>;
@@ -203,24 +212,39 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
         const previousCaptureStream = activeSession.localStream;
         const previousSendStream = activeSession.localSendStream;
         const previousSendTrack = activeSession.localSendTrack;
+        const previousController = activeSession.localSendController;
 
-        const { sendStream: nextSendStream, sendTrack: nextSendTrack, gateControllable } =
-                buildOutboundAudioResources(newStream, settings.audioInputLevel);
+        const {
+                sendStream: nextSendStream,
+                sendTrack: nextSendTrack,
+                gateControllable,
+                controller
+        } = buildOutboundAudioResources(newStream, settings.audioInputLevel);
 
         sendStream = nextSendStream;
         sendTrack = nextSendTrack;
 
+        if (!session || session.id !== sessionId) {
+                stopStream(newStream);
+                if (controller) {
+                        controller.dispose();
+                } else {
+                        stopStream(sendStream);
+                        if (sendTrack && sendTrack !== sendStream?.getAudioTracks()[0]) {
+                                try {
+                                        sendTrack.stop();
+                                } catch {}
+                        }
+                }
+                return;
+        }
+
         activeSession.localStream = newStream;
         activeSession.localSendStream = sendStream;
         activeSession.localSendTrack = sendTrack;
+        activeSession.localSendController = controller;
         activeSession.localGateControllable = gateControllable;
         startLocalMonitor(activeSession);
-
-        if (!session || session.id !== sessionId) {
-                stopStream(newStream);
-                stopStream(sendStream);
-                return;
-        }
 
         if (activeSession.pc) {
                 const outboundTrack = sendTrack ?? newTrack;
@@ -254,6 +278,9 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
         applyMuteState(activeSession, get(state).muted);
 
         if (session && session.id === sessionId) {
+                if (previousController && previousController !== controller) {
+                        previousController.dispose();
+                }
                 stopStream(previousCaptureStream);
                 if (previousSendStream && previousSendStream !== previousCaptureStream) {
                         stopStream(previousSendStream);
@@ -265,37 +292,163 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
                 }
         } else {
                 stopStream(newStream);
-                stopStream(sendStream);
-                if (sendTrack && sendTrack !== sendStream?.getAudioTracks()[0]) {
-                        try {
-                                sendTrack.stop();
-                        } catch {}
+                if (controller) {
+                        controller.dispose();
+                } else {
+                        stopStream(sendStream);
+                        if (sendTrack && sendTrack !== sendStream?.getAudioTracks()[0]) {
+                                try {
+                                        sendTrack.stop();
+                                } catch {}
+                        }
                 }
+        }
+}
+
+function getAudioContextConstructor(): typeof AudioContext | null {
+        if (typeof window !== 'undefined') {
+                const ctor =
+                        window.AudioContext ??
+                        (window as any).webkitAudioContext ??
+                        (typeof AudioContext !== 'undefined' ? AudioContext : null);
+                return ctor ?? null;
+        }
+        if (typeof AudioContext !== 'undefined') {
+                return AudioContext;
+        }
+        return null;
+}
+
+function createLocalAudioSendController(stream: MediaStream, gain: number): LocalAudioSendController | null {
+        if (!browser) return null;
+        const AudioContextCtor = getAudioContextConstructor();
+        if (!AudioContextCtor) return null;
+        try {
+                const context = new AudioContextCtor();
+                const source = context.createMediaStreamSource(stream);
+                const inputGain = context.createGain();
+                const gateGain = context.createGain();
+                const destination = context.createMediaStreamDestination();
+                source.connect(inputGain);
+                inputGain.connect(gateGain);
+                gateGain.connect(destination);
+                const outboundStream = destination.stream;
+                const outboundTrack = outboundStream.getAudioTracks()[0] ?? null;
+                if (!outboundTrack) {
+                        context.close().catch(() => {});
+                        return null;
+                }
+
+                const clampLevel = (value: number) => clamp(Number.isFinite(value) ? Number(value) : 1, 0, 1);
+                inputGain.gain.value = clampLevel(gain);
+                gateGain.gain.value = 1;
+                outboundTrack.enabled = true;
+
+                context.resume().catch(() => {});
+
+                let disposed = false;
+                let lastTransmit = true;
+
+                const applyTransmit = (active: boolean) => {
+                        const target = active ? 1 : 0;
+                        try {
+                                gateGain.gain.setTargetAtTime(target, context.currentTime, 0.05);
+                        } catch {
+                                gateGain.gain.value = target;
+                        }
+                        outboundTrack.enabled = active;
+                        lastTransmit = active;
+                };
+
+                applyTransmit(true);
+
+                return {
+                        stream: outboundStream,
+                        track: outboundTrack,
+                        setInputLevel(level: number) {
+                                if (disposed) return;
+                                inputGain.gain.value = clampLevel(level);
+                        },
+                        setTransmit(active: boolean) {
+                                if (disposed) return;
+                                if (lastTransmit === active && outboundTrack.enabled === active) {
+                                        return;
+                                }
+                                applyTransmit(active);
+                        },
+                        dispose() {
+                                if (disposed) return;
+                                disposed = true;
+                                try {
+                                        source.disconnect();
+                                } catch {}
+                                try {
+                                        inputGain.disconnect();
+                                } catch {}
+                                try {
+                                        gateGain.disconnect();
+                                } catch {}
+                                try {
+                                        destination.disconnect?.();
+                                } catch {}
+                                for (const sendTrack of outboundStream.getTracks()) {
+                                        try {
+                                                sendTrack.stop();
+                                        } catch {}
+                                }
+                                context.close().catch(() => {});
+                        }
+                };
+        } catch (error) {
+                console.error('Failed to build local audio processing graph.', error);
+                return null;
         }
 }
 
 function applyLocalInputGain(settings: DeviceSettings) {
         const activeSession = session;
         if (!activeSession) return;
+        const controller = activeSession.localSendController;
+        if (controller) {
+                controller.setInputLevel(settings.audioInputLevel);
+                return;
+        }
         const captureTrack = activeSession.localStream?.getAudioTracks()[0] ?? null;
         applyGainToTrack(captureTrack, settings.audioInputLevel);
-        if (activeSession.localSendTrack) {
-                applyGainToTrack(activeSession.localSendTrack, settings.audioInputLevel);
+        const sendTrack = activeSession.localSendTrack;
+        if (sendTrack && sendTrack !== captureTrack) {
+                applyGainToTrack(sendTrack, settings.audioInputLevel);
         }
 }
 
 function buildOutboundAudioResources(
         stream: MediaStream | null,
         gain: number
-): { sendStream: MediaStream | null; sendTrack: MediaStreamTrack | null; gateControllable: boolean } {
+): {
+        sendStream: MediaStream | null;
+        sendTrack: MediaStreamTrack | null;
+        gateControllable: boolean;
+        controller: LocalAudioSendController | null;
+} {
         if (!stream) {
-                return { sendStream: null, sendTrack: null, gateControllable: false };
+                return { sendStream: null, sendTrack: null, gateControllable: false, controller: null };
         }
         const track = stream.getAudioTracks()[0] ?? null;
         if (!track) {
-                return { sendStream: null, sendTrack: null, gateControllable: false };
+                return { sendStream: null, sendTrack: null, gateControllable: false, controller: null };
         }
         track.enabled = true;
+
+        const controller = createLocalAudioSendController(stream, gain);
+        if (controller) {
+                return {
+                        sendStream: controller.stream,
+                        sendTrack: controller.track,
+                        gateControllable: true,
+                        controller
+                };
+        }
+
         applyGainToTrack(track, gain);
         let cloned: MediaStreamTrack | null = null;
         try {
@@ -304,20 +457,20 @@ function buildOutboundAudioResources(
                 cloned = null;
         }
         if (!cloned) {
-                return { sendStream: stream, sendTrack: track, gateControllable: false };
+                return { sendStream: stream, sendTrack: track, gateControllable: false, controller: null };
         }
         cloned.enabled = true;
         applyGainToTrack(cloned, gain);
         try {
                 const outbound = new MediaStream();
                 outbound.addTrack(cloned);
-                return { sendStream: outbound, sendTrack: cloned, gateControllable: true };
+                return { sendStream: outbound, sendTrack: cloned, gateControllable: true, controller: null };
         } catch (error) {
                 console.error('Failed to attach cloned audio track to send stream.', error);
                 try {
                         cloned.stop();
                 } catch {}
-                return { sendStream: stream, sendTrack: track, gateControllable: false };
+                return { sendStream: stream, sendTrack: track, gateControllable: false, controller: null };
         }
 }
 
@@ -708,6 +861,7 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
         const captureTracks = captureStream ? captureStream.getAudioTracks() : [];
         const sendTrack = activeSession.localSendTrack;
         const sendIsCapture = Boolean(sendTrack && captureTracks.includes(sendTrack));
+        const controller = activeSession.localSendController;
 
         if (!sendIsCapture) {
                 for (const track of captureTracks) {
@@ -715,9 +869,13 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
                 }
         }
 
+        if (controller) {
+                controller.setTransmit(shouldTransmit);
+        }
+
         if (sendTrack && !sendIsCapture) {
                 sendTrack.enabled = shouldTransmit;
-        } else {
+        } else if (!controller) {
                 for (const track of captureTracks) {
                         track.enabled = shouldTransmit;
                 }
@@ -1084,6 +1242,8 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
 
         current.localMonitor?.stop();
         current.localMonitor = null;
+        current.localSendController?.dispose();
+        current.localSendController = null;
         stopStream(current.localSendStream);
         current.localSendStream = null;
         current.localSendTrack = null;
@@ -1543,6 +1703,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         localStream,
                         localSendStream: null,
                         localSendTrack: null,
+                        localSendController: null,
                         localAudioSender: null,
                         remoteStreams: new Map(),
                         remoteUserIds: new Map(),
@@ -1572,14 +1733,20 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 });
 
                 if (localStream) {
-                        const { sendStream: initialSendStream, sendTrack: initialSendTrack, gateControllable } =
-                                buildOutboundAudioResources(localStream, deviceSnapshot.audioInputLevel);
+                        const {
+                                sendStream: initialSendStream,
+                                sendTrack: initialSendTrack,
+                                gateControllable,
+                                controller
+                        } = buildOutboundAudioResources(localStream, deviceSnapshot.audioInputLevel);
                         currentSession.localSendStream = initialSendStream;
                         currentSession.localSendTrack = initialSendTrack;
+                        currentSession.localSendController = controller;
                         currentSession.localGateControllable = gateControllable;
                 } else {
                         currentSession.localSendStream = null;
                         currentSession.localSendTrack = null;
+                        currentSession.localSendController = null;
                         currentSession.localGateControllable = false;
                 }
 
