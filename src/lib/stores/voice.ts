@@ -1120,6 +1120,55 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
         }
 }
 
+function adoptPeerVideoTransceiver(
+        currentSession: VoiceSessionInternal,
+        pc: RTCPeerConnection
+): RTCRtpTransceiver | null {
+        if (!pc || typeof pc.getTransceivers !== 'function') {
+                return currentSession.localVideoTransceiver;
+        }
+
+        const transceivers = pc.getTransceivers();
+        for (const candidate of transceivers) {
+                if (!candidate) continue;
+                const senderKind = candidate.sender?.track?.kind ?? null;
+                const receiverKind = candidate.receiver?.track?.kind ?? null;
+                let mediaKind = senderKind || receiverKind;
+                if (!mediaKind) {
+                        try {
+                                const senderCodecs = candidate.sender?.getParameters()?.codecs ?? [];
+                                const receiverCodecs = candidate.receiver?.getParameters()?.codecs ?? [];
+                                if (
+                                        senderCodecs.some((codec) =>
+                                                typeof codec?.mimeType === 'string' &&
+                                                codec.mimeType.toLowerCase().startsWith('video/')
+                                        ) ||
+                                        receiverCodecs.some((codec) =>
+                                                typeof codec?.mimeType === 'string' &&
+                                                codec.mimeType.toLowerCase().startsWith('video/')
+                                        )
+                                ) {
+                                        mediaKind = 'video';
+                                }
+                        } catch {}
+                }
+                if (mediaKind === 'video') {
+                        currentSession.localVideoTransceiver = candidate;
+                        if (candidate.sender) {
+                                currentSession.localVideoSender = candidate.sender;
+                        }
+                        try {
+                                if (candidate.direction !== 'sendrecv') {
+                                        candidate.direction = 'sendrecv';
+                                }
+                        } catch {}
+                        return candidate;
+                }
+        }
+
+        return currentSession.localVideoTransceiver;
+}
+
 function ensureLocalVideoSender(
         currentSession: VoiceSessionInternal,
         pcOverride?: RTCPeerConnection | null
@@ -1127,13 +1176,29 @@ function ensureLocalVideoSender(
         const connection = pcOverride ?? currentSession.pc;
         if (!connection) return null;
 
-        if (currentSession.localVideoSender) {
-                return currentSession.localVideoSender;
+        const existingSender = currentSession.localVideoSender;
+        if (existingSender) {
+                const activeSenders =
+                        typeof connection.getSenders === 'function' ? connection.getSenders() : [];
+                if (activeSenders.includes(existingSender)) {
+                        return existingSender;
+                }
         }
 
-        if (currentSession.localVideoTransceiver && currentSession.localVideoTransceiver.sender) {
-                currentSession.localVideoSender = currentSession.localVideoTransceiver.sender;
-                return currentSession.localVideoSender;
+        const adoptedTransceiver = adoptPeerVideoTransceiver(currentSession, connection);
+        if (adoptedTransceiver?.sender) {
+                currentSession.localVideoSender = adoptedTransceiver.sender;
+                return adoptedTransceiver.sender;
+        }
+
+        if (typeof connection.getSenders === 'function') {
+                const sender = connection
+                        .getSenders()
+                        .find((item) => item?.track?.kind === 'video' || item === existingSender);
+                if (sender) {
+                        currentSession.localVideoSender = sender;
+                        return sender;
+                }
         }
 
         try {
@@ -1726,6 +1791,7 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
 
                 currentSession.processingRemoteOffer = true;
                 await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
+                adoptPeerVideoTransceiver(currentSession, pc);
                 currentSession.lastRemoteOfferSdp = offerSdp;
                 logVoice('applied remote offer', { sessionId: currentSession.id });
                 await flushPendingRemoteCandidates(currentSession);
