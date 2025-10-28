@@ -56,6 +56,18 @@
                 return classes.join(' ');
         });
 
+        const labelClass = $derived(() => {
+                const base = ['pointer-events-none absolute flex items-center gap-2 text-xs'];
+                if (variant === 'primary') {
+                        base.push(
+                                'bottom-4 left-4 right-auto max-w-[80%] rounded-full bg-black/70 px-4 py-2 text-[0.75rem] backdrop-blur'
+                        );
+                } else {
+                        base.push('bottom-2 left-2 right-2 rounded-md bg-black/60 px-2 py-1');
+                }
+                return base.join(' ');
+        });
+
         let videoEl: HTMLVideoElement | null = $state(null);
 
         $effect(() => {
@@ -111,9 +123,7 @@
                         </div>
                 </div>
         {/if}
-        <div
-                class="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-black/60 px-3 py-2 text-xs"
-        >
+        <div class={labelClass}>
                 <span class="min-w-0 truncate">{props.label}</span>
                 {#if props.badge}
                         <span class="text-[10px] tracking-wide uppercase opacity-70">{props.badge}</span>

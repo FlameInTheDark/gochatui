@@ -62,6 +62,7 @@ type VoiceSessionInternal = {
         pc: RTCPeerConnection | null;
         localStream: MediaStream | null;
         remoteStreams: Map<string, MediaStream>;
+        remoteUserIds: Map<string, string | null>;
         remoteMonitors: Map<string, StreamMonitor>;
         localMonitor: StreamMonitor | null;
         manualClose: boolean;
@@ -73,6 +74,7 @@ type VoiceSessionInternal = {
         lastRemoteOfferSdp: string | null;
         localVideoStream: MediaStream | null;
         localVideoSender: RTCRtpSender | null;
+        localGateOpen: boolean;
 };
 
 const initialState: VoiceState = {
@@ -107,6 +109,13 @@ let session: VoiceSessionInternal | null = null;
 let sessionCounter = 0;
 let pingCounter = 0;
 let cameraToggleInProgress = false;
+
+const LOCAL_GATE_CLOSE_RATIO = 0.7;
+const LOCAL_GATE_HOLD_MS = 300;
+const getTimestamp =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+                ? () => performance.now()
+                : () => Date.now();
 
 function clamp(value: number, min: number, max: number): number {
         return Math.max(min, Math.min(max, value));
@@ -325,7 +334,7 @@ function normalizedMonitorThreshold(value: number | null | undefined): number {
 function createAudioLevelMonitor(
         stream: MediaStream | null,
         userId: string | null,
-        options?: { levelMultiplier?: number; threshold?: number }
+        options?: { levelMultiplier?: number; threshold?: number; onLevelChange?: (level: number) => void }
 ): StreamMonitor | null {
         if (!browser) return null;
         if (!stream || !userId) return null;
@@ -358,6 +367,9 @@ function createAudioLevelMonitor(
                         });
                         const level = measurement.normalized;
                         lastLevel = level;
+                        try {
+                                options?.onLevelChange?.(level);
+                        } catch {}
                         const speaking = level >= threshold;
                         if (speaking !== lastSpeaking) {
                                 lastSpeaking = speaking;
@@ -392,19 +404,58 @@ function startLocalMonitor(currentSession: VoiceSessionInternal) {
         const localStream = currentSession.localStream;
         if (!localStream) {
                 currentSession.localMonitor = null;
+                currentSession.localGateOpen = true;
                 return;
         }
         const me = get(auth.user);
         const userId = toSnowflakeString((me as any)?.id);
         if (!userId) {
                 currentSession.localMonitor = null;
+                currentSession.localGateOpen = true;
                 return;
         }
+        const openThreshold = normalizedMonitorThreshold(lastDeviceSettings.audioInputThreshold);
+        const closeThreshold = clampNormalized(openThreshold * LOCAL_GATE_CLOSE_RATIO);
+        let gateOpen = currentSession.localGateOpen ?? true;
+        let lastGateOpenedAt = gateOpen ? getTimestamp() : 0;
+
+        const applyGateState = (nextOpen: boolean) => {
+                gateOpen = nextOpen;
+                if (currentSession.localGateOpen !== nextOpen) {
+                        currentSession.localGateOpen = nextOpen;
+                }
+                applyMuteState(currentSession.localStream, get(state).muted, nextOpen);
+        };
+
+        applyGateState(gateOpen);
+
         const monitor = createAudioLevelMonitor(localStream, userId, {
                 levelMultiplier: lastDeviceSettings.audioInputLevel,
-                threshold: lastDeviceSettings.audioInputThreshold
+                threshold: openThreshold,
+                onLevelChange(level) {
+                        if (!browser) return;
+                        const now = getTimestamp();
+                        if (level >= openThreshold) {
+                                lastGateOpenedAt = now;
+                                if (!gateOpen) {
+                                        applyGateState(true);
+                                }
+                                return;
+                        }
+                        if (!gateOpen) {
+                                return;
+                        }
+                        const holdExpired = now - lastGateOpenedAt > LOCAL_GATE_HOLD_MS;
+                        if (holdExpired && level <= closeThreshold) {
+                                applyGateState(false);
+                        }
+                }
         });
+
         currentSession.localMonitor = monitor;
+        if (!monitor) {
+                applyGateState(true);
+        }
 }
 
 function updateRemoteStreams(nextSession: VoiceSessionInternal | null) {
@@ -419,7 +470,8 @@ function updateRemoteStreams(nextSession: VoiceSessionInternal | null) {
                                         if (track?.label) trackHints.push(track.label);
                                 }
                         }
-                        const userId = extractUserId(stream?.id ?? null, id, ...trackHints);
+                        const mappedUserId = nextSession.remoteUserIds.get(id) ?? null;
+                        const userId = mappedUserId ?? extractUserId(stream?.id ?? null, id, ...trackHints);
                         entries.push({ id, stream, userId });
                         if (userId) {
                                 activeUserIds.add(userId);
@@ -434,6 +486,24 @@ function updateRemoteStreams(nextSession: VoiceSessionInternal | null) {
         } else {
                 resetRemoteState();
         }
+}
+
+function extractUserIdFromStreamId(streamId: string | null | undefined): string | null {
+        if (typeof streamId !== 'string') return null;
+        const trimmed = streamId.trim();
+        if (!trimmed) return null;
+        if (trimmed.startsWith('u:') || trimmed.startsWith('U:')) {
+                const digits = trimmed.slice(2).replace(/[^0-9]/g, '');
+                if (digits.length >= 15) {
+                        return digits;
+                }
+        }
+        return extractUserId(trimmed);
+}
+
+function extractUserIdFromStream(stream: MediaStream | null | undefined): string | null {
+        if (!stream) return null;
+        return extractUserIdFromStreamId(stream.id);
 }
 
 function parseUserIdFragment(value: string): string | null {
@@ -474,10 +544,11 @@ function extractUserId(...candidates: (string | null | undefined)[]): string | n
         return null;
 }
 
-function applyMuteState(localStream: MediaStream | null, muted: boolean) {
+function applyMuteState(localStream: MediaStream | null, muted: boolean, gateOpen?: boolean) {
         if (!localStream) return;
+        const shouldEnable = !muted && (typeof gateOpen === 'boolean' ? gateOpen : session?.localGateOpen ?? true);
         for (const track of localStream.getAudioTracks()) {
-                track.enabled = !muted;
+                track.enabled = shouldEnable;
         }
 }
 
@@ -812,6 +883,9 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
         current.pendingRemoteCandidates = [];
         current.lastRemoteOfferSdp = null;
 
+        current.remoteUserIds.clear();
+        current.localGateOpen = true;
+
         try {
                 if (current.ws) {
                         current.ws.onopen = noop;
@@ -852,6 +926,7 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
         }
 
         current.remoteStreams.clear();
+
         updateRemoteStreams(null);
         setSelfVoiceChannelId(null);
 
@@ -931,17 +1006,23 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
         pc.ontrack = (event) => {
                 if (!session || session.id !== currentSession.id) return;
                 const trackId = event.track?.id ?? '';
+                const primaryStream = event.streams[0] ?? null;
+                const primaryUserId = extractUserIdFromStream(primaryStream);
                 for (const stream of event.streams) {
                         const streamId = stream.id || '';
                         const keySource = streamId || trackId || `${Date.now()}-${Math.random()}`;
                         const key = trackId ? `${keySource}:${trackId}` : keySource;
-                        currentSession.remoteStreams.set(key, stream);
                         const trackHints: string[] = [];
                         for (const track of stream.getTracks()) {
                                 if (track?.id) trackHints.push(track.id);
                                 if (track?.label) trackHints.push(track.label);
                         }
-                        const userId = extractUserId(streamId, trackId, event.track?.label, key, ...trackHints);
+                        const streamUserCandidate = extractUserIdFromStream(stream) ?? primaryUserId;
+                        const userId =
+                                streamUserCandidate ??
+                                extractUserId(streamId, trackId, event.track?.label, key, ...trackHints);
+                        currentSession.remoteStreams.set(key, stream);
+                        currentSession.remoteUserIds.set(key, userId ?? null);
                         if (userId) {
                                 const existingMonitor = currentSession.remoteMonitors.get(key);
                                 existingMonitor?.stop();
@@ -956,6 +1037,7 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                                 const remaining = stream.getTracks();
                                 if (remaining.length === 0) {
                                         currentSession.remoteStreams.delete(key);
+                                        currentSession.remoteUserIds.delete(key);
                                 }
                                 const hasAudio = remaining.some((item) => item.kind === 'audio');
                                 const monitor = currentSession.remoteMonitors.get(key);
@@ -1222,6 +1304,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         pc: null,
                         localStream,
                         remoteStreams: new Map(),
+                        remoteUserIds: new Map(),
                         remoteMonitors: new Map(),
                         localMonitor: null,
                         manualClose: false,
@@ -1232,7 +1315,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         processingRemoteOffer: false,
                         lastRemoteOfferSdp: null,
                         localVideoStream: null,
-                        localVideoSender: null
+                        localVideoSender: null,
+                        localGateOpen: true
                 };
 
                 session = currentSession;
