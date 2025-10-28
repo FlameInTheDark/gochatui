@@ -43,7 +43,7 @@ type LocalAudioSendController = {
         stream: MediaStream;
         track: MediaStreamTrack;
         setInputLevel: (level: number) => void;
-        setTransmit: (active: boolean) => void;
+        setTransmit: (active: boolean, meta?: { muted: boolean; gateOpen: boolean }) => void;
         dispose: () => void;
 };
 
@@ -347,20 +347,34 @@ function createLocalAudioSendController(stream: MediaStream, gain: number): Loca
                 context.resume().catch(() => {});
 
                 let disposed = false;
-                let lastTransmit = true;
+                let lastGate = true;
+                let lastTrackEnabled = true;
 
-                const applyTransmit = (active: boolean) => {
-                        const target = active ? 1 : 0;
+                const applyGate = (open: boolean) => {
+                        if (disposed || open === lastGate) {
+                                lastGate = open;
+                                return;
+                        }
+                        const target = open ? 1 : 0;
                         try {
                                 gateGain.gain.setTargetAtTime(target, context.currentTime, 0.05);
                         } catch {
                                 gateGain.gain.value = target;
                         }
-                        outboundTrack.enabled = active;
-                        lastTransmit = active;
+                        lastGate = open;
                 };
 
-                applyTransmit(true);
+                const applyTrackEnabled = (enabled: boolean) => {
+                        if (disposed || enabled === lastTrackEnabled) {
+                                lastTrackEnabled = enabled;
+                                return;
+                        }
+                        outboundTrack.enabled = enabled;
+                        lastTrackEnabled = enabled;
+                };
+
+                applyGate(true);
+                applyTrackEnabled(true);
 
                 return {
                         stream: outboundStream,
@@ -369,12 +383,15 @@ function createLocalAudioSendController(stream: MediaStream, gain: number): Loca
                                 if (disposed) return;
                                 inputGain.gain.value = clampLevel(level);
                         },
-                        setTransmit(active: boolean) {
+                        setTransmit(active: boolean, meta?: { muted: boolean; gateOpen: boolean }) {
                                 if (disposed) return;
-                                if (lastTransmit === active && outboundTrack.enabled === active) {
-                                        return;
-                                }
-                                applyTransmit(active);
+                                const muted = Boolean(meta?.muted ?? !active);
+                                const gateOpen = Boolean(meta?.gateOpen ?? active);
+                                const shouldGateOpen = !muted && gateOpen;
+                                const shouldEnableTrack = !muted;
+
+                                applyGate(shouldGateOpen);
+                                applyTrackEnabled(shouldEnableTrack);
                         },
                         dispose() {
                                 if (disposed) return;
@@ -870,14 +887,16 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
         }
 
         if (controller) {
-                controller.setTransmit(shouldTransmit);
+                controller.setTransmit(shouldTransmit, { muted, gateOpen: gateValue });
         }
 
-        if (sendTrack && !sendIsCapture) {
-                sendTrack.enabled = shouldTransmit;
-        } else if (!controller) {
-                for (const track of captureTracks) {
-                        track.enabled = shouldTransmit;
+        if (!controller) {
+                if (sendTrack && !sendIsCapture) {
+                        sendTrack.enabled = shouldTransmit;
+                } else {
+                        for (const track of captureTracks) {
+                                track.enabled = shouldTransmit;
+                        }
                 }
         }
 }
