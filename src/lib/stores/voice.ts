@@ -78,6 +78,8 @@ type VoiceSessionInternal = {
         id: number;
         guildId: string;
         channelId: string;
+        selfUserId: string | null;
+        userStreamId: string | null;
         ws: WebSocket | null;
         pc: RTCPeerConnection | null;
         localStream: MediaStream | null;
@@ -222,15 +224,28 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
         const previousSendTrack = activeSession.localSendTrack;
         const previousController = activeSession.localSendController;
 
+        const desiredStreamId =
+                activeSession.userStreamId ?? buildUserStreamId(activeSession.selfUserId);
+        if (desiredStreamId) {
+                tagStreamWithId(newStream, desiredStreamId);
+                if (!activeSession.userStreamId) {
+                        activeSession.userStreamId = desiredStreamId;
+                }
+        }
+
         const {
                 sendStream: nextSendStream,
                 sendTrack: nextSendTrack,
                 gateControllable,
                 controller
-        } = buildOutboundAudioResources(newStream, settings);
+        } = buildOutboundAudioResources(newStream, settings, { userStreamId: desiredStreamId });
 
         sendStream = nextSendStream;
         sendTrack = nextSendTrack;
+
+        if (sendStream && desiredStreamId) {
+                tagStreamWithId(sendStream, desiredStreamId);
+        }
 
         if (!session || session.id !== sessionId) {
                 stopStream(newStream);
@@ -574,7 +589,8 @@ function applyLocalInputGain(settings: DeviceSettings) {
 
 function buildOutboundAudioResources(
         stream: MediaStream | null,
-        settings: DeviceSettings
+        settings: DeviceSettings,
+        options?: { userStreamId?: string | null }
 ): {
         sendStream: MediaStream | null;
         sendTrack: MediaStreamTrack | null;
@@ -594,6 +610,9 @@ function buildOutboundAudioResources(
                 inputLevel: settings.audioInputLevel
         });
         if (controller) {
+                if (options?.userStreamId) {
+                        tagStreamWithId(controller.stream, options.userStreamId);
+                }
                 return {
                         sendStream: controller.stream,
                         sendTrack: controller.track,
@@ -616,6 +635,9 @@ function buildOutboundAudioResources(
         applyGainToTrack(cloned, settings.audioInputLevel);
         try {
                 const outbound = new MediaStream();
+                if (options?.userStreamId) {
+                        tagStreamWithId(outbound, options.userStreamId);
+                }
                 outbound.addTrack(cloned);
                 return { sendStream: outbound, sendTrack: cloned, gateControllable: true, controller: null };
         } catch (error) {
@@ -653,6 +675,44 @@ function toSnowflakeString(value: unknown): string | null {
                 } catch {
                         return null;
                 }
+        }
+}
+
+function buildUserStreamId(userId: string | null | undefined): string | null {
+        const normalized = typeof userId === 'string' ? userId.trim() : '';
+        if (!normalized) return null;
+        return `u:${normalized}`;
+}
+
+function tagStreamWithId(stream: MediaStream | null | undefined, desiredId: string | null | undefined): string | null {
+        if (!stream) return null;
+        if (!desiredId) return null;
+        let currentId: string | null = null;
+        try {
+                currentId = stream.id ?? null;
+        } catch {
+                currentId = null;
+        }
+        if (currentId === desiredId) {
+                logVoice('stream already tagged with desired id', { desiredId });
+                return desiredId;
+        }
+        try {
+                Object.defineProperty(stream, 'id', {
+                        configurable: true,
+                        get() {
+                                return desiredId;
+                        }
+                });
+                logVoice('tagged media stream with user id', { desiredId, previousId: currentId });
+                return desiredId;
+        } catch (error) {
+                logVoice('failed to tag media stream id', {
+                        desiredId,
+                        previousId: currentId,
+                        error: error instanceof Error ? error.message : String(error ?? '')
+                });
+                return null;
         }
 }
 
@@ -1101,6 +1161,12 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
                 return;
         }
 
+        logVoice('stopping local camera', {
+                sessionId: target.id,
+                hadStream: Boolean(target.localVideoStream),
+                hadSender: Boolean(target.localVideoSender)
+        });
+
         const sender = target.localVideoSender;
         if (sender) {
                 try {
@@ -1122,6 +1188,10 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
                                 setDirection.call(transceiver, 'recvonly');
                         } catch {}
                 }
+                logVoice('set video transceiver to recvonly', {
+                        sessionId: target.id,
+                        direction: transceiver.direction
+                });
         }
 
         const activeVideoStream = target.localVideoStream;
@@ -1137,6 +1207,11 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
                                 for (const track of activeTracks) {
                                         try {
                                                 publishStream.removeTrack(track);
+                                                logVoice('removed camera track from publish stream', {
+                                                        sessionId: target.id,
+                                                        publishStreamId: publishStream.id,
+                                                        trackId: track.id
+                                                });
                                         } catch {}
                                 }
                         }
@@ -1150,6 +1225,11 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
         if (updateStore) {
                 setState({ cameraEnabled: false, localVideoStream: null });
         }
+
+        logVoice('local camera stopped', {
+                sessionId: target.id,
+                transceiverDirection: target.localVideoTransceiver?.direction ?? null
+        });
 }
 
 function adoptPeerVideoTransceiver(
@@ -1194,6 +1274,11 @@ function adoptPeerVideoTransceiver(
                                         candidate.direction = 'sendrecv';
                                 }
                         } catch {}
+                        logVoice('adopted peer video transceiver', {
+                                sessionId: currentSession.id,
+                                direction: candidate.direction,
+                                senderHasTrack: Boolean(candidate.sender?.track)
+                        });
                         return candidate;
                 }
         }
@@ -1213,6 +1298,10 @@ function ensureLocalVideoSender(
                 const activeSenders =
                         typeof connection.getSenders === 'function' ? connection.getSenders() : [];
                 if (activeSenders.includes(existingSender)) {
+                        logVoice('reusing existing video sender', {
+                                sessionId: currentSession.id,
+                                hasTrack: Boolean(existingSender.track)
+                        });
                         return existingSender;
                 }
         }
@@ -1220,6 +1309,10 @@ function ensureLocalVideoSender(
         const adoptedTransceiver = adoptPeerVideoTransceiver(currentSession, connection);
         if (adoptedTransceiver?.sender) {
                 currentSession.localVideoSender = adoptedTransceiver.sender;
+                logVoice('ensured video sender from adopted transceiver', {
+                        sessionId: currentSession.id,
+                        hasTrack: Boolean(adoptedTransceiver.sender.track)
+                });
                 return adoptedTransceiver.sender;
         }
 
@@ -1229,6 +1322,10 @@ function ensureLocalVideoSender(
                         .find((item) => item?.track?.kind === 'video' || item === existingSender);
                 if (sender) {
                         currentSession.localVideoSender = sender;
+                        logVoice('ensured video sender from connection senders', {
+                                sessionId: currentSession.id,
+                                hasTrack: Boolean(sender.track)
+                        });
                         return sender;
                 }
         }
@@ -1237,6 +1334,10 @@ function ensureLocalVideoSender(
                 const transceiver = connection.addTransceiver('video', { direction: 'sendrecv' });
                 currentSession.localVideoTransceiver = transceiver;
                 currentSession.localVideoSender = transceiver.sender;
+                logVoice('created new video transceiver for sender', {
+                        sessionId: currentSession.id,
+                        hasTrack: Boolean(transceiver.sender?.track)
+                });
                 return transceiver.sender;
         } catch (error) {
                 console.error('Failed to create local video transceiver.', error);
@@ -1505,6 +1606,7 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
         stopLocalCamera(current);
         current.localVideoSender = null;
         current.localVideoTransceiver = null;
+        current.userStreamId = null;
 
         session = null;
 
@@ -1913,16 +2015,32 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
 
         const deviceSnapshot = cloneDeviceSettings(lastDeviceSettings);
         let localStream: MediaStream | null = null;
+        const me = get(auth.user);
+        const selfUserId = toSnowflakeString((me as any)?.id);
+        const desiredStreamId = buildUserStreamId(selfUserId);
+
         try {
                 localStream = await navigator.mediaDevices.getUserMedia({
                         audio: buildAudioConstraints(deviceSnapshot)
                 });
-                logVoice('acquired preferred local audio stream', { sessionId: attemptId });
+                if (desiredStreamId) {
+                        tagStreamWithId(localStream, desiredStreamId);
+                }
+                logVoice('acquired preferred local audio stream', {
+                        sessionId: attemptId,
+                        streamId: localStream?.id ?? null
+                });
         } catch (error) {
                 console.error('Failed to acquire preferred audio stream.', error);
                 try {
                         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        logVoice('acquired fallback local audio stream', { sessionId: attemptId });
+                        if (desiredStreamId) {
+                                tagStreamWithId(localStream, desiredStreamId);
+                        }
+                        logVoice('acquired fallback local audio stream', {
+                                sessionId: attemptId,
+                                streamId: localStream?.id ?? null
+                        });
                 } catch (fallbackError) {
                         console.error('Failed to acquire fallback audio stream.', fallbackError);
                         localStream = null;
@@ -1964,6 +2082,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         id: attemptId,
                         guildId: normalizedGuild,
                         channelId: normalizedChannel,
+                        selfUserId,
+                        userStreamId: desiredStreamId ?? null,
                         ws,
                         pc: null,
                         localStream,
@@ -1995,7 +2115,9 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         sessionId: currentSession.id,
                         guildId: currentSession.guildId,
                         channelId: currentSession.channelId,
-                        hasLocalStream: Boolean(localStream)
+                        hasLocalStream: Boolean(localStream),
+                        selfUserId,
+                        userStreamId: currentSession.userStreamId
                 });
 
                 if (localStream) {
@@ -2004,8 +2126,16 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                                 sendTrack: initialSendTrack,
                                 gateControllable,
                                 controller
-                        } = buildOutboundAudioResources(localStream, deviceSnapshot);
+                        } = buildOutboundAudioResources(localStream, deviceSnapshot, {
+                                userStreamId: currentSession.userStreamId ?? desiredStreamId ?? null
+                        });
                         currentSession.localSendStream = initialSendStream;
+                        if (initialSendStream && (currentSession.userStreamId ?? desiredStreamId)) {
+                                tagStreamWithId(
+                                        initialSendStream,
+                                        currentSession.userStreamId ?? desiredStreamId ?? null
+                                );
+                        }
                         currentSession.localSendTrack = initialSendTrack;
                         currentSession.localSendController = controller;
                         currentSession.localGateControllable = gateControllable;
@@ -2274,6 +2404,12 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                 return;
         }
 
+        logVoice('setVoiceCameraEnabled invoked', {
+                sessionId: currentSession.id,
+                enabled,
+                previous: currentSession.localVideoStream ? 'enabled' : 'disabled'
+        });
+
         cameraToggleInProgress = true;
         setState({ cameraBusy: true, cameraError: null });
 
@@ -2283,6 +2419,7 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
         };
 
         if (!enabled) {
+                logVoice('disabling local camera', { sessionId: currentSession.id });
                 stopLocalCamera(currentSession);
                 finish();
                 setState({ cameraEnabled: false, cameraError: null, localVideoStream: null });
@@ -2301,6 +2438,10 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                 if (session && session.id === currentSession.id) {
                         stopLocalCamera(currentSession, false);
                 }
+                logVoice('camera enable failed', {
+                        sessionId: currentSession.id,
+                        code
+                });
                 setState({ cameraEnabled: false, cameraError: code, localVideoStream: null });
         };
 
@@ -2317,6 +2458,19 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         }
                         stream = await navigator.mediaDevices.getUserMedia({
                                 video: videoConstraints
+                        });
+                        const desiredStreamId =
+                                currentSession.userStreamId ?? buildUserStreamId(currentSession.selfUserId);
+                        if (desiredStreamId) {
+                                const taggedId = tagStreamWithId(stream, desiredStreamId);
+                                if (!currentSession.userStreamId && taggedId) {
+                                        currentSession.userStreamId = taggedId;
+                                }
+                        }
+                        logVoice('acquired camera stream', {
+                                sessionId: currentSession.id,
+                                streamId: stream?.id ?? null,
+                                trackId: stream?.getVideoTracks()?.[0]?.id ?? null
                         });
                 } catch (error: any) {
                         console.error('Failed to access camera.', error);
@@ -2346,24 +2500,52 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         return;
                 }
 
+                logVoice('ensured peer connection for camera publish', {
+                        sessionId: currentSession.id,
+                        signalingState: pc.signalingState
+                });
+
+                const desiredStreamId =
+                        currentSession.userStreamId ?? buildUserStreamId(currentSession.selfUserId);
+                if (desiredStreamId) {
+                        if (!currentSession.userStreamId) {
+                                currentSession.userStreamId = desiredStreamId;
+                        }
+                        tagStreamWithId(currentSession.localSendStream, desiredStreamId);
+                        tagStreamWithId(currentSession.localStream, desiredStreamId);
+                }
+
                 const basePublishStream = currentSession.localSendStream ?? currentSession.localStream ?? null;
                 const publishStream = basePublishStream ?? stream;
 
                 if (basePublishStream && !basePublishStream.getVideoTracks().includes(track)) {
                         try {
                                 basePublishStream.addTrack(track);
+                                logVoice('attached camera track to publish stream', {
+                                        sessionId: currentSession.id,
+                                        publishStreamId: basePublishStream.id,
+                                        trackId: track.id
+                                });
                         } catch {}
                 }
 
                 let sender = ensureLocalVideoSender(currentSession, pc);
                 const activeSenders = typeof pc.getSenders === 'function' ? pc.getSenders() : [];
                 if (sender && !activeSenders.includes(sender)) {
+                        logVoice('discarding stale video sender', {
+                                sessionId: currentSession.id
+                        });
                         sender = null;
                 }
 
                 if (!sender) {
                         try {
                                 sender = pc.addTrack(track, publishStream ?? stream);
+                                logVoice('added camera track to peer connection', {
+                                        sessionId: currentSession.id,
+                                        publishStreamId: publishStream?.id ?? null,
+                                        trackId: track.id
+                                });
                         } catch (error) {
                                 console.error('Failed to attach local video track to peer connection.', error);
                                 fail('peer');
@@ -2393,11 +2575,21 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                 if (publishStream && typeof sender.setStreams === 'function') {
                         try {
                                 sender.setStreams(publishStream);
+                                logVoice('updated video sender streams', {
+                                        sessionId: currentSession.id,
+                                        streamId: publishStream.id,
+                                        trackId: track.id
+                                });
                         } catch {}
                 }
 
                 try {
                         await sender.replaceTrack(track);
+                        logVoice('replaced video sender track', {
+                                sessionId: currentSession.id,
+                                trackId: track.id,
+                                senderHasTrack: Boolean(sender.track)
+                        });
                 } catch (error) {
                         console.error('Failed to replace local video track.', error);
                         fail('peer');
@@ -2408,6 +2600,10 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         currentSession.localVideoTransceiver = activeTransceiver;
                         try {
                                 activeTransceiver.direction = 'sendrecv';
+                                logVoice('set video transceiver direction', {
+                                        sessionId: currentSession.id,
+                                        direction: activeTransceiver.direction
+                                });
                         } catch {}
                         const setDirection = (activeTransceiver as {
                                 setDirection?: (value: RTCRtpTransceiverDirection) => void;
@@ -2415,14 +2611,27 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                         if (typeof setDirection === 'function') {
                                 try {
                                         setDirection.call(activeTransceiver, 'sendrecv');
+                                        logVoice('invoked video transceiver setDirection', {
+                                                sessionId: currentSession.id,
+                                                direction: activeTransceiver.direction
+                                        });
                                 } catch {}
                         }
                 }
 
                 currentSession.localVideoSender = sender;
                 currentSession.localVideoStream = stream;
+                logVoice('local camera publishing ready', {
+                        sessionId: currentSession.id,
+                        streamId: stream?.id ?? null,
+                        trackId: track.id
+                });
                 const sessionId = currentSession.id;
                 track.onended = () => {
+                        logVoice('local camera track ended', {
+                                sessionId: currentSession.id,
+                                trackId: track.id
+                        });
                         if (!session || session.id !== sessionId) return;
                         stopLocalCamera(currentSession);
                         setState({ cameraEnabled: false, localVideoStream: null });
