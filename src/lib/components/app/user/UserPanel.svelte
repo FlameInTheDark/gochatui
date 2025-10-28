@@ -3,7 +3,7 @@
 	import { settingsOpen } from '$lib/stores/settings';
 	import { m } from '$lib/paraglide/messages.js';
 	import { onMount } from 'svelte';
-        import { HeadphoneOff, Headphones, Loader2, Mic, MicOff, PhoneOff, Settings, Check, Wifi } from 'lucide-svelte';
+        import { HeadphoneOff, Headphones, Loader2, Mic, MicOff, PhoneOff, Settings, Check, Wifi, Video, VideoOff } from 'lucide-svelte';
         import { tooltip } from '$lib/actions/tooltip';
         import {
                 presenceIndicatorClass,
@@ -22,6 +22,7 @@
                 leaveVoiceChannel,
                 toggleVoiceMuted as toggleVoiceMutedStore,
                 toggleVoiceDeafened as toggleVoiceDeafenedStore,
+                toggleVoiceCamera as toggleVoiceCameraStore,
                 voiceSession
         } from '$lib/stores/voice';
 
@@ -102,6 +103,23 @@
                 return m.voice_latency_measuring();
         });
 
+        const cameraErrorMessage = $derived.by(() => {
+                const code = $voice.cameraError;
+                if (!code) return null;
+                switch (code) {
+                        case 'permission':
+                                return m.voice_camera_error_permission();
+                        case 'acquisition':
+                                return m.voice_camera_error_acquisition();
+                        case 'peer':
+                                return m.voice_camera_error_peer();
+                        case 'not-connected':
+                                return m.voice_camera_error_not_connected();
+                        default:
+                                return null;
+                }
+        });
+
 	type StatusOption = {
 		mode: PresenceMode;
 		indicator: PresenceStatus;
@@ -142,6 +160,11 @@
 
         function toggleDeafen() {
                 toggleVoiceDeafenedStore();
+        }
+
+        function toggleCamera() {
+                if ($voice.cameraBusy) return;
+                void toggleVoiceCameraStore();
         }
 
 	function toggleStatusMenu() {
@@ -247,22 +270,54 @@
 <div class="relative border-t border-[var(--stroke)] p-3">
         {#if voiceStatusText}
                 <div class="mb-2 rounded border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--muted)]">
-                        <div class="flex items-center gap-2">
-                                <span
-                                        class="grid h-5 w-5 place-items-center rounded-full bg-[var(--panel-strong)] text-[var(--accent)]"
-                                        aria-label={voiceLatencyTooltip}
-                                        role="img"
-                                        tabindex="0"
-                                        use:tooltip={() => voiceLatencyTooltip}
-                                >
-                                        {#if $voice.status === 'connecting'}
-                                                <Loader2 class="h-3.5 w-3.5 animate-spin" stroke-width={2} />
-                                        {:else}
-                                                <Wifi class="h-3.5 w-3.5" stroke-width={2} />
-                                        {/if}
-                                </span>
-                                <span class="min-w-0 truncate">{voiceStatusText}</span>
+                        <div class="flex items-center justify-between gap-2">
+                                <div class="flex min-w-0 items-center gap-2">
+                                        <span
+                                                class="grid h-5 w-5 place-items-center rounded-full bg-[var(--panel-strong)] text-[var(--accent)]"
+                                                aria-label={voiceLatencyTooltip}
+                                                role="img"
+                                                use:tooltip={() => voiceLatencyTooltip}
+                                        >
+                                                {#if $voice.status === 'connecting'}
+                                                        <Loader2 class="h-3.5 w-3.5 animate-spin" stroke-width={2} />
+                                                {:else}
+                                                        <Wifi class="h-3.5 w-3.5" stroke-width={2} />
+                                                {/if}
+                                        </span>
+                                        <span class="min-w-0 truncate">{voiceStatusText}</span>
+                                </div>
+                                <div class="flex flex-shrink-0 items-center gap-1">
+                                        <button
+                                                type="button"
+                                                class={`grid h-7 w-7 place-items-center rounded-md hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] ${
+                                                        $voice.cameraEnabled ? 'text-[var(--brand)]' : ''
+                                                } ${voiceActive ? '' : 'opacity-50'}`.trim()}
+                                                onclick={toggleCamera}
+                                                aria-label={$voice.cameraEnabled ? m.voice_camera_disable() : m.voice_camera_enable()}
+                                                disabled={!voiceActive || $voice.cameraBusy}
+                                        >
+                                                {#if $voice.cameraBusy}
+                                                        <Loader2 class="h-3.5 w-3.5 animate-spin" stroke-width={2} />
+                                                {:else if $voice.cameraEnabled}
+                                                        <Video class="h-3.5 w-3.5" stroke-width={2} />
+                                                {:else}
+                                                        <VideoOff class="h-3.5 w-3.5" stroke-width={2} />
+                                                {/if}
+                                        </button>
+                                        <button
+                                                type="button"
+                                                class="grid h-7 w-7 place-items-center rounded-md text-[var(--brand)] hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] disabled:opacity-50"
+                                                onclick={leaveVoiceChannel}
+                                                aria-label={m.voice_leave_channel()}
+                                                disabled={!voiceActive}
+                                        >
+                                                <PhoneOff class="h-3.5 w-3.5" stroke-width={2} />
+                                        </button>
+                                </div>
                         </div>
+                        {#if cameraErrorMessage}
+                                <div class="mt-1 text-[0.7rem] text-red-400">{cameraErrorMessage}</div>
+                        {/if}
                 </div>
         {:else if voiceError}
                 <div class="mb-2 rounded border border-red-500 bg-red-500/10 px-2 py-1 text-xs text-red-400">
@@ -329,16 +384,6 @@
                                         <Headphones class="h-4 w-4" stroke-width={2} />
                                 {/if}
                         </button>
-                        {#if voiceActive}
-                                <button
-                                        type="button"
-                                        class="grid h-8 w-8 place-items-center rounded-md text-[var(--brand)] hover:bg-[var(--panel)]"
-                                        onclick={leaveVoiceChannel}
-                                        aria-label={m.voice_leave_channel()}
-                                >
-                                        <PhoneOff class="h-4 w-4" stroke-width={2} />
-                                </button>
-                        {/if}
                         <button
                                 type="button"
                                 class="grid h-8 w-8 place-items-center rounded-md hover:bg-[var(--panel)]"

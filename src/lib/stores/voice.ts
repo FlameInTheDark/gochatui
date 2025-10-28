@@ -35,6 +35,8 @@ type StreamMonitor = {
         userId: string;
 };
 
+type VoiceCameraError = 'permission' | 'acquisition' | 'peer' | 'not-connected';
+
 type VoiceState = {
         status: VoiceConnectionStatus;
         guildId: string | null;
@@ -46,6 +48,10 @@ type VoiceState = {
         remoteSettings: Record<string, VoiceRemoteSettings>;
         speakingUserIds: string[];
         latencyMs: number | null;
+        cameraEnabled: boolean;
+        cameraBusy: boolean;
+        cameraError: VoiceCameraError | null;
+        localVideoStream: MediaStream | null;
 };
 
 type VoiceSessionInternal = {
@@ -65,6 +71,8 @@ type VoiceSessionInternal = {
         pendingRemoteCandidates: RTCIceCandidateInit[];
         processingRemoteOffer: boolean;
         lastRemoteOfferSdp: string | null;
+        localVideoStream: MediaStream | null;
+        localVideoSender: RTCRtpSender | null;
 };
 
 const initialState: VoiceState = {
@@ -77,7 +85,11 @@ const initialState: VoiceState = {
         remoteStreams: [],
         remoteSettings: {},
         speakingUserIds: [],
-        latencyMs: null
+        latencyMs: null,
+        cameraEnabled: false,
+        cameraBusy: false,
+        cameraError: null,
+        localVideoStream: null
 };
 
 const state = writable<VoiceState>(initialState);
@@ -86,6 +98,7 @@ export const voiceSession = derived(state, (value) => value);
 let session: VoiceSessionInternal | null = null;
 let sessionCounter = 0;
 let pingCounter = 0;
+let cameraToggleInProgress = false;
 
 function clamp(value: number, min: number, max: number): number {
         return Math.max(min, Math.min(max, value));
@@ -491,6 +504,31 @@ function setState(partial: Partial<VoiceState>) {
         state.update((current) => ({ ...current, ...partial }));
 }
 
+function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true) {
+        if (!target) {
+                if (updateStore) {
+                        setState({ cameraEnabled: false, localVideoStream: null });
+                }
+                return;
+        }
+
+        const sender = target.localVideoSender;
+        if (sender && target.pc) {
+                try {
+                        target.pc.removeTrack(sender);
+                } catch {}
+        }
+        target.localVideoSender = null;
+
+        const stream = target.localVideoStream;
+        target.localVideoStream = null;
+        stopStream(stream);
+
+        if (updateStore) {
+                setState({ cameraEnabled: false, localVideoStream: null });
+        }
+}
+
 function stopLatencyProbe(currentSession: VoiceSessionInternal | null) {
         if (!currentSession) return;
         if (currentSession.pingInterval) {
@@ -722,7 +760,11 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                                 remoteStreams: [],
                                 remoteSettings: {},
                                 speakingUserIds: [],
-                                latencyMs: null
+                                latencyMs: null,
+                                cameraEnabled: false,
+                                cameraBusy: false,
+                                cameraError: null,
+                                localVideoStream: null
                         });
                 } else {
                         setState({
@@ -733,12 +775,19 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                                 remoteStreams: [],
                                 remoteSettings: {},
                                 speakingUserIds: [],
-                                latencyMs: null
+                                latencyMs: null,
+                                cameraEnabled: false,
+                                cameraBusy: false,
+                                cameraError: null,
+                                localVideoStream: null
                         });
                 }
                 setSelfVoiceChannelId(null);
                 return;
         }
+
+        cameraToggleInProgress = false;
+        stopLocalCamera(current);
 
         session = null;
 
@@ -807,7 +856,11 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                                 remoteStreams: [],
                                 remoteSettings: {},
                                 speakingUserIds: [],
-                                latencyMs: null
+                                latencyMs: null,
+                                cameraEnabled: false,
+                                cameraBusy: false,
+                                cameraError: null,
+                                localVideoStream: null
                         });
         } else {
                         setState({
@@ -818,7 +871,11 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
                                 remoteStreams: [],
                                 remoteSettings: {},
                                 speakingUserIds: [],
-                                latencyMs: null
+                                latencyMs: null,
+                                cameraEnabled: false,
+                                cameraBusy: false,
+                                cameraError: null,
+                                localVideoStream: null
                         });
         }
 }
@@ -888,12 +945,22 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                                 }
                         }
                         stream.onremovetrack = () => {
-                                currentSession.remoteStreams.delete(key);
+                                const remaining = stream.getTracks();
+                                if (remaining.length === 0) {
+                                        currentSession.remoteStreams.delete(key);
+                                }
+                                const hasAudio = remaining.some((item) => item.kind === 'audio');
                                 const monitor = currentSession.remoteMonitors.get(key);
-                                if (monitor) {
+                                if (!hasAudio && monitor) {
                                         monitor.stop();
                                         currentSession.remoteMonitors.delete(key);
                                 }
+                                if (!hasAudio && remaining.length > 0) {
+                                        currentSession.remoteStreams.set(key, stream);
+                                }
+                                updateRemoteStreams(currentSession);
+                        };
+                        stream.onaddtrack = () => {
                                 updateRemoteStreams(currentSession);
                         };
                 }
@@ -1074,7 +1141,11 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 remoteStreams: [],
                 remoteSettings: {},
                 speakingUserIds: [],
-                latencyMs: null
+                latencyMs: null,
+                cameraEnabled: false,
+                cameraBusy: false,
+                cameraError: null,
+                localVideoStream: null
         });
 
         const deviceSnapshot = cloneDeviceSettings(lastDeviceSettings);
@@ -1151,7 +1222,9 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         pendingLocalCandidates: [],
                         pendingRemoteCandidates: [],
                         processingRemoteOffer: false,
-                        lastRemoteOfferSdp: null
+                        lastRemoteOfferSdp: null,
+                        localVideoStream: null,
+                        localVideoSender: null
                 };
 
                 session = currentSession;
@@ -1383,6 +1456,138 @@ export function leaveVoiceChannel(): void {
                 } catch {}
         }
         clearSession({ manual: true });
+}
+
+export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
+        ensureBrowser();
+        if (cameraToggleInProgress) {
+                return;
+        }
+
+        const currentState = get(state);
+        if (enabled === currentState.cameraEnabled) {
+                if (!enabled) {
+                        setState({ cameraError: null });
+                }
+                return;
+        }
+
+        const currentSession = session;
+        if (!currentSession) {
+                if (enabled) {
+                        setState({ cameraError: 'not-connected', cameraEnabled: false, cameraBusy: false });
+                } else {
+                        setState({ cameraEnabled: false, cameraBusy: false, cameraError: null, localVideoStream: null });
+                }
+                return;
+        }
+
+        cameraToggleInProgress = true;
+        setState({ cameraBusy: true, cameraError: null });
+
+        const finish = () => {
+                cameraToggleInProgress = false;
+                setState({ cameraBusy: false });
+        };
+
+        if (!enabled) {
+                stopLocalCamera(currentSession);
+                finish();
+                setState({ cameraEnabled: false, cameraError: null, localVideoStream: null });
+                return;
+        }
+
+        let stream: MediaStream | null = null;
+        const cleanup = () => {
+                if (stream) {
+                        stopStream(stream);
+                        stream = null;
+                }
+        };
+
+        const fail = (code: VoiceCameraError) => {
+                if (session && session.id === currentSession.id) {
+                        stopLocalCamera(currentSession, false);
+                }
+                setState({ cameraEnabled: false, cameraError: code, localVideoStream: null });
+        };
+
+        try {
+                try {
+                        stream = await navigator.mediaDevices.getUserMedia({
+                                video: {
+                                        width: { ideal: 1280 },
+                                        height: { ideal: 720 },
+                                        frameRate: { ideal: 30 }
+                                }
+                        });
+                } catch (error: any) {
+                        console.error('Failed to access camera.', error);
+                        const name = typeof error?.name === 'string' ? error.name : '';
+                        const code: VoiceCameraError =
+                                name === 'NotAllowedError' || name === 'SecurityError' ? 'permission' : 'acquisition';
+                        fail(code);
+                        return;
+                }
+
+                if (!session || session.id !== currentSession.id) {
+                        return;
+                }
+
+                const track = stream.getVideoTracks()[0] ?? null;
+                if (!track) {
+                        fail('acquisition');
+                        return;
+                }
+
+                const pc = currentSession.pc ?? (await createPeerConnection(currentSession));
+                if (!session || session.id !== currentSession.id) {
+                        return;
+                }
+                if (!pc) {
+                        fail('peer');
+                        return;
+                }
+
+                let sender = currentSession.localVideoSender;
+                if (sender) {
+                        try {
+                                await sender.replaceTrack(track);
+                        } catch (error) {
+                                console.error('Failed to replace local video track.', error);
+                                fail('peer');
+                                return;
+                        }
+                } else {
+                        try {
+                                sender = pc.addTrack(track, stream);
+                        } catch (error) {
+                                console.error('Failed to attach local video track.', error);
+                                fail('peer');
+                                return;
+                        }
+                        currentSession.localVideoSender = sender;
+                }
+
+                currentSession.localVideoStream = stream;
+                const sessionId = currentSession.id;
+                track.onended = () => {
+                        if (!session || session.id !== sessionId) return;
+                        stopLocalCamera(currentSession);
+                        setState({ cameraEnabled: false, localVideoStream: null });
+                };
+
+                setState({ cameraEnabled: true, localVideoStream: stream, cameraError: null });
+                stream = null;
+        } finally {
+                cleanup();
+                finish();
+        }
+}
+
+export async function toggleVoiceCamera(): Promise<void> {
+        const current = get(state);
+        await setVoiceCameraEnabled(!current.cameraEnabled);
 }
 
 export function setVoiceMuted(muted: boolean): void {
