@@ -1,10 +1,15 @@
 import { browser } from '$app/environment';
 
+import mentionSoundUrl from '$lib/assets/sounds/mention.ogg?url';
+import voiceOffSoundUrl from '$lib/assets/sounds/voice_off.ogg?url';
+import voiceOnSoundUrl from '$lib/assets/sounds/voice_on.ogg?url';
+import voiceJoinSoundUrl from '$lib/assets/sounds/voice_join.ogg?url';
+
 const SOUND_SOURCES = {
-        mention: '/sounds/mention.ogg',
-        voiceOff: '/sounds/voice_off.ogg',
-        voiceOn: '/sounds/voice_on.ogg',
-        voiceJoin: '/sounds/voice_join.ogg'
+        mention: mentionSoundUrl,
+        voiceOff: voiceOffSoundUrl,
+        voiceOn: voiceOnSoundUrl,
+        voiceJoin: voiceJoinSoundUrl
 } as const;
 
 type SoundKey = keyof typeof SOUND_SOURCES;
