@@ -1111,13 +1111,6 @@ function stopLocalCamera(target: VoiceSessionInternal | null, updateStore = true
                 } catch {}
         }
 
-        const transceiver = target.localVideoTransceiver;
-        if (transceiver) {
-                try {
-                        transceiver.direction = 'recvonly';
-                } catch {}
-        }
-
         const stream = target.localVideoStream;
         target.localVideoStream = null;
         stopStream(stream);
@@ -1692,12 +1685,7 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
                 applyMuteState(currentSession, currentState.muted);
         }
 
-        const sender = ensureLocalVideoSender(currentSession, pc);
-        if (sender && currentSession.localVideoTransceiver && !get(state).cameraEnabled) {
-                try {
-                        currentSession.localVideoTransceiver.direction = 'recvonly';
-                } catch {}
-        }
+        ensureLocalVideoSender(currentSession, pc);
 
         return pc;
 }
@@ -2264,12 +2252,6 @@ export async function setVoiceCameraEnabled(enabled: boolean): Promise<void> {
                 if (!sender) {
                         fail('peer');
                         return;
-                }
-
-                if (currentSession.localVideoTransceiver) {
-                        try {
-                                currentSession.localVideoTransceiver.direction = 'sendrecv';
-                        } catch {}
                 }
 
                 try {
