@@ -1345,6 +1345,100 @@ function ensureLocalVideoSender(
         }
 }
 
+async function prepareLocalVideoForAnswer(
+        currentSession: VoiceSessionInternal,
+        pc: RTCPeerConnection
+): Promise<void> {
+        const transceiver = adoptPeerVideoTransceiver(currentSession, pc);
+        if (!transceiver) {
+                return;
+        }
+
+        const stream = currentSession.localVideoStream;
+        const track = stream?.getVideoTracks()?.[0] ?? null;
+        const publishStream =
+                currentSession.localSendStream ?? currentSession.localStream ?? stream ?? null;
+
+        let sender: RTCRtpSender | null = transceiver.sender ?? currentSession.localVideoSender ?? null;
+        if (!sender) {
+                sender = ensureLocalVideoSender(currentSession, pc);
+        }
+
+        if (!sender) {
+                logVoice('video sender unavailable before answer', { sessionId: currentSession.id });
+                return;
+        }
+
+        if (!track) {
+                currentSession.localVideoSender = sender;
+                currentSession.localVideoTransceiver = transceiver;
+                try {
+                        if (transceiver.direction !== 'recvonly') {
+                                transceiver.direction = 'recvonly';
+                                logVoice('set video transceiver to recvonly before answer', {
+                                        sessionId: currentSession.id,
+                                        direction: transceiver.direction
+                                });
+                        }
+                } catch {}
+                const setDirection = (transceiver as {
+                        setDirection?: (value: RTCRtpTransceiverDirection) => void;
+                }).setDirection;
+                if (typeof setDirection === 'function') {
+                        try {
+                                setDirection.call(transceiver, 'recvonly');
+                        } catch {}
+                }
+                return;
+        }
+
+        if (publishStream && typeof sender.setStreams === 'function') {
+                try {
+                        sender.setStreams(publishStream);
+                        logVoice('ensured video sender streams before answer', {
+                                sessionId: currentSession.id,
+                                streamId: publishStream.id,
+                                trackId: track.id
+                        });
+                } catch {}
+        }
+
+        if (sender.track !== track) {
+                try {
+                        await sender.replaceTrack(track);
+                        logVoice('bound camera track to video sender before answer', {
+                                sessionId: currentSession.id,
+                                trackId: track.id
+                        });
+                } catch (error) {
+                        console.error('Failed to bind local video track before answering.', error);
+                        throw error;
+                }
+        }
+
+        currentSession.localVideoSender = sender;
+        currentSession.localVideoTransceiver = transceiver;
+
+        try {
+                if (transceiver.direction !== 'sendrecv') {
+                        transceiver.direction = 'sendrecv';
+                        logVoice('set video transceiver to sendrecv before answer', {
+                                sessionId: currentSession.id,
+                                direction: transceiver.direction
+                        });
+                }
+        } catch {}
+
+        const setDirection = (transceiver as {
+                setDirection?: (value: RTCRtpTransceiverDirection) => void;
+        }).setDirection;
+        if (typeof setDirection === 'function') {
+                try {
+                        setDirection.call(transceiver, 'sendrecv');
+                } catch {}
+        }
+}
+
 function stopLatencyProbe(currentSession: VoiceSessionInternal | null) {
         if (!currentSession) return;
         if (currentSession.pingInterval) {
@@ -1956,7 +2050,7 @@ async function handleServerOffer(currentSession: VoiceSessionInternal, sdp: stri
 
                 currentSession.processingRemoteOffer = true;
                 await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
-                adoptPeerVideoTransceiver(currentSession, pc);
+                await prepareLocalVideoForAnswer(currentSession, pc);
                 currentSession.lastRemoteOfferSdp = offerSdp;
                 logVoice('applied remote offer', { sessionId: currentSession.id });
                 await flushPendingRemoteCandidates(currentSession);
