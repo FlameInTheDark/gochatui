@@ -3,7 +3,11 @@ import { writable, derived, get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import { setSelfVoiceChannelId } from '$lib/stores/presence';
 import { appSettings, cloneDeviceSettings, type DeviceSettings } from '$lib/stores/settings';
-import { analyzeTimeDomainLevel, clampNormalized } from '$lib/utils/audio';
+import {
+        analyzeTimeDomainLevel,
+        clampNormalized,
+        decibelsToNormalized
+} from '$lib/utils/audio';
 import { playVoiceJoinSound, playVoiceOffSound, playVoiceOnSound } from '$lib/utils/sounds';
 
 const noop = () => {};
@@ -117,6 +121,10 @@ let cameraToggleInProgress = false;
 
 const LOCAL_GATE_CLOSE_RATIO = 0.7;
 const LOCAL_GATE_HOLD_MS = 300;
+const LOCAL_GATE_THRESHOLD_DB_MIN = -60;
+const LOCAL_GATE_THRESHOLD_MIN = decibelsToNormalized(LOCAL_GATE_THRESHOLD_DB_MIN);
+const LOCAL_MONITOR_FFT_SIZE = 2048;
+const LOCAL_MONITOR_SMOOTHING = 0.6;
 const getTimestamp =
         typeof performance !== 'undefined' && typeof performance.now === 'function'
                 ? () => performance.now()
@@ -410,15 +418,22 @@ function resetRemoteState() {
         emitSpeakingUsers();
 }
 
-function normalizedMonitorThreshold(value: number | null | undefined): number {
-        if (!Number.isFinite(value)) return REMOTE_SPEAKING_THRESHOLD;
-        return clampNormalized(Number(value));
+function normalizeLocalGateThreshold(value: number | null | undefined): number {
+        if (!Number.isFinite(value)) return LOCAL_GATE_THRESHOLD_MIN;
+        return clamp(Number(value), LOCAL_GATE_THRESHOLD_MIN, 1);
 }
 
 function createAudioLevelMonitor(
         stream: MediaStream | null,
         userId: string | null,
-        options?: { levelMultiplier?: number; threshold?: number; onLevelChange?: (level: number) => void }
+        options?: {
+                levelMultiplier?: number;
+                threshold?: number;
+                thresholdMinimum?: number;
+                onLevelChange?: (level: number) => void;
+                fftSize?: number;
+                smoothingTimeConstant?: number;
+        }
 ): StreamMonitor | null {
         if (!browser) return null;
         if (!stream || !userId) return null;
@@ -444,7 +459,19 @@ function createAudioLevelMonitor(
                 }
                 const source = audioContext.createMediaStreamSource(monitorStream);
                 const analyser = audioContext.createAnalyser();
-                analyser.fftSize = 512;
+                const fftSize = options?.fftSize && Number.isFinite(options.fftSize)
+                        ? Math.max(32, Math.min(32768, Math.floor(options.fftSize)))
+                        : 512;
+                analyser.fftSize = fftSize;
+                if (Number.isFinite(options?.smoothingTimeConstant)) {
+                        try {
+                                analyser.smoothingTimeConstant = clamp(
+                                        Number(options?.smoothingTimeConstant),
+                                        0,
+                                        0.99
+                                );
+                        } catch {}
+                }
                 const data = new Uint8Array(analyser.fftSize);
                 let raf = 0;
                 let disposed = false;
@@ -454,7 +481,19 @@ function createAudioLevelMonitor(
                         0,
                         4
                 );
-                const threshold = normalizedMonitorThreshold(options?.threshold);
+                const thresholdMinimum = clampNormalized(
+                        Number.isFinite(options?.thresholdMinimum)
+                                ? Number(options?.thresholdMinimum)
+                                : 0
+                );
+                const threshold = clampNormalized(
+                        Math.max(
+                                thresholdMinimum,
+                                Number.isFinite(options?.threshold)
+                                        ? Number(options?.threshold)
+                                        : REMOTE_SPEAKING_THRESHOLD
+                        )
+                );
                 let lastLevel = 0;
 
                 const update = () => {
@@ -521,8 +560,8 @@ function startLocalMonitor(currentSession: VoiceSessionInternal) {
                 currentSession.localGateOpen = true;
                 return;
         }
-        const openThreshold = normalizedMonitorThreshold(lastDeviceSettings.audioInputThreshold);
-        const closeThreshold = clampNormalized(openThreshold * LOCAL_GATE_CLOSE_RATIO);
+        const openThreshold = normalizeLocalGateThreshold(lastDeviceSettings.audioInputThreshold);
+        const closeThreshold = normalizeLocalGateThreshold(openThreshold * LOCAL_GATE_CLOSE_RATIO);
         const gateSupported = currentSession.localGateControllable !== false;
         let gateOpen = gateSupported ? currentSession.localGateOpen ?? true : true;
         let lastGateOpenedAt = gateOpen ? getTimestamp() : 0;
@@ -541,6 +580,9 @@ function startLocalMonitor(currentSession: VoiceSessionInternal) {
         const monitor = createAudioLevelMonitor(localStream, userId, {
                 levelMultiplier: lastDeviceSettings.audioInputLevel,
                 threshold: openThreshold,
+                thresholdMinimum: LOCAL_GATE_THRESHOLD_MIN,
+                fftSize: LOCAL_MONITOR_FFT_SIZE,
+                smoothingTimeConstant: LOCAL_MONITOR_SMOOTHING,
                 onLevelChange(level) {
                         if (!browser) return;
                         const now = getTimestamp();
