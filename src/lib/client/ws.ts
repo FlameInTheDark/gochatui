@@ -14,6 +14,7 @@ import {
         selectedGuildId
 } from '$lib/stores/appState';
 import { markChannelUnread } from '$lib/stores/unread';
+import { recordChannelMention } from '$lib/stores/mentions';
 import { browser } from '$app/environment';
 import { env as publicEnv } from '$env/dynamic/public';
 import { getRuntimeConfig } from '$lib/runtime/config';
@@ -122,6 +123,7 @@ let heartbeatSessionId: string | null = wsState.heartbeatSessionId;
 const WS_EVENT_MEMBER_JOIN = 200;
 const WS_EVENT_MEMBER_LEAVE = 202;
 const WS_EVENT_CHANNEL_TYPING = 301;
+const WS_EVENT_CHANNEL_MENTION = 302;
 const WS_EVENT_FRIEND_REQUEST = 402;
 const WS_EVENT_FRIEND_ADDED = 403;
 const WS_EVENT_FRIEND_REMOVED = 404;
@@ -983,6 +985,30 @@ export function connectWS() {
                                                 normalizeSnowflake(payload?.userId);
                                         if (channelId && userId) {
                                                 markChannelTyping(channelId, userId, { durationMs: 10_000 });
+                                        }
+                                } else if (data.t === WS_EVENT_CHANNEL_MENTION) {
+                                        const guildId = normalizeSnowflake(payload?.guild_id) ??
+                                                normalizeSnowflake(payload?.guildId);
+                                        const channelId = normalizeSnowflake(payload?.channel_id) ??
+                                                normalizeSnowflake(payload?.channelId);
+                                        const messageId = normalizeSnowflake(payload?.message_id) ??
+                                                normalizeSnowflake(payload?.messageId);
+                                        const mentionType = payload?.type ?? payload?.Type ?? null;
+                                        if (channelId && messageId) {
+                                                let shouldHighlight = true;
+                                                if (browser) {
+                                                        const focused = Boolean(get(appHasFocus));
+                                                        if (focused) {
+                                                                const activeGuildId = normalizeSnowflake(get(selectedGuildId));
+                                                                const activeChannelId = normalizeSnowflake(get(selectedChannelId));
+                                                                if (guildId === activeGuildId && channelId === activeChannelId) {
+                                                                        shouldHighlight = false;
+                                                                }
+                                                        }
+                                                }
+                                                if (shouldHighlight) {
+                                                        recordChannelMention(guildId, channelId, messageId, mentionType);
+                                                }
                                         }
                                 }
                         } else if (data.t === WS_EVENT_CHANNEL_TYPING) {

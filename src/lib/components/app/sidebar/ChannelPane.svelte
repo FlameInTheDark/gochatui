@@ -59,17 +59,23 @@
                 hasAnyGuildPermission,
                 normalizePermissionValue
         } from '$lib/utils/permissions';
-        import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
+        import {
+                CHANNEL_MENTION_BADGE_CLASSES,
+                CHANNEL_UNREAD_BADGE_CLASSES
+        } from '$lib/constants/unreadIndicator';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
         import { joinVoiceChannel, leaveVoiceChannel, voiceSession } from '$lib/stores/voice';
         import VoiceChannelParticipants from '$lib/components/app/sidebar/VoiceChannelParticipants.svelte';
+        import { channelMentionsByGuild } from '$lib/stores/mentions';
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadChannels = unreadChannelsByGuild;
         const voice = voiceSession;
+        const channelMentions = channelMentionsByGuild;
         const selectedGuildIdValue = $derived($selectedGuildId ? String($selectedGuildId) : '');
 
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
+        const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
 
         let dismissPanel: (() => void) | null = null;
         let creatingChannel = $state(false);
@@ -124,21 +130,37 @@
                 categoryError = null;
         }
 
-	function toSnowflakeString(value: unknown): string | null {
-		if (value == null) return null;
-		try {
-			if (typeof value === 'string') return value;
-			if (typeof value === 'bigint') return value.toString();
-			if (typeof value === 'number') return BigInt(value).toString();
-			return String(value);
-		} catch {
-			try {
-				return String(value);
-			} catch {
-				return null;
-			}
-		}
-	}
+        function toSnowflakeString(value: unknown): string | null {
+                if (value == null) return null;
+                try {
+                        if (typeof value === 'string') return value;
+                        if (typeof value === 'bigint') return value.toString();
+                        if (typeof value === 'number') return BigInt(value).toString();
+                        return String(value);
+                } catch {
+                        try {
+                                return String(value);
+                        } catch {
+                                return null;
+                        }
+                }
+        }
+
+        function formatMentionCount(count: number): string {
+                return count > 99 ? '99+' : String(count);
+        }
+
+        function channelMentionCountFor(guildId: unknown, channelId: unknown): number {
+                const gid = toSnowflakeString(guildId);
+                const cid = toSnowflakeString(channelId);
+                if (!gid || !cid) return 0;
+                const entry = $channelMentions?.[gid]?.[cid] ?? null;
+                return entry?.count ?? 0;
+        }
+
+        function mentionLabelClass(count: number): string {
+                return count > 0 ? 'text-[var(--danger)] font-semibold' : '';
+        }
 
 	function myGuildRoleIds(guildId: string): Set<string> {
 		const gid = String(guildId ?? '');
@@ -297,11 +319,13 @@
                 channelId: string,
                 channel: DtoChannel,
                 channelUnread: boolean,
+                mentionCount: number,
                 voiceState?: 'none' | 'connecting' | 'connected'
         ): string {
+                const hasBadge = channelUnread || mentionCount > 0;
                 const classes = [
                         'relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)]',
-                        channelUnread ? 'pl-6' : 'pl-3'
+                        hasBadge ? 'pl-6' : 'pl-3'
                 ];
                 const state = voiceState ?? voiceStateForChannel(channelId, channel);
                 const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
@@ -1220,6 +1244,7 @@
                                         {#if sec.type === 'channel'}
                                                 {@const channelId = String((sec.ch as any).id)}
                                                 {@const channelUnread = isChannelUnread($selectedGuildId, channelId)}
+                                                {@const channelMentionCount = channelMentionCountFor($selectedGuildId, channelId)}
                                                 {@const voiceState = voiceStateForChannel(channelId, sec.ch)}
                                                 {#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
                                                         <div
@@ -1241,7 +1266,7 @@
                                                                         ></div>
                                                                 {/if}
                                                                 <div
-                                                                        class={channelRowClasses(channelId, sec.ch, channelUnread, voiceState)}
+                                                                        class={channelRowClasses(channelId, sec.ch, channelUnread, channelMentionCount, voiceState)}
                                                                         role="button"
                                                                         tabindex="0"
                                                                         use:customContextMenuTarget
@@ -1255,7 +1280,10 @@
                                                                                 openChannelMenu(e, sec.ch);
                                                                         }}
                                                                 >
-                                                                        {#if channelUnread}
+                                                                        {#if channelMentionCount > 0}
+                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: channelMentionCount })}</span>
+                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(channelMentionCount)}</span>
+                                                                        {:else if channelUnread}
                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
                                                                                 <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                         {/if}
@@ -1266,7 +1294,7 @@
                                                                                         {:else}
                                                                                                 <span class="opacity-70">#</span>
                                                                                         {/if}
-                                                                                        <span class="truncate">{sec.ch.name}</span>
+                                                                                        <span class={`truncate ${mentionLabelClass(channelMentionCount)}`}>{sec.ch.name}</span>
                                                                                 </div>
                                                                                 {#if voiceState === 'connecting' || voiceState === 'connected'}
                                                                                         <span class={`text-xs ${voiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>
@@ -1364,6 +1392,7 @@
                                                                                 .includes(filter.toLowerCase())) as ch (String((ch as any).id))}
                                                                         {@const nestedChannelId = String((ch as any).id)}
                                                                         {@const nestedChannelUnread = isChannelUnread($selectedGuildId, nestedChannelId)}
+                                                                        {@const nestedMentionCount = channelMentionCountFor($selectedGuildId, nestedChannelId)}
                                                                         {@const nestedVoiceState = voiceStateForChannel(nestedChannelId, ch)}
                                                                         <div
                                                                                 role="listitem"
@@ -1399,20 +1428,24 @@
                                                                                         }}
                                                                                 >
                                                                                         <div class="relative flex w-full items-center gap-2">
-                                                                                                <div class="flex min-w-0 flex-1 items-center gap-2 truncate pl-3">
-                                                                                                        {#if nestedChannelUnread}
+                                                                                                <div
+                                                                                                        class={`relative flex min-w-0 flex-1 items-center gap-2 truncate ${
+                                                                                                                nestedChannelUnread || nestedMentionCount > 0 ? 'pl-6' : 'pl-3'
+                                                                                                        }`}
+                                                                                                >
+                                                                                                        {#if nestedMentionCount > 0}
+                                                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: nestedMentionCount })}</span>
+                                                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedMentionCount)}</span>
+                                                                                                        {:else if nestedChannelUnread}
                                                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                                                <span
-                                                                                                                        aria-hidden="true"
-                                                                                                                        class="absolute left-0 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-                                                                                                                ></span>
+                                                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                                                         {/if}
                                                                                                         {#if isVoiceChannel(ch)}
                                                                                                                 <Volume2 class="opacity-70" size={16} />
                                                                                                         {:else}
                                                                                                                 <span class="opacity-70">#</span>
                                                                                                         {/if}
-                                                                                                        <span class="truncate">{ch.name}</span>
+                                                                                                        <span class={`truncate ${mentionLabelClass(nestedMentionCount)}`}>{ch.name}</span>
                                                                                                 </div>
                                                                                                 {#if nestedVoiceState === 'connecting' || nestedVoiceState === 'connected'}
                                                                                                         <span class={`text-xs ${nestedVoiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>

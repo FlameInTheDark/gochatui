@@ -2,6 +2,7 @@ import { derived, get, writable } from 'svelte/store';
 import type { DtoChannel } from '$lib/api';
 import { channelsByGuild } from '$lib/stores/appState';
 import { guildChannelReadStateLookup, type GuildChannelReadStateLookup } from '$lib/stores/settings';
+import { clearChannelMentions, clearGuildMentions } from '$lib/stores/mentions';
 import { unreadSnapshot } from '$lib/stores/unreadSeed';
 
 interface ChannelUnreadEntry {
@@ -112,6 +113,7 @@ export function clearChannelUnread(guildId: unknown, channelId: unknown): void {
         const gid = normalizeId(guildId);
         const cid = normalizeId(channelId);
         if (!gid || !cid) return;
+        clearChannelMentions(gid, cid);
         updateState((state) => {
                 const existingGuild = state[gid];
                 if (!existingGuild || !existingGuild[cid]) {
@@ -131,6 +133,7 @@ export function clearChannelUnread(guildId: unknown, channelId: unknown): void {
 export function clearGuildUnread(guildId: unknown): void {
         const gid = normalizeId(guildId);
         if (!gid) return;
+        clearGuildMentions(gid);
         updateState((state) => {
                 if (!(gid in state)) {
                         return { next: state, changed: false };
@@ -143,9 +146,11 @@ export function clearGuildUnread(guildId: unknown): void {
 
 export function acknowledgeChannelRead(
         guildId: unknown,
-        channelId: unknown
+        channelId: unknown,
+        lastReadMessageId: unknown = null
 ): void {
         clearChannelUnread(guildId, channelId);
+        clearChannelMentions(guildId, channelId, lastReadMessageId);
 }
 
 function clearChannelsWithoutUnreadEvidence() {

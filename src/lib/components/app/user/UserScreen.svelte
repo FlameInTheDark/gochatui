@@ -35,10 +35,14 @@
         import { Check, X } from 'lucide-svelte';
         import { isMessageNewer } from '$lib/components/app/chat/readStateUtils';
         import { unreadChannelsByGuild } from '$lib/stores/unread';
-        import { CHANNEL_UNREAD_BADGE_CLASSES } from '$lib/constants/unreadIndicator';
+        import {
+                CHANNEL_MENTION_BADGE_CLASSES,
+                CHANNEL_UNREAD_BADGE_CLASSES
+        } from '$lib/constants/unreadIndicator';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
         import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import { channelMentionsByGuild } from '$lib/stores/mentions';
 
         type FriendEntry = {
                 id: string;
@@ -70,6 +74,7 @@
         const presenceMap = presenceByUser;
         const presenceSubscription = createPresenceSubscription();
         const unreadByGuild = unreadChannelsByGuild;
+        const mentionStore = channelMentionsByGuild;
         let lastPresenceSignature = '';
 
         let directChannels = $state<DirectChannelEntry[]>([]);
@@ -106,6 +111,7 @@
         let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
+        const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
 
         function buildNotificationMenuItems(
                 current: NotificationLevel,
@@ -162,6 +168,21 @@
                 const guildUnread = $unreadByGuild?.['@me'] ?? null;
                 if (!guildUnread) return false;
                 return Boolean(guildUnread[normalized]);
+        }
+
+        function formatMentionCount(count: number): string {
+                return count > 99 ? '99+' : String(count);
+        }
+
+        function dmMentionCount(channelId: unknown): number {
+                const normalized = toSnowflakeString(channelId);
+                if (!normalized) return 0;
+                const entry = $mentionStore?.['@me']?.[normalized] ?? null;
+                return entry?.count ?? 0;
+        }
+
+        function mentionLabelClass(count: number): string {
+                return count > 0 ? 'text-[var(--danger)] font-semibold' : '';
         }
 
         function setFriendLoading(id: string, value: boolean) {
@@ -1712,6 +1733,14 @@
                                                                 {@const isLoading = targetId ? openingDmChannelIds.has(targetId) : false}
                                                                 {@const isActive = activeDmChannelId === channel.id}
                                                                 {@const hasUnread = dmChannelHasUnread(channel.id)}
+                                                                {@const mentionCount = dmMentionCount(channel.id)}
+                                                                {@const indicatorPaddingClass =
+                                                                        mentionCount > 0
+                                                                                ? 'pl-9'
+                                                                                : hasUnread
+                                                                                        ? 'pl-6'
+                                                                                        : 'pl-3'}
+                                                                {@const showUnreadDot = mentionCount === 0 && hasUnread}
                                                                 {@const recipient =
                                                                         channel.recipients.length === 1
                                                                                 ? channel.recipients[0]
@@ -1739,15 +1768,18 @@
                                                                                                 isActive
                                                                                                         ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                                        } ${isLoading ? 'cursor-wait' : ''}`}
-                                                                                        class:pl-6={hasUnread}
-                                                                                        class:pl-3={!hasUnread}
+                                                                                        } ${indicatorPaddingClass} ${isLoading ? 'cursor-wait' : ''}`}
                                                                                         disabled={isLoading}
                                                                                         aria-busy={isLoading}
                                                                                         aria-pressed={isActive}
                                                                                         onclick={() => handleActivateDirectChannel(channel)}
                                                                                 >
-                                                                                        {#if hasUnread}
+                                                                                        {#if mentionCount > 0}
+                                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: mentionCount })}</span>
+                                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>
+                                                                                                        {formatMentionCount(mentionCount)}
+                                                                                                </span>
+                                                                                        {:else if showUnreadDot}
                                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
                                                                                                 <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
                                                                                         {/if}
@@ -1766,7 +1798,7 @@
                                                                                                 {/if}
                                                                                         </div>
                                                                                         <div class="min-w-0 flex-1">
-                                                                                                <div class="truncate text-sm font-semibold">{displayName}</div>
+                                                                                                <div class={`truncate text-sm font-semibold ${mentionLabelClass(mentionCount)}`}>{displayName}</div>
                                                                                                 {#if secondaryLine}
                                                                                                         <div class="truncate text-xs text-[var(--muted)]">{secondaryLine}</div>
                                                                                                 {/if}

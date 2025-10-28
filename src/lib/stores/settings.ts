@@ -1913,7 +1913,7 @@ async function loadSettingsFromApi(currentToken: string | null = get(auth.token)
                                 (responseData as any)?.channelMentions ??
                                 null;
                         const channelGuildLookup = buildChannelGuildLookupFromSnapshot(lastMessageSnapshot);
-                        updateMentionSnapshot(mentionsSnapshot, channelMentionsSnapshot);
+                        updateMentionSnapshot(mentionsSnapshot, channelMentionsSnapshot, channelGuildLookup);
                         if (response.status === 204 || !response.data?.settings) {
                                 suppressSave = true;
                                 const next = createDefaultSettingsSnapshot();

@@ -43,18 +43,25 @@
         import { colorIntToHex, parseColorValue } from '$lib/utils/color';
         import { resolveIconUrl } from '$lib/utils/icon';
         import {
+                FOLDER_MENTION_BADGE_CLASSES,
                 FOLDER_UNREAD_BADGE_CLASSES,
+                SERVER_MENTION_BADGE_CLASSES,
                 SERVER_UNREAD_BADGE_CLASSES
         } from '$lib/constants/unreadIndicator';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import { guildMentionSummary } from '$lib/stores/mentions';
 
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadSummary = guildUnreadSummary;
+        const mentionSummary = guildMentionSummary;
         const view = activeView;
+        const homeMentionCount = $derived.by(() => userHomeMentionCount());
 
         const UNREAD_INDICATOR_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
         const FOLDER_UNREAD_INDICATOR_CLASSES = FOLDER_UNREAD_BADGE_CLASSES;
+        const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
+        const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
 
 	type DisplayGuild = {
 		type: 'guild';
@@ -120,29 +127,54 @@
                 return resolveIconUrl((guild as any)?.icon);
         }
 
-	function toSnowflakeString(value: unknown): string | null {
-		if (value == null) return null;
-		try {
-			if (typeof value === 'string') return value;
-			if (typeof value === 'number' || typeof value === 'bigint') return BigInt(value).toString();
-			return String(value);
-		} catch {
-			try {
-				return String(value);
-			} catch {
-				return null;
-			}
-		}
-	}
+        function toSnowflakeString(value: unknown): string | null {
+                if (value == null) return null;
+                try {
+                        if (typeof value === 'string') return value;
+                        if (typeof value === 'number' || typeof value === 'bigint') return BigInt(value).toString();
+                        return String(value);
+                } catch {
+                        try {
+                                return String(value);
+                        } catch {
+                                return null;
+                        }
+                }
+        }
+
+        function formatMentionCount(count: number): string {
+                return count > 99 ? '99+' : String(count);
+        }
+
+        function guildMentionCount(guildId: unknown): number {
+                const gid = toSnowflakeString(guildId);
+                if (!gid) return 0;
+                const entry = $mentionSummary?.[gid] ?? null;
+                return entry?.mentionCount ?? 0;
+        }
+
+        function folderMentionCount(folder: DisplayFolder): number {
+                return folder.guilds.reduce((total, nested) => total + guildMentionCount(nested.guildId), 0);
+        }
+
+        function userHomeMentionCount(): number {
+                return guildMentionCount('@me');
+        }
 
         function guildHasUnread(guildId: unknown): boolean {
                 const gid = toSnowflakeString(guildId);
                 if (!gid) return false;
                 const entry = $unreadSummary?.[gid];
+                if (guildMentionCount(gid) > 0) {
+                        return true;
+                }
                 return Boolean(entry?.channelCount);
         }
 
         function userHomeHasUnread(): boolean {
+                if (userHomeMentionCount() > 0) {
+                        return true;
+                }
                 const entry = $unreadSummary?.['@me'];
                 return Boolean(entry?.channelCount);
         }
@@ -564,7 +596,10 @@
                         aria-label={m.user_home_open_label()}
                         onclick={openUserHome}
                 >
-                        {#if userHomeHasUnread()}
+                        {#if homeMentionCount > 0}
+                                <span class="sr-only">{m.unread_mentions_indicator({ count: homeMentionCount })}</span>
+                                <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(homeMentionCount)}</span>
+                        {:else if userHomeHasUnread()}
                                 <span class="sr-only">{m.unread_indicator()}</span>
                                 <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                         {/if}
@@ -583,6 +618,7 @@
 		{#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
                         {#if item.type === 'guild'}
                                 {@const guildUnread = guildHasUnread(item.guildId)}
+                                {@const guildMentionTotal = guildMentionCount(item.guildId)}
                                 {@const guildIcon = guildIconUrl(item.guild)}
                                 <div class="group relative flex justify-center">
                                         <button
@@ -617,15 +653,19 @@
                                                 {:else}
                                                         <span class="font-bold">{guildInitials(item.guild)}</span>
                                                 {/if}
-                                                {#if guildUnread}
+                                                {#if guildMentionTotal > 0}
+                                                        <span class="sr-only">{m.unread_mentions_indicator({ count: guildMentionTotal })}</span>
+                                                        <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(guildMentionTotal)}</span>
+                                                {:else if guildUnread}
                                                         <span class="sr-only">{m.unread_indicator()}</span>
                                                         <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                                                 {/if}
-					</button>
-				</div>
+                                        </button>
+                                </div>
 			{:else}
-				{@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
-				{@const folderHasUnread = item.guilds.some((g) => guildHasUnread(g.guildId))}
+                                {@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
+                                {@const folderHasUnread = item.guilds.some((g) => guildHasUnread(g.guildId))}
+                                {@const folderMentionTotal = folderMentionCount(item)}
 				{@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
 				{@const folderName = item.folder.name?.trim()}
 				{@const folderLabel = folderName ? folderName : m.guild_folder()}
@@ -707,7 +747,13 @@
 									{/if}
 								</div>
 							{/if}
-                                                        {#if folderHasUnread}
+                                                        {#if folderMentionTotal > 0}
+                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: folderMentionTotal })}</span>
+                                                                <span
+                                                                        aria-hidden="true"
+                                                                        class={FOLDER_MENTION_INDICATOR_CLASSES}
+                                                                >{formatMentionCount(folderMentionTotal)}</span>
+                                                        {:else if folderHasUnread}
                                                                 <span class="sr-only">{m.unread_indicator()}</span>
                                                                 <span
                                                                         aria-hidden="true"
@@ -733,6 +779,7 @@
 							></div>
                                                         {#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
                                                                 {@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
+                                                                {@const nestedGuildMention = guildMentionCount(nestedGuild.guildId)}
                                                                 {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
                                                                 <div class="group relative flex justify-center">
                                                                   <button
@@ -770,7 +817,7 @@
                                                                                         )
                                                                                 }
                                                                           >
-                                                                                  {#if nestedGuildIcon}
+                                                                                {#if nestedGuildIcon}
                                                                                           <img
                                                                                                   src={nestedGuildIcon}
                                                                                                   alt=""
@@ -781,12 +828,15 @@
                                                                                   {:else}
                                                                                           <span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
                                                                                   {/if}
-                                                                                  {#if nestedGuildUnread}
+                                                                                  {#if nestedGuildMention > 0}
+                                                                                          <span class="sr-only">{m.unread_mentions_indicator({ count: nestedGuildMention })}</span>
+                                                                                          <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedGuildMention)}</span>
+                                                                                {:else if nestedGuildUnread}
                                                                                           <span class="sr-only">{m.unread_indicator()}</span>
                                                                                           <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                                                                                 {/if}
-									</button>
-								</div>
+                                                                        </button>
+                                                                </div>
 							{/each}
 						</div>
 					{/if}
