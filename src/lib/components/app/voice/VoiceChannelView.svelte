@@ -4,8 +4,9 @@
 	import { auth } from '$lib/stores/auth';
 	import { presenceByUser } from '$lib/stores/presence';
 	import { membersByGuild } from '$lib/stores/appState';
-	import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
-	import { memberPrimaryName, toSnowflakeString } from '$lib/utils/members';
+        import { ensureGuildMembersLoaded } from '$lib/utils/guildMembers';
+        import { resolveAvatarUrl } from '$lib/utils/avatar';
+        import { memberInitial, memberPrimaryName, toSnowflakeString } from '$lib/utils/members';
 	import { m } from '$lib/paraglide/messages.js';
 	import type { DtoMember } from '$lib/api';
 
@@ -67,12 +68,12 @@
 		return m.user_default_name();
 	}
 
-	function hasLiveVideo(stream: MediaStream | null): boolean {
-		if (!stream) return false;
-		return stream.getVideoTracks().some((track) => track.readyState === 'live' && track.enabled);
-	}
+        function hasLiveVideo(stream: MediaStream | null): boolean {
+                if (!stream) return false;
+                return stream.getVideoTracks().some((track) => track.readyState === 'live' && track.enabled);
+        }
 
-	const isConnected = $derived.by(() => {
+        const isConnected = $derived.by(() => {
 		const state = $voice;
 		if (state.status !== 'connected') return false;
 		return (
@@ -81,55 +82,149 @@
 		);
 	});
 
-	type VideoEntry = {
-		id: string;
-		stream: MediaStream;
-		label: string;
-		badge: string | null;
-		speaking: boolean;
-	};
+        type ParticipantEntry = {
+                id: string;
+                userId: string | null;
+                stream: MediaStream | null;
+                videoActive: boolean;
+                label: string;
+                badge: string | null;
+                speaking: boolean;
+                avatarUrl: string | null;
+                initial: string;
+                isSelf: boolean;
+        };
 
-	const videoEntries = $derived.by<VideoEntry[]>(() => {
-		const entries: VideoEntry[] = [];
-		if (!isConnected) return entries;
-		const state = $voice;
-		const speakingSet = new Set(state.speakingUserIds ?? []);
-		const seen = new Set<string>();
-		const selfId = toSnowflakeString($me?.id) ?? '';
+        function fallbackInitial(label: string): string {
+                return label.trim().charAt(0).toUpperCase() || '?';
+        }
 
-		const localStream = state.localVideoStream ?? null;
-		if (state.cameraEnabled && hasLiveVideo(localStream)) {
-			const id = 'self';
-			const label = displayNameFor(selfId, true);
-			entries.push({
-				id,
-				stream: localStream!,
-				label,
-				badge: m.voice_self_label(),
-				speaking: speakingSet.has(selfId)
-			});
-			seen.add(id);
-		}
+        const participants = $derived.by<ParticipantEntry[]>(() => {
+                const results: ParticipantEntry[] = [];
+                if (!isConnected) return results;
 
-		for (const remote of state.remoteStreams ?? []) {
-			const stream = remote.stream;
-			if (!hasLiveVideo(stream)) continue;
-			const userId = toSnowflakeString(remote.userId);
-			const labelId = userId || String(remote.id);
-			const key = stream?.id ? `${labelId}:${stream.id}` : `${labelId}:${remote.id}`;
-			if (seen.has(key)) continue;
-			seen.add(key);
-			entries.push({
-				id: key,
-				stream,
-				label: displayNameFor(userId, false),
-				badge: null,
-				speaking: userId ? speakingSet.has(userId) : false
-			});
-		}
+                const state = $voice;
+                const presenceMap = ($presence ?? {}) as Record<string, any>;
+                const speakingSet = new Set(state.speakingUserIds ?? []);
+                const targetChannel = normalizedChannelId;
+                const selfId = toSnowflakeString($me?.id) ?? '';
 
-		return entries;
-	});
+                const memberMap = new Map<string, DtoMember>();
+                for (const member of currentMembers()) {
+                        const id = toSnowflakeString((member as any)?.user?.id);
+                        if (!id) continue;
+                        if (!memberMap.has(id)) {
+                                memberMap.set(id, member);
+                        }
+                }
+
+                const entryMap = new Map<string, ParticipantEntry>();
+
+                function ensureEntry(id: string, userId: string | null): ParticipantEntry {
+                        const existing = entryMap.get(id);
+                        if (existing) return existing;
+
+                        const normalizedUserId = userId ? String(userId) : '';
+                        const isSelf = normalizedUserId ? normalizedUserId === selfId : false;
+                        const label = displayNameFor(normalizedUserId || null, isSelf);
+                        const badge = isSelf ? m.voice_self_label() : null;
+                        let avatarUrl: string | null = null;
+                        let initial = fallbackInitial(label);
+
+                        if (isSelf) {
+                                avatarUrl = resolveAvatarUrl($me);
+                                initial = fallbackInitial(label);
+                        } else if (normalizedUserId && memberMap.has(normalizedUserId)) {
+                                const member = memberMap.get(normalizedUserId) ?? null;
+                                avatarUrl = resolveAvatarUrl(member?.user ?? member ?? undefined);
+                                initial = memberInitial(member ?? undefined);
+                        } else if (normalizedUserId) {
+                                const presenceEntry = presenceMap[normalizedUserId];
+                                const presenceAvatar = resolveAvatarUrl(presenceEntry?.user ?? presenceEntry ?? undefined);
+                                if (presenceAvatar) {
+                                        avatarUrl = presenceAvatar;
+                                }
+                        }
+
+                        const speaking = normalizedUserId ? speakingSet.has(normalizedUserId) : false;
+                        const created: ParticipantEntry = {
+                                id,
+                                userId: normalizedUserId || null,
+                                stream: null,
+                                videoActive: false,
+                                label,
+                                badge,
+                                speaking,
+                                avatarUrl,
+                                initial,
+                                isSelf
+                        };
+                        entryMap.set(id, created);
+                        return created;
+                }
+
+                for (const [userId, info] of Object.entries(presenceMap)) {
+                        const normalized = normalizedId(userId);
+                        if (!normalized) continue;
+                        if (info?.voiceChannelId !== targetChannel) continue;
+                        ensureEntry(normalized, normalized);
+                }
+
+                if (selfId) {
+                        ensureEntry(selfId, selfId);
+                }
+
+                const localStream = state.localVideoStream ?? null;
+                if (selfId) {
+                        const entry = ensureEntry(selfId, selfId);
+                        const active = state.cameraEnabled && hasLiveVideo(localStream);
+                        entry.stream = active ? localStream : null;
+                        entry.videoActive = active;
+                }
+
+                for (const remote of state.remoteStreams ?? []) {
+                        const stream = remote.stream ?? null;
+                        const userId = toSnowflakeString(remote.userId);
+                        const key = userId || `remote:${remote.id}`;
+                        const entry = ensureEntry(key, userId ?? null);
+                        const active = hasLiveVideo(stream);
+                        if (active) {
+                                entry.stream = stream;
+                                entry.videoActive = true;
+                        }
+                        if (userId) {
+                                entry.speaking = entry.speaking || speakingSet.has(userId);
+                        }
+                }
+
+                for (const entry of entryMap.values()) {
+                        results.push(entry);
+                }
+
+                results.sort((a, b) => {
+                        const videoScore = Number(b.videoActive) - Number(a.videoActive);
+                        if (videoScore !== 0) return videoScore;
+                        if (a.isSelf && !b.isSelf) return -1;
+                        if (!a.isSelf && b.isSelf) return 1;
+                        return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+                });
+
+                return results;
+        });
+
+        let focusedParticipantId = $state<string | null>(null);
+
+        $effect(() => {
+                if (!participants.length) {
+                        focusedParticipantId = null;
+                        return;
+                }
+                if (focusedParticipantId && participants.some((entry) => entry.id === focusedParticipantId)) {
+                        return;
+                }
+                const firstVideo = participants.find((entry) => entry.videoActive);
+                focusedParticipantId = (firstVideo ?? participants[0]).id;
+        });
 
 	$effect(() => {
 		if (!isConnected) return;
@@ -144,22 +239,60 @@
 		<div class="grid flex-1 place-items-center px-6 text-center text-[var(--muted)]">
 			<p class="max-w-md text-sm leading-relaxed">{m.voice_video_not_connected()}</p>
 		</div>
-	{:else if videoEntries.length === 0}
-		<div class="grid flex-1 place-items-center px-6 text-center text-[var(--muted)]">
-			<p class="max-w-md text-sm leading-relaxed">{m.voice_video_empty()}</p>
-		</div>
-	{:else}
-		<div class="flex-1 overflow-auto p-4">
-			<div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-				{#each videoEntries as entry (entry.id)}
-					<VoiceVideoTile
-						stream={entry.stream}
-						label={entry.label}
-						badge={entry.badge}
-						speaking={entry.speaking}
-					/>
-				{/each}
-			</div>
-		</div>
-	{/if}
+        {:else if participants.length === 0}
+                <div class="grid flex-1 place-items-center px-6 text-center text-[var(--muted)]">
+                        <p class="max-w-md text-sm leading-relaxed">{m.voice_video_empty()}</p>
+                </div>
+        {:else}
+                {@const activeParticipant =
+                        participants.find((entry) => entry.id === focusedParticipantId) ?? participants[0]}
+                <div class="flex h-full flex-1 flex-col gap-4 overflow-hidden p-4">
+                        <div class="flex-1 min-h-0">
+                                <div class="flex h-full min-h-0 items-center justify-center">
+                                        <VoiceVideoTile
+                                                stream={activeParticipant.stream}
+                                                videoActive={activeParticipant.videoActive}
+                                                label={activeParticipant.label}
+                                                badge={activeParticipant.badge}
+                                                speaking={activeParticipant.speaking}
+                                                avatarUrl={activeParticipant.avatarUrl}
+                                                initial={activeParticipant.initial}
+                                                variant="primary"
+                                        />
+                                </div>
+                        </div>
+                        {#if participants.length > 1}
+                                <div class="flex-shrink-0">
+                                        <div
+                                                class="grid gap-3"
+                                                style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));"
+                                        >
+                                                {#each participants as entry (entry.id)}
+                                                        <button
+                                                                type="button"
+                                                                class="block rounded-lg p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]"
+                                                                aria-pressed={entry.id === activeParticipant.id}
+                                                                onclick={() => {
+                                                                        focusedParticipantId = entry.id;
+                                                                }}
+                                                        >
+                                                                <VoiceVideoTile
+                                                                        stream={entry.stream}
+                                                                        videoActive={entry.videoActive}
+                                                                        label={entry.label}
+                                                                        badge={entry.badge}
+                                                                        speaking={entry.speaking}
+                                                                        avatarUrl={entry.avatarUrl}
+                                                                        initial={entry.initial}
+                                                                        variant="thumbnail"
+                                                                        interactive
+                                                                        selected={entry.id === activeParticipant.id}
+                                                                />
+                                                        </button>
+                                                {/each}
+                                        </div>
+                                </div>
+                        {/if}
+                </div>
+        {/if}
 </div>

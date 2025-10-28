@@ -1124,8 +1124,6 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 return;
         }
 
-        setVoicePanelChannelId(normalizedChannel);
-
         if (session && session.guildId === normalizedGuild && session.channelId === normalizedChannel) {
                 logVoice('already connected to voice channel', {
                         guildId: normalizedGuild,

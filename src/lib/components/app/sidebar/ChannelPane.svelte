@@ -307,8 +307,26 @@
         function joinVoiceById(channelId: string) {
                 const gid = $selectedGuildId ? String($selectedGuildId) : '';
                 if (!gid || !channelId) return;
-                setVoicePanelChannelId(channelId);
-                void joinVoiceChannel(gid, channelId);
+                const normalizedChannel = String(channelId);
+                const state = $voice;
+                const connectedGuild = state.guildId ? String(state.guildId) : '';
+                const connectedChannel = state.channelId ? String(state.channelId) : '';
+                const isTargetChannel =
+                        connectedGuild === gid && connectedChannel === normalizedChannel;
+                const isActiveState = state.status === 'connected' || state.status === 'connecting';
+
+                if (isTargetChannel && isActiveState) {
+                        if ($voicePanel !== normalizedChannel) {
+                                setVoicePanelChannelId(normalizedChannel);
+                        }
+                        return;
+                }
+
+                if ($voicePanel) {
+                        setVoicePanelChannelId(null);
+                }
+
+                void joinVoiceChannel(gid, normalizedChannel);
         }
 
         function activateChannel(channel: DtoChannel) {
