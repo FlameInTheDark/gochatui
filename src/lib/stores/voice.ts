@@ -769,9 +769,14 @@ function pruneSpeakingUsers(activeUserIds: Set<string>) {
         if (changed) emitSpeakingUsers();
 }
 
-function scheduleSpeakingSignal(currentSession: VoiceSessionInternal, speaking: boolean) {
+function scheduleSpeakingSignal(
+        currentSession: VoiceSessionInternal,
+        speaking: boolean,
+        options?: { force?: boolean }
+) {
         if (!browser) return;
-        if (currentSession.localSpeaking === speaking && currentSession.lastSignaledSpeaking === speaking) {
+        const force = Boolean(options?.force);
+        if (!force && currentSession.localSpeaking === speaking && currentSession.lastSignaledSpeaking === speaking) {
                 return;
         }
 
@@ -858,6 +863,11 @@ function parseSpeakingValue(value: any): boolean {
 function setUserSpeaking(userId: string | null, speaking: boolean) {
         const normalized = toSnowflakeString(userId);
         if (!normalized) return;
+        const currentSession = session;
+        const isSelf = Boolean(currentSession && currentSession.selfUserId === normalized);
+        if (isSelf && get(state).muted && speaking) {
+                return;
+        }
         const has = speakingUsers.has(normalized);
         let changed = false;
         if (speaking) {
@@ -1287,6 +1297,7 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
                 }
                 if (muted) {
                         setUserSpeaking(activeSession.selfUserId, false);
+                        scheduleSpeakingSignal(activeSession, false, { force: true });
                 }
                 return;
         }
@@ -1306,6 +1317,7 @@ function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gat
 
         if (muted) {
                 setUserSpeaking(activeSession.selfUserId, false);
+                scheduleSpeakingSignal(activeSession, false, { force: true });
         }
 }
 
