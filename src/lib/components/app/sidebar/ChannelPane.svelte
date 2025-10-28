@@ -158,14 +158,10 @@
                 return entry?.count ?? 0;
         }
 
-        function mentionLabelClass(count: number): string {
-                return count > 0 ? 'text-[var(--danger)] font-semibold' : '';
-        }
-
-	function myGuildRoleIds(guildId: string): Set<string> {
-		const gid = String(guildId ?? '');
-		const members = Array.isArray($membersByGuild[gid])
-			? ($membersByGuild[gid] as DtoMember[])
+        function myGuildRoleIds(guildId: string): Set<string> {
+                const gid = String(guildId ?? '');
+                const members = Array.isArray($membersByGuild[gid])
+                        ? ($membersByGuild[gid] as DtoMember[])
 			: undefined;
 		const fallbackRoles = Array.isArray($myGuildRoleIdsByGuild[gid])
 			? ($myGuildRoleIdsByGuild[gid] as string[])
@@ -1294,7 +1290,7 @@
                                                                                         {:else}
                                                                                                 <span class="opacity-70">#</span>
                                                                                         {/if}
-                                                                                        <span class={`truncate ${mentionLabelClass(channelMentionCount)}`}>{sec.ch.name}</span>
+                                                                                <span class="truncate">{sec.ch.name}</span>
                                                                                 </div>
                                                                                 {#if voiceState === 'connecting' || voiceState === 'connected'}
                                                                                         <span class={`text-xs ${voiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>
@@ -1445,7 +1441,7 @@
                                                                                                         {:else}
                                                                                                                 <span class="opacity-70">#</span>
                                                                                                         {/if}
-                                                                                                        <span class={`truncate ${mentionLabelClass(nestedMentionCount)}`}>{ch.name}</span>
+                                        <span class="truncate">{ch.name}</span>
                                                                                                 </div>
                                                                                                 {#if nestedVoiceState === 'connecting' || nestedVoiceState === 'connected'}
                                                                                                         <span class={`text-xs ${nestedVoiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>

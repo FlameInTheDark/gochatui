@@ -1,7 +1,16 @@
 import { derived, get, writable } from 'svelte/store';
 import type { Readable } from 'svelte/store';
 import { mentionSnapshot } from '$lib/stores/mentionSeed';
-import { guildChannelReadStateLookup } from '$lib/stores/settings';
+import {
+        appSettings,
+        guildChannelReadStateLookup,
+        NOTIFICATION_LEVELS,
+        resolveNotificationLevel,
+        type AppSettings,
+        type GuildLayoutItem,
+        type NotificationLevel,
+        type VisibleDmChannel
+} from '$lib/stores/settings';
 import { channelsByGuild } from '$lib/stores/appState';
 
 interface MentionEntry {
@@ -30,6 +39,8 @@ export type GuildMentionSummary = Record<string, { mentionCount: number; channel
 type AnyRecord = Record<string, unknown>;
 
 const mentionsInternal = writable<MentionState>({});
+
+const CHANNEL_MENTION_TYPE_USER = 0;
 
 function cloneState(state: MentionState): MentionState {
         const next: MentionState = {};
@@ -154,7 +165,7 @@ function buildStateFromSnapshot(): void {
                                         extractId(entry, 'GuildId', 'guild_id', 'guildId'),
                                         channelId,
                                         messageId,
-                                        null
+                                        CHANNEL_MENTION_TYPE_USER
                                 );
                         }
                 }
@@ -231,32 +242,140 @@ guildChannelReadStateLookup.subscribe((lookup) => {
 function resolveGuildLookup(channels: Record<string, any[]>): Record<string, string> {
         const lookup: Record<string, string> = {};
         for (const [guildId, list] of Object.entries(channels ?? {})) {
-                        for (const channel of list ?? []) {
-                                const channelId = normalizeId((channel as AnyRecord)?.id);
-                                if (!channelId) continue;
-                                if (!(channelId in lookup)) {
-                                        lookup[channelId] = guildId;
-                                }
+                for (const channel of list ?? []) {
+                        const channelId = normalizeId((channel as AnyRecord)?.id);
+                        if (!channelId) continue;
+                        if (!(channelId in lookup)) {
+                                lookup[channelId] = guildId;
                         }
+                }
         }
         return lookup;
 }
 
+function hasOwn(map: unknown, key: string): boolean {
+        if (!map || typeof map !== 'object') return false;
+        return Object.prototype.hasOwnProperty.call(map, key);
+}
+
+function buildGuildNotificationLevelMap(settings: AppSettings | null | undefined): Record<string, NotificationLevel> {
+        const layout = (settings?.guildLayout ?? []) as GuildLayoutItem[];
+        const map: Record<string, NotificationLevel> = {};
+        for (const item of layout) {
+                if (!item) continue;
+                if (item.kind === 'folder') {
+                        for (const guild of item.guilds ?? []) {
+                                if (!guild?.guildId) continue;
+                                const gid = normalizeId(guild.guildId);
+                                if (!gid) continue;
+                                map[gid] = resolveNotificationLevel(guild.notifications);
+                        }
+                        continue;
+                }
+                const gid = normalizeId(item.guildId);
+                if (!gid) continue;
+                map[gid] = resolveNotificationLevel(item.notifications);
+        }
+        return map;
+}
+
+function buildDmChannelUserLookup(dmChannels: VisibleDmChannel[] | null | undefined): Record<string, string | null> {
+        const lookup: Record<string, string | null> = {};
+        if (!Array.isArray(dmChannels)) return lookup;
+        for (const channel of dmChannels) {
+                if (!channel) continue;
+                const channelId = normalizeId(channel.channelId);
+                if (!channelId) continue;
+                const userId = normalizeId(channel.userId);
+                lookup[channelId] = userId;
+        }
+        return lookup;
+}
+
+function resolveEffectiveNotificationLevel(
+        guildId: string,
+        channelId: string,
+        guildLevels: Record<string, NotificationLevel>,
+        channelNotifications: AppSettings['channelNotifications'] | undefined,
+        userNotifications: AppSettings['userNotifications'] | undefined,
+        dmUserLookup: Record<string, string | null>
+): NotificationLevel {
+        if (guildId !== '@me') {
+                const guildLevel = guildLevels[guildId] ?? NOTIFICATION_LEVELS.ALL;
+                if (guildLevel === NOTIFICATION_LEVELS.NONE || guildLevel === NOTIFICATION_LEVELS.MENTIONS) {
+                        return guildLevel;
+                }
+                if (hasOwn(channelNotifications, channelId)) {
+                        const channelLevel = resolveNotificationLevel(channelNotifications?.[channelId]);
+                        if (channelLevel === NOTIFICATION_LEVELS.NONE || channelLevel === NOTIFICATION_LEVELS.MENTIONS) {
+                                return channelLevel;
+                        }
+                        return channelLevel;
+                }
+                return guildLevel;
+        }
+
+        const userId = dmUserLookup[channelId] ?? null;
+        if (userId && hasOwn(userNotifications, userId)) {
+                const userLevel = resolveNotificationLevel(userNotifications?.[userId]);
+                if (userLevel === NOTIFICATION_LEVELS.NONE || userLevel === NOTIFICATION_LEVELS.MENTIONS) {
+                        return userLevel;
+                }
+        }
+
+        if (hasOwn(channelNotifications, channelId)) {
+                const channelLevel = resolveNotificationLevel(channelNotifications?.[channelId]);
+                if (channelLevel === NOTIFICATION_LEVELS.NONE || channelLevel === NOTIFICATION_LEVELS.MENTIONS) {
+                        return channelLevel;
+                }
+                return channelLevel;
+        }
+
+        if (userId) {
+                return resolveNotificationLevel(userNotifications?.[userId]);
+        }
+
+        return NOTIFICATION_LEVELS.ALL;
+}
+
+function filterMessagesForLevel(messages: MentionEntry[], level: NotificationLevel): MentionEntry[] {
+        if (level === NOTIFICATION_LEVELS.NONE) {
+                return [];
+        }
+        if (level === NOTIFICATION_LEVELS.MENTIONS) {
+                return messages.filter((message) => message.type == null || message.type === CHANNEL_MENTION_TYPE_USER);
+        }
+        return messages;
+}
+
 export const channelMentionsByGuild: Readable<ChannelMentionSummaryByGuild> = derived(
-        [mentionsInternal, channelsByGuild],
-        ([$mentions, $channels]) => {
+        [mentionsInternal, channelsByGuild, appSettings],
+        ([$mentions, $channels, settings]) => {
                 const result: ChannelMentionSummaryByGuild = {};
                 const guildLookup = resolveGuildLookup($channels as Record<string, any[]>);
+                const guildLevels = buildGuildNotificationLevelMap(settings);
+                const channelNotifications = settings?.channelNotifications;
+                const userNotifications = settings?.userNotifications;
+                const dmLookup = buildDmChannelUserLookup(settings?.dmChannels);
                 for (const [channelId, entry] of Object.entries($mentions)) {
-                        const count = entry.messages.length;
-                        if (!count) continue;
                         const guildId = entry.guildId ?? guildLookup[channelId] ?? '@me';
+                        const level = resolveEffectiveNotificationLevel(
+                                guildId,
+                                channelId,
+                                guildLevels,
+                                channelNotifications,
+                                userNotifications,
+                                dmLookup
+                        );
+                        const visibleMessages = filterMessagesForLevel(entry.messages, level);
+                        const count = visibleMessages.length;
+                        if (!count) continue;
                         if (!result[guildId]) {
                                 result[guildId] = {};
                         }
                         result[guildId]![channelId] = {
                                 count,
-                                latestMessageId: entry.latestMessageId
+                                latestMessageId: visibleMessages[count - 1]?.messageId ?? entry.latestMessageId
                         };
                 }
                 return result;

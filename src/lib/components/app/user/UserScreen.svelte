@@ -181,10 +181,6 @@
                 return entry?.count ?? 0;
         }
 
-        function mentionLabelClass(count: number): string {
-                return count > 0 ? 'text-[var(--danger)] font-semibold' : '';
-        }
-
         function setFriendLoading(id: string, value: boolean) {
                 const next = new Set(removingFriendIds);
                 if (value) {
@@ -1798,7 +1794,7 @@
                                                                                                 {/if}
                                                                                         </div>
                                                                                         <div class="min-w-0 flex-1">
-                                                                                                <div class={`truncate text-sm font-semibold ${mentionLabelClass(mentionCount)}`}>{displayName}</div>
+                                                                                                <div class="truncate text-sm font-semibold">{displayName}</div>
                                                                                                 {#if secondaryLine}
                                                                                                         <div class="truncate text-xs text-[var(--muted)]">{secondaryLine}</div>
                                                                                                 {/if}
