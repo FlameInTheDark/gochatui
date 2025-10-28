@@ -61,6 +61,9 @@ type VoiceSessionInternal = {
         ws: WebSocket | null;
         pc: RTCPeerConnection | null;
         localStream: MediaStream | null;
+        localSendStream: MediaStream | null;
+        localSendTrack: MediaStreamTrack | null;
+        localAudioSender: RTCRtpSender | null;
         remoteStreams: Map<string, MediaStream>;
         remoteUserIds: Map<string, string | null>;
         remoteMonitors: Map<string, StreamMonitor>;
@@ -76,6 +79,7 @@ type VoiceSessionInternal = {
         localVideoSender: RTCRtpSender | null;
         localVideoTransceiver: RTCRtpTransceiver | null;
         localGateOpen: boolean;
+        localGateControllable: boolean;
 };
 
 const initialState: VoiceState = {
@@ -163,6 +167,8 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
         const sessionId = activeSession.id;
         const constraints = buildAudioConstraints(settings);
         let newStream: MediaStream | null = null;
+        let sendStream: MediaStream | null = null;
+        let sendTrack: MediaStreamTrack | null = null;
         try {
                 newStream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
         } catch (error) {
@@ -186,48 +192,125 @@ async function replaceLocalAudioStream(settings: DeviceSettings): Promise<void> 
                 return;
         }
 
-        applyGainToTrack(newTrack, settings.audioInputLevel);
+        const previousCaptureStream = activeSession.localStream;
+        const previousSendStream = activeSession.localSendStream;
+        const previousSendTrack = activeSession.localSendTrack;
 
-        const previousStream = activeSession.localStream;
+        const { sendStream: nextSendStream, sendTrack: nextSendTrack, gateControllable } =
+                buildOutboundAudioResources(newStream, settings.audioInputLevel);
+
+        sendStream = nextSendStream;
+        sendTrack = nextSendTrack;
+
         activeSession.localStream = newStream;
+        activeSession.localSendStream = sendStream;
+        activeSession.localSendTrack = sendTrack;
+        activeSession.localGateControllable = gateControllable;
         startLocalMonitor(activeSession);
 
         if (!session || session.id !== sessionId) {
                 stopStream(newStream);
+                stopStream(sendStream);
                 return;
         }
 
         if (activeSession.pc) {
-                const sender = activeSession.pc.getSenders().find((item) => item.track?.kind === 'audio');
+                const outboundTrack = sendTrack ?? newTrack;
+                const outboundStream = sendStream ?? newStream;
+                let sender = activeSession.localAudioSender;
+                if (!sender) {
+                        sender = activeSession.pc
+                                .getSenders()
+                                .find((item) => item.track?.kind === 'audio') ?? null;
+                        if (sender) {
+                                activeSession.localAudioSender = sender;
+                        }
+                }
+
                 if (sender) {
                         try {
-                                await sender.replaceTrack(newTrack);
+                                await sender.replaceTrack(outboundTrack);
                         } catch (error) {
                                 console.error('Failed to replace audio track on peer connection.', error);
                         }
                 } else {
                         try {
-                                activeSession.pc.addTrack(newTrack, newStream);
+                                const createdSender = activeSession.pc.addTrack(outboundTrack, outboundStream);
+                                activeSession.localAudioSender = createdSender;
                         } catch (error) {
                                 console.error('Failed to attach audio track to peer connection.', error);
                         }
                 }
         }
 
-        applyMuteState(newStream, get(state).muted);
+        applyMuteState(activeSession, get(state).muted);
 
         if (session && session.id === sessionId) {
-                stopStream(previousStream);
+                stopStream(previousCaptureStream);
+                if (previousSendStream && previousSendStream !== previousCaptureStream) {
+                        stopStream(previousSendStream);
+                }
+                if (previousSendTrack && previousSendTrack !== previousSendStream?.getAudioTracks()[0]) {
+                        try {
+                                previousSendTrack.stop();
+                        } catch {}
+                }
         } else {
                 stopStream(newStream);
+                stopStream(sendStream);
+                if (sendTrack && sendTrack !== sendStream?.getAudioTracks()[0]) {
+                        try {
+                                sendTrack.stop();
+                        } catch {}
+                }
         }
 }
 
 function applyLocalInputGain(settings: DeviceSettings) {
         const activeSession = session;
         if (!activeSession) return;
-        const track = activeSession.localStream?.getAudioTracks()[0] ?? null;
-        applyGainToTrack(track, settings.audioInputLevel);
+        const captureTrack = activeSession.localStream?.getAudioTracks()[0] ?? null;
+        applyGainToTrack(captureTrack, settings.audioInputLevel);
+        if (activeSession.localSendTrack) {
+                applyGainToTrack(activeSession.localSendTrack, settings.audioInputLevel);
+        }
+}
+
+function buildOutboundAudioResources(
+        stream: MediaStream | null,
+        gain: number
+): { sendStream: MediaStream | null; sendTrack: MediaStreamTrack | null; gateControllable: boolean } {
+        if (!stream) {
+                return { sendStream: null, sendTrack: null, gateControllable: false };
+        }
+        const track = stream.getAudioTracks()[0] ?? null;
+        if (!track) {
+                return { sendStream: null, sendTrack: null, gateControllable: false };
+        }
+        track.enabled = true;
+        applyGainToTrack(track, gain);
+        let cloned: MediaStreamTrack | null = null;
+        try {
+                cloned = typeof track.clone === 'function' ? track.clone() : null;
+        } catch {
+                cloned = null;
+        }
+        if (!cloned) {
+                return { sendStream: stream, sendTrack: track, gateControllable: false };
+        }
+        cloned.enabled = true;
+        applyGainToTrack(cloned, gain);
+        try {
+                const outbound = new MediaStream();
+                outbound.addTrack(cloned);
+                return { sendStream: outbound, sendTrack: cloned, gateControllable: true };
+        } catch (error) {
+                console.error('Failed to attach cloned audio track to send stream.', error);
+                try {
+                        cloned.stop();
+                } catch {}
+                return { sendStream: stream, sendTrack: track, gateControllable: false };
+        }
 }
 
 const defaultDeviceSettings = cloneDeviceSettings(null);
@@ -440,15 +523,17 @@ function startLocalMonitor(currentSession: VoiceSessionInternal) {
         }
         const openThreshold = normalizedMonitorThreshold(lastDeviceSettings.audioInputThreshold);
         const closeThreshold = clampNormalized(openThreshold * LOCAL_GATE_CLOSE_RATIO);
-        let gateOpen = currentSession.localGateOpen ?? true;
+        const gateSupported = currentSession.localGateControllable !== false;
+        let gateOpen = gateSupported ? currentSession.localGateOpen ?? true : true;
         let lastGateOpenedAt = gateOpen ? getTimestamp() : 0;
 
         const applyGateState = (nextOpen: boolean) => {
-                gateOpen = nextOpen;
-                if (currentSession.localGateOpen !== nextOpen) {
-                        currentSession.localGateOpen = nextOpen;
+                const normalizedOpen = gateSupported ? nextOpen : true;
+                gateOpen = normalizedOpen;
+                if (currentSession.localGateOpen !== normalizedOpen) {
+                        currentSession.localGateOpen = normalizedOpen;
                 }
-                applyMuteState(currentSession.localStream, get(state).muted, nextOpen);
+                applyMuteState(currentSession, get(state).muted, normalizedOpen);
         };
 
         applyGateState(gateOpen);
@@ -568,11 +653,32 @@ function extractUserId(...candidates: (string | null | undefined)[]): string | n
         return null;
 }
 
-function applyMuteState(localStream: MediaStream | null, muted: boolean, gateOpen?: boolean) {
-        if (!localStream) return;
-        const shouldEnable = !muted && (typeof gateOpen === 'boolean' ? gateOpen : session?.localGateOpen ?? true);
-        for (const track of localStream.getAudioTracks()) {
-                track.enabled = shouldEnable;
+function applyMuteState(target: VoiceSessionInternal | null, muted: boolean, gateOpen?: boolean) {
+        const activeSession = target ?? session;
+        if (!activeSession) return;
+
+        const gateAvailable = activeSession.localGateControllable !== false;
+        const gateValue = typeof gateOpen === 'boolean' ? gateOpen : activeSession.localGateOpen ?? true;
+        const effectiveGate = gateAvailable ? gateValue : true;
+        const shouldTransmit = !muted && effectiveGate;
+
+        const captureStream = activeSession.localStream;
+        const captureTracks = captureStream ? captureStream.getAudioTracks() : [];
+        const sendTrack = activeSession.localSendTrack;
+        const sendIsCapture = Boolean(sendTrack && captureTracks.includes(sendTrack));
+
+        if (!sendIsCapture) {
+                for (const track of captureTracks) {
+                        track.enabled = true;
+                }
+        }
+
+        if (sendTrack && !sendIsCapture) {
+                sendTrack.enabled = shouldTransmit;
+        } else {
+                for (const track of captureTracks) {
+                        track.enabled = shouldTransmit;
+                }
         }
 }
 
@@ -936,6 +1042,11 @@ function clearSession(options: { error?: string | null; manual?: boolean } = {})
 
         current.localMonitor?.stop();
         current.localMonitor = null;
+        stopStream(current.localSendStream);
+        current.localSendStream = null;
+        current.localSendTrack = null;
+        current.localAudioSender = null;
+        current.localGateControllable = true;
         for (const monitor of current.remoteMonitors.values()) {
                 monitor.stop();
         }
@@ -1165,13 +1276,38 @@ async function createPeerConnection(currentSession: VoiceSessionInternal): Promi
         };
 
         const currentState = get(state);
-        if (currentSession.localStream) {
-                for (const track of currentSession.localStream.getTracks()) {
+        const outboundTrack =
+                currentSession.localSendTrack ?? currentSession.localStream?.getAudioTracks()[0] ?? null;
+        const outboundStream = currentSession.localSendStream ?? currentSession.localStream ?? null;
+        if (outboundTrack && outboundStream) {
+                let sender = currentSession.localAudioSender;
+                if (!sender) {
+                        sender = pc
+                                .getSenders()
+                                .find((item) => item.track?.kind === 'audio') ?? null;
+                        if (!sender) {
+                                try {
+                                        sender = pc.addTrack(outboundTrack, outboundStream);
+                                } catch (error) {
+                                        console.error('Failed to attach audio track to peer connection.', error);
+                                        sender = null;
+                                }
+                        }
+                        if (sender) {
+                                currentSession.localAudioSender = sender;
+                        }
+                } else if (sender.track !== outboundTrack) {
                         try {
-                                pc.addTrack(track, currentSession.localStream);
-                        } catch {}
+                                const result = sender.replaceTrack(outboundTrack);
+                                if (result && typeof (result as Promise<void>).catch === 'function') {
+                                        (result as Promise<void>).catch(() => {});
+                                }
+                        } catch (error) {
+                                console.error('Failed to sync audio sender track.', error);
+                        }
                 }
-                applyMuteState(currentSession.localStream, currentState.muted);
+
+                applyMuteState(currentSession, currentState.muted);
         }
 
         const sender = ensureLocalVideoSender(currentSession, pc);
@@ -1326,15 +1462,6 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 }
         }
 
-        if (localStream) {
-                const track = localStream.getAudioTracks()[0] ?? null;
-                applyGainToTrack(track, deviceSnapshot.audioInputLevel);
-                logVoice('applied local input gain', {
-                        sessionId: attemptId,
-                        trackPresent: Boolean(track)
-                });
-        }
-
         try {
                 logVoice('requesting SFU credentials', {
                         sessionId: attemptId,
@@ -1372,6 +1499,9 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         ws,
                         pc: null,
                         localStream,
+                        localSendStream: null,
+                        localSendTrack: null,
+                        localAudioSender: null,
                         remoteStreams: new Map(),
                         remoteUserIds: new Map(),
                         remoteMonitors: new Map(),
@@ -1386,7 +1516,8 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         localVideoStream: null,
                         localVideoSender: null,
                         localVideoTransceiver: null,
-                        localGateOpen: true
+                        localGateOpen: true,
+                        localGateControllable: true
                 };
 
                 session = currentSession;
@@ -1397,6 +1528,18 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                         channelId: currentSession.channelId,
                         hasLocalStream: Boolean(localStream)
                 });
+
+                if (localStream) {
+                        const { sendStream: initialSendStream, sendTrack: initialSendTrack, gateControllable } =
+                                buildOutboundAudioResources(localStream, deviceSnapshot.audioInputLevel);
+                        currentSession.localSendStream = initialSendStream;
+                        currentSession.localSendTrack = initialSendTrack;
+                        currentSession.localGateControllable = gateControllable;
+                } else {
+                        currentSession.localSendStream = null;
+                        currentSession.localSendTrack = null;
+                        currentSession.localGateControllable = false;
+                }
 
                 setSelfVoiceChannelId(normalizedChannel);
                 startLocalMonitor(currentSession);
@@ -1588,7 +1731,7 @@ export async function joinVoiceChannel(guildId: string, channelId: string): Prom
                 };
 
                 if (!localStream) {
-                        applyMuteState(null, get(state).muted);
+                        applyMuteState(currentSession, get(state).muted);
                 }
 
                 updateRemoteStreams(currentSession);
@@ -1778,7 +1921,7 @@ export async function toggleVoiceCamera(): Promise<void> {
 export function setVoiceMuted(muted: boolean): void {
         const current = get(state);
         if (current.muted === muted) return;
-        applyMuteState(session?.localStream ?? null, muted);
+        applyMuteState(session, muted);
         if (session?.ws && session.ws.readyState === WebSocket.OPEN) {
                 try {
                         session.ws.send(JSON.stringify({ op: 7, t: 505, d: { muted } }));
