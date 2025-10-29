@@ -6,7 +6,8 @@
                 channelsByGuild,
                 selectedGuildId,
                 channelReady,
-                messageJumpRequest
+                messageJumpRequest,
+                membersByGuild
         } from '$lib/stores/appState';
         import MessageItem from './MessageItem.svelte';
         import MessagePlaceholder from './MessagePlaceholder.svelte';
@@ -16,8 +17,11 @@
         import { fly } from 'svelte/transition';
         import { onDestroy, onMount, tick, untrack } from 'svelte';
         import { Sparkles } from 'lucide-svelte';
+        import { pendingMessages } from '$lib/stores/pendingMessages';
+        import PendingMessageItem from './PendingMessageItem.svelte';
         import {
                 guildChannelReadStateLookup,
+                dmChannelMetadataLookup,
                 mutateAppSettingsWithoutSaving,
                 type GuildChannelReadState,
                 type GuildLayoutGuild,
@@ -25,6 +29,9 @@
         } from '$lib/stores/settings';
         import { acknowledgeChannelRead } from '$lib/stores/unread';
         import { isMessageNewer } from './readStateUtils';
+        import { channelTypingUsers } from '$lib/stores/channelTyping';
+        import { tooltip } from '$lib/actions/tooltip';
+        import { memberPrimaryName, toSnowflakeString } from '$lib/utils/members';
 
 	let messages = $state<DtoMessage[]>([]);
         let loading = $state(false);
@@ -40,7 +47,15 @@
         let channelSwitchToken = 0;
         let jumpRequestToken = 0;
 
+        let typingBannerEl: HTMLDivElement | null = null;
+        let typingBannerHeight = $state(24);
+        let typingBannerObserver: ResizeObserver | null = null;
+
+        const SCROLLBAR_GUTTER_PX = 10;
+
         const READ_STATE_FLUSH_INTERVAL = 60_000;
+        const me = auth.user;
+        const typingUsersLookup = channelTypingUsers;
 
         interface PendingReadState {
                 guildId: string;
@@ -157,6 +172,41 @@
                 mutateAppSettingsWithoutSaving((settings) => {
                         let changed = false;
                         for (const [guildId, states] of updatesByGuild) {
+                                if (guildId === '@me') {
+                                        if (!Array.isArray(settings.dmChannels) || !settings.dmChannels.length) {
+                                                continue;
+                                        }
+                                        const nextDmChannels = settings.dmChannels.map((entry) => ({
+                                                channelId: entry.channelId,
+                                                userId: entry.userId,
+                                                isDead: entry.isDead ?? false,
+                                                lastReadMessageId: entry.lastReadMessageId ?? null,
+                                                hidden: entry.hidden ?? false,
+                                                hiddenAfterMessageId: entry.hiddenAfterMessageId ?? null
+                                        }));
+                                        let dmChanged = false;
+                                        for (const state of states) {
+                                                const idx = nextDmChannels.findIndex(
+                                                        (entry) => entry.channelId === state.channelId
+                                                );
+                                                if (idx === -1) continue;
+                                                const current = nextDmChannels[idx];
+                                                const nextLastRead = state.lastReadMessageId ?? null;
+                                                if ((current.lastReadMessageId ?? null) === nextLastRead) {
+                                                        continue;
+                                                }
+                                                nextDmChannels[idx] = {
+                                                        ...current,
+                                                        lastReadMessageId: nextLastRead
+                                                };
+                                                dmChanged = true;
+                                        }
+                                        if (dmChanged) {
+                                                settings.dmChannels = nextDmChannels;
+                                                changed = true;
+                                        }
+                                        continue;
+                                }
                                 const entry = findGuildLayoutEntry(settings.guildLayout, guildId);
                                 if (!entry) continue;
                                 const existing = Array.isArray(entry.readStates) ? [...entry.readStates] : [];
@@ -202,11 +252,42 @@
                                 ) {
                                         activeChannelReadMarker = state.lastReadMessageId ?? null;
                                 }
-                                acknowledgeChannelRead(state.guildId, state.channelId);
+                                acknowledgeChannelRead(state.guildId, state.channelId, state.lastReadMessageId);
                         }
                         dirtyGuilds.delete(guildId);
                 }
         }
+
+        function updateTypingBannerHeight() {
+                const measured = typingBannerEl?.offsetHeight ?? 0;
+                typingBannerHeight = Math.max(measured, 24);
+        }
+
+        onMount(() => {
+                updateTypingBannerHeight();
+                if (typeof ResizeObserver !== 'undefined') {
+                        typingBannerObserver = new ResizeObserver(() => {
+                                updateTypingBannerHeight();
+                        });
+                        if (typingBannerEl) {
+                                typingBannerObserver.observe(typingBannerEl);
+                        }
+                }
+                return () => {
+                        typingBannerObserver?.disconnect();
+                        typingBannerObserver = null;
+                };
+        });
+
+        $effect(() => {
+                const el = typingBannerEl;
+                if (!el) return;
+                updateTypingBannerHeight();
+                if (typingBannerObserver) {
+                        typingBannerObserver.disconnect();
+                        typingBannerObserver.observe(el);
+                }
+        });
 
         function buildAckKey(guildId: string, channelId: string, messageId: string | null): string | null {
                 if (!guildId || !channelId || !messageId) return null;
@@ -284,7 +365,7 @@
                                 lastAckedKey = key;
                                 updateReadMarkersAfterAck(guildId, channelId, messageId);
                                 if (guildId) {
-                                        acknowledgeChannelRead(guildId, channelId);
+                                        acknowledgeChannelRead(guildId, channelId, messageId);
                                 }
                         } else if (
                                 wasAtBottom &&
@@ -370,9 +451,17 @@
                 const gid = $selectedGuildId ?? '';
                 const cid = $selectedChannelId ?? '';
                 const lookup = $guildChannelReadStateLookup;
+                const dmLookup = $dmChannelMetadataLookup;
                 if (!atBottom || !gid || !cid || !messageId) {
                         clearAckTimer();
                         return;
+                }
+                if (gid === '@me') {
+                        const metadata = dmLookup?.[cid] ?? null;
+                        if (metadata?.isDead) {
+                                clearAckTimer();
+                                return;
+                        }
                 }
                 const key = `${gid}:${cid}`;
                 const persisted = lastPersistedReadStates.get(key);
@@ -437,25 +526,6 @@
 			if ((a as any).name) return String((a as any).name);
 		}
 		return null;
-	}
-
-	function currentChannel(): any | null {
-		const gid = $selectedGuildId ?? '';
-		const list = $channelsByGuild[gid] ?? [];
-		return list.find((c: any) => String((c as any)?.id) === $selectedChannelId) ?? null;
-	}
-
-	function channelDisplayName() {
-		const ch = currentChannel() as any;
-		const name = typeof ch?.name === 'string' ? ch.name.trim() : '';
-		return name || 'channel';
-	}
-
-	function channelTopic() {
-		const ch = currentChannel() as any;
-		if (!ch) return '';
-		const topic = (ch?.topic ?? '').toString().trim();
-		return topic;
 	}
 
         $effect(() => {
@@ -537,6 +607,47 @@
         const PLACEHOLDER_COUNT = 3;
         const placeholders = Array.from({ length: PLACEHOLDER_COUNT }, (_, i) => i);
 
+        const typingIndicator = $derived.by(() => {
+                const channelId = $selectedChannelId ?? '';
+                if (!channelId) return null;
+                const lookup = $typingUsersLookup;
+                const rawIds = Array.isArray(lookup?.[channelId]) ? lookup[channelId] : [];
+                if (rawIds.length === 0) return null;
+
+                const normalizedIds: string[] = [];
+                for (const value of rawIds) {
+                        const normalized = toSnowflakeString(value);
+                        if (!normalized) continue;
+                        if (!normalizedIds.includes(normalized)) {
+                                normalizedIds.push(normalized);
+                        }
+                }
+
+                if (!normalizedIds.length) return null;
+                const selfId = toSnowflakeString(($me as any)?.id);
+                const filtered = normalizedIds.filter((id) => id !== selfId);
+                if (!filtered.length) return null;
+
+                const names: string[] = [];
+                for (const id of filtered) {
+                        const name = resolveTypingName(channelId, id);
+                        if (!name) continue;
+                        names.push(name);
+                }
+                if (!names.length) return null;
+
+                const visible = names.slice(0, 3);
+                const hidden = names.slice(3);
+                const text = formatTypingText(visible, hidden.length);
+                if (!text) return null;
+
+                return {
+                        text,
+                        tooltip: names.join(', '),
+                        hasTooltip: hidden.length > 0
+                };
+        });
+
         function extractId(value: any): string | null {
                 if (value == null) return null;
                 const raw = typeof value === 'object' ? ((value as any)?.id ?? value) : value;
@@ -597,6 +708,129 @@
                 return merged;
         }
 
+        function formatUserDisplayName(candidate: any): string | null {
+                if (!candidate || typeof candidate !== 'object') return null;
+                const fields = [
+                        candidate.global_name,
+                        candidate.globalName,
+                        candidate.display_name,
+                        candidate.displayName,
+                        candidate.username,
+                        candidate.name,
+                        candidate.nick,
+                        candidate.nickname
+                ];
+                for (const field of fields) {
+                        if (typeof field !== 'string') continue;
+                        const trimmed = field.trim();
+                        if (trimmed) {
+                                return trimmed;
+                        }
+                }
+                return null;
+        }
+
+        function resolveNameFromGuildMembers(guildId: string, userId: string): string | null {
+                if (!guildId || guildId === '@me') return null;
+                const list = $membersByGuild[guildId];
+                if (!Array.isArray(list)) return null;
+                for (const entry of list) {
+                        const memberId =
+                                toSnowflakeString((entry as any)?.user?.id) ?? toSnowflakeString((entry as any)?.id);
+                        if (memberId !== userId) continue;
+                        const name = memberPrimaryName(entry);
+                        if (name) return name;
+                        const fallback = formatUserDisplayName((entry as any)?.user);
+                        if (fallback) return fallback;
+                        break;
+                }
+                return null;
+        }
+
+        function resolveNameFromDmChannel(channelId: string, userId: string): string | null {
+                if (!channelId) return null;
+                const dmChannels = $channelsByGuild['@me'] ?? [];
+                const channel = dmChannels.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId);
+                if (!channel) return null;
+                const recipients = Array.isArray((channel as any)?.recipients)
+                        ? ((channel as any).recipients as any[])
+                        : [];
+                for (const recipient of recipients) {
+                        const rid = toSnowflakeString((recipient as any)?.id);
+                        if (rid === userId) {
+                                const name = formatUserDisplayName(recipient);
+                                if (name) return name;
+                        }
+                }
+                const directRecipient = toSnowflakeString(
+                        (channel as any)?.recipient_id ?? (channel as any)?.recipientId
+                );
+                if (directRecipient === userId) {
+                        const name = formatUserDisplayName((channel as any)?.recipient);
+                        if (name) return name;
+                }
+                return null;
+        }
+
+        function resolveNameFromMessages(channelId: string, userId: string): string | null {
+                for (let i = messages.length - 1; i >= 0; i--) {
+                        const entry = messages[i] as any;
+                        const authorId =
+                                toSnowflakeString(entry?.author_id) ??
+                                toSnowflakeString(entry?.authorId) ??
+                                toSnowflakeString(entry?.author?.id);
+                        if (authorId !== userId) continue;
+                        const name = formatUserDisplayName(entry?.author);
+                        if (name) return name;
+                }
+                return null;
+        }
+
+        function fallbackTypingName(userId: string): string {
+                if (!userId) return 'Someone';
+                const suffix = userId.slice(-4);
+                return `User ${suffix}`;
+        }
+
+        function resolveTypingName(channelId: string, userId: string): string {
+                const guildId = $selectedGuildId ?? '';
+                if (guildId && guildId !== '@me') {
+                        const fromMembers = resolveNameFromGuildMembers(guildId, userId);
+                        if (fromMembers) return fromMembers;
+                } else {
+                        const dmName = resolveNameFromDmChannel(channelId, userId);
+                        if (dmName) return dmName;
+                }
+                const fromMessages = resolveNameFromMessages(channelId, userId);
+                if (fromMessages) return fromMessages;
+                return fallbackTypingName(userId);
+        }
+
+        function formatTypingText(visible: string[], hiddenCount: number): string {
+                const total = visible.length + hiddenCount;
+                if (total === 0) return '';
+                if (total === 1) {
+                        return `${visible[0]} is typing…`;
+                }
+                if (hiddenCount === 0) {
+                        if (visible.length === 2) {
+                                return `${visible[0]} and ${visible[1]} are typing…`;
+                        }
+                        if (visible.length === 3) {
+                                return `${visible[0]}, ${visible[1]}, and ${visible[2]} are typing…`;
+                        }
+                        return `${visible.join(', ')} are typing…`;
+                }
+                const othersLabel = `${hiddenCount} other${hiddenCount === 1 ? '' : 's'}`;
+                if (visible.length === 1) {
+                        return `${visible[0]} and ${othersLabel} are typing…`;
+                }
+                if (visible.length === 2) {
+                        return `${visible[0]}, ${visible[1]}, and ${othersLabel} are typing…`;
+                }
+                return `${visible[0]}, ${visible[1]}, ${visible[2]}, and ${othersLabel} are typing…`;
+        }
+
         async function scrollToMessageId(id: string, smooth = true): Promise<boolean> {
                 if (!scroller) return false;
                 await tick();
@@ -610,6 +844,18 @@
                 scroller.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
                 wasAtBottom = false;
                 newCount = 0;
+
+                const highlightClass = 'message-jump-highlight';
+                target.classList.remove(highlightClass);
+                void target.offsetWidth;
+                target.classList.add(highlightClass);
+                target.addEventListener(
+                        'animationend',
+                        () => {
+                                target.classList.remove(highlightClass);
+                        },
+                        { once: true }
+                );
                 return true;
         }
 
@@ -901,7 +1147,7 @@
 </script>
 
 <div
-	class="scroll-area relative flex-1 overflow-y-auto"
+    class="scroll-area chat-scroll relative flex-1 overflow-y-auto"
 	bind:this={scroller}
         onscroll={() => {
                 const nearBottom = isNearBottom();
@@ -929,32 +1175,23 @@
                 </div>
         {/if}
         {#if endReached && initialLoaded}
-                {@const name = channelDisplayName()}
-                {@const topic = channelTopic()}
                 <div class="px-4 py-6">
-			<div
-				class="mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
-			>
-				<div
-					class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--brand)]"
-				>
+                        <div
+                                class="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-[var(--stroke)] bg-[var(--panel)]/80 p-6 text-center shadow-sm"
+                        >
+                                <div
+                                        class="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-[var(--brand)]"
+                                >
                                         <Sparkles aria-hidden="true" class="h-6 w-6" stroke-width={2} />
                                 </div>
-				<div class="space-y-1">
-					<p class="text-sm font-semibold text-[var(--fg-strong)]">
-						It&apos;s the beginning of your conversation in
-						<span class="text-[var(--brand)]">#{name}</span>
-					</p>
-					{#if topic}
-						<p class="text-xs text-[var(--muted)]">{topic}</p>
-					{/if}
-				</div>
-				<p class="text-xs leading-relaxed text-[var(--muted)]">
-					Send a message to kick things off and keep the conversation going.
-				</p>
-			</div>
-		</div>
-	{/if}
+                                <div>
+                                        <p class="text-sm font-medium text-[var(--foreground)]">
+                                                {i18n.start_of_history()}
+                                        </p>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 	{#each messages as m, i (m.id)}
 		{@const d = (function () {
 			const t = (m as any)?.id;
@@ -1010,6 +1247,7 @@
 		})()}
                 {@const withinMinute =
                         pd && d ? Math.abs((d as Date).getTime() - (pd as Date).getTime()) <= 60000 : false}
+                {@const isJoinMessage = Number((m as any)?.type ?? 0) === 2}
                 {@const compact = pk != null && ck != null && pk === ck && withinMinute}
                 {@const showNewSeparator = shouldShowNewSeparator(m, prev)}
                 {#if showNewSeparator}
@@ -1021,7 +1259,10 @@
                                 <div class="h-px flex-1 rounded-full bg-red-500/50"></div>
                         </div>
                 {/if}
-                <MessageItem message={m} {compact} on:deleted={loadLatest} />
+                <MessageItem message={m} compact={isJoinMessage ? false : compact} on:deleted={loadLatest} />
+        {/each}
+        {#each $pendingMessages.filter((msg) => msg.channelId === ($selectedChannelId ?? '')) as pending (pending.localId)}
+                <PendingMessageItem message={pending} />
         {/each}
         {#if loading && loadingDirection === 'newer'}
                 <div class="space-y-2 pt-2" aria-hidden="true">
@@ -1032,14 +1273,34 @@
         {/if}
 </div>
 
+<div
+        class="typing-banner flex h-6 items-center px-4 text-xs italic text-[var(--muted)]"
+        bind:this={typingBannerEl}
+        use:tooltip={
+                typingIndicator?.hasTooltip
+                        ? {
+                                  content: () => typingIndicator.tooltip,
+                                  placement: 'top' as const,
+                                  align: 'start' as const
+                          }
+                        : ''
+        }
+>
+        <span class="block w-full truncate" style:visibility={typingIndicator ? 'visible' : 'hidden'}>
+                {typingIndicator?.text ?? ''}
+        </span>
+</div>
+
 {#if !wasAtBottom && initialLoaded}
-	<div class="pointer-events-none relative">
-		<div
-			class="gradient-blur absolute inset-x-0 bottom-0 h-16"
-			transition:fly={{ y: 16, duration: 200 }}
-		>
-			<div></div>
-			<div></div>
+        <div class="pointer-events-none relative">
+                <div
+                        class="gradient-blur absolute left-0 h-16"
+                        style:bottom={`${typingBannerHeight}px`}
+                        style:right={`${SCROLLBAR_GUTTER_PX}px`}
+                        transition:fly={{ y: 16, duration: 200 }}
+                >
+                        <div></div>
+                        <div></div>
 			<div></div>
 			<div></div>
 			<div></div>
@@ -1119,11 +1380,62 @@
 		-webkit-backdrop-filter: blur(8px) !important;
 		mask: linear-gradient(180deg, transparent 75%, #000 87.5%, #000);
 	}
-	.gradient-blur:after {
-		content: '';
-		z-index: 8;
-		backdrop-filter: blur(10px);
-		-webkit-backdrop-filter: blur(10px) !important;
-		mask: linear-gradient(180deg, transparent 87.5%, #000);
-	}
+        .gradient-blur:after {
+                content: '';
+                z-index: 8;
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px) !important;
+                mask: linear-gradient(180deg, transparent 87.5%, #000);
+        }
+
+        .chat-scroll {
+                scrollbar-gutter: stable;
+                scrollbar-width: thin;
+                scrollbar-color: transparent transparent;
+        }
+
+        .chat-scroll:hover {
+                scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+        }
+
+        .chat-scroll::-webkit-scrollbar {
+                width: 10px;
+                height: 10px;
+                background: transparent;
+        }
+
+        .chat-scroll::-webkit-scrollbar-button {
+                width: 0;
+                height: 0;
+                display: none;
+        }
+
+        .chat-scroll::-webkit-scrollbar-thumb {
+                background-color: transparent;
+                border-radius: 9999px;
+        }
+
+        .chat-scroll:hover::-webkit-scrollbar-thumb {
+                background-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .chat-scroll::-webkit-scrollbar-track {
+                background: transparent;
+        }
+
+        @keyframes message-jump-highlight {
+                0% {
+                        background-color: rgba(249, 115, 22, 0.75);
+                }
+                60% {
+                        background-color: rgba(249, 115, 22, 0.28);
+                }
+                100% {
+                        background-color: transparent;
+                }
+        }
+
+        :global(.message-jump-highlight) {
+                animation: message-jump-highlight 1.4s ease-out;
+        }
 </style>

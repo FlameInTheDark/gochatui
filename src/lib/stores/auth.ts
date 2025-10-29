@@ -110,7 +110,7 @@ function createAuthStore() {
 		}, delay);
 	}
 
-	async function refresh(): Promise<boolean> {
+        async function refresh(): Promise<boolean> {
                 const rt = get(refreshToken);
                 if (!rt) return false;
                 try {
@@ -246,21 +246,36 @@ function createAuthStore() {
 
 	const isAuthenticated = derived(token, (t) => Boolean(t));
 
-	token.subscribe(async (t) => {
-		try {
-			if (typeof localStorage !== 'undefined') {
-				if (t) localStorage.setItem(TOKEN_KEY, t);
-				else localStorage.removeItem(TOKEN_KEY);
-			}
-		} catch {
-			// ignore
-		}
-		scheduleTokenRefresh(t);
+        let hasFetchedMeForSession = false;
+
+        user.subscribe((value) => {
+                if (!value) {
+                        hasFetchedMeForSession = false;
+                }
+        });
+
+        token.subscribe(async (t) => {
+                try {
+                        if (typeof localStorage !== 'undefined') {
+                                if (t) localStorage.setItem(TOKEN_KEY, t);
+                                else localStorage.removeItem(TOKEN_KEY);
+                        }
+                } catch {
+                        // ignore
+                }
+                scheduleTokenRefresh(t);
                 if (t) {
-                        await loadMe();
+                        if (!hasFetchedMeForSession) {
+                                hasFetchedMeForSession = true;
+                                const me = await loadMe();
+                                if (!me) {
+                                        hasFetchedMeForSession = false;
+                                }
+                        }
                 } else {
                         user.set(null);
                         guilds.set([]);
+                        hasFetchedMeForSession = false;
                 }
         });
 

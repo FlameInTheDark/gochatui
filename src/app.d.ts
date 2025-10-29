@@ -11,3 +11,8 @@ declare global {
 }
 
 export {};
+
+declare module '*.ogg?url' {
+        const src: string;
+        export default src;
+}

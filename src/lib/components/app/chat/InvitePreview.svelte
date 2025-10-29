@@ -2,7 +2,7 @@
 	import type { DtoInvitePreview } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages.js';
-	import { computeApiBase } from '$lib/runtime/api';
+        import { resolveIconUrl } from '$lib/utils/icon';
 	import { selectGuild } from '$lib/utils/guildSelection';
 
 	let { code, url } = $props<{ code: string; url: string }>();
@@ -46,12 +46,7 @@
 
 	const guildName = $derived(getGuildName(preview));
 	const guildInitials = $derived(getGuildInitials(guildName));
-	const guildIconUrl = $derived.by(() => {
-		const iconId = preview?.guild?.icon;
-		if (iconId == null) return null;
-		const base = computeApiBase();
-		return `${base.replace(/\/$/, '')}/attachments/${iconId}`;
-	});
+        const guildIconUrl = $derived.by(() => resolveIconUrl(preview?.guild?.icon));
 	const memberLabel = $derived.by(() => {
 		const count = preview?.members_count;
 		if (count == null) {

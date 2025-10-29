@@ -1,7 +1,6 @@
 <script lang="ts">
         import AuthGate from '$lib/components/app/auth/AuthGate.svelte';
         import { goto } from '$app/navigation';
-        import { browser } from '$app/environment';
         import type { PageData } from './$types';
         import type { DtoInvitePreview } from '$lib/api';
         import { auth } from '$lib/stores/auth';
@@ -47,22 +46,10 @@
                         acceptInvite: (params) => auth.api.guildInvites.guildInvitesAcceptInviteCodePost(params),
                         loadGuilds: () => auth.loadGuilds(),
                         goto,
-                        onSuccess: ({ guildId, guild }) => {
-                                const targetGuildId =
-                                        guildId ??
-                                        (guild?.id != null
-                                                ? String(guild.id)
-                                                : invite?.guild?.id != null
-                                                        ? String(invite.guild.id)
-                                                        : null);
+                        onSuccess: () => {
                                 selectedGuildId.set(null);
                                 selectedChannelId.set(null);
                                 channelReady.set(false);
-                                if (browser && targetGuildId) {
-                                        try {
-                                                localStorage.setItem('lastGuild', targetGuildId);
-                                        } catch {}
-                                }
                         }
                 });
                 if (!result.success) {

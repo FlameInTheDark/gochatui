@@ -1,6 +1,10 @@
 <script lang="ts">
-	import { contextMenu } from '$lib/stores/contextMenu';
-	import type { ContextMenuItem } from '$lib/stores/contextMenu';
+        import { contextMenu } from '$lib/stores/contextMenu';
+        import type {
+                ContextMenuActionItem,
+                ContextMenuItem,
+                ContextMenuSliderItem
+        } from '$lib/stores/contextMenu';
 	import { tick } from 'svelte';
 
 	let menuEl: HTMLDivElement | null = $state(null);
@@ -10,17 +14,50 @@
 	let submenuX = $state(0);
 	let submenuY = $state(0);
 
-	let itemRefs: (HTMLButtonElement | null)[] = [];
-	let submenuItemRefs: (HTMLButtonElement | null)[] = [];
+        let itemRefs: (HTMLButtonElement | null)[] = [];
+        let submenuItemRefs: (HTMLButtonElement | null)[] = [];
+        let sliderValues: Record<number, number> = {};
 
-	function getOpenSubmenuItems(): ContextMenuItem[] {
-		const cm = $contextMenu as { items: ContextMenuItem[]; openSubmenuIndex: number | null } | null;
-		if (!cm || cm.openSubmenuIndex == null) {
-			return [];
-		}
-		return cm.items[cm.openSubmenuIndex]?.children ?? [];
-	}
-	let submenuCloseTimeout: ReturnType<typeof setTimeout> | null = null;
+        function isSliderItem(item: ContextMenuItem): item is ContextMenuSliderItem {
+                return (item as ContextMenuSliderItem)?.type === 'slider';
+        }
+
+        const isActionItem = (item: ContextMenuItem): item is ContextMenuActionItem => !isSliderItem(item);
+
+        function sliderValue(index: number, item: ContextMenuSliderItem): number {
+                const raw = sliderValues[index];
+                const fallback = Number(item.value ?? 0);
+                return Number.isFinite(raw) ? raw : fallback;
+        }
+
+        function sliderDisplay(value: number): string {
+                const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+                return `${pct}%`;
+        }
+
+        function sliderInputId(index: number): string {
+                return `cm-slider-${index}`;
+        }
+
+        function handleSliderInput(index: number, item: ContextMenuSliderItem, event: Event) {
+                if (item.disabled) return;
+                event.stopPropagation();
+                const input = event.currentTarget as HTMLInputElement;
+                const nextValue = Number(input.value);
+                sliderValues = { ...sliderValues, [index]: nextValue };
+                item.onChange?.(nextValue);
+        }
+
+        function getOpenSubmenuItems(): ContextMenuActionItem[] {
+                const cm = $contextMenu as { items: ContextMenuItem[]; openSubmenuIndex: number | null } | null;
+                if (!cm || cm.openSubmenuIndex == null) {
+                        return [];
+                }
+                const item = cm.items[cm.openSubmenuIndex];
+                if (!item || !isActionItem(item) || !item.children) return [];
+                return item.children;
+        }
+        let submenuCloseTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	function clamp(v: number, min: number, max: number) {
 		return Math.max(min, Math.min(max, v));
@@ -170,10 +207,11 @@
 			});
 	}
 
-	function handleTriggerEnter(index: number, item: ContextMenuItem) {
-		if (!item.children?.length || item.disabled) return;
-		openSubmenu(index);
-	}
+        function handleTriggerEnter(index: number, item: ContextMenuItem) {
+                if (!isActionItem(item)) return;
+                if (!item.children?.length || item.disabled) return;
+                openSubmenu(index);
+        }
 
 	function handleTriggerLeave(index: number) {
 		const cm = $contextMenu as any;
@@ -182,29 +220,34 @@
 		}
 	}
 
-	function handleItemClick(event: MouseEvent, item: ContextMenuItem, index: number) {
-		if (item.disabled) {
-			event.preventDefault();
-			return;
-		}
-		if (item.children?.length) {
-			event.preventDefault();
-			openSubmenu(index, { focus: event.detail === 0 });
-			return;
-		}
-		contextMenu.close();
-		if (item.action) {
-			Promise.resolve().then(item.action);
-		}
-	}
+        function handleItemClick(event: MouseEvent, item: ContextMenuItem, index: number) {
+                if (!isActionItem(item)) {
+                        event.preventDefault();
+                        return;
+                }
+                const actionItem = item;
+                if (actionItem.disabled) {
+                        event.preventDefault();
+                        return;
+                }
+                if (actionItem.children?.length) {
+                        event.preventDefault();
+                        openSubmenu(index, { focus: event.detail === 0 });
+                        return;
+                }
+                contextMenu.close();
+                if (actionItem.action) {
+                        Promise.resolve().then(actionItem.action);
+                }
+        }
 
-	function handleSubmenuItemClick(item: ContextMenuItem) {
-		if (item.disabled) return;
-		contextMenu.close();
-		if (item.action) {
-			Promise.resolve().then(item.action);
-		}
-	}
+        function handleSubmenuItemClick(item: ContextMenuActionItem) {
+                if (item.disabled) return;
+                contextMenu.close();
+                if (item.action) {
+                        Promise.resolve().then(item.action);
+                }
+        }
 
 	function onRootKeydown(event: KeyboardEvent) {
 		const cm = $contextMenu as any;
@@ -232,13 +275,18 @@
 			}
 			case 'ArrowRight': {
 				if (index >= 0) {
-					const item = cm.items[index] as ContextMenuItem | undefined;
-					if (item?.children?.length && !item.disabled) {
-						event.preventDefault();
-						event.stopPropagation();
-						openSubmenu(index, { focus: true });
-					}
-				}
+                                        const maybeItem = cm.items[index] as ContextMenuItem | undefined;
+                                        if (
+                                                maybeItem &&
+                                                isActionItem(maybeItem) &&
+                                                maybeItem.children?.length &&
+                                                !maybeItem.disabled
+                                        ) {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                openSubmenu(index, { focus: true });
+                                        }
+                                }
 				break;
 			}
 			case 'ArrowLeft':
@@ -329,24 +377,32 @@
 		}
 	});
 
-	// Reset refs when menu closes
-	$effect(() => {
-		const cm = $contextMenu as any;
-		if (!cm?.open) {
-			itemRefs = [];
-			submenuItemRefs = [];
-			clearSubmenuCloseTimeout();
-		}
-	});
+        // Reset refs when menu closes
+        $effect(() => {
+                const cm = $contextMenu as any;
+                if (!cm?.open) {
+                        itemRefs = [];
+                        submenuItemRefs = [];
+                        clearSubmenuCloseTimeout();
+                        sliderValues = {};
+                }
+        });
+
+        const submenuItems = $derived(getOpenSubmenuItems());
 </script>
 
 <svelte:window
-	onkeydown={onGlobalKey}
-	onclick={() => contextMenu.close()}
-	onresize={() => {
-		updatePosition();
-		updateSubmenuPosition();
-	}}
+        onkeydown={onGlobalKey}
+        onpointerdown={(event) => {
+                if (event.defaultPrevented) return;
+                if (event.pointerType === 'touch' || event.button === 0 || event.button === -1) {
+                        contextMenu.close();
+                }
+        }}
+        onresize={() => {
+                updatePosition();
+                updateSubmenuPosition();
+        }}
 />
 
 {#if $contextMenu.open}
@@ -363,40 +419,73 @@
 		>
 			<div class="rounded-lg backdrop-blur-md">
 				<div class="panel max-w-[260px] min-w-[200px] rounded-md p-1">
-					{#each $contextMenu.items as it, index}
-						<button
-							use:rootRef={index}
-							class={`flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
-								it.danger ? 'text-red-400' : ''
-							} ${it.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-							role="menuitem"
-							type="button"
-							aria-haspopup={it.children?.length ? 'menu' : undefined}
-							aria-expanded={it.children?.length
-								? $contextMenu.openSubmenuIndex === index
-								: undefined}
-							disabled={it.disabled}
-							onpointerenter={() => handleTriggerEnter(index, it)}
-							onpointerleave={() => handleTriggerLeave(index)}
-							onclick={(event) => handleItemClick(event, it, index)}
-						>
-							<span class="truncate">{it.label}</span>
-							{#if it.children?.length}
-								<span aria-hidden="true" class="text-xs opacity-70">›</span>
-							{/if}
-						</button>
-					{/each}
-				</div>
-			</div>
-		</div>
-		{#if $contextMenu.openSubmenuIndex != null}
-			{@const submenuItems = getOpenSubmenuItems()}
-			{#if submenuItems.length}
-				<div
-					bind:this={submenuEl}
-					class="pointer-events-auto absolute"
-					role="menu"
-					tabindex="-1"
+                                        {#each $contextMenu.items as it, index}
+                                                {#if isSliderItem(it)}
+                                                        <div class={`px-3 py-2 ${it.disabled ? 'opacity-50' : ''}`}>
+                                                                <label
+                                                                        for={sliderInputId(index)}
+                                                                        class="flex items-center justify-between text-xs font-medium text-[var(--muted)]"
+                                                                >
+                                                                        <span class="truncate">{it.label}</span>
+                                                                        <span>{sliderDisplay(sliderValue(index, it))}</span>
+                                                                </label>
+                                                                <input
+                                                                        type="range"
+                                                                        min={it.min ?? 0}
+                                                                        max={it.max ?? 1}
+                                                                        step={it.step ?? 0.05}
+                                                                        value={sliderValue(index, it)}
+                                                                        id={sliderInputId(index)}
+                                                                        class="mt-2 w-full accent-[var(--brand)]"
+                                                                        disabled={it.disabled}
+                                                                        onpointerdown={(event) => event.stopPropagation()}
+                                                                        onpointerup={(event) => event.stopPropagation()}
+                                                                        onclick={(event) => event.stopPropagation()}
+                                                                        oninput={(event) => handleSliderInput(index, it, event)}
+                                                                />
+                                                        </div>
+                                                {:else}
+                                                        <button
+                                                                use:rootRef={index}
+                                                                class={`flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
+                                                                        it.danger ? 'text-red-400' : ''
+                                                                } ${it.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                                role="menuitem"
+                                                                type="button"
+                                                                aria-haspopup={it.children?.length ? 'menu' : undefined}
+                                                                aria-expanded={it.children?.length
+                                                                        ? $contextMenu.openSubmenuIndex === index
+                                                                        : undefined}
+                                                                disabled={it.disabled}
+                                                                onpointerenter={() => handleTriggerEnter(index, it)}
+                                                                onpointerleave={() => handleTriggerLeave(index)}
+                                                                onclick={(event) => handleItemClick(event, it, index)}
+                                                        >
+                                                                <span class="truncate">{it.label}</span>
+                                                                {#if it.children?.length || it.icon}
+                                                                        <span class="flex items-center gap-2 pl-2 text-[var(--fg-muted)]">
+                                                                                {#if it.children?.length}
+                                                                                        <span aria-hidden="true" class="text-xs opacity-70">›</span>
+                                                                                {/if}
+                                                                                {#if it.icon}
+                                                                                        {@const Icon = it.icon}
+                                                                                        <Icon class="h-4 w-4 shrink-0 opacity-80" />
+                                                                                {/if}
+                                                                        </span>
+                                                                {/if}
+                                                        </button>
+                                                {/if}
+                                        {/each}
+                                </div>
+                        </div>
+                </div>
+                {#if $contextMenu.openSubmenuIndex != null}
+                        {#if submenuItems.length}
+                                <div
+                                        bind:this={submenuEl}
+                                        class="pointer-events-auto absolute"
+                                        role="menu"
+                                        tabindex="-1"
 					style={`left:${submenuX}px; top:${submenuY}px`}
 					onpointerenter={clearSubmenuCloseTimeout}
 					onpointerleave={scheduleSubmenuClose}
@@ -407,21 +496,25 @@
 					<div class="rounded-lg backdrop-blur-md">
 						<div class="panel max-w-[260px] min-w-[200px] rounded-md p-1">
 							{#each submenuItems as child, childIndex}
-								<button
-									use:submenuRef={childIndex}
-									class={`flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
-										child.danger ? 'text-red-400' : ''
-									} ${child.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                                                        <button
+                                                                use:submenuRef={childIndex}
+                                                                class={`flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-[var(--panel)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
+                                                                                child.danger ? 'text-red-400' : ''
+                                                                        } ${child.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
 									role="menuitem"
 									type="button"
 									disabled={child.disabled}
 									onclick={() => handleSubmenuItemClick(child)}
 								>
-									<span class="truncate">{child.label}</span>
-								</button>
-							{/each}
-						</div>
-					</div>
+                                                                        <span class="truncate">{child.label}</span>
+                                                                        {#if child.icon}
+                                                                                {@const Icon = child.icon}
+                                                                                <Icon class="h-4 w-4 shrink-0 text-[var(--fg-muted)] opacity-80" />
+                                                                        {/if}
+                                                                </button>
+                                                        {/each}
+                                                </div>
+                                        </div>
 				</div>
 			{/if}
 		{/if}

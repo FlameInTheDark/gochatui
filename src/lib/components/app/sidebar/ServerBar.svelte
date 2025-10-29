@@ -2,40 +2,71 @@
 	import type { DtoGuild } from '$lib/api';
 	import { m } from '$lib/paraglide/messages.js';
 	import { tooltip } from '$lib/actions/tooltip';
-        import {
-                appSettings,
-                createFolderWithGuilds,
-                moveFolder,
-                moveGuildToFolder,
-                moveGuildToTop,
-                folderSettingsOpen,
-                folderSettingsRequest
-        } from '$lib/stores/settings';
+	import {
+		appSettings,
+		createFolderWithGuilds,
+		moveFolder,
+		moveGuildToFolder,
+		moveGuildToTop,
+		folderSettingsOpen,
+		folderSettingsRequest
+	} from '$lib/stores/settings';
 	import { auth } from '$lib/stores/auth';
-	import { guildSettingsOpen, selectedGuildId } from '$lib/stores/appState';
+	import {
+		activeView,
+		channelReady,
+		guildSettingsOpen,
+		selectedChannelId,
+		selectedGuildId
+	} from '$lib/stores/appState';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
-        import type { ContextMenuItem } from '$lib/stores/contextMenu';
-        import type { GuildFolderItem, GuildLayoutItem, GuildLayoutGuild } from '$lib/stores/settings';
-        import { Folder, Plus } from 'lucide-svelte';
-        import { onMount } from 'svelte';
-        import { persistSelectedGuildId, selectGuild } from '$lib/utils/guildSelection';
+        import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
         import {
-                PERMISSION_MANAGE_CHANNELS,
-                PERMISSION_MANAGE_GUILD,
-                PERMISSION_MANAGE_ROLES,
-                hasAnyGuildPermission
-        } from '$lib/utils/permissions';
+                NOTIFICATION_LEVELS,
+                resolveNotificationLevel,
+                setGuildNotificationLevel,
+                type GuildFolderItem,
+                type GuildLayoutItem,
+                type GuildLayoutGuild,
+                type NotificationLevel
+        } from '$lib/stores/settings';
+        import { Check, Folder, Plus, User } from 'lucide-svelte';
+	import { onMount } from 'svelte';
+        import { selectGuild } from '$lib/utils/guildSelection';
+	import {
+		PERMISSION_MANAGE_CHANNELS,
+		PERMISSION_MANAGE_GUILD,
+		PERMISSION_MANAGE_ROLES,
+		hasAnyGuildPermission
+	} from '$lib/utils/permissions';
         import { guildUnreadSummary } from '$lib/stores/unread';
         import { colorIntToHex, parseColorValue } from '$lib/utils/color';
+        import { resolveIconUrl } from '$lib/utils/icon';
+        import {
+                FOLDER_MENTION_BADGE_CLASSES,
+                FOLDER_UNREAD_BADGE_CLASSES,
+                SERVER_MENTION_BADGE_CLASSES,
+                SERVER_UNREAD_BADGE_CLASSES
+        } from '$lib/constants/unreadIndicator';
+        import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import { guildMentionSummary } from '$lib/stores/mentions';
 
         const guilds = auth.guilds;
         const me = auth.user;
         const unreadSummary = guildUnreadSummary;
+        const mentionSummary = guildMentionSummary;
+        const view = activeView;
+        const homeMentionCount = $derived.by(() => userHomeMentionCount());
 
-        type DisplayGuild = {
-                type: 'guild';
-                guild: DtoGuild;
-                guildId: string;
+        const UNREAD_INDICATOR_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
+        const FOLDER_UNREAD_INDICATOR_CLASSES = FOLDER_UNREAD_BADGE_CLASSES;
+        const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
+        const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
+
+	type DisplayGuild = {
+		type: 'guild';
+		guild: DtoGuild;
+		guildId: string;
 		topIndex: number;
 		folderId: string | null;
 		folderIndex: number | null;
@@ -92,6 +123,10 @@
                 return name.slice(0, 2).toUpperCase();
         }
 
+        function guildIconUrl(guild: DtoGuild | null | undefined): string | null {
+                return resolveIconUrl((guild as any)?.icon);
+        }
+
         function toSnowflakeString(value: unknown): string | null {
                 if (value == null) return null;
                 try {
@@ -107,18 +142,48 @@
                 }
         }
 
+        function formatMentionCount(count: number): string {
+                return count > 99 ? '99+' : String(count);
+        }
+
+        function guildMentionCount(guildId: unknown): number {
+                const gid = toSnowflakeString(guildId);
+                if (!gid) return 0;
+                const entry = $mentionSummary?.[gid] ?? null;
+                return entry?.mentionCount ?? 0;
+        }
+
+        function folderMentionCount(folder: DisplayFolder): number {
+                return folder.guilds.reduce((total, nested) => total + guildMentionCount(nested.guildId), 0);
+        }
+
+        function userHomeMentionCount(): number {
+                return guildMentionCount('@me');
+        }
+
         function guildHasUnread(guildId: unknown): boolean {
                 const gid = toSnowflakeString(guildId);
                 if (!gid) return false;
                 const entry = $unreadSummary?.[gid];
+                if (guildMentionCount(gid) > 0) {
+                        return true;
+                }
                 return Boolean(entry?.channelCount);
         }
 
-        function canAccessGuildSettings(guild: any): boolean {
-                return hasAnyGuildPermission(
-                        guild,
-                        $me?.id,
-                        PERMISSION_MANAGE_GUILD,
+        function userHomeHasUnread(): boolean {
+                if (userHomeMentionCount() > 0) {
+                        return true;
+                }
+                const entry = $unreadSummary?.['@me'];
+                return Boolean(entry?.channelCount);
+        }
+
+	function canAccessGuildSettings(guild: any): boolean {
+		return hasAnyGuildPermission(
+			guild,
+			$me?.id,
+			PERMISSION_MANAGE_GUILD,
 			PERMISSION_MANAGE_ROLES,
 			PERMISSION_MANAGE_CHANNELS
 		);
@@ -338,28 +403,74 @@
 	}
 
 	async function confirmLeaveGuild() {
-		if (!leavingGuild) return;
-		const { id } = leavingGuild;
-		leavingGuild = null;
-		await leaveGuildDirect(id);
-		if ($selectedGuildId === id) {
-			selectedGuildId.set(null);
-			persistSelectedGuildId(null);
-		}
-	}
+                if (!leavingGuild) return;
+                const { id } = leavingGuild;
+                leavingGuild = null;
+                await leaveGuildDirect(id);
+                if ($selectedGuildId === id) {
+                        selectedGuildId.set(null);
+                }
+        }
 
-        function openGuildMenu(event: MouseEvent, guild: DtoGuild) {
+        function findLayoutGuildEntry(guildId: string): GuildLayoutGuild | null {
+                for (const item of $appSettings.guildLayout) {
+                        if (item.kind === 'guild') {
+                                if (item.guildId === guildId) {
+                                        return item;
+                                }
+                                continue;
+                        }
+                        for (const guild of item.guilds) {
+                                if (guild.guildId === guildId) {
+                                        return guild;
+                                }
+                        }
+                }
+                return null;
+        }
+
+        function buildNotificationMenuItems(
+                current: NotificationLevel,
+                onSelect: (level: NotificationLevel) => void
+        ): ContextMenuActionItem[] {
+                return [
+                        {
+                                label: m.ctx_notifications_all(),
+                                icon: current === NOTIFICATION_LEVELS.ALL ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.ALL)
+                        },
+                        {
+                                label: m.ctx_notifications_mentions(),
+                                icon: current === NOTIFICATION_LEVELS.MENTIONS ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.MENTIONS)
+                        },
+                        {
+                                label: m.ctx_notifications_none(),
+                                icon: current === NOTIFICATION_LEVELS.NONE ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.NONE)
+                        }
+                ];
+        }
+
+        function openGuildMenu(event: MouseEvent, guild: DtoGuild, layoutEntry: GuildLayoutGuild | null = null) {
                 event.preventDefault();
                 const gid = String((guild as any)?.id ?? '');
                 const name = String((guild as any)?.name ?? 'Server');
+                if (!gid) return;
+                const effectiveLayout = layoutEntry ?? findLayoutGuildEntry(gid);
+                const notificationItems = buildNotificationMenuItems(
+                        resolveNotificationLevel(effectiveLayout?.notifications),
+                        (level) => setGuildNotificationLevel(gid, level)
+                );
                 const menuItems: ContextMenuItem[] = [
-			{ label: m.copy_server_id(), action: () => copyToClipboard(gid) }
-		];
-		if (canAccessGuildSettings(guild)) {
-			menuItems.push({
-				label: m.server_settings(),
-				action: () => openGuildSettings(gid)
-			});
+                        { label: m.ctx_notifications_menu(), children: notificationItems },
+                        { label: m.copy_server_id(), action: () => copyToClipboard(gid) }
+                ];
+                if (canAccessGuildSettings(guild)) {
+                        menuItems.push({
+                                label: m.server_settings(),
+                                action: () => openGuildSettings(gid)
+                        });
 		}
 		menuItems.push({
 			label: m.leave_server(),
@@ -368,87 +479,134 @@
 			},
 			danger: true
 		});
-                contextMenu.openFromEvent(event, menuItems);
-        }
+		contextMenu.openFromEvent(event, menuItems);
+	}
 
-        function openFolderMenu(event: MouseEvent, folder: DisplayFolder) {
-                event.preventDefault();
-                event.stopPropagation();
-                const menuItems: ContextMenuItem[] = [
-                        {
-                                label: m.folder_settings_action(),
-                                action: () => {
-                                        folderSettingsOpen.set(true);
-                                        folderSettingsRequest.set({
-                                                folderId: folder.folder.id,
-                                                requestId: Date.now(),
-                                        });
-                                }
-                        }
-                ];
-                contextMenu.openFromEvent(event, menuItems);
-        }
+	function openFolderMenu(event: MouseEvent, folder: DisplayFolder) {
+		event.preventDefault();
+		event.stopPropagation();
+		const menuItems: ContextMenuItem[] = [
+			{
+				label: m.folder_settings_action(),
+				action: () => {
+					folderSettingsOpen.set(true);
+					folderSettingsRequest.set({
+						folderId: folder.folder.id,
+						requestId: Date.now()
+					});
+				}
+			}
+		];
+		contextMenu.openFromEvent(event, menuItems);
+	}
 
 	function isGuildSelected(guildId: string): boolean {
 		return $selectedGuildId === guildId;
 	}
 
-        function selectGuildAndPersist(id: string) {
+        function selectGuildFromSidebar(id: string) {
                 selectGuild(id);
         }
 
-        function resolveFolderColor(color: GuildFolderItem['color']): string | null {
-                const numeric = parseColorValue(color);
-                if (numeric == null || numeric <= 0) {
-                        return null;
-                }
-
-                return colorIntToHex(numeric);
+        function openUserHome() {
+                activeView.set('user');
+                selectedGuildId.set(null);
+                selectedChannelId.set(null);
+                channelReady.set(false);
         }
 
-        function computeFolderColorTokens(color: GuildFolderItem['color']) {
-                const resolved = resolveFolderColor(color);
-                if (!resolved) {
-                        return null;
+        function ensureDefaultGuildSelection() {
+                const list = $guilds ?? [];
+                if (!list.length) return;
+
+                const currentExists =
+                        $selectedGuildId &&
+                        list.some((g: any) => String((g as any)?.id) === $selectedGuildId);
+
+                if ($view !== 'guild') {
+                        if (!currentExists && $selectedGuildId) {
+                                selectedGuildId.set(null);
+                                channelReady.set(false);
+                        }
+                        return;
                 }
 
-                return {
-                        resolved,
-                        collapsedBorder: `color-mix(in srgb, ${resolved} 65%, transparent)`,
-                        collapsedBackground: `color-mix(in srgb, var(--panel-strong) 75%, ${resolved} 25%)`,
-                        hoverBackground: `color-mix(in srgb, var(--panel-strong) 65%, ${resolved} 35%)`,
-                        expandedBorder: `color-mix(in srgb, ${resolved} 45%, transparent)`,
-                        expandedBackground: `color-mix(in srgb, var(--panel-strong) 85%, ${resolved} 15%)`
-                } as const;
+                if (currentExists) return;
+
+                const fallbackId = String((list[0] as any)?.id ?? '');
+                if (fallbackId) {
+                        selectGuildFromSidebar(fallbackId);
+                }
         }
+
+	function resolveFolderColor(color: GuildFolderItem['color']): string | null {
+		const numeric = parseColorValue(color);
+		if (numeric == null || numeric <= 0) {
+			return null;
+		}
+
+		return colorIntToHex(numeric);
+	}
+
+	function computeFolderColorTokens(color: GuildFolderItem['color']) {
+		const resolved = resolveFolderColor(color);
+		if (!resolved) {
+			return null;
+		}
+
+		return {
+			resolved,
+			collapsedBorder: `color-mix(in srgb, ${resolved} 65%, transparent)`,
+			collapsedBackground: `color-mix(in srgb, var(--panel-strong) 75%, ${resolved} 25%)`,
+			hoverBackground: `color-mix(in srgb, var(--panel-strong) 65%, ${resolved} 35%)`,
+			expandedBorder: `color-mix(in srgb, ${resolved} 45%, transparent)`,
+			expandedBackground: `color-mix(in srgb, var(--panel-strong) 85%, ${resolved} 15%)`
+		} as const;
+	}
 
 	onMount(() => {
-		const unsubscribe = guilds.subscribe((arr) => {
-			if (!$selectedGuildId && (arr?.length ?? 0) > 0) {
-				let target = $appSettings.selectedGuildId ?? '';
-				if (!target) {
-					try {
-						const saved = localStorage.getItem('lastGuild');
-						if (saved) target = saved;
-					} catch {
-						/* ignore */
-					}
-				}
-				const exists = target && arr.some((g: any) => String(g?.id) === target);
-				const pick = exists ? target : String((arr[0] as any)?.id || '');
-				if (pick) {
-					selectGuildAndPersist(pick);
-				}
-			}
+		const unsubscribeGuilds = guilds.subscribe(() => {
+			ensureDefaultGuildSelection();
 		});
-		return () => unsubscribe();
+		const unsubscribeView = view.subscribe(() => {
+			ensureDefaultGuildSelection();
+		});
+		ensureDefaultGuildSelection();
+		return () => {
+			unsubscribeGuilds();
+			unsubscribeView();
+		};
 	});
 </script>
 
 <div
 	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-hidden border-r border-[var(--stroke)] p-2"
 >
-	<div class="scroll-area flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
+        <div class="group relative flex justify-center">
+                <button
+                        class={`relative grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                $view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
+                        }`}
+                        data-tooltip-disabled
+                        use:tooltip={{
+                                content: () => m.user_home_open_label(),
+                                placement: 'right'
+                        }}
+                        aria-current={$view === 'user' ? 'true' : 'false'}
+                        aria-label={m.user_home_open_label()}
+                        onclick={openUserHome}
+                >
+                        {#if homeMentionCount > 0}
+                                <span class="sr-only">{m.unread_mentions_indicator({ count: homeMentionCount })}</span>
+                                <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(homeMentionCount)}</span>
+                        {:else if userHomeHasUnread()}
+                                <span class="sr-only">{m.unread_indicator()}</span>
+                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                        {/if}
+                        <User class="h-5 w-5" stroke-width={2} />
+                </button>
+	</div>
+        <div class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
 		<div
 			class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 				topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
@@ -460,61 +618,69 @@
 		{#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
                         {#if item.type === 'guild'}
                                 {@const guildUnread = guildHasUnread(item.guildId)}
+                                {@const guildMentionTotal = guildMentionCount(item.guildId)}
+                                {@const guildIcon = guildIconUrl(item.guild)}
                                 <div class="group relative flex justify-center">
                                         <button
-                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                class={`relative flex h-12 w-12 transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                         isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                                 } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
-                                                data-tooltip={item.guild.name ?? 'Server'}
-                                                data-tooltip-placement="right"
+                                                data-tooltip-disabled
+                                                use:tooltip={{
+                                                        content: () => item.guild.name ?? 'Server',
+                                                        placement: 'right'
+                                                }}
                                                 aria-current={isGuildSelected(item.guildId) ? 'true' : 'false'}
                                                 aria-label={item.guild.name ?? 'Server'}
                                                 draggable="true"
+                                                use:customContextMenuTarget
                                                 ondragstart={(event) => startGuildDrag(event, item.guildId, item.folderId)}
                                                 ondragend={endDrag}
                                                 ondragover={(event) =>
                                                         onGuildMergeOver(event, item.guildId, item.topIndex, item.folderId)}
                                                 ondrop={(event) => onGuildMergeDrop(event, item.guildId, item.topIndex)}
-                                                onclick={() => selectGuildAndPersist(item.guildId)}
-                                                oncontextmenu={(event) => openGuildMenu(event, item.guild)}
+                                                onclick={() => selectGuildFromSidebar(item.guildId)}
+                                                oncontextmenu={(event) => openGuildMenu(event, item.guild, item.layout)}
                                         >
-                                                <span class="font-bold">{guildInitials(item.guild)}</span>
-                                                {#if guildUnread}
-                                                        <span class="sr-only">{m.unread_indicator()}</span>
-                                                        <span
+                                                {#if guildIcon}
+                                                        <img
+                                                                src={guildIcon}
+                                                                alt=""
                                                                 aria-hidden="true"
-                                                                class="absolute -left-1.5 top-1/2 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-                                                        ></span>
+                                                                class="h-full w-full rounded-xl object-cover"
+                                                                loading="lazy"
+                                                        />
+                                                {:else}
+                                                        <span class="font-bold">{guildInitials(item.guild)}</span>
+                                                {/if}
+                                                {#if guildMentionTotal > 0}
+                                                        <span class="sr-only">{m.unread_mentions_indicator({ count: guildMentionTotal })}</span>
+                                                        <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(guildMentionTotal)}</span>
+                                                {:else if guildUnread}
+                                                        <span class="sr-only">{m.unread_indicator()}</span>
+                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                                                 {/if}
                                         </button>
                                 </div>
-                        {:else}
+			{:else}
                                 {@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
                                 {@const folderHasUnread = item.guilds.some((g) => guildHasUnread(g.guildId))}
-                                {@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
-                                {@const folderName = item.folder.name?.trim()}
-                                {@const folderLabel = folderName ? folderName : m.guild_folder()}
-                                {@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
-                                <div
-                                        class="group relative flex flex-col items-center gap-2 rounded-2xl"
-                                        style:--folder-collapsed-border={
-                                                folderColorTokens?.collapsedBorder ?? 'var(--stroke)'
-                                        }
-                                        style:--folder-collapsed-bg={
-                                                folderColorTokens?.collapsedBackground ?? 'var(--panel-strong)'
-                                        }
-                                        style:--folder-hover-bg={
-                                                folderColorTokens?.hoverBackground ?? 'var(--panel)'
-                                        }
-                                        style:--folder-expanded-border={
-                                                folderColorTokens?.expandedBorder ?? 'var(--stroke)'
-                                        }
-                                        style:--folder-expanded-bg={
-                                                folderColorTokens?.expandedBackground ??
-                                                'color-mix(in srgb, var(--panel-strong) 70%, transparent)'
-                                        }
-                                >
-                                        <div class="relative">
+                                {@const folderMentionTotal = folderMentionCount(item)}
+				{@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
+				{@const folderName = item.folder.name?.trim()}
+				{@const folderLabel = folderName ? folderName : m.guild_folder()}
+				{@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
+				<div
+					class="group relative flex flex-col items-center gap-2 rounded-2xl"
+					style:--folder-collapsed-border={folderColorTokens?.collapsedBorder ?? 'var(--stroke)'}
+					style:--folder-collapsed-bg={folderColorTokens?.collapsedBackground ??
+						'var(--panel-strong)'}
+					style:--folder-hover-bg={folderColorTokens?.hoverBackground ?? 'var(--panel)'}
+					style:--folder-expanded-border={folderColorTokens?.expandedBorder ?? 'var(--stroke)'}
+					style:--folder-expanded-bg={folderColorTokens?.expandedBackground ??
+						'color-mix(in srgb, var(--panel-strong) 70%, transparent)'}
+				>
+					<div class="relative">
                                                 <button
                                                         class={`relative flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                 folderIsDropTarget
@@ -525,38 +691,53 @@
                                                         }`}
                                                         type="button"
                                                         draggable="true"
-                                                        data-tooltip={folderLabel}
-                                                        data-tooltip-placement="right"
+                                                        data-tooltip-disabled
+                                                        use:tooltip={{
+                                                                content: () => folderLabel,
+                                                                placement: 'right'
+                                                        }}
                                                         aria-label={folderLabel}
+                                                        use:customContextMenuTarget
                                                         ondragstart={(event) => startFolderDrag(event, item.folder.id)}
-                                                        ondragend={endDrag}
-                                                        oncontextmenu={(event) => openFolderMenu(event, item)}
-                                                        ondragover={(event) =>
-                                                                onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
-                                                        ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
-                                                        onclick={() =>
-                                                                (expandedFolders = {
-                                                                        ...expandedFolders,
-                                                                        [item.folder.id]: !expandedFolders[item.folder.id]
-                                                                })}
-                                                        style:--folder-collapsed-border={
-                                                                folderHasUnread && !folderIsDropTarget && !folderHasSelection
-                                                                        ? 'var(--brand)'
-                                                                        : null
-                                                        }
-                                                >
-                                                        {#if expandedFolders[item.folder.id]}
-                                                                <Folder class="h-5 w-5" stroke-width={2} />
-                                                        {:else}
-                                                                <div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
+							ondragend={endDrag}
+							oncontextmenu={(event) => openFolderMenu(event, item)}
+							ondragover={(event) =>
+								onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
+							ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
+							onclick={() =>
+								(expandedFolders = {
+									...expandedFolders,
+									[item.folder.id]: !expandedFolders[item.folder.id]
+								})}
+							style:--folder-collapsed-border={folderHasUnread &&
+							!folderIsDropTarget &&
+							!folderHasSelection
+								? 'var(--brand)'
+								: null}
+						>
+							{#if expandedFolders[item.folder.id]}
+								<Folder class="h-5 w-5" stroke-width={2} />
+							{:else}
+								<div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
                                                                         {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
                                                                                 {@const previewUnread = guildHasUnread(guildPreview.guildId)}
+                                                                                {@const previewIcon = guildIconUrl(guildPreview.guild)}
                                                                                 <div
-                                                                                        class={`relative flex items-center justify-center rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
+                                                                                        class={`relative flex items-center justify-center overflow-hidden rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
                                                                                                 guildPreview.guildId === $selectedGuildId ? 'border-[var(--brand)]' : ''
                                                                                         } ${previewUnread ? 'border-[var(--brand)] bg-[var(--brand)]/10' : ''}`}
                                                                                 >
-                                                                                        {guildInitials(guildPreview.guild)}
+                                                                                        {#if previewIcon}
+                                                                                                <img
+                                                                                                        src={previewIcon}
+                                                                                                        alt=""
+                                                                                                        aria-hidden="true"
+                                                                                                        class="h-full w-full object-cover"
+                                                                                                        loading="lazy"
+                                                                                                />
+                                                                                        {:else}
+                                                                                                {guildInitials(guildPreview.guild)}
+                                                                                        {/if}
                                                                                 </div>
                                                                         {/each}
 									{#if item.guilds.length < 4}
@@ -564,22 +745,28 @@
 											<div class="rounded-lg border border-dashed border-[var(--stroke)]"></div>
 										{/each}
 									{/if}
-                                                                </div>
-                                                        {/if}
-                                                        {#if folderHasUnread}
+								</div>
+							{/if}
+                                                        {#if folderMentionTotal > 0}
+                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: folderMentionTotal })}</span>
+                                                                <span
+                                                                        aria-hidden="true"
+                                                                        class={FOLDER_MENTION_INDICATOR_CLASSES}
+                                                                >{formatMentionCount(folderMentionTotal)}</span>
+                                                        {:else if folderHasUnread}
                                                                 <span class="sr-only">{m.unread_indicator()}</span>
                                                                 <span
                                                                         aria-hidden="true"
-                                                                        class="absolute -left-1.5 top-1/2 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                        class={FOLDER_UNREAD_INDICATOR_CLASSES}
                                                                 ></span>
                                                         {/if}
-                                                </button>
-                                        </div>
+						</button>
+					</div>
 
 					{#if expandedFolders[item.folder.id]}
-                                                <div
-                                                        class="flex flex-col items-center gap-2 rounded-2xl border border-[var(--folder-expanded-border)] bg-[var(--folder-expanded-bg)] p-2"
-                                                >
+						<div
+							class="flex flex-col items-center gap-2 rounded-2xl border border-[var(--folder-expanded-border)] bg-[var(--folder-expanded-bg)] p-2"
+						>
 							<div
 								class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 									folderDropTarget?.folderId === item.folder.id && folderDropTarget.index === 0
@@ -592,43 +779,65 @@
 							></div>
                                                         {#each item.guilds as nestedGuild, nestedIndex (nestedGuild.guildId)}
                                                                 {@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
+                                                                {@const nestedGuildMention = guildMentionCount(nestedGuild.guildId)}
+                                                                {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
                                                                 <div class="group relative flex justify-center">
-                                                                        <button
-                                                                                class={`relative flex h-12 w-12 transform items-center justify-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-                                                                                        isGuildSelected(nestedGuild.guildId)
-                                                                                                ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
-                                                                                                : ''
-                                                                                } ${
-                                                                                        folderDropTarget?.folderId === item.folder.id &&
+                                                                  <button
+                                                                          class={`relative flex h-12 w-12 transform items-center justify-center overflow-hidden rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                                         isGuildSelected(nestedGuild.guildId)
+                                                                                                 ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                                                 : ''
+                                                                                 } ${
+                                                                                         folderDropTarget?.folderId === item.folder.id &&
                                                                                         folderDropTarget.index === nestedIndex + 1
                                                                                                 ? 'ring-2 ring-[var(--brand)]'
                                                                                                 : ''
                                                                                 }`}
-                                                                                data-tooltip={nestedGuild.guild.name ?? 'Server'}
-                                                                                data-tooltip-placement="right"
+                                                                                data-tooltip-disabled
+                                                                                use:tooltip={{
+                                                                                        content: () => nestedGuild.guild.name ?? 'Server',
+                                                                                        placement: 'right'
+                                                                                }}
                                                                                 aria-current={isGuildSelected(nestedGuild.guildId) ? 'true' : 'false'}
                                                                                 aria-label={nestedGuild.guild.name ?? 'Server'}
-										draggable="true"
-										ondragstart={(event) =>
-											startGuildDrag(event, nestedGuild.guildId, nestedGuild.folderId)}
+                                                                                draggable="true"
+                                                                                use:customContextMenuTarget
+                                                                                ondragstart={(event) =>
+                                                                                        startGuildDrag(event, nestedGuild.guildId, nestedGuild.folderId)}
 										ondragend={endDrag}
 										ondragover={(event) =>
 											onFolderDropZoneOver(event, item.folder.id, nestedIndex + 1)}
 										ondrop={(event) => onFolderDrop(event, item.folder.id, nestedIndex + 1)}
-                                                                                onclick={() => selectGuildAndPersist(nestedGuild.guildId)}
-                                                                                oncontextmenu={(event) => openGuildMenu(event, nestedGuild.guild)}
-                                                                        >
-                                                                                <span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
-                                                                                {#if nestedGuildUnread}
-                                                                                        <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                        <span
-                                                                                                aria-hidden="true"
-                                                                                                class="absolute -left-1.5 top-1/2 h-6 w-1.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-                                                                                        ></span>
+                                                                onclick={() => selectGuildFromSidebar(nestedGuild.guildId)}
+                                                                                oncontextmenu={(event) =>
+                                                                                        openGuildMenu(
+                                                                                                event,
+                                                                                                nestedGuild.guild,
+                                                                                                nestedGuild.layout
+                                                                                        )
+                                                                                }
+                                                                          >
+                                                                                {#if nestedGuildIcon}
+                                                                                          <img
+                                                                                                  src={nestedGuildIcon}
+                                                                                                  alt=""
+                                                                                                  aria-hidden="true"
+                                                                                                  class="h-full w-full object-cover"
+                                                                                                  loading="lazy"
+                                                                                          />
+                                                                                  {:else}
+                                                                                          <span class="font-bold">{guildInitials(nestedGuild.guild)}</span>
+                                                                                  {/if}
+                                                                                  {#if nestedGuildMention > 0}
+                                                                                          <span class="sr-only">{m.unread_mentions_indicator({ count: nestedGuildMention })}</span>
+                                                                                          <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedGuildMention)}</span>
+                                                                                {:else if nestedGuildUnread}
+                                                                                          <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                          <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                                                                                 {/if}
                                                                         </button>
                                                                 </div>
-                                                        {/each}
+							{/each}
 						</div>
 					{/if}
 				</div>
@@ -643,33 +852,36 @@
 			></div>
 		{/each}
 	</div>
-	<div>
+        <div>
                 <button
                         class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
                         onclick={() => (creating = !creating)}
-                        data-tooltip={m.new_server()}
-                        data-tooltip-placement="right"
+                        data-tooltip-disabled
+                        use:tooltip={{
+                                content: () => m.new_server(),
+                                placement: 'right'
+                        }}
                         aria-label={m.new_server()}
                 >
-			<Plus class="h-[18px] w-[18px]" stroke-width={2} />
-		</button>
-	</div>
+                        <Plus class="h-[18px] w-[18px]" stroke-width={2} />
+                </button>
+        </div>
 
-        {#if creating}
-                <div
-                        class="fixed inset-0 z-50"
-                        role="dialog"
-                        tabindex="0"
-                        onclick={(event) => {
-                                if (event.target !== event.currentTarget) return;
-                                creating = false;
-                        }}
+	{#if creating}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onclick={(event) => {
+				if (event.target !== event.currentTarget) return;
+				creating = false;
+			}}
 			onkeydown={(event) => {
 				if (event.key === 'Escape') creating = false;
 				if (event.key === 'Enter') createGuild();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+			<div class="pointer-events-none absolute inset-0 bg-black/40"></div>
 			<div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
 				<div class="relative">
 					<div
@@ -708,21 +920,21 @@
 		</div>
 	{/if}
 
-        {#if leavingGuild}
-                <div
-                        class="fixed inset-0 z-50"
-                        role="dialog"
-                        tabindex="0"
-                        onclick={(event) => {
-                                if (event.target !== event.currentTarget) return;
-                                leavingGuild = null;
-                        }}
+	{#if leavingGuild}
+		<div
+			class="fixed inset-0 z-50"
+			role="dialog"
+			tabindex="0"
+			onclick={(event) => {
+				if (event.target !== event.currentTarget) return;
+				leavingGuild = null;
+			}}
 			onkeydown={(event) => {
 				if (event.key === 'Escape') leavingGuild = null;
 				if (event.key === 'Enter') confirmLeaveGuild();
 			}}
 		>
-                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+			<div class="pointer-events-none absolute inset-0 bg-black/40"></div>
 			<div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
 				<div class="relative">
 					<div
@@ -760,3 +972,14 @@
 		</div>
 	{/if}
 </div>
+
+<style lang="postcss">
+        .server-scroll {
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+        }
+
+        .server-scroll::-webkit-scrollbar {
+                display: none;
+        }
+</style>

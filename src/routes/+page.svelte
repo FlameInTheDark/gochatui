@@ -118,15 +118,15 @@
                                 <a class="hover:text-white" href="#cta">{m.landing_link_get_started()}</a>
                         </nav>
                         <div class="flex items-center gap-2">
-                                <div class="relative" bind:this={languageMenuContainer} on:focusout={handleLanguageMenuFocusOut}>
+                                <div class="relative" bind:this={languageMenuContainer} onfocusout={handleLanguageMenuFocusOut}>
                                         <button
                                                 type="button"
                                                 class="group inline-flex h-12 min-w-[160px] items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 text-left text-sm text-zinc-200 outline-none transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50"
                                                 aria-haspopup="listbox"
                                                 aria-expanded={languageMenuOpen}
                                                 aria-controls={languageMenuId}
-                                                on:click={toggleLanguageMenu}
-                                                on:keydown={handleLanguageButtonKeydown}
+                                                onclick={toggleLanguageMenu}
+                                                onkeydown={handleLanguageButtonKeydown}
                                                 bind:this={languageMenuButton}
                                                 id={languageButtonId}
                                         >
@@ -176,7 +176,7 @@
                                                                                         ? 'bg-violet-500/20 text-white'
                                                                                         : 'text-zinc-200'
                                                                         }`}
-                                                                        on:click={() => selectLocale(option.code)}
+                                                                        onclick={() => selectLocale(option.code)}
                                                                 >
                                                                         <span>{option.label()}</span>
                                                                         {#if option.code === $locale}
@@ -469,10 +469,6 @@
                                                         <path d="M13.73 21a2 2 0 01-3.46 0"></path>
                                                 </svg>
                                                 <span class="text-sm font-semibold text-zinc-100">{m.landing_feature_notifications_title()}</span>
-                                                <span
-                                                        class="ml-2 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-200"
-                                                        >{m.landing_feature_badge_coming_soon()}</span
-                                                >
                                         </div>
                                         <p class="text-sm leading-relaxed text-zinc-400">
                                                 {m.landing_feature_notifications_description()}
@@ -526,10 +522,6 @@
                                                         ></path>
                                                 </svg>
                                                 <span class="text-sm font-semibold text-zinc-100">{m.landing_feature_voice_title()}</span>
-                                                <span
-                                                        class="ml-2 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-200"
-                                                        >{m.landing_feature_badge_coming_soon()}</span
-                                                >
                                         </div>
                                         <p class="text-sm leading-relaxed text-zinc-400">
                                                 {m.landing_feature_voice_description()}

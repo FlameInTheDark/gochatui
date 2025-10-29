@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { DtoMember, DtoRole } from '$lib/api';
-	import { auth } from '$lib/stores/auth';
-	import {
-		channelsByGuild,
-		channelRolesByGuild,
-		membersByGuild,
+        import { auth } from '$lib/stores/auth';
+        import {
+                channelsByGuild,
+                channelRolesByGuild,
+                membersByGuild,
 		selectedChannelId,
 		selectedGuildId
 	} from '$lib/stores/appState';
@@ -26,6 +26,7 @@
                 resolveMemberRoleColor,
                 toSnowflakeString
         } from '$lib/utils/members';
+        import { resolveAvatarUrl } from '$lib/utils/avatar';
         import {
                 createPresenceSubscription,
                 presenceByUser,
@@ -34,10 +35,14 @@
         } from '$lib/stores/presence';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
         import { onDestroy } from 'svelte';
+        import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import { channelTypingUsers } from '$lib/stores/channelTyping';
+        import { Ellipsis } from 'lucide-svelte';
 
-	const guilds = auth.guilds;
-	const presenceMap = presenceByUser;
-	const presenceSubscription = createPresenceSubscription();
+        const guilds = auth.guilds;
+        const presenceMap = presenceByUser;
+        const typingUsers = channelTypingUsers;
+        const presenceSubscription = createPresenceSubscription();
 	let lastTrackedUserIds: string[] = [];
 
 	function applyTrackedUserIds(next: string[]) {
@@ -278,27 +283,41 @@
                 name: string;
                 color: string | null;
                 userId: string | null;
+                avatarUrl: string | null;
                 presenceStatus: PresenceStatus | null;
                 presenceSince: number | null;
                 hasPresence: boolean;
                 customStatusText: string | null;
                 presenceBucket: PresenceBucket;
+                isTyping: boolean;
         };
 
         const decoratedMembers = $derived.by(() => {
                 const channel = currentChannel;
                 const guild = currentGuild;
-		const list = currentMembers ?? [];
-		if (!channel) {
-			applyTrackedUserIds([]);
-			return [] as DecoratedMember[];
-		}
-		const lookup = $presenceMap;
+                const list = currentMembers ?? [];
+                if (!channel) {
+                        applyTrackedUserIds([]);
+                        return [] as DecoratedMember[];
+                }
+                const lookup = $presenceMap;
+                const typingLookup = $typingUsers;
+                const channelId = toSnowflakeString((channel as any)?.id);
+                const typingSet = new Set<string>();
+                if (channelId && Array.isArray(typingLookup?.[channelId])) {
+                        for (const value of typingLookup[channelId]) {
+                                const normalized = toSnowflakeString(value);
+                                if (normalized) {
+                                        typingSet.add(normalized);
+                                }
+                        }
+                }
                 const entries = list.map<DecoratedMember>((member) => {
                         const hasAccess = memberHasChannelAccess(member, channel, guild);
                         const guildId = toSnowflakeString((guild as any)?.id) ?? null;
                         const userId =
                                 toSnowflakeString((member as any)?.user?.id) ?? toSnowflakeString((member as any)?.id);
+                        const avatarUrl = resolveAvatarUrl(member, (member as any)?.user);
                         const info = userId ? (lookup[userId] ?? null) : null;
                         const presenceStatus = info?.status ?? null;
                         const hasPresence = Boolean(info);
@@ -315,11 +334,13 @@
                                 name: memberPrimaryName(member),
                                 color: resolveMemberRoleColor(member, guildId, roleMap),
                                 userId,
+                                avatarUrl,
                                 presenceStatus,
                                 presenceSince: info?.since ?? null,
                                 hasPresence,
                                 customStatusText,
-                                presenceBucket
+                                presenceBucket,
+                                isTyping: Boolean(userId && typingSet.has(userId))
                         };
                 });
                 const hideWithoutAccess = Boolean((channel as any)?.private);
@@ -372,6 +393,7 @@
 
                 memberProfilePanel.open({
                         member: entry.member,
+                        user: (entry.member as any)?.user ?? null,
                         guildId: $selectedGuildId,
                         anchor
                 });
@@ -419,6 +441,7 @@
                                                         {#each group.members as entry (toSnowflakeString((entry.member as any)?.user?.id) ?? memberPrimaryName(entry.member))}
                                                                 <button
                                                                         type="button"
+                                                                        use:customContextMenuTarget
                                                                         class="group/member flex w-full select-none items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition hover:bg-[var(--panel-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
                                                                         onclick={(event) => openMemberPanel(event, entry)}
                                                                         oncontextmenu={(event) =>
@@ -434,14 +457,31 @@
                                                                 >
                                                                         <div class="relative h-8 w-8 flex-shrink-0">
                                                                                 <div
-                                                                                        class="flex h-full w-full items-center justify-center rounded-full bg-[var(--panel-strong)] text-xs font-semibold uppercase"
+                                                                                        class="grid h-full w-full place-items-center overflow-hidden rounded-full border border-[var(--stroke)] bg-[var(--panel-strong)] text-xs font-semibold uppercase"
                                                                                 >
-                                                                                        {memberInitial(entry.member)}
+                                                                                        {#if entry.avatarUrl}
+                                                                                                <img
+                                                                                                        alt=""
+                                                                                                        aria-hidden="true"
+                                                                                                        class="h-full w-full object-cover"
+                                                                                                        src={entry.avatarUrl}
+                                                                                                />
+                                                                                        {:else}
+                                                                                                {memberInitial(entry.member)}
+                                                                                        {/if}
                                                                                 </div>
                                                                                 <span
-                                                                                        class={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[var(--panel)] ${presenceIndicatorClass(entry.presenceStatus)}`}
-                                                                                        class:opacity-0={!entry.hasPresence}
-                                                                                ></span>
+                                                                                        class={`absolute -right-0.5 -bottom-0.5 flex h-[0.9rem] items-center justify-center rounded-full border-2 border-[var(--panel)] transition-all duration-150 ease-out ${presenceIndicatorClass(entry.presenceStatus)} ${entry.isTyping ? 'px-[0.2rem]' : 'w-[0.9rem]'}`}
+                                                                                        class:opacity-0={!entry.hasPresence && !entry.isTyping}
+                                                                                >
+                                                                                        {#if entry.isTyping}
+                                                                                                <Ellipsis
+                                                                                                        class="h-3 w-3 text-white"
+                                                                                                        stroke-width={3}
+                                                                                                        aria-hidden="true"
+                                                                                                />
+                                                                                        {/if}
+                                                                                </span>
                                                                         </div>
                                                                         <div class="min-w-0 flex-1">
                                                                                 <div class="truncate font-medium" style:color={entry.color ?? null}>
