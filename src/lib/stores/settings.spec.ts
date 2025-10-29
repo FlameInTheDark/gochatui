@@ -1,52 +1,53 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$app/environment', () => ({
-        browser: false
+	browser: false
 }));
 
-vi.mock(
-        '$lib/paraglide/runtime',
-        () => ({
-                setLocale: vi.fn()
-        }),
-        { virtual: true }
-);
+vi.mock('$lib/paraglide/runtime', () => ({
+	setLocale: vi.fn()
+}));
 
 import { get } from 'svelte/store';
 
 import {
         appSettings,
         applyReadStatesMapToLayout,
+        cloneDeviceSettings,
+        cloneUiSoundSettings,
         type AppSettings,
         type GuildLayoutItem,
+        type GuildTopLevelItem,
         guildChannelReadStateLookup
 } from './settings';
 
 describe('applyReadStatesMapToLayout', () => {
-        let originalSettings: AppSettings;
+	let originalSettings: AppSettings;
 
-        beforeEach(() => {
-                originalSettings = JSON.parse(JSON.stringify(get(appSettings))) as AppSettings;
-        });
+	beforeEach(() => {
+		originalSettings = JSON.parse(JSON.stringify(get(appSettings))) as AppSettings;
+	});
 
-        afterEach(() => {
-                appSettings.set(originalSettings);
-        });
+	afterEach(() => {
+		appSettings.set(originalSettings);
+	});
 
-        it('maps channel-scoped read state entries to their guild via lookup', () => {
-                const layout: GuildLayoutItem[] = [{ kind: 'guild', guildId: '123' }];
-                const readStateMap: Record<string, unknown> = { '456': '789' };
-                const channelGuildLookup = { '456': '123' };
+	it('maps channel-scoped read state entries to their guild via lookup', () => {
+		const layout: GuildLayoutItem[] = [{ kind: 'guild', guildId: '123' }];
+		const readStateMap: Record<string, unknown> = { '456': '789' };
+		const channelGuildLookup = { '456': '123' };
 
-                applyReadStatesMapToLayout(layout, readStateMap, undefined, channelGuildLookup);
+		applyReadStatesMapToLayout(layout, readStateMap, undefined, channelGuildLookup);
 
-                expect(layout[0].readStates).toEqual([
-                        {
-                                channelId: '456',
-                                lastReadMessageId: '789',
-                                scrollPosition: null
-                        }
-                ]);
+		const guildLayout = layout[0] as GuildTopLevelItem;
+
+		expect(guildLayout.readStates).toEqual([
+			{
+				channelId: '456',
+				lastReadMessageId: '789',
+				scrollPosition: null
+			}
+		]);
 
                 appSettings.set({
                         language: 'en',
@@ -60,11 +61,15 @@ describe('applyReadStatesMapToLayout', () => {
                                 status: 'online',
                                 customStatusText: null
                         },
-                        dmChannels: []
+                        dmChannels: [],
+                        channelNotifications: {},
+                        userNotifications: {},
+                        devices: cloneDeviceSettings(null),
+                        uiSounds: cloneUiSoundSettings(null)
                 });
 
-                const lookup = get(guildChannelReadStateLookup);
-                expect(lookup['123']).toBeDefined();
-                expect(lookup['123']?.['456']?.lastReadMessageId).toBe('789');
-        });
+		const lookup = get(guildChannelReadStateLookup);
+		expect(lookup['123']).toBeDefined();
+		expect(lookup['123']?.['456']?.lastReadMessageId).toBe('789');
+	});
 });

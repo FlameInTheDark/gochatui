@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DtoChannel, DtoMember, DtoMessage, DtoRole } from '$lib/api';
+        import type { DtoChannel, DtoMember, DtoMessage, DtoRole, DtoUser } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
 	import {
 		channelsByGuild,
@@ -28,14 +28,18 @@
                 Hash,
                 Image as ImageIcon,
                 ImageOff,
+                MoveRight,
                 Paperclip,
                 Pencil,
                 Play,
                 Trash2,
                 X
         } from 'lucide-svelte';
-	import { colorIntToHex } from '$lib/utils/color';
+        import { colorIntToHex } from '$lib/utils/color';
         import { guildRoleCacheState, loadGuildRolesCached } from '$lib/utils/guildRoles';
+        import { splitTextWithMentions } from '$lib/utils/mentions';
+        import { MENTION_ACCENT_COLORS, type MentionMatch, type MentionType } from '$lib/utils/mentions';
+        import { buildRoleMap, memberPrimaryName, toSnowflakeString } from '$lib/utils/members';
         import { openUserContextMenu } from '$lib/utils/userContextMenu';
         import { resolveAvatarUrl } from '$lib/utils/avatar';
         import { memberProfilePanel } from '$lib/stores/memberProfilePanel';
@@ -62,10 +66,22 @@
 		strike?: boolean;
 	};
 
-	export type InlineToken =
-		| { type: 'text'; content: string; styles?: FormatStyles }
-		| { type: 'link'; label: string; url: string; styles?: FormatStyles; embed?: MessageEmbed }
-		| { type: 'code'; content: string };
+        type ChannelKind = 'text' | 'voice';
+
+        export type InlineToken =
+                | { type: 'text'; content: string; styles?: FormatStyles }
+                | { type: 'link'; label: string; url: string; styles?: FormatStyles; embed?: MessageEmbed }
+                | { type: 'code'; content: string }
+                | {
+                                type: 'mention';
+                                mentionType: MentionType;
+                                id: string;
+                                label: string;
+                                raw: string;
+                                accentColor?: string | null;
+                                onClick?: ((event: MouseEvent) => void) | null;
+                                channelKind?: ChannelKind;
+                        };
 
 	type Block =
 		| { type: 'paragraph'; tokens: InlineToken[] }
@@ -74,9 +90,13 @@
 		| { type: 'list'; items: InlineToken[][] }
 		| { type: 'break' };
 
-	type RenderedSegment =
-		| { type: 'code'; content: string; language?: string }
-		| { type: 'blocks'; blocks: Block[] };
+        type RenderedSegment =
+                | { type: 'code'; content: string; language?: string }
+                | { type: 'blocks'; blocks: Block[] };
+
+        const EMOJI_SEQUENCE_REGEX =
+                /(?:\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D(?:\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?))*)|(?:[#*0-9]\uFE0F?\u20E3)|(?:\p{Regional_Indicator}{2})/gu;
+        const CUSTOM_EMOJI_REGEX = /<a?:[\w-]+:\d+>/g;
 
 	function getRoleId(role?: DtoRole | null): string | null {
 		const raw = role?.id as string | number | bigint | undefined;
@@ -154,11 +174,11 @@
 		return lines.map((line) => line.replace(pattern, '')).join('\n');
 	}
 
-	function parseMessageContent(content: string | null | undefined): MessageSegment[] {
-		if (!content) return [];
-		const segments: MessageSegment[] = [];
-		const pattern = /```([^\r\n`]*)?(?:\r?\n)?([\s\S]*?)```/g;
-		let lastIndex = 0;
+        function parseMessageContent(content: string | null | undefined): MessageSegment[] {
+                if (!content) return [];
+                const segments: MessageSegment[] = [];
+                const pattern = /```([^\r\n`]*)?(?:\r?\n)?([\s\S]*?)```/g;
+                let lastIndex = 0;
 		let match: RegExpExecArray | null;
 
 		while ((match = pattern.exec(content)) !== null) {
@@ -179,15 +199,69 @@
 			segments.push({ type: 'text', content: content.slice(lastIndex) });
 		}
 
-		if (segments.length === 0) {
-			return [{ type: 'text', content }];
-		}
+                if (segments.length === 0) {
+                        return [{ type: 'text', content }];
+                }
 
-		return segments;
-	}
+                return segments;
+        }
 
-	const urlPattern =
-		/((?:https?:\/\/|ftp:\/\/)[^\s<>()]+|www\.[^\s<>()]+|[\w.-]+\.[a-zA-Z]{2,}(?:\/[^\s<>()]+)*)/gi;
+        function isEmojiOnly(text: string): boolean {
+                if (!text) return false;
+                const trimmed = text.trim();
+                if (!trimmed) return false;
+                const standardMatches = trimmed.match(EMOJI_SEQUENCE_REGEX) ?? [];
+                const customMatches = trimmed.match(CUSTOM_EMOJI_REGEX) ?? [];
+                if (!standardMatches.length && !customMatches.length) {
+                        return false;
+                }
+                const stripped = trimmed
+                        .replace(EMOJI_SEQUENCE_REGEX, '')
+                        .replace(CUSTOM_EMOJI_REGEX, '')
+                        .replace(/\s+/g, '');
+                return stripped.length === 0;
+        }
+
+        const JOIN_MESSAGE_PHRASES: readonly (() => string)[] = [
+                () => m.system_join_phrase_party(),
+                () => m.system_join_phrase_guild_hall(),
+                () => m.system_join_phrase_slid_in(),
+                () => m.system_join_phrase_touched_down(),
+                () => m.system_join_phrase_popped_in(),
+                () => m.system_join_phrase_joined_adventure(),
+                () => m.system_join_phrase_roll_out_mat(),
+                () => m.system_join_phrase_connected_wave(),
+                () => m.system_join_phrase_stepped_lobby(),
+                () => m.system_join_phrase_spawned_nearby()
+        ];
+
+        function hashString(value: string): number {
+                let hash = 0;
+                for (let index = 0; index < value.length; index += 1) {
+                        hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+                }
+                return hash >>> 0;
+        }
+
+        function selectJoinPhraseIndex(msg: DtoMessage): number {
+                const phrasesLength = JOIN_MESSAGE_PHRASES.length;
+                if (phrasesLength === 0) return 0;
+                const rawId = (msg as any)?.id;
+                if (rawId == null) return 0;
+                try {
+                        const big = typeof rawId === 'bigint' ? rawId : BigInt(String(rawId));
+                        const mod = big % BigInt(phrasesLength);
+                        const normalized = mod < 0 ? mod + BigInt(phrasesLength) : mod;
+                        return Number(normalized);
+                } catch {
+                        const str = String(rawId);
+                        if (!str) return 0;
+                        return hashString(str) % phrasesLength;
+                }
+        }
+
+        const urlPattern =
+                /((?:https?:\/\/|ftp:\/\/)[^\s<>()]+|www\.[^\s<>()]+|[\w.-]+\.[a-zA-Z]{2,}(?:\/[^\s<>()]+)*)/gi;
 
 	function normalizeUrl(raw: string): string {
 		if (!raw) return raw;
@@ -337,84 +411,309 @@
 		return mergeChunks(result);
 	}
 
-	function parsePlainText(content: string, tokens: InlineToken[]) {
-		if (!content) return;
+        function formatUserDisplayName(candidate: any): string | null {
+                if (!candidate || typeof candidate !== 'object') return null;
+                const fields = [
+                        candidate.global_name,
+                        candidate.globalName,
+                        candidate.display_name,
+                        candidate.displayName,
+                        candidate.username,
+                        candidate.name,
+                        candidate.nick,
+                        candidate.nickname
+                ];
+                for (const field of fields) {
+                        if (typeof field !== 'string') continue;
+                        const trimmed = field.trim();
+                        if (trimmed) return trimmed;
+                }
+                return null;
+        }
 
-		const chunks = parseFormattingChunks(content);
+        function fallbackUserMentionLabel(userId: string): string {
+                if (!userId) return '@Unknown';
+                const suffix = userId.length > 4 ? userId.slice(-4) : userId;
+                return `@User ${suffix}`;
+        }
 
-		for (const chunk of chunks) {
-			if (!chunk.text) continue;
+        function findGuildMemberById(userId: string | null): DtoMember | null {
+                if (!userId) return null;
+                return mentionMemberMap.get(userId) ?? null;
+        }
 
-			urlPattern.lastIndex = 0;
-			let lastIndex = 0;
-			let match: RegExpExecArray | null;
+        function findDmUserById(userId: string | null): DtoUser | null {
+                if (!userId) return null;
+                const channelId = $selectedChannelId;
+                if (!channelId) return null;
+                const dmChannels = ($channelsByGuild['@me'] ?? []) as DtoChannel[];
+                const active = dmChannels.find((candidate) => toSnowflakeString((candidate as any)?.id) === channelId);
+                if (!active) return null;
+                const recipients = Array.isArray((active as any)?.recipients)
+                        ? ((active as any)?.recipients as DtoUser[])
+                        : [];
+                for (const entry of recipients) {
+                        const id = toSnowflakeString((entry as any)?.id);
+                        if (id === userId) {
+                                return entry;
+                        }
+                }
+                const direct = (active as any)?.recipient;
+                const directId = toSnowflakeString(
+                        (active as any)?.recipient_id ?? (active as any)?.recipientId ?? (direct as any)?.id
+                );
+                if (direct && directId === userId) {
+                        return direct as DtoUser;
+                }
+                return null;
+        }
 
-			while ((match = urlPattern.exec(chunk.text)) !== null) {
-				const startIndex = match.index;
-				let endIndex = startIndex + match[0].length;
+        const VOICE_CHANNEL_TYPES = new Set([1, 3]);
 
-				while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(chunk.text[endIndex - 1])) {
-					endIndex--;
-				}
+        function detectChannelKind(channel: DtoChannel | null | undefined): ChannelKind {
+                const type = Number((channel as any)?.type ?? 0);
+                if (VOICE_CHANNEL_TYPES.has(type)) {
+                        return 'voice';
+                }
+                return 'text';
+        }
 
-				if (endIndex <= startIndex) {
-					continue;
-				}
+        function resolveUserMentionDetails(userId: string): {
+                label: string;
+                accentColor: string | null;
+                member: DtoMember | null;
+                user: DtoUser | null;
+        } {
+                const guildId = $selectedGuildId;
+                const member = guildId && guildId !== '@me' ? findGuildMemberById(userId) : null;
+                const userFromMember = (member as any)?.user as DtoUser | undefined;
+                const dmUser = guildId === '@me' || !guildId ? findDmUserById(userId) : null;
+                const user: DtoUser | null = (userFromMember ?? dmUser ?? null) as DtoUser | null;
+                const name = memberPrimaryName(member) || formatUserDisplayName(user) || fallbackUserMentionLabel(userId);
+                return {
+                        label: `@${name.replace(/^@+/, '').trim()}`,
+                        accentColor: MENTION_ACCENT_COLORS.user,
+                        member,
+                        user
+                };
+        }
 
-				if (startIndex > lastIndex) {
-					tokens.push({
-						type: 'text',
-						content: chunk.text.slice(lastIndex, startIndex),
-						styles: chunk.styles
-					});
-				}
+        function resolveRoleMentionLabel(roleId: string): { label: string; accentColor: string | null } {
+                const role = mentionRoleMap[roleId] ?? null;
+                if (!role) {
+                        return { label: `@Role ${roleId}`, accentColor: MENTION_ACCENT_COLORS.role };
+                }
+                const name = typeof (role as any)?.name === 'string' ? (role as any).name : `Role ${roleId}`;
+                return {
+                        label: `@${String(name)}`,
+                        accentColor: MENTION_ACCENT_COLORS.role
+                };
+        }
 
-				const rawUrl = chunk.text.slice(startIndex, endIndex);
-				const normalized = normalizeUrl(rawUrl);
-				const invite = extractInvite(normalized);
-				const youtube = extractYouTube(normalized);
+        function resolveChannelMentionDetails(
+                channelId: string,
+                channel?: DtoChannel | null
+        ): { label: string; accentColor: string | null; channelKind: ChannelKind } {
+                const guildId = $selectedGuildId ?? '';
+                const list = ($channelsByGuild[guildId] ?? []) as DtoChannel[];
+                const resolvedChannel = channel ?? list.find((candidate) => {
+                        return toSnowflakeString((candidate as any)?.id) === channelId;
+                });
+                const kind = detectChannelKind(resolvedChannel);
+                const rawName = (resolvedChannel as any)?.name;
+                const baseName =
+                        typeof rawName === 'string' && rawName.trim() ? rawName.trim() : `channel-${channelId}`;
+                const sanitized = baseName.replace(/^#+/, '');
+                const label = kind === 'voice' ? sanitized : `#${sanitized}`;
+                return {
+                        label,
+                        accentColor: MENTION_ACCENT_COLORS.channel,
+                        channelKind: kind
+                };
+        }
 
-				if (invite) {
-					tokens.push({
-						type: 'link',
-						label: rawUrl,
-						url: normalized,
-						embed: { kind: 'invite', code: invite.code, url: normalized },
-						styles: chunk.styles
-					});
-				} else if (youtube) {
-					tokens.push({
-						type: 'link',
-						label: rawUrl,
-						url: normalized,
-						embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized },
-						styles: chunk.styles
-					});
-				} else {
-					tokens.push({
-						type: 'link',
-						label: rawUrl,
-						url: normalized,
-						styles: chunk.styles
-					});
-				}
+        function createMentionToken(mention: MentionMatch): InlineToken | null {
+                const id = mention.id;
+                if (!id) return null;
+                if (mention.type === 'user') {
+                        if (mention.special === 'everyone' || mention.special === 'here') {
+                                return {
+                                        type: 'mention',
+                                        mentionType: 'user',
+                                        id,
+                                        label: mention.raw ?? `@${mention.special}`,
+                                        raw: mention.raw,
+                                        accentColor: MENTION_ACCENT_COLORS.user,
+                                        onClick: null
+                                };
+                        }
+                        const { label, accentColor, member, user } = resolveUserMentionDetails(id);
+                        const onClick = (event: MouseEvent) => {
+                                if (!member && !user) {
+                                        return;
+                                }
+                                const target = event.currentTarget as HTMLElement | null;
+                                let anchor: { x: number; y: number; width: number; height: number } | null = null;
+                                if (target && typeof window !== 'undefined') {
+                                        const rect = target.getBoundingClientRect();
+                                        anchor = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+                                }
+                                memberProfilePanel.open({
+                                        member,
+                                        user: user ?? (member as any)?.user ?? null,
+                                        guildId: $selectedGuildId,
+                                        anchor
+                                });
+                        };
+                        return {
+                                type: 'mention',
+                                mentionType: 'user',
+                                id,
+                                label,
+                                raw: mention.raw,
+                                accentColor,
+                                onClick
+                        };
+                }
+                if (mention.type === 'role') {
+                        const { label, accentColor } = resolveRoleMentionLabel(id);
+                        return {
+                                type: 'mention',
+                                mentionType: 'role',
+                                id,
+                                label,
+                                raw: mention.raw,
+                                accentColor,
+                                onClick: null
+                        };
+                }
+                if (mention.type === 'channel') {
+                        const details = resolveChannelMentionDetails(id);
+                        const onClick = () => {
+                                const guildId = $selectedGuildId;
+                                if (guildId && guildId !== '@me') {
+                                        selectedChannelId.set(id);
+                                }
+                        };
+                        return {
+                                type: 'mention',
+                                mentionType: 'channel',
+                                id,
+                                label: details.label,
+                                raw: mention.raw,
+                                accentColor: details.accentColor,
+                                onClick,
+                                channelKind: details.channelKind
+                        };
+                }
+                return null;
+        }
 
-				lastIndex = endIndex;
+        function emitTextWithLinks(
+                text: string,
+                styles: FormatStyles | undefined,
+                tokens: InlineToken[]
+        ) {
+                if (!text) return;
 
-				if (urlPattern.lastIndex > endIndex) {
-					urlPattern.lastIndex = endIndex;
-				}
-			}
+                urlPattern.lastIndex = 0;
+                let lastIndex = 0;
+                let match: RegExpExecArray | null;
 
-			if (lastIndex < chunk.text.length) {
-				tokens.push({
-					type: 'text',
-					content: chunk.text.slice(lastIndex),
-					styles: chunk.styles
-				});
-			}
-		}
-	}
+                while ((match = urlPattern.exec(text)) !== null) {
+                        const startIndex = match.index;
+                        let endIndex = startIndex + match[0].length;
+
+                        while (endIndex > startIndex && /[)\]\}>,.;!?]/.test(text[endIndex - 1])) {
+                                endIndex--;
+                        }
+
+                        if (endIndex <= startIndex) {
+                                continue;
+                        }
+
+                        if (startIndex > lastIndex) {
+                                tokens.push({
+                                        type: 'text',
+                                        content: text.slice(lastIndex, startIndex),
+                                        styles
+                                });
+                        }
+
+                        const rawUrl = text.slice(startIndex, endIndex);
+                        const normalized = normalizeUrl(rawUrl);
+                        const invite = extractInvite(normalized);
+                        const youtube = extractYouTube(normalized);
+
+                        if (invite) {
+                                tokens.push({
+                                        type: 'link',
+                                        label: rawUrl,
+                                        url: normalized,
+                                        embed: { kind: 'invite', code: invite.code, url: normalized },
+                                        styles
+                                });
+                        } else if (youtube) {
+                                tokens.push({
+                                        type: 'link',
+                                        label: rawUrl,
+                                        url: normalized,
+                                        embed: { kind: 'youtube', videoId: youtube.videoId, url: normalized },
+                                        styles
+                                });
+                        } else {
+                                tokens.push({
+                                        type: 'link',
+                                        label: rawUrl,
+                                        url: normalized,
+                                        styles
+                                });
+                        }
+
+                        lastIndex = endIndex;
+
+                        if (urlPattern.lastIndex > endIndex) {
+                                urlPattern.lastIndex = endIndex;
+                        }
+                }
+
+                if (lastIndex < text.length) {
+                        tokens.push({
+                                type: 'text',
+                                content: text.slice(lastIndex),
+                                styles
+                        });
+                }
+        }
+
+        function parsePlainText(content: string, tokens: InlineToken[]) {
+                if (!content) return;
+
+                const chunks = parseFormattingChunks(content);
+
+                for (const chunk of chunks) {
+                        if (!chunk.text) continue;
+
+                        const segments = splitTextWithMentions(chunk.text);
+                        if (segments.length === 0) {
+                                emitTextWithLinks(chunk.text, chunk.styles, tokens);
+                                continue;
+                        }
+
+                        for (const segment of segments) {
+                                if (segment.type === 'text') {
+                                        emitTextWithLinks(segment.value, chunk.styles, tokens);
+                                } else {
+                                        const mentionToken = createMentionToken(segment.mention);
+                                        if (mentionToken) {
+                                                tokens.push(mentionToken);
+                                        } else {
+                                                emitTextWithLinks(segment.mention.raw, chunk.styles, tokens);
+                                        }
+                                }
+                        }
+                }
+        }
 
         function parseInline(content: string): InlineToken[] {
                 const tokens: InlineToken[] = [];
@@ -798,13 +1097,36 @@
 
         const me = auth.user;
         let { message, compact = false } = $props<{ message: DtoMessage; compact?: boolean }>();
-	let isEditing = $state(false);
+        const isJoinMessage = $derived.by(() => Number((message as any)?.type ?? 0) === 2);
+        const joinPhrase = $derived.by(() => {
+                if (Number((message as any)?.type ?? 0) !== 2) return null;
+                const index = selectJoinPhraseIndex(message);
+                const resolver = JOIN_MESSAGE_PHRASES[index] ?? JOIN_MESSAGE_PHRASES[0];
+                return resolver ? resolver() : '';
+        });
+        const joinDisplayName = $derived.by(() => {
+                const raw = message.author?.name;
+                if (!raw) return 'Unknown user';
+                const trimmed = raw.trim();
+                return trimmed || raw;
+        });
+        let isEditing = $state(false);
         let draft = $state(message.content ?? '');
         let saving = $state(false);
         let editTextarea = $state<HTMLTextAreaElement | null>(null);
         let messageRoot = $state<HTMLElement | null>(null);
 	const dispatch = createEventDispatcher<{ deleted: void }>();
         const segments = $derived(parseMessageContent(message.content ?? ''));
+        const fallbackInlineTokens = $derived(parseInline(message.content ?? ''));
+        const isEmojiOnlyMessage = $derived.by(() => isEmojiOnly(message.content ?? ''));
+        const messageBodyClass = $derived.by(() => {
+                const base = compact ? 'mt-0 pr-16' : 'mt-0.5 pr-16';
+                if (isEmojiOnlyMessage) {
+                        return `${base} emoji-only-message text-2xl leading-tight`;
+                }
+                const normalLineHeight = compact ? 'leading-tight' : 'leading-normal';
+                return `${base} ${normalLineHeight} text-base`;
+        });
         const authorAvatarUrl = $derived.by(() =>
                 resolveAvatarUrl(
                         (message as any)?.author,
@@ -821,6 +1143,8 @@
 	let primaryRoleColor = $state<string | null>(null);
         let roleColorRequest = 0;
         let resolvedAuthorMember = $state<DtoMember | null>(null);
+        let mentionRoleMap = $state<Record<string, DtoRole>>({});
+        let mentionMemberMap = $state<Map<string, DtoMember>>(new Map());
         let imagePreview = $state<ImagePreviewState | null>(null);
         let imagePreviewZoom = $state(1);
         let imagePreviewFitZoom = $state(1);
@@ -1018,6 +1342,11 @@
                 const perms = resolveChannelPermissions();
                 const own = currentId != null && authorStr != null && currentId === authorStr;
                 const manage = Boolean(perms & PERMISSION_MANAGE_MESSAGES);
+                if (isJoinMessage) {
+                        canEditMessage = false;
+                        canDeleteMessage = manage;
+                        return;
+                }
                 const attachments = (message.attachments ?? []) as MessageAttachment[];
                 const hasTextContent =
                         typeof message.content === 'string' && message.content.trim().length > 0;
@@ -1042,6 +1371,7 @@
                                 }
                         }
                 }
+                mentionMemberMap = memberIndex;
                 const directMember = ((message as any)?.member ?? null) as DtoMember | null;
                 const cachedMember = directMember ?? (authorId ? memberIndex.get(authorId) ?? null : null);
                 resolvedAuthorMember = cachedMember;
@@ -1049,8 +1379,9 @@
                 primaryRoleColor = null;
 
                 if (!guildId) {
+                        mentionRoleMap = {};
                         return;
-		}
+                }
 
 		const activeGuildId = guildId;
 
@@ -1090,12 +1421,13 @@
 					return;
 				}
 
-				const definitions = await loadGuildRolesCached(activeGuildId);
-				if (requestId !== roleColorRequest) {
-					return;
-				}
+                                const definitions = await loadGuildRolesCached(activeGuildId);
+                                if (requestId !== roleColorRequest) {
+                                        return;
+                                }
+                                mentionRoleMap = buildRoleMap(definitions);
 
-				let resolvedColor: string | null = null;
+                                let resolvedColor: string | null = null;
 				for (const roleId of orderedRoleIds) {
 					const matchedRole = definitions.find((role) => getRoleId(role) === roleId);
 					if (!matchedRole) continue;
@@ -1707,12 +2039,18 @@
                         event.preventDefault();
                         return;
                 }
-                if (event.button !== 0) return;
+
+                const pointerType = event.pointerType ?? '';
+                if (pointerType === 'mouse' || (!pointerType && event instanceof MouseEvent)) {
+                        return;
+                }
+
+                if (event.button !== 0 && event.button !== -1) return;
                 if (event.defaultPrevented || isEditing) return;
-		if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
-		const target = event.target as HTMLElement | null;
-		if (
-			target &&
+                if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
+                const target = event.target as HTMLElement | null;
+                if (
+                        target &&
 			target.closest(
 				'button, a, textarea, input, [contenteditable], [role="button"], [data-user-menu="true"]'
 			)
@@ -2045,20 +2383,26 @@
 
 <div
         role="listitem"
-        class={`group/message flex gap-3 px-4 ${compact ? 'py-0.5' : 'py-2'} hover:bg-[var(--panel)]/30`}
+        class={`group/message flex gap-3 px-4 ${compact && !isJoinMessage ? 'py-0.5 items-center' : 'py-2'} hover:bg-[var(--panel)]/30 ${
+                isJoinMessage ? 'items-center' : ''
+        }`}
         use:customContextMenuTarget
         onpointerup={handleRootPointerUp}
         oncontextmenu={openMessageMenu}
         data-message-id={messageDomId((message as any)?.id)}
         bind:this={messageRoot}
 >
-	{#if compact}
-		<div
-			class="w-10 shrink-0 pt-0.5 pr-1 text-right text-[10px] leading-tight text-[var(--muted)] opacity-0 transition-opacity group-hover/message:opacity-100"
-			use:tooltip={() => fmtMsgFull(message)}
-		>
-			{fmtMsgTime(message)}
-		</div>
+        {#if isJoinMessage}
+                <div class="flex w-10 shrink-0 items-center justify-center text-emerald-400" aria-hidden="true">
+                        <MoveRight class="h-5 w-5" stroke-width={2} />
+                </div>
+        {:else if compact}
+                <div
+                        class="w-10 shrink-0 pt-0.5 pr-1 text-right text-[10px] leading-tight text-[var(--muted)] opacity-0 transition-opacity group-hover/message:opacity-100"
+                        use:tooltip={() => fmtMsgFull(message)}
+                >
+                        {fmtMsgTime(message)}
+                </div>
         {:else}
                 <button
                         type="button"
@@ -2082,79 +2426,114 @@
                         {/if}
                 </button>
         {/if}
-	<div class="relative min-w-0 flex-1">
-		{#if !isEditing && (canEditMessage || canDeleteMessage)}
-			<div
-				class="absolute top-1 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
-			>
-				{#if canEditMessage}
+        <div class="relative min-w-0 flex-1">
+                {#if isJoinMessage}
+                        {@const joinTime = fmtMsgTime(message)}
+                        <div class="flex flex-col gap-1 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm">
+                                <div class="flex flex-wrap items-center gap-1 text-sm text-[var(--foreground)]">
                                         <button
-                                                class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
-                                                aria-label="Edit"
-						onclick={() => {
-							void startEditing();
-						}}
-					>
-						<Pencil class="h-3.5 w-3.5" stroke-width={2} />
-					</button>
-				{/if}
-				{#if canDeleteMessage}
-                                        <button
-                                                class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
-                                                aria-label="Delete"
-						onclick={deleteMsg}
-					>
-						<Trash2 class="h-3.5 w-3.5" stroke-width={2} />
-					</button>
-				{/if}
-			</div>
-		{/if}
-		{#if !compact}
-			<div class="flex items-baseline gap-2 pr-20">
-                                <button
-                                        type="button"
-                                        use:customContextMenuTarget
-                                        class="truncate font-semibold text-[var(--muted)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                                        style:color={primaryRoleColor ?? null}
-                                        data-user-menu="true"
-                                        data-tooltip-disabled
-                                        oncontextmenu={openUserMenu}
-                                        onclick={openAuthorProfile}
-                                >
-                                        {message.author?.name ?? 'User'}
-                                </button>
-                                <div class="text-xs text-[var(--muted)]" use:tooltip={() => fmtMsgFull(message)}>
-                                        {fmtMsgTime(message)}
+                                                type="button"
+                                                use:customContextMenuTarget
+                                                class="font-semibold text-[var(--foreground)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                                style:color={primaryRoleColor ?? null}
+                                                data-user-menu="true"
+                                                data-tooltip-disabled
+                                                oncontextmenu={openUserMenu}
+                                                onclick={openAuthorProfile}
+                                        >
+                                                {joinDisplayName}
+                                        </button>
+                                        <span class="text-[var(--muted)]">{joinPhrase ?? ''}</span>
                                 </div>
-			</div>
-		{/if}
-		{#if isEditing}
-			<div class="mt-1">
-				<textarea
-					class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					bind:this={editTextarea}
-					bind:value={draft}
-					style:overflow-y={'hidden'}
-					oninput={autoSizeEditTextarea}
-				></textarea>
-				<div class="mt-1 flex gap-2 text-sm">
-					<button
-						class="rounded-md bg-[var(--brand)] px-2 py-1 text-[var(--bg)]"
-						disabled={saving}
-						onclick={saveEdit}>{saving ? 'Saving…' : 'Save'}</button
-					>
-					<button
-						class="rounded-md border border-[var(--stroke)] px-2 py-1"
-						onclick={() => (isEditing = false)}>Cancel</button
-					>
-				</div>
-			</div>
-		{:else}
-			<div class={compact ? 'mt-0 pr-16 text-sm leading-tight' : 'mt-0.5 pr-16'}>
-				{#if renderedSegments.length === 0}
-					<span class="break-words whitespace-pre-wrap">{message.content}</span>
-				{:else}
-					{#each renderedSegments as segment, index (index)}
+                                {#if joinTime}
+                                        <div
+                                                class="mt-1 inline-flex w-max text-xs text-[var(--muted)]"
+                                                use:tooltip={() => fmtMsgFull(message)}
+                                        >
+                                                {joinTime}
+                                        </div>
+                                {/if}
+                        </div>
+                {:else}
+                        {#if !isEditing && (canEditMessage || canDeleteMessage)}
+                                <div
+                                        class="absolute top-1 right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100"
+                                >
+                                        {#if canEditMessage}
+                                                <button
+                                                        class="rounded border border-[var(--stroke)] p-1 hover:bg-[var(--panel)]"
+                                                        aria-label="Edit"
+                                                        onclick={() => {
+                                                                void startEditing();
+                                                        }}
+                                                >
+                                                        <Pencil class="h-3.5 w-3.5" stroke-width={2} />
+                                                </button>
+                                        {/if}
+                                        {#if canDeleteMessage}
+                                                <button
+                                                        class="rounded border border-[var(--stroke)] p-1 text-red-400 hover:bg-[var(--panel)]"
+                                                        aria-label="Delete"
+                                                        onclick={deleteMsg}
+                                                >
+                                                        <Trash2 class="h-3.5 w-3.5" stroke-width={2} />
+                                                </button>
+                                        {/if}
+                                </div>
+                        {/if}
+                        {#if !compact}
+                                <div class="flex items-baseline gap-2 pr-20">
+                                        <button
+                                                type="button"
+                                                use:customContextMenuTarget
+                                                class="truncate font-semibold text-[var(--muted)] transition hover:underline focus-visible:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                                style:color={primaryRoleColor ?? null}
+                                                data-user-menu="true"
+                                                data-tooltip-disabled
+                                                oncontextmenu={openUserMenu}
+                                                onclick={openAuthorProfile}
+                                        >
+                                                {message.author?.name ?? 'User'}
+                                        </button>
+                                        <div
+                                                class="inline-flex w-max text-xs text-[var(--muted)]"
+                                                use:tooltip={() => fmtMsgFull(message)}
+                                        >
+                                                {fmtMsgTime(message)}
+                                        </div>
+                                </div>
+                        {/if}
+                        {#if isEditing}
+                                <div class="mt-1">
+                                        <textarea
+                                                class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                bind:this={editTextarea}
+                                                bind:value={draft}
+                                                style:overflow-y={'hidden'}
+                                                oninput={autoSizeEditTextarea}
+                                        ></textarea>
+                                        <div class="mt-1 flex gap-2 text-sm">
+                                                <button
+                                                        class="rounded-md bg-[var(--brand)] px-2 py-1 text-[var(--bg)]"
+                                                        disabled={saving}
+                                                        onclick={saveEdit}>{saving ? 'Saving…' : 'Save'}</button
+                                                >
+                                                <button
+                                                        class="rounded-md border border-[var(--stroke)] px-2 py-1"
+                                                        onclick={() => (isEditing = false)}>Cancel</button
+                                                >
+                                        </div>
+                                </div>
+                        {:else}
+                                <div class={messageBodyClass}>
+                                {#if renderedSegments.length === 0}
+                                        {#if fallbackInlineTokens.length === 0}
+                                                <span class="break-words whitespace-pre-wrap">{message.content}</span>
+                                        {:else}
+                                                <InlineTokens tokens={fallbackInlineTokens} />
+                                        {/if}
+                                {:else}
+                                        {#each renderedSegments as segment, index (index)}
 						{#if segment.type === 'code'}
 							<div class="my-2 whitespace-normal first:mt-0 last:mb-0">
 								<CodeBlock code={segment.content} language={segment.language} />
@@ -2534,8 +2913,9 @@
                                                 {/each}
                                         </div>
                                 {/if}
-			</div>
-		{/if}
+                        </div>
+                {/if}
+        {/if}
         </div>
 </div>
 

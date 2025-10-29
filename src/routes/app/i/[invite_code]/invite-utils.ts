@@ -1,5 +1,5 @@
 import type { DtoGuild, DtoInvitePreview } from '$lib/api';
-import { computeApiBase } from '$lib/runtime/api';
+import { resolveIconUrl } from '$lib/utils/icon';
 
 export type InviteState = 'ok' | 'not-found' | 'error';
 
@@ -24,11 +24,7 @@ export function getMemberCountLabel(invite: DtoInvitePreview | null): string {
 }
 
 export function buildGuildIconUrl(invite: DtoInvitePreview | null): string | null {
-	const iconId = invite?.guild?.icon;
-	if (iconId == null) return null;
-	const base = computeApiBase();
-	const normalized = base.replace(/\/$/, '');
-	return `${normalized}/attachments/${iconId}`;
+        return resolveIconUrl(invite?.guild?.icon);
 }
 
 export function getInviteUnavailableMessage(state: InviteState): string | null {

@@ -469,10 +469,6 @@
                                                         <path d="M13.73 21a2 2 0 01-3.46 0"></path>
                                                 </svg>
                                                 <span class="text-sm font-semibold text-zinc-100">{m.landing_feature_notifications_title()}</span>
-                                                <span
-                                                        class="ml-2 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-200"
-                                                        >{m.landing_feature_badge_coming_soon()}</span
-                                                >
                                         </div>
                                         <p class="text-sm leading-relaxed text-zinc-400">
                                                 {m.landing_feature_notifications_description()}
@@ -526,10 +522,6 @@
                                                         ></path>
                                                 </svg>
                                                 <span class="text-sm font-semibold text-zinc-100">{m.landing_feature_voice_title()}</span>
-                                                <span
-                                                        class="ml-2 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-200"
-                                                        >{m.landing_feature_badge_coming_soon()}</span
-                                                >
                                         </div>
                                         <p class="text-sm leading-relaxed text-zinc-400">
                                                 {m.landing_feature_voice_description()}

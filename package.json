@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "vite dev --host 0.0.0.0",
 		"paraglide": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide",
 		"build": "npm run paraglide && vite build",
 		"preview": "vite preview",
@@ -44,6 +44,7 @@
 	"dependencies": {
 		"axios": "^1.6.8",
 		"highlight.js": "^11.11.1",
-		"lucide-svelte": "^0.544.0"
+		"lucide-svelte": "^0.544.0",
+		"unicode-emoji-json": "^0.8.0"
 	}
 }
