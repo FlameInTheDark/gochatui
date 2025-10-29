@@ -16,6 +16,36 @@ const TOKEN_KEY = 'gochat.token';
 const REFRESH_KEY = 'gochat.refresh';
 const USER_KEY = 'gochat.user';
 
+const REFRESH_LEEWAY_MS = 30_000;
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+function decodeTokenExpiry(token: string): number | null {
+        try {
+                const part = token.split('.')[1] || '';
+                const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
+                const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+                const json =
+                        typeof atob === 'function'
+                                ? atob(padded)
+                                : Buffer.from(padded, 'base64').toString('utf8');
+                const payload = JSON.parse(json) as { exp?: number };
+                return typeof payload.exp === 'number' ? payload.exp : null;
+        } catch {
+                return null;
+        }
+}
+
+function computeRefreshLeadTime(token: string): number | null {
+        const exp = decodeTokenExpiry(token);
+        if (!exp) return null;
+        const expiresAt = exp * 1000;
+        const msUntilExpiry = expiresAt - Date.now();
+        if (!Number.isFinite(msUntilExpiry)) return null;
+        if (msUntilExpiry <= 0) return 0;
+        const delay = Math.max(0, msUntilExpiry - REFRESH_LEEWAY_MS);
+        return Math.min(delay, MAX_TIMEOUT_MS);
+}
+
 function toSnowflakeString(value: unknown): string | null {
         if (value == null) return null;
         try {
@@ -32,51 +62,68 @@ function toSnowflakeString(value: unknown): string | null {
         }
 }
 
-function createAuthStore() {
-	const token = writable<string | null>(
-		typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
-	);
-	token.subscribe((t) => {
-		try {
-			if (typeof localStorage !== 'undefined') {
-				if (t) localStorage.setItem(TOKEN_KEY, t);
-				else localStorage.removeItem(TOKEN_KEY);
-			}
-		} catch {
-			// ignore
-		}
-	});
+function normalizeRefreshToken(value: string | null | undefined): string | null {
+        if (!value) return null;
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const bearerMatch = trimmed.match(/^bearer\s+/i);
+        if (bearerMatch) {
+                const token = trimmed.slice(bearerMatch[0].length).trim();
+                return token ? `Bearer ${token}` : null;
+        }
+        return `Bearer ${trimmed}`;
+}
 
-	const refreshToken = writable<string | null>(
-		typeof localStorage !== 'undefined' ? localStorage.getItem(REFRESH_KEY) : null
-	);
-	refreshToken.subscribe((t) => {
-		try {
-			if (typeof localStorage !== 'undefined') {
-				if (t) localStorage.setItem(REFRESH_KEY, t);
-				else localStorage.removeItem(REFRESH_KEY);
-			}
-		} catch {
-			/* ignore */
+function createAuthStore() {
+        const token = writable<string | null>(
+                typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
+        );
+        const refreshToken = writable<string | null>(
+                typeof localStorage !== 'undefined'
+                        ? normalizeRefreshToken(localStorage.getItem(REFRESH_KEY))
+                        : null
+        );
+
+	let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function clearRefreshTimer() {
+		if (refreshTimer) {
+			clearTimeout(refreshTimer);
+			refreshTimer = null;
 		}
-	});
+	}
 
 	// Separate API instance for token refresh without automatic auth header
 	const refreshApi = createApi(() => null);
 
-	async function refresh(): Promise<boolean> {
+	function scheduleTokenRefresh(currentToken: string | null) {
+		clearRefreshTimer();
+		if (!browser) return;
+		if (!currentToken) return;
 		const rt = get(refreshToken);
-		if (!rt) return false;
-		try {
-			const res = await refreshApi.auth.authRefreshGet({
-				headers: { Authorization: `Bearer ${rt}` }
-			});
-			const t = res.data.token ?? '';
-			const r = res.data.refresh_token ?? '';
-			if (t) token.set(t);
-			if (r) refreshToken.set(r);
-			return true;
-		} catch {
+		if (!rt) return;
+		const delay = computeRefreshLeadTime(currentToken);
+		if (delay == null) return;
+		refreshTimer = setTimeout(async () => {
+			refreshTimer = null;
+			await refresh();
+		}, delay);
+	}
+
+        async function refresh(): Promise<boolean> {
+                const rt = get(refreshToken);
+                if (!rt) return false;
+                try {
+                        const res = await refreshApi.auth.authRefreshGet({
+                                authorization: rt
+                        });
+                        const t = res.data.token ?? '';
+                        const r = normalizeRefreshToken(res.data.refresh_token);
+                        if (t) token.set(t);
+                        if (r) refreshToken.set(r);
+                        scheduleTokenRefresh(t || get(token));
+                        return true;
+                } catch {
 			logout();
 			return false;
 		}
@@ -109,14 +156,15 @@ function createAuthStore() {
 
 	async function login(data: AuthLoginRequest) {
 		const res = await api.auth.authLoginPost({ authLoginRequest: data });
-		const t = res.data.token ?? '';
-		const r = res.data.refresh_token ?? '';
-		token.set(t);
-		refreshToken.set(r);
-		return t;
-	}
+                const t = res.data.token ?? '';
+                const r = normalizeRefreshToken(res.data.refresh_token);
+                token.set(t);
+                refreshToken.set(r);
+                return t;
+        }
 
 	function logout() {
+		clearRefreshTimer();
 		token.set(null);
 		refreshToken.set(null);
 		user.set(null);
@@ -155,16 +203,14 @@ function createAuthStore() {
 			const status = (err as { response?: { status?: number } }).response?.status;
 			if (status === 401) {
 				logout();
-                                if (browser) window.location.href = '/';
+				if (browser) window.location.href = '/';
 			}
 			return null;
 		}
 	}
 
-        async function loadGuilds() {
-                if (!get(token)) return [];
-                const res = await api.user.userMeGuildsGet();
-                const incoming = res.data ?? [];
+        function ingestGuilds(list: unknown): DtoGuild[] {
+                const incoming = Array.isArray(list) ? (list as DtoGuild[]) : [];
                 const previous = get(guilds);
                 const previousMap = new Map<string, any>();
                 for (const guild of previous) {
@@ -173,7 +219,7 @@ function createAuthStore() {
                                 previousMap.set(id, guild as any);
                         }
                 }
-                const list = incoming.map((guild) => {
+                const nextList = incoming.map((guild) => {
                         const id = toSnowflakeString((guild as any)?.id);
                         const base = normalizePermissionValue((guild as any)?.permissions);
                         const prev = id ? previousMap.get(id) : undefined;
@@ -188,19 +234,67 @@ function createAuthStore() {
                                 __effectivePermissions: effective
                         } as any;
                 });
-                guilds.set(list);
-                return list;
+                guilds.set(nextList);
+                return nextList;
+        }
+
+        async function loadGuilds() {
+                if (!get(token)) return [];
+                const res = await api.user.userMeGuildsGet();
+                return ingestGuilds(res.data ?? []);
         }
 
 	const isAuthenticated = derived(token, (t) => Boolean(t));
 
-	token.subscribe(async (t) => {
-		if (t) {
-			await loadMe();
-			await loadGuilds();
-		} else {
-			user.set(null);
-			guilds.set([]);
+        let hasFetchedMeForSession = false;
+
+        user.subscribe((value) => {
+                if (!value) {
+                        hasFetchedMeForSession = false;
+                }
+        });
+
+        token.subscribe(async (t) => {
+                try {
+                        if (typeof localStorage !== 'undefined') {
+                                if (t) localStorage.setItem(TOKEN_KEY, t);
+                                else localStorage.removeItem(TOKEN_KEY);
+                        }
+                } catch {
+                        // ignore
+                }
+                scheduleTokenRefresh(t);
+                if (t) {
+                        if (!hasFetchedMeForSession) {
+                                hasFetchedMeForSession = true;
+                                const me = await loadMe();
+                                if (!me) {
+                                        hasFetchedMeForSession = false;
+                                }
+                        }
+                } else {
+                        user.set(null);
+                        guilds.set([]);
+                        hasFetchedMeForSession = false;
+                }
+        });
+
+	refreshToken.subscribe((t) => {
+		try {
+			if (typeof localStorage !== 'undefined') {
+				if (t) localStorage.setItem(REFRESH_KEY, t);
+				else localStorage.removeItem(REFRESH_KEY);
+			}
+		} catch {
+			/* ignore */
+		}
+		if (!t) {
+			clearRefreshTimer();
+			return;
+		}
+		const currentToken = get(token);
+		if (currentToken) {
+			scheduleTokenRefresh(currentToken);
 		}
 	});
 
@@ -209,16 +303,17 @@ function createAuthStore() {
 		user,
 		guilds,
 		isAuthenticated,
-		api,
-		login,
-		logout,
-		register,
-		confirm,
-		recover,
-		reset,
-		loadMe,
-		loadGuilds
-	};
+                api,
+                login,
+                logout,
+                register,
+                confirm,
+                recover,
+                reset,
+                loadMe,
+                loadGuilds,
+                ingestGuilds
+        };
 }
 
 export const auth = createAuthStore();

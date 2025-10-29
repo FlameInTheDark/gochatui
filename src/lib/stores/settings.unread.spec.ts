@@ -1,0 +1,281 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { derived, get, writable } from 'svelte/store';
+
+vi.mock('$app/environment', () => ({
+        browser: false
+}));
+
+vi.mock('$lib/paraglide/runtime', () => ({
+        setLocale: vi.fn()
+}));
+
+const userMeSettingsGet = vi.fn();
+const userMeSettingsPost = vi.fn();
+
+vi.mock('$lib/stores/auth', () => {
+        const token = writable<string | null>(null);
+        const guilds = writable<any[]>([]);
+        const isAuthenticated = derived(token, (value) => Boolean(value));
+        const ingestGuilds = vi.fn((list: unknown) => {
+                const next = Array.isArray(list) ? list : [];
+                guilds.set(next as any);
+                return next as any;
+        });
+
+        return {
+                auth: {
+                        token,
+                        guilds,
+                        isAuthenticated,
+                        ingestGuilds,
+                        api: {
+                                user: {
+                                        userMeSettingsGet,
+                                        userMeSettingsPost
+                                }
+                        }
+                }
+        };
+});
+
+describe('settings unread snapshot integration', () => {
+        beforeEach(async () => {
+                vi.resetModules();
+                userMeSettingsGet.mockReset();
+                userMeSettingsPost.mockReset();
+                const { auth } = await import('$lib/stores/auth');
+                auth.token.set(null);
+                auth.guilds.set([]);
+                const { channelsByGuild } = await import('$lib/stores/appState');
+                channelsByGuild.set({});
+                const { updateUnreadSnapshot } = await import('$lib/stores/unreadSeed');
+                updateUnreadSnapshot(null);
+        });
+
+        afterEach(async () => {
+                const { auth } = await import('$lib/stores/auth');
+                auth.token.set(null);
+                const { updateUnreadSnapshot } = await import('$lib/stores/unreadSeed');
+                updateUnreadSnapshot(null);
+        });
+
+        it('prefers guilds_last_messages payloads for unread snapshot seeding', async () => {
+                const guildsLastMessages = {
+                        '111': {
+                                '222': '333'
+                        }
+                };
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                guilds_last_messages: guildsLastMessages,
+                                settings: null
+                        }
+                });
+
+                const { unreadSnapshot } = await import('$lib/stores/unreadSeed');
+                const { auth } = await import('$lib/stores/auth');
+                await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(userMeSettingsGet).toHaveBeenCalledTimes(1);
+                expect(get(unreadSnapshot)).toEqual(guildsLastMessages);
+        });
+
+        it('treats channels without a last message as read when read state is missing', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                guilds_last_messages: { '111': {} },
+                                settings: null
+                        }
+                });
+
+                const { channelsByGuild } = await import('$lib/stores/appState');
+                channelsByGuild.set({
+                        '111': [
+                                {
+                                        id: '222',
+                                        type: 0,
+                                        last_message_id: null
+                                }
+                        ]
+                } as any);
+
+                const { unreadChannelsByGuild } = await import('$lib/stores/unread');
+                const { auth } = await import('$lib/stores/auth');
+                await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(userMeSettingsGet).toHaveBeenCalled();
+                expect(get(unreadChannelsByGuild)).toEqual({});
+        });
+
+        it('does not seed unread entries for channels missing from guilds_last_messages', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                guilds_last_messages: { '111': {} },
+                                settings: null
+                        }
+                });
+
+                const { channelsByGuild } = await import('$lib/stores/appState');
+                channelsByGuild.set({
+                        '111': [
+                                {
+                                        id: '222',
+                                        type: 0,
+                                        last_message_id: '333'
+                                }
+                        ]
+                } as any);
+
+                const { unreadChannelsByGuild } = await import('$lib/stores/unread');
+                const { auth } = await import('$lib/stores/auth');
+                await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(userMeSettingsGet).toHaveBeenCalled();
+                expect(get(unreadChannelsByGuild)).toEqual({});
+        });
+
+        it('retains unread entries even when channel metadata lacks last_message_id', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                guilds_last_messages: null,
+                                settings: null
+                        }
+                });
+
+                const { channelsByGuild } = await import('$lib/stores/appState');
+                channelsByGuild.set({
+                        '111': [
+                                {
+                                        id: '222',
+                                        type: 0,
+                                        last_message_id: null
+                                }
+                        ]
+                } as any);
+
+                const { unreadChannelsByGuild, markChannelUnread } = await import('$lib/stores/unread');
+                const { auth } = await import('$lib/stores/auth');
+                await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                markChannelUnread('111', '222', '555');
+
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                channelsByGuild.set({
+                        '111': [
+                                {
+                                        id: '222',
+                                        type: 0,
+                                        last_message_id: null
+                                }
+                        ]
+                } as any);
+
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(get(unreadChannelsByGuild)).toEqual({
+                        '111': {
+                                '222': {
+                                        latestMessageId: '555'
+                                }
+                        }
+                });
+        });
+
+        it('applies default voice settings when the API returns no settings payload', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 204,
+                        data: null
+                });
+
+                const settingsModule = await import('./settings');
+                const { appSettings, cloneDeviceSettings } = settingsModule;
+                const { auth } = await import('$lib/stores/auth');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                const defaults = cloneDeviceSettings(null);
+                expect(get(appSettings).devices).toEqual(defaults);
+        });
+
+        it('applies default voice settings when the API omits device data', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                settings: {}
+                        }
+                });
+
+                const settingsModule = await import('./settings');
+                const { appSettings, cloneDeviceSettings } = settingsModule;
+                const { auth } = await import('$lib/stores/auth');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                const defaults = cloneDeviceSettings(null);
+                expect(get(appSettings).devices).toEqual(defaults);
+        });
+
+        it('hydrates audible device defaults when the API returns silent levels', async () => {
+                userMeSettingsGet.mockResolvedValueOnce({
+                        status: 200,
+                        data: {
+                                settings: {
+                                        devices: {
+                                                audio_input_level: 0,
+                                                audio_output_level: 0,
+                                                audio_input_threshold: 0,
+                                                auto_gain_control: true,
+                                                echo_cancellation: true,
+                                                noise_suppression: true
+                                        }
+                                }
+                        }
+                });
+                userMeSettingsPost.mockResolvedValue({ status: 204 });
+
+                const { auth } = await import('$lib/stores/auth');
+                const { appSettings } = await import('./settings');
+
+                auth.token.set('token');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                const snapshot = get(appSettings);
+                expect(snapshot.devices.audioInputLevel).toBeCloseTo(1);
+                expect(snapshot.devices.audioOutputLevel).toBeCloseTo(1);
+                expect(snapshot.devices.audioInputThreshold).toBeCloseTo(0.1);
+
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(userMeSettingsPost).toHaveBeenCalledTimes(1);
+                const payload = userMeSettingsPost.mock.calls[0]?.[0]?.modelUserSettingsData?.devices;
+                expect(payload.audio_input_level).toBeCloseTo(1);
+                expect(payload.audio_output_level).toBeCloseTo(1);
+                expect(payload.audio_input_threshold).toBeCloseTo(0.1);
+        });
+});

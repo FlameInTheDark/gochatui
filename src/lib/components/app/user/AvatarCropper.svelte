@@ -1,0 +1,719 @@
+<script lang="ts">
+        import { onDestroy } from 'svelte';
+
+        export let initialAvatarUrl: string | null = null;
+        export let fallbackInitial = '?';
+        export let croppedDataUrl: string | null = null;
+        export let uploadLabel = 'Upload image';
+        export let chooseButtonLabel = 'Choose image';
+        export let helperText = 'PNG or JPEG recommended';
+        export let resetButtonLabel = 'Reset avatar selection';
+        export let previewLabel = 'Cropped preview (128×128)';
+        export let previewPlaceholderText = 'Adjust the crop to see preview';
+        export let previewImageAlt = 'Cropped avatar';
+        export let displayImageAlt = 'Avatar preview';
+        export let uploadInputId = 'profile-avatar-upload';
+        export let maskShape: 'circle' | 'rounded' = 'circle';
+        export let maskCornerRadiusRatio = 0.25;
+        export let displayBorderRadiusClass = 'rounded-full';
+        export let previewBorderRadiusClass = 'rounded-full';
+        export let previewPlaceholderBorderRadiusClass = 'rounded-full';
+
+        let avatarError: string | null = null;
+
+        let fileInput: HTMLInputElement | null = null;
+
+        let imageObjectUrl: string | null = null;
+        let imageElement: HTMLImageElement | null = null;
+        let imageReady = false;
+
+        const cropSize = 256;
+        const minMaskSize = 64;
+
+        type MaskHandle = 'nw' | 'ne' | 'sw' | 'se';
+
+        let zoom = 1;
+        let maskSize = cropSize;
+        let maskPosition = { x: 0, y: 0 };
+        let maskDragging = false;
+        let dragPointerId: number | null = null;
+        let dragOrigin = { x: 0, y: 0 };
+        let dragMaskStart = { x: 0, y: 0 };
+
+        let overlayElement: HTMLDivElement | null = null;
+        let resizingHandle: MaskHandle | null = null;
+        let resizePointerId: number | null = null;
+        let resizeStart = { position: { x: 0, y: 0 }, size: cropSize };
+
+        let imageFitScale = 1;
+        let imageDisplayWidth = 0;
+        let imageDisplayHeight = 0;
+        let imageOffset = { x: 0, y: 0 };
+        let maxMaskSize = cropSize;
+
+        let previewCanvas: HTMLCanvasElement | null = null;
+
+        $: maskRadius = maskSize / 2;
+        $: maskCenter = { x: maskPosition.x + maskRadius, y: maskPosition.y + maskRadius };
+        $: normalizedCornerRatio = maskShape === 'rounded' ? Math.min(Math.max(maskCornerRadiusRatio, 0), 0.5) : 0.5;
+        $: maskBorderRadius =
+                maskShape === 'circle' ? '50%' : `${Math.round(maskSize * normalizedCornerRatio)}px`;
+        $: minZoom = cropSize / (maxMaskSize || cropSize);
+        $: maxZoom = cropSize / minMaskSize;
+
+        $: displayAvatarUrl = croppedDataUrl ?? initialAvatarUrl;
+
+        $: if (imageReady && imageElement && previewCanvas) {
+                drawPreview(
+                        imageElement,
+                        previewCanvas,
+                        maskPosition,
+                        maskSize,
+                        imageFitScale,
+                        imageOffset
+                );
+        }
+
+        function handleAvatarSelection(event: Event) {
+                const input = event.currentTarget as HTMLInputElement | null;
+                const file = input?.files?.[0] ?? null;
+                if (!file) {
+                        return;
+                }
+
+                if (!file.type.startsWith('image/')) {
+                        avatarError = 'Please choose an image file.';
+                        return;
+                }
+
+                avatarError = null;
+                croppedDataUrl = null;
+                imageReady = false;
+                imageElement = null;
+                zoom = 1;
+                maskSize = cropSize;
+                maskPosition = centerMask(maskSize);
+                maskDragging = false;
+                imageFitScale = 1;
+                imageDisplayWidth = 0;
+                imageDisplayHeight = 0;
+                imageOffset = { x: 0, y: 0 };
+                maxMaskSize = cropSize;
+
+                if (imageObjectUrl) {
+                        URL.revokeObjectURL(imageObjectUrl);
+                }
+                imageObjectUrl = URL.createObjectURL(file);
+                if (input) {
+                        input.value = '';
+                }
+        }
+
+        function handleImageLoad(event: Event) {
+                const element = event.currentTarget as HTMLImageElement | null;
+                if (!element) {
+                        avatarError = 'Could not load image.';
+                        return;
+                }
+
+                const { naturalWidth, naturalHeight } = element;
+                if (!naturalWidth || !naturalHeight) {
+                        avatarError = 'Image appears to be empty.';
+                        return;
+                }
+
+                imageElement = element;
+                imageFitScale = Math.min(cropSize / naturalWidth, cropSize / naturalHeight);
+                imageDisplayWidth = naturalWidth * imageFitScale;
+                imageDisplayHeight = naturalHeight * imageFitScale;
+                imageOffset = {
+                        x: (cropSize - imageDisplayWidth) / 2,
+                        y: (cropSize - imageDisplayHeight) / 2
+                };
+
+                const availableMaskSize = Math.min(cropSize, imageDisplayWidth, imageDisplayHeight) || cropSize;
+                maxMaskSize = Math.max(availableMaskSize, minMaskSize);
+                maskSize = clampMaskSize(maxMaskSize);
+                maskPosition = centerMaskWithinImage(maskSize);
+                zoom = cropSize / maskSize;
+                maskDragging = false;
+
+                imageReady = true;
+        }
+
+        function centerMask(size: number) {
+                const start = (cropSize - size) / 2;
+                return { x: start, y: start };
+        }
+
+        function centerMaskWithinImage(size: number) {
+                const centerX = imageOffset.x + imageDisplayWidth / 2 - size / 2;
+                const centerY = imageOffset.y + imageDisplayHeight / 2 - size / 2;
+                return clampMaskPosition(centerX, centerY, size);
+        }
+
+        function getMaskBounds(size: number) {
+                const containerMax = Math.max(cropSize - size, 0);
+
+                let minX = 0;
+                let maxX = containerMax;
+                let minY = 0;
+                let maxY = containerMax;
+
+                if (imageDisplayWidth && imageDisplayHeight) {
+                        minX = Math.min(Math.max(imageOffset.x, 0), containerMax);
+                        minY = Math.min(Math.max(imageOffset.y, 0), containerMax);
+
+                        const imageMaxX = imageOffset.x + imageDisplayWidth - size;
+                        const imageMaxY = imageOffset.y + imageDisplayHeight - size;
+
+                        if (imageMaxX >= imageOffset.x) {
+                                maxX = Math.min(Math.max(imageMaxX, minX), containerMax);
+                        } else {
+                                const centeredX = imageOffset.x + imageDisplayWidth / 2 - size / 2;
+                                minX = maxX = Math.min(Math.max(centeredX, 0), containerMax);
+                        }
+
+                        if (imageMaxY >= imageOffset.y) {
+                                maxY = Math.min(Math.max(imageMaxY, minY), containerMax);
+                        } else {
+                                const centeredY = imageOffset.y + imageDisplayHeight / 2 - size / 2;
+                                minY = maxY = Math.min(Math.max(centeredY, 0), containerMax);
+                        }
+                }
+
+                if (maxX < minX) {
+                        const middle = (minX + maxX) / 2;
+                        minX = maxX = middle;
+                }
+
+                if (maxY < minY) {
+                        const middle = (minY + maxY) / 2;
+                        minY = maxY = middle;
+                }
+
+                return { minX, maxX, minY, maxY };
+        }
+
+        function clampMaskPosition(x: number, y: number, size: number) {
+                const bounds = getMaskBounds(size);
+                return {
+                        x: Math.min(Math.max(x, bounds.minX), bounds.maxX),
+                        y: Math.min(Math.max(y, bounds.minY), bounds.maxY)
+                };
+        }
+
+        function clampMaskSize(size: number) {
+                return Math.min(Math.max(size, minMaskSize), maxMaskSize);
+        }
+
+        function getPointerWithinOverlay(event: PointerEvent) {
+                if (!overlayElement) return null;
+                const rect = overlayElement.getBoundingClientRect();
+                return {
+                        x: Math.min(Math.max(event.clientX - rect.left, 0), cropSize),
+                        y: Math.min(Math.max(event.clientY - rect.top, 0), cropSize)
+                };
+        }
+
+        function startMaskResize(handle: MaskHandle, event: PointerEvent) {
+                if (!imageReady || !overlayElement) return;
+                event.stopPropagation();
+                event.preventDefault();
+
+                const currentTarget = event.currentTarget;
+                if (!(currentTarget instanceof HTMLElement)) return;
+
+                resizingHandle = handle;
+                resizePointerId = event.pointerId;
+                resizeStart = { position: { ...maskPosition }, size: maskSize };
+                maskDragging = false;
+
+                currentTarget.setPointerCapture(resizePointerId);
+        }
+
+        function computeResizedMask(handle: MaskHandle, pointer: { x: number; y: number }) {
+                const startPosition = resizeStart.position;
+                const startSize = resizeStart.size;
+
+                switch (handle) {
+                        case 'se': {
+                                const maxSize = Math.min(cropSize - startPosition.x, cropSize - startPosition.y);
+                                const proposed = Math.max(pointer.x - startPosition.x, pointer.y - startPosition.y);
+                                const size = clampMaskSize(Math.min(proposed, maxSize));
+                                return { position: { ...startPosition }, size };
+                        }
+                        case 'nw': {
+                                const fixed = {
+                                        x: startPosition.x + startSize,
+                                        y: startPosition.y + startSize
+                                };
+                                const maxSize = Math.min(fixed.x, fixed.y);
+                                const proposed = Math.max(fixed.x - pointer.x, fixed.y - pointer.y);
+                                const size = clampMaskSize(Math.min(proposed, maxSize));
+                                const position = clampMaskPosition(fixed.x - size, fixed.y - size, size);
+                                return { position, size };
+                        }
+                        case 'ne': {
+                                const fixed = {
+                                        x: startPosition.x,
+                                        y: startPosition.y + startSize
+                                };
+                                const maxSize = Math.min(cropSize - fixed.x, fixed.y);
+                                const proposed = Math.max(pointer.x - fixed.x, fixed.y - pointer.y);
+                                const size = clampMaskSize(Math.min(proposed, maxSize));
+                                const position = clampMaskPosition(fixed.x, fixed.y - size, size);
+                                return { position, size };
+                        }
+                        case 'sw': {
+                                const fixed = {
+                                        x: startPosition.x + startSize,
+                                        y: startPosition.y
+                                };
+                                const maxSize = Math.min(fixed.x, cropSize - fixed.y);
+                                const proposed = Math.max(fixed.x - pointer.x, pointer.y - fixed.y);
+                                const size = clampMaskSize(Math.min(proposed, maxSize));
+                                const position = clampMaskPosition(fixed.x - size, fixed.y, size);
+                                return { position, size };
+                        }
+                }
+
+                return { position: { ...startPosition }, size: startSize };
+        }
+
+        function handleMaskResize(event: PointerEvent) {
+                if (!resizingHandle || resizePointerId !== event.pointerId) return;
+                const pointer = getPointerWithinOverlay(event);
+                if (!pointer) return;
+
+                const next = computeResizedMask(resizingHandle, pointer);
+                if (!next) return;
+
+                maskSize = next.size;
+                maskPosition = next.position;
+                zoom = cropSize / maskSize;
+        }
+
+        function endMaskResize(event: PointerEvent) {
+                if (!resizingHandle || resizePointerId !== event.pointerId) return;
+
+                const currentTarget = event.currentTarget;
+                if (currentTarget instanceof HTMLElement) {
+                        currentTarget.releasePointerCapture(resizePointerId);
+                }
+
+                resizingHandle = null;
+                resizePointerId = null;
+        }
+
+        function startMaskDrag(event: PointerEvent) {
+                if (!imageReady || !event.currentTarget || resizingHandle) return;
+                if (!(event.currentTarget instanceof HTMLElement)) return;
+
+                const rect = event.currentTarget.getBoundingClientRect();
+                const pointerX = event.clientX - rect.left;
+                const pointerY = event.clientY - rect.top;
+                const radius = maskSize / 2;
+                const maskCenterX = maskPosition.x + radius;
+                const maskCenterY = maskPosition.y + radius;
+                const distanceSq =
+                        (pointerX - maskCenterX) * (pointerX - maskCenterX) +
+                        (pointerY - maskCenterY) * (pointerY - maskCenterY);
+
+                if (distanceSq > radius * radius) {
+                        const recentered = clampMaskPosition(pointerX - radius, pointerY - radius, maskSize);
+                        maskPosition = recentered;
+                }
+
+                maskDragging = true;
+                dragPointerId = event.pointerId;
+                dragOrigin = { x: pointerX, y: pointerY };
+                dragMaskStart = { ...maskPosition };
+                event.currentTarget.setPointerCapture(dragPointerId);
+        }
+
+        function handleMaskDrag(event: PointerEvent) {
+                if (!maskDragging || dragPointerId !== event.pointerId || resizingHandle) return;
+                if (!(event.currentTarget instanceof HTMLElement)) return;
+
+                const rect = event.currentTarget.getBoundingClientRect();
+                const pointerX = event.clientX - rect.left;
+                const pointerY = event.clientY - rect.top;
+                const dx = pointerX - dragOrigin.x;
+                const dy = pointerY - dragOrigin.y;
+                const next = clampMaskPosition(dragMaskStart.x + dx, dragMaskStart.y + dy, maskSize);
+                if (next.x !== maskPosition.x || next.y !== maskPosition.y) {
+                        maskPosition = next;
+                }
+        }
+
+        function endMaskDrag(event: PointerEvent) {
+                if (!maskDragging || dragPointerId !== event.pointerId) return;
+                maskDragging = false;
+                if (dragPointerId != null && event.currentTarget instanceof HTMLElement) {
+                        event.currentTarget.releasePointerCapture(dragPointerId);
+                }
+                dragPointerId = null;
+        }
+
+        function handleZoomInput(event: Event) {
+                if (!imageReady || !imageElement) return;
+                const input = event.currentTarget as HTMLInputElement | null;
+                if (!input) return;
+                const requestedZoom = Number(input.value);
+                if (!Number.isFinite(requestedZoom) || requestedZoom <= 0) return;
+
+                const lowerBound = minZoom;
+                const upperBound = maxZoom;
+                const clampedZoom = Math.min(Math.max(requestedZoom, lowerBound), upperBound);
+                const targetSize = cropSize / clampedZoom;
+                const constrainedSize = clampMaskSize(targetSize);
+                const previousCenter = {
+                        x: maskPosition.x + maskSize / 2,
+                        y: maskPosition.y + maskSize / 2
+                };
+
+                const nextPosition = clampMaskPosition(
+                        previousCenter.x - constrainedSize / 2,
+                        previousCenter.y - constrainedSize / 2,
+                        constrainedSize
+                );
+
+                maskSize = constrainedSize;
+                maskPosition = nextPosition;
+                zoom = cropSize / constrainedSize;
+        }
+
+        function drawPreview(
+                image: HTMLImageElement,
+                canvas: HTMLCanvasElement,
+                mask: { x: number; y: number },
+                size: number,
+                fitScale: number,
+                displayOffset: { x: number; y: number }
+        ) {
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                const sampleSize = size / fitScale;
+                const sx = (mask.x - displayOffset.x) / fitScale;
+                const sy = (mask.y - displayOffset.y) / fitScale;
+                const clampedSx = Math.min(
+                        Math.max(sx, 0),
+                        Math.max(image.naturalWidth - sampleSize, 0)
+                );
+                const clampedSy = Math.min(
+                        Math.max(sy, 0),
+                        Math.max(image.naturalHeight - sampleSize, 0)
+                );
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(
+                        image,
+                        clampedSx,
+                        clampedSy,
+                        sampleSize,
+                        sampleSize,
+                        0,
+                        0,
+                        canvas.width,
+                        canvas.height
+                );
+                croppedDataUrl = canvas.toDataURL('image/png');
+        }
+
+        function resetAvatar() {
+                croppedDataUrl = null;
+                avatarError = null;
+                imageReady = false;
+                imageElement = null;
+                zoom = 1;
+                maskSize = cropSize;
+                maskPosition = centerMask(maskSize);
+                maskDragging = false;
+                imageFitScale = 1;
+                imageDisplayWidth = 0;
+                imageDisplayHeight = 0;
+                imageOffset = { x: 0, y: 0 };
+                resizingHandle = null;
+                resizePointerId = null;
+                if (previewCanvas) {
+                        const ctx = previewCanvas.getContext('2d');
+                        ctx?.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+                }
+                if (imageObjectUrl) {
+                        URL.revokeObjectURL(imageObjectUrl);
+                        imageObjectUrl = null;
+                }
+        }
+
+        onDestroy(() => {
+                if (imageObjectUrl) {
+                        URL.revokeObjectURL(imageObjectUrl);
+                        imageObjectUrl = null;
+                }
+        });
+</script>
+
+<div class="panel space-y-4 p-4">
+        <div class="flex items-center justify-between gap-3">
+                <div>
+                        <div class="text-sm font-medium">Avatar</div>
+                        <p class="text-xs text-[var(--muted)]">
+                                Select an image, adjust the crop, and preview how it will look.
+                        </p>
+                </div>
+        <div
+                class={`flex h-16 w-16 items-center justify-center overflow-hidden border border-[var(--stroke)] bg-[var(--panel-strong)] ${displayBorderRadiusClass}`}
+        >
+                {#if displayAvatarUrl}
+                        <img alt={displayImageAlt} class="h-full w-full object-cover" src={displayAvatarUrl} />
+                {:else}
+                        <span class="text-lg font-semibold text-[var(--muted)]">{fallbackInitial}</span>
+                {/if}
+        </div>
+        </div>
+
+        <label class="block text-sm font-medium" for={uploadInputId}>{uploadLabel}</label>
+        <div class="flex items-center gap-3">
+                <button
+                        class="rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm"
+                        onclick={() => fileInput?.click()}
+                        type="button"
+                >
+                        {chooseButtonLabel}
+                </button>
+                <span class="text-xs text-[var(--muted)]">{helperText}</span>
+        </div>
+        <input
+                accept="image/*"
+                bind:this={fileInput}
+                class="sr-only"
+                id={uploadInputId}
+                type="file"
+                onchange={handleAvatarSelection}
+        />
+
+        {#if imageObjectUrl}
+                <div class="flex flex-col gap-3 md:flex-row md:items-start">
+                        <div class="avatar-crop-container">
+                                <div class="avatar-crop-area">
+                                        <img
+                                                alt="Crop source"
+                                                class="avatar-source"
+                                                onload={handleImageLoad}
+                                                src={imageObjectUrl}
+                                                style={`width: ${imageDisplayWidth}px; height: ${imageDisplayHeight}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0);`}
+                                        />
+                                        <div
+                                                aria-hidden="true"
+                                                bind:this={overlayElement}
+                                                class={`avatar-crop-overlay ${maskDragging ? 'is-dragging' : ''}`}
+                                                onpointerdown={startMaskDrag}
+                                                onpointermove={handleMaskDrag}
+                                                onpointerup={endMaskDrag}
+                                                onpointercancel={endMaskDrag}
+                                        >
+                                                <div
+                                                        class="avatar-crop-mask"
+                                                        style={`width: ${maskSize}px; height: ${maskSize}px; transform: translate3d(${maskPosition.x}px, ${maskPosition.y}px, 0);`}
+                                                >
+                                                        <div class="avatar-crop-shade" style={`border-radius: ${maskBorderRadius};`}></div>
+                                                        <div class="avatar-crop-ring" style={`border-radius: ${maskBorderRadius};`}></div>
+                                                        <div
+                                                                class="avatar-crop-handle handle-nw"
+                                                                onpointerdown={(event) => startMaskResize('nw', event)}
+                                                                onpointermove={handleMaskResize}
+                                                                onpointerup={endMaskResize}
+                                                                onpointercancel={endMaskResize}
+                                                        ></div>
+                                                        <div
+                                                                class="avatar-crop-handle handle-ne"
+                                                                onpointerdown={(event) => startMaskResize('ne', event)}
+                                                                onpointermove={handleMaskResize}
+                                                                onpointerup={endMaskResize}
+                                                                onpointercancel={endMaskResize}
+                                                        ></div>
+                                                        <div
+                                                                class="avatar-crop-handle handle-sw"
+                                                                onpointerdown={(event) => startMaskResize('sw', event)}
+                                                                onpointermove={handleMaskResize}
+                                                                onpointerup={endMaskResize}
+                                                                onpointercancel={endMaskResize}
+                                                        ></div>
+                                                        <div
+                                                                class="avatar-crop-handle handle-se"
+                                                                onpointerdown={(event) => startMaskResize('se', event)}
+                                                                onpointermove={handleMaskResize}
+                                                                onpointerup={endMaskResize}
+                                                                onpointercancel={endMaskResize}
+                                                        ></div>
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                        <div class="flex flex-1 flex-col gap-3">
+                                <div>
+                                        <div class="flex items-center justify-between text-xs font-medium text-[var(--muted)]">
+                                                <span>Zoom</span>
+                                                <span>{zoom.toFixed(2)}×</span>
+                                        </div>
+                                        <input
+                                                class="w-full"
+                                                max={maxZoom}
+                                                min={minZoom}
+                                                step="0.01"
+                                                type="range"
+                                                value={zoom}
+                                                oninput={handleZoomInput}
+                                        />
+                                </div>
+                                <div>
+                                        <div class="text-xs font-medium text-[var(--muted)]">{previewLabel}</div>
+                                        {#if croppedDataUrl}
+                                                <img
+                                                        alt={previewImageAlt}
+                                                        class={`mt-2 h-32 w-32 border border-[var(--stroke)] ${previewBorderRadiusClass}`}
+                                                        height="128"
+                                                        src={croppedDataUrl}
+                                                        width="128"
+                                                />
+                                        {:else}
+                                                <div
+                                                        class={`mt-2 flex h-32 w-32 items-center justify-center border border-dashed border-[var(--stroke)] text-xs text-[var(--muted)] ${previewPlaceholderBorderRadiusClass}`}
+                                                >
+                                                        {previewPlaceholderText}
+                                                </div>
+                                        {/if}
+                                </div>
+                                <button class="self-start rounded-md border border-[var(--stroke)] px-3 py-1 text-sm" onclick={resetAvatar}>
+                                        {resetButtonLabel}
+                                </button>
+                        </div>
+                </div>
+        {/if}
+
+        {#if avatarError}
+                <div class="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                        {avatarError}
+                </div>
+        {/if}
+
+        <canvas bind:this={previewCanvas} class="hidden" height="128" width="128"></canvas>
+</div>
+
+<style>
+        .avatar-crop-container {
+                width: 256px;
+        }
+
+        .avatar-crop-area {
+                position: relative;
+                width: 256px;
+                height: 256px;
+                overflow: hidden;
+                border-radius: 16px;
+                border: 1px solid var(--stroke);
+                background: var(--panel-strong);
+        }
+
+        .avatar-source {
+                position: absolute;
+                top: 0;
+                left: 0;
+                transform-origin: top left;
+                user-select: none;
+                pointer-events: none;
+                will-change: transform;
+        }
+
+        .avatar-crop-overlay {
+                position: absolute;
+                inset: 0;
+                cursor: grab;
+                touch-action: none;
+                display: flex;
+                align-items: stretch;
+                justify-content: stretch;
+        }
+
+        .avatar-crop-overlay.is-dragging {
+                cursor: grabbing;
+        }
+
+        .avatar-crop-mask {
+                position: absolute;
+                top: 0;
+                left: 0;
+        }
+
+        .avatar-crop-shade {
+                position: absolute;
+                inset: 0;
+                box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+                pointer-events: none;
+        }
+
+        .avatar-crop-ring {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                box-shadow:
+                        inset 0 0 0 2px rgba(255, 255, 255, 0.85),
+                        0 0 0 1px rgba(0, 0, 0, 0.55);
+                pointer-events: none;
+        }
+
+        .avatar-crop-handle {
+                position: absolute;
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                border: 2px solid rgba(255, 255, 255, 0.95);
+                background: rgba(15, 23, 42, 0.75);
+                box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+                touch-action: none;
+        }
+
+        .avatar-crop-handle.handle-nw,
+        .avatar-crop-handle.handle-se {
+                cursor: nwse-resize;
+        }
+
+        .avatar-crop-handle.handle-ne,
+        .avatar-crop-handle.handle-sw {
+                cursor: nesw-resize;
+        }
+
+        .avatar-crop-handle.handle-nw {
+                top: 0;
+                left: 0;
+        }
+
+        .avatar-crop-handle.handle-ne {
+                top: 0;
+                right: 0;
+        }
+
+        .avatar-crop-handle.handle-sw {
+                bottom: 0;
+                left: 0;
+        }
+
+        .avatar-crop-handle.handle-se {
+                bottom: 0;
+                right: 0;
+        }
+
+        @media (max-width: 640px) {
+                .avatar-crop-container {
+                        width: 100%;
+                }
+
+                .avatar-crop-area {
+                        width: 100%;
+                        max-width: 256px;
+                }
+        }
+</style>

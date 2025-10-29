@@ -1,55 +1,95 @@
+<script lang="ts" module>
+        export type ChannelPaneHandle = {
+                openCreateChannel: (parentId?: string | null) => void;
+                openCreateCategory: () => void;
+        };
+</script>
+
 <script lang="ts">
 	import { get } from 'svelte/store';
-	import { auth } from '$lib/stores/auth';
-	import {
-		selectedGuildId,
-		selectedChannelId,
-		channelsByGuild,
-		messagesByChannel,
-		lastChannelByGuild,
-		channelReady,
-		guildSettingsOpen
+        import { auth } from '$lib/stores/auth';
+        import {
+                selectedGuildId,
+                selectedChannelId,
+                channelsByGuild,
+                messagesByChannel,
+                lastChannelByGuild,
+                channelReady,
+                membersByGuild,
+		myGuildRoleIdsByGuild,
+		channelRolesByGuild
 	} from '$lib/stores/appState';
 	import type {
 		DtoChannel,
+		DtoMember,
 		DtoRole,
 		GuildChannelOrder,
 		GuildChannelRolePermission
 	} from '$lib/api';
-	import { subscribeWS, wsEvent } from '$lib/client/ws';
-	import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import { subscribeWS, wsEvent } from '$lib/client/ws';
+        import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
+        import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
+        import {
+                NOTIFICATION_LEVELS,
+                appSettings,
+                resolveNotificationLevel,
+                setChannelNotificationLevel,
+                updateGuildSelectedChannel,
+                type NotificationLevel
+        } from '$lib/stores/settings';
+        import { unreadChannelsByGuild } from '$lib/stores/unread';
 	import { m } from '$lib/paraglide/messages.js';
 	import UserPanel from '$lib/components/app/user/UserPanel.svelte';
-	import { Check, FolderPlus, Plus, Settings, Slash, X } from 'lucide-svelte';
-	import { loadGuildRolesCached } from '$lib/utils/guildRoles';
+	import SettingsPanel from '$lib/components/ui/SettingsPanel.svelte';
+        import { Check, PhoneOff, Slash, X, Volume2 } from 'lucide-svelte';
+        import {
+                loadGuildRolesCached,
+                loadChannelRoleIds,
+		primeGuildChannelRoles,
+		pruneChannelRoleCache,
+		refreshChannelRoleIds,
+		invalidateChannelRoleIds
+	} from '$lib/utils/guildRoles';
 	import { CHANNEL_PERMISSION_CATEGORIES } from '$lib/utils/permissionDefinitions';
-	import {
-		PERMISSION_MANAGE_CHANNELS,
-		PERMISSION_MANAGE_GUILD,
-		PERMISSION_MANAGE_ROLES,
-		hasAnyGuildPermission,
-		normalizePermissionValue
-	} from '$lib/utils/permissions';
-	const guilds = auth.guilds;
-	const me = auth.user;
+	import { filterViewableRoleIds } from '$lib/utils/channelRolePermissions';
+        import { channelAllowListedRoleIds } from '$lib/utils/channelRoles';
+        import { resolveCurrentUserRoleIds } from '$lib/utils/currentUserRoleIds';
+        import {
+                PERMISSION_ADMINISTRATOR,
+                hasAnyGuildPermission,
+                normalizePermissionValue
+        } from '$lib/utils/permissions';
+        import {
+                CHANNEL_MENTION_BADGE_CLASSES,
+                CHANNEL_UNREAD_BADGE_CLASSES
+        } from '$lib/constants/unreadIndicator';
+        import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import {
+                joinVoiceChannel,
+                leaveVoiceChannel,
+                voiceSession,
+                voicePanelChannelId,
+                setVoicePanelChannelId
+        } from '$lib/stores/voice';
+        import VoiceChannelParticipants from '$lib/components/app/sidebar/VoiceChannelParticipants.svelte';
+        import { channelMentionsByGuild } from '$lib/stores/mentions';
+        const guilds = auth.guilds;
+        const me = auth.user;
+        const unreadChannels = unreadChannelsByGuild;
+        const voice = voiceSession;
+        const voicePanel = voicePanelChannelId;
+        const channelMentions = channelMentionsByGuild;
+        const selectedGuildIdValue = $derived($selectedGuildId ? String($selectedGuildId) : '');
 
-	const canAccessSelectedGuildSettings = $derived.by(() => {
-		const gid = $selectedGuildId;
-		if (!gid) return false;
-		const guild = $guilds.find((g) => String((g as any)?.id) === gid) ?? null;
-		return hasAnyGuildPermission(
-			guild,
-			$me?.id,
-			PERMISSION_MANAGE_GUILD,
-			PERMISSION_MANAGE_ROLES,
-			PERMISSION_MANAGE_CHANNELS
-		);
-	});
+        const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
+        const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
 
-	let creatingChannel = $state(false);
+        let dismissPanel: (() => void) | null = null;
+        let creatingChannel = $state(false);
 	let creatingCategory = $state(false);
 	let newChannelName = $state('');
 	let newChannelPrivate = $state(false);
+	let newChannelType = $state<'text' | 'voice'>('text');
 	let newCategoryName = $state('');
 	let channelError: string | null = $state(null);
 	let categoryError: string | null = $state(null);
@@ -61,20 +101,20 @@
 	let editChannelName = $state('');
 	let editChannelTopic = $state('');
 	let editChannelPrivate = $state(false);
-        let editChannelError: string | null = $state(null);
-        let editChannelTab = $state<'overview' | 'permissions'>('overview');
-        let editChannelRoles = $state<DtoRole[]>([]);
-        let editChannelRoleToAdd = $state('');
-        let editChannelOverrides = $state<Record<string, { accept: number; deny: number }>>({});
-        let editChannelOverridesInitial = $state<Record<string, { accept: number; deny: number }>>({});
-        let editChannelSelectedOverride = $state<string | null>(null);
-        let editChannelOrderedOverrideRoleIds = $state<string[]>([]);
-        let editChannelPermissionsLoading = $state(false);
-        let editChannelPermissionsError: string | null = $state(null);
-        let editChannelInitialName = $state('');
-        let editChannelInitialTopic = $state('');
-        let editChannelInitialPrivate = $state(false);
-        let editChannelSaving = $state(false);
+	let editChannelError: string | null = $state(null);
+	let editChannelTab = $state<'overview' | 'permissions'>('overview');
+	let editChannelRoles = $state<DtoRole[]>([]);
+	let editChannelRoleToAdd = $state('');
+	let editChannelOverrides = $state<Record<string, { accept: number; deny: number }>>({});
+	let editChannelOverridesInitial = $state<Record<string, { accept: number; deny: number }>>({});
+	let editChannelSelectedOverride = $state<string | null>(null);
+	let editChannelOrderedOverrideRoleIds = $state<string[]>([]);
+	let editChannelPermissionsLoading = $state(false);
+	let editChannelPermissionsError: string | null = $state(null);
+	let editChannelInitialName = $state('');
+	let editChannelInitialTopic = $state('');
+	let editChannelInitialPrivate = $state(false);
+	let editChannelSaving = $state(false);
 	let editCategoryName = $state('');
 	let editCategoryError: string | null = $state(null);
 	let dragging: { id: string; parent: string | null; type: number } | null = null;
@@ -83,12 +123,319 @@
 		parent: string | null;
 		mode: 'before' | 'inside';
 	} | null>(null);
-	let editChannelPermissionsLoadToken = 0;
+        let editChannelPermissionsLoadToken = 0;
 
-	function currentGuildChannels(): DtoChannel[] {
-		const gid = $selectedGuildId ?? '';
-		return $channelsByGuild[gid] ?? [];
+        export function openCreateChannel(parentId: string | null = null) {
+                creatingChannel = true;
+                channelError = null;
+                creatingChannelParent = parentId;
+                newChannelType = 'text';
+        }
+
+        export function openCreateCategory() {
+                creatingCategory = true;
+                categoryError = null;
+        }
+
+        function toSnowflakeString(value: unknown): string | null {
+                if (value == null) return null;
+                try {
+                        if (typeof value === 'string') return value;
+                        if (typeof value === 'bigint') return value.toString();
+                        if (typeof value === 'number') return BigInt(value).toString();
+                        return String(value);
+                } catch {
+                        try {
+                                return String(value);
+                        } catch {
+                                return null;
+                        }
+                }
+        }
+
+        function formatMentionCount(count: number): string {
+                return count > 99 ? '99+' : String(count);
+        }
+
+        function channelMentionCountFor(guildId: unknown, channelId: unknown): number {
+                const gid = toSnowflakeString(guildId);
+                const cid = toSnowflakeString(channelId);
+                if (!gid || !cid) return 0;
+                const entry = $channelMentions?.[gid]?.[cid] ?? null;
+                return entry?.count ?? 0;
+        }
+
+        function myGuildRoleIds(guildId: string): Set<string> {
+                const gid = String(guildId ?? '');
+                const members = Array.isArray($membersByGuild[gid])
+                        ? ($membersByGuild[gid] as DtoMember[])
+			: undefined;
+		const fallbackRoles = Array.isArray($myGuildRoleIdsByGuild[gid])
+			? ($myGuildRoleIdsByGuild[gid] as string[])
+			: undefined;
+		return resolveCurrentUserRoleIds({
+			guildId: gid,
+			members,
+			currentUserId: $me?.id,
+			fallbackRoleIds: fallbackRoles
+		});
 	}
+
+	function inlineChannelRoleIds(channel: DtoChannel): string[] {
+		const inlineRoles = (channel as any)?.roles;
+		if (!Array.isArray(inlineRoles)) {
+			return [];
+		}
+		return filterViewableRoleIds(inlineRoles as any);
+	}
+
+	function rememberInlineChannelRoles(
+		guildId: string,
+		channels: DtoChannel | DtoChannel[] | null | undefined
+	) {
+		const gid = String(guildId ?? '');
+		if (!gid) return;
+		const list = Array.isArray(channels) ? channels : channels ? [channels] : [];
+		if (!list.length) return;
+		const pending: Record<string, string[]> = {};
+		for (const channel of list) {
+			const cid = toSnowflakeString((channel as any)?.id);
+			if (!cid) continue;
+			const roles = inlineChannelRoleIds(channel);
+			if (!roles.length) continue;
+			pending[cid] = roles;
+		}
+		if (!Object.keys(pending).length) return;
+		queueMicrotask(() => {
+			channelRolesByGuild.update((map) => {
+				const currentGuild = map[gid] ?? {};
+				const nextGuild = { ...currentGuild } as Record<string, string[]>;
+				let changed = false;
+				for (const [cid, roles] of Object.entries(pending)) {
+					const existing = nextGuild[cid];
+					if (
+						existing &&
+						existing.length === roles.length &&
+						existing.every((value, index) => value === roles[index])
+					) {
+						continue;
+					}
+					nextGuild[cid] = roles;
+					changed = true;
+				}
+				if (!changed) return map;
+				return { ...map, [gid]: nextGuild };
+			});
+		});
+	}
+
+	function channelAssignedRoleIds(guildId: string, channel: DtoChannel): string[] {
+		const gid = String(guildId ?? '');
+		const cid = toSnowflakeString((channel as any)?.id);
+		if (!gid || !cid) return [];
+		const stored = $channelRolesByGuild[gid]?.[cid];
+		if (!stored && Boolean((channel as any)?.private)) {
+			void loadChannelRoleIds(gid, cid).catch(() => {});
+		}
+		return channelAllowListedRoleIds(gid, channel, $channelRolesByGuild);
+	}
+
+        function canAccessChannel(guildId: string, channel: DtoChannel): boolean {
+                const type = (channel as any)?.type ?? 0;
+                if (type === 2) return true;
+                if (!Boolean((channel as any)?.private)) return true;
+                const gid = String(guildId ?? '');
+                if (!gid) return false;
+		const guild = $guilds.find((g) => toSnowflakeString((g as any)?.id) === gid) ?? null;
+		if (guild && hasAnyGuildPermission(guild, $me?.id, PERMISSION_ADMINISTRATOR)) {
+			return true;
+		}
+		const allowed = channelAssignedRoleIds(gid, channel);
+		if (!allowed.length) {
+			return false;
+		}
+		const myRoles = myGuildRoleIds(gid);
+		for (const rid of allowed) {
+			if (myRoles.has(rid)) {
+				return true;
+			}
+                }
+                return false;
+        }
+
+        function isChannelUnread(guildId: unknown, channelId: unknown): boolean {
+                const gid = toSnowflakeString(guildId);
+                const cid = toSnowflakeString(channelId);
+                if (!gid || !cid) return false;
+                return Boolean($unreadChannels?.[gid]?.[cid]);
+        }
+
+        function isVoiceChannel(channel: DtoChannel): boolean {
+                return Number((channel as any)?.type ?? 0) === 1;
+        }
+
+        function voiceStateForChannel(channelId: string, channel: DtoChannel): 'none' | 'connecting' | 'connected' {
+                const cid = channelId ? String(channelId) : '';
+                if (!cid || !isVoiceChannel(channel)) return 'none';
+                const state = $voice;
+                if (!state.channelId || !state.guildId) return 'none';
+                if (state.channelId !== cid) return 'none';
+                const currentGuildId = $selectedGuildId ? String($selectedGuildId) : null;
+                if (currentGuildId && state.guildId !== currentGuildId) return 'none';
+                if (state.status === 'connecting') return 'connecting';
+                if (state.status === 'connected') return 'connected';
+                return 'none';
+        }
+
+        $effect(() => {
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                const focusedVoice = $voicePanel ? String($voicePanel) : '';
+                if (!focusedVoice) return;
+                if (!gid) {
+                        setVoicePanelChannelId(null);
+                        return;
+                }
+                const channels = $channelsByGuild[gid] ?? [];
+                const exists = channels.some(
+                        (channel: any) => String((channel as any)?.id ?? '') === focusedVoice && (channel as any)?.type === 1
+                );
+                if (!exists) {
+                        setVoicePanelChannelId(null);
+                }
+        });
+
+        function joinVoiceById(channelId: string) {
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                if (!gid || !channelId) return;
+                const normalizedChannel = String(channelId);
+                const state = $voice;
+                const connectedGuild = state.guildId ? String(state.guildId) : '';
+                const connectedChannel = state.channelId ? String(state.channelId) : '';
+                const isTargetChannel =
+                        connectedGuild === gid && connectedChannel === normalizedChannel;
+                const isActiveState = state.status === 'connected' || state.status === 'connecting';
+
+                if (isTargetChannel && isActiveState) {
+                        if ($voicePanel !== normalizedChannel) {
+                                setVoicePanelChannelId(normalizedChannel);
+                        }
+                        return;
+                }
+
+                if ($voicePanel) {
+                        setVoicePanelChannelId(null);
+                }
+
+                void joinVoiceChannel(gid, normalizedChannel);
+        }
+
+        function activateChannel(channel: DtoChannel) {
+                const id = String((channel as any)?.id ?? '');
+                if (!id) return;
+                const type = Number((channel as any)?.type ?? 0);
+                if (type === 0) {
+                        selectChannel(id);
+                } else if (type === 1) {
+                        joinVoiceById(id);
+                }
+        }
+
+        function handleChannelKey(event: KeyboardEvent, channel: DtoChannel) {
+                if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar' && event.key !== 'Space') return;
+                event.preventDefault();
+                activateChannel(channel);
+        }
+
+        function leaveVoiceIfChannel(guildId: string, channelId: string) {
+                const state = $voice;
+                if (!state.channelId || !state.guildId) return;
+                if (state.guildId !== guildId) return;
+                if (state.channelId !== channelId) return;
+                leaveVoiceChannel();
+        }
+
+        function channelRowClasses(
+                channelId: string,
+                channel: DtoChannel,
+                channelUnread: boolean,
+                mentionCount: number,
+                voiceState?: 'none' | 'connecting' | 'connected'
+        ): string {
+                const hasBadge = channelUnread || mentionCount > 0;
+                const classes = [
+                        'relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)]',
+                        hasBadge ? 'pl-6' : 'pl-3'
+                ];
+                const state = voiceState ?? voiceStateForChannel(channelId, channel);
+                const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
+                if (isTextChannel && $selectedChannelId === channelId) {
+                        classes.push('bg-[var(--panel)]');
+                }
+                if (!isTextChannel && $voicePanel === channelId) {
+                        classes.push('bg-[var(--panel)]');
+                }
+                if (state === 'connected') {
+                        classes.push('bg-[var(--panel)]', 'ring-1', 'ring-[var(--brand)]');
+                }
+                if (state === 'connecting') {
+                        classes.push('bg-[var(--panel)]/60');
+                }
+                return classes.filter(Boolean).join(' ');
+        }
+
+        function nestedChannelRowClasses(
+                channelId: string,
+                channel: DtoChannel,
+                voiceState?: 'none' | 'connecting' | 'connected'
+        ): string {
+                const classes = ['flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)]'];
+                const state = voiceState ?? voiceStateForChannel(channelId, channel);
+                const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
+                if (isTextChannel && $selectedChannelId === channelId) {
+                        classes.push('bg-[var(--panel)]');
+                }
+                if (!isTextChannel && $voicePanel === channelId) {
+                        classes.push('bg-[var(--panel)]');
+                }
+                if (state === 'connected') {
+                        classes.push('bg-[var(--panel)]', 'ring-1', 'ring-[var(--brand)]');
+                }
+                if (state === 'connecting') {
+                        classes.push('bg-[var(--panel)]/60');
+                }
+                return classes.filter(Boolean).join(' ');
+        }
+
+        function currentGuildChannels(): DtoChannel[] {
+                const gid = $selectedGuildId ?? '';
+                if (!gid) return [];
+                const list = $channelsByGuild[gid] ?? [];
+                return list.filter((channel) => canAccessChannel(gid, channel));
+	}
+
+	$effect(() => {
+		const gid = $selectedGuildId ?? '';
+		if (!gid) return;
+		const selected = $selectedChannelId ? String($selectedChannelId) : '';
+		const accessibleTextChannels = currentGuildChannels().filter(
+			(channel) => (channel as any)?.type === 0
+		);
+		const accessibleIds = accessibleTextChannels.map((channel) =>
+			String((channel as any)?.id ?? '')
+		);
+		if (selected && accessibleIds.includes(selected)) {
+			return;
+		}
+		const fallback = accessibleIds[0] ?? null;
+		if (fallback) {
+			if (fallback !== selected) {
+				selectChannel(fallback);
+			}
+		} else if (selected) {
+			selectedChannelId.set(null);
+			channelReady.set(false);
+		}
+	});
 
 	async function refreshChannels() {
 		const gid = $selectedGuildId ? String($selectedGuildId) : '';
@@ -98,30 +445,36 @@
 		});
 		const list = res.data ?? [];
 		channelsByGuild.update((m) => ({ ...m, [gid]: list }));
+		pruneChannelRoleCache(gid, list);
+		rememberInlineChannelRoles(gid, list);
+		await primeGuildChannelRoles(gid, list).catch(() => {});
 		// If selected channel is not present in this guild or not a text channel, auto-fix.
-		const textChannels = list.filter((c: any) => c?.type === 0);
+		const textChannels = list.filter(
+			(c: any) => c?.type === 0 && canAccessChannel(gid, c as DtoChannel)
+		);
 		const sel = $selectedChannelId ? String($selectedChannelId) : '';
 		const selValid = sel && textChannels.some((c: any) => String((c as any).id) === sel);
-		if (!selValid) {
-			const first = textChannels[0] as any;
-			const firstId = first ? String(first.id) : '';
-			if (firstId && $selectedGuildId === gid) {
-				selectedChannelId.set(firstId);
-				subscribeWS([gid], firstId);
-				// persist last visited for this guild
-				lastChannelByGuild.update((map) => {
-					const next = { ...map, [gid]: firstId } as Record<string, string>;
-					try {
-						localStorage.setItem('lastChannels', JSON.stringify(next));
-					} catch {}
-					return next;
-				});
-			} else {
-				// no valid text channels; keep selection empty
-				selectedChannelId.set(null);
-			}
-		}
-	}
+                if (!selValid) {
+                        const first = textChannels[0] as any;
+                        const firstId = first ? String(first.id) : '';
+                        if (firstId && $selectedGuildId === gid) {
+                                selectedChannelId.set(firstId);
+                                subscribeWS([gid], firstId);
+                                // persist last visited for this guild
+                                lastChannelByGuild.update((map) => ({ ...map, [gid]: firstId }));
+                                updateGuildSelectedChannel(gid, firstId);
+                        } else {
+                                // no valid text channels; keep selection empty
+                                selectedChannelId.set(null);
+                                lastChannelByGuild.update((map) => {
+                                        if (!(gid in map)) return map;
+                                        const { [gid]: _removed, ...rest } = map;
+                                        return rest;
+                                });
+                                updateGuildSelectedChannel(gid, null);
+                        }
+                }
+        }
 
 	function toApiSnowflake(value: string): any {
 		try {
@@ -290,6 +643,7 @@
 		if (ev?.op === 0 && ev?.d?.guild_id != null) {
 			if (ev?.t === 108 && Array.isArray(ev?.d?.channels)) {
 				const gid = String(ev.d.guild_id);
+				let nextList: DtoChannel[] = [];
 				channelsByGuild.update((map) => {
 					const list = [...(map[gid] ?? [])];
 					const pos = new Map<string, number>();
@@ -301,13 +655,17 @@
 						if (p != null) (ch as any).position = p;
 					}
 					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+					nextList = list;
 					return { ...map, [gid]: list };
 				});
+				pruneChannelRoleCache(gid, nextList);
+				rememberInlineChannelRoles(gid, nextList);
 			}
 
 			if ((ev?.t === 106 || ev?.t === 107) && ev?.d?.channel) {
 				const gid = String(ev.d.guild_id);
 				const updated = ev.d.channel;
+				let nextList: DtoChannel[] = [];
 				channelsByGuild.update((map) => {
 					const list = [...(map[gid] ?? [])];
 					const id = String(updated.id);
@@ -324,44 +682,62 @@
 						} as any);
 					}
 					list.sort((a: any, b: any) => ((a as any).position ?? 0) - ((b as any).position ?? 0));
+					nextList = list;
 					return { ...map, [gid]: list };
 				});
-			}
-
-			if (ev?.t === 109 && ev?.d?.channel_id != null) {
-				const gid = String(ev.d.guild_id);
-				const cid = String(ev.d.channel_id);
-				let list: DtoChannel[] = [];
-				channelsByGuild.update((map) => {
-					list = (map[gid] ?? []).filter((c) => String((c as any).id) !== cid);
-					return { ...map, [gid]: list };
-				});
-				messagesByChannel.update((map) => {
-					if (map[cid]) {
-						const { [cid]: _removed, ...rest } = map;
-						return rest;
-					}
-					return map;
-				});
-				const curGuild = String(get(selectedGuildId) ?? '');
-				const curChannel = String(get(selectedChannelId) ?? '');
-				if (curGuild === gid && curChannel === cid) {
-					const next = list.find((c: any) => (c as any).type === 0);
-					const nextId = next ? String((next as any).id) : null;
-					selectedChannelId.set(nextId);
-					if (nextId) {
-						subscribeWS([gid], nextId);
-						lastChannelByGuild.update((map) => ({ ...map, [gid]: nextId }));
+				pruneChannelRoleCache(gid, nextList);
+				rememberInlineChannelRoles(gid, updated as DtoChannel);
+				const channelId = String(updated?.id ?? '');
+				if (channelId) {
+					const type = (updated as any)?.type ?? 0;
+					const isPrivate = Boolean((updated as any)?.private);
+					if (type === 2 || !isPrivate) {
+						invalidateChannelRoleIds(gid, channelId);
 					} else {
-						lastChannelByGuild.update((map) => {
-							const { [gid]: _gone, ...rest } = map;
-							return rest;
-						});
+						void refreshChannelRoleIds(gid, channelId).catch(() => {});
 					}
 				}
 			}
-		}
-	});
+
+                        if (ev?.t === 109 && ev?.d?.channel_id != null) {
+                                const gid = String(ev.d.guild_id);
+                                const cid = String(ev.d.channel_id);
+                                let list: DtoChannel[] = [];
+                                channelsByGuild.update((map) => {
+                                        list = (map[gid] ?? []).filter((c) => String((c as any).id) !== cid);
+                                        return { ...map, [gid]: list };
+                                });
+                                pruneChannelRoleCache(gid, list);
+                                invalidateChannelRoleIds(gid, cid);
+                                messagesByChannel.update((map) => {
+                                        if (map[cid]) {
+                                                const { [cid]: _removed, ...rest } = map;
+                                                return rest;
+                                        }
+                                        return map;
+                                });
+                                leaveVoiceIfChannel(gid, cid);
+                                const curGuild = String(get(selectedGuildId) ?? '');
+                                const curChannel = String(get(selectedChannelId) ?? '');
+                                if (curGuild === gid && curChannel === cid) {
+                                        const next = list.find((c: any) => (c as any).type === 0);
+                                        const nextId = next ? String((next as any).id) : null;
+					selectedChannelId.set(nextId);
+                                        if (nextId) {
+                                                subscribeWS([gid], nextId);
+                                                lastChannelByGuild.update((map) => ({ ...map, [gid]: nextId }));
+                                                updateGuildSelectedChannel(gid, nextId);
+                                        } else {
+                                                lastChannelByGuild.update((map) => {
+                                                        const { [gid]: _gone, ...rest } = map;
+                                                        return rest;
+                                                });
+                                                updateGuildSelectedChannel(gid, null);
+                                        }
+                                }
+                        }
+                }
+        });
 
 	function computeSections(channels: DtoChannel[]) {
 		const byParent: Record<string, DtoChannel[]> = {};
@@ -394,97 +770,140 @@
 		return ordered;
 	}
 
-	function toggleCollapse(id: string) {
-		collapsed = { ...collapsed, [id]: !collapsed[id] };
-	}
+        function toggleCollapse(id: string) {
+                collapsed = { ...collapsed, [id]: !collapsed[id] };
+        }
 
-	async function createChannel() {
+        function buildNotificationMenuItems(
+                current: NotificationLevel,
+                onSelect: (level: NotificationLevel) => void
+        ): ContextMenuActionItem[] {
+                return [
+                        {
+                                label: m.ctx_notifications_all(),
+                                icon: current === NOTIFICATION_LEVELS.ALL ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.ALL)
+                        },
+                        {
+                                label: m.ctx_notifications_mentions(),
+                                icon: current === NOTIFICATION_LEVELS.MENTIONS ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.MENTIONS)
+                        },
+                        {
+                                label: m.ctx_notifications_none(),
+                                icon: current === NOTIFICATION_LEVELS.NONE ? Check : undefined,
+                                action: () => onSelect(NOTIFICATION_LEVELS.NONE)
+                        }
+                ];
+        }
+
+        async function createChannel() {
 		if (!newChannelName.trim() || !$selectedGuildId) return;
-		try {
-			await auth.api.guild.guildGuildIdChannelPost({
-				guildId: BigInt($selectedGuildId) as any,
-				guildCreateGuildChannelRequest: {
-					name: newChannelName,
-					parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
-					type: 0,
-					private: newChannelPrivate
-				}
-			});
-			creatingChannel = false;
-			newChannelName = '';
-			newChannelPrivate = false;
-			creatingChannelParent = null;
-			channelError = null;
-			await refreshChannels();
+                try {
+                        const channelType = newChannelType === 'voice' ? 1 : 0;
+                        await auth.api.guild.guildGuildIdChannelPost({
+                                guildId: BigInt($selectedGuildId) as any,
+                                guildCreateGuildChannelRequest: {
+                                        name: newChannelName,
+                                        parent_id: creatingChannelParent ? (BigInt(creatingChannelParent) as any) : undefined,
+                                        type: channelType,
+                                        private: newChannelPrivate
+                                }
+                        });
+                        creatingChannel = false;
+                        newChannelName = '';
+                        newChannelPrivate = false;
+                        newChannelType = 'text';
+                        creatingChannelParent = null;
+                        channelError = null;
+                        await refreshChannels();
 		} catch (e: any) {
 			channelError = e?.response?.data?.message ?? e?.message ?? 'Failed to create channel';
 		}
 	}
 
-	function selectChannel(id: string) {
-		const gid = $selectedGuildId ? String($selectedGuildId) : '';
-		if (!gid) return;
-		// validate the channel belongs to current guild and is a text channel
-		const list = $channelsByGuild[gid] ?? [];
+        function selectChannel(id: string) {
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                if (!gid) return;
+                setVoicePanelChannelId(null);
+                // validate the channel belongs to current guild and is a text channel
+                const list = $channelsByGuild[gid] ?? [];
 		const ok = list.some(
-			(c: any) => String((c as any).id) === String(id) && (c as any)?.type === 0
+			(c: any) =>
+				String((c as any).id) === String(id) &&
+				(c as any)?.type === 0 &&
+				canAccessChannel(gid, c as DtoChannel)
 		);
-		if (!ok) return;
-		selectedChannelId.set(String(id));
-		subscribeWS([gid], id);
-		lastChannelByGuild.update((map) => ({ ...map, [gid]: String(id) }));
-		try {
-			const raw = localStorage.getItem('lastChannels');
-			const saved = raw ? JSON.parse(raw) : {};
-			saved[gid] = String(id);
-			localStorage.setItem('lastChannels', JSON.stringify(saved));
-		} catch {}
-		channelReady.set(true);
-	}
+                if (!ok) return;
+                const nextId = String(id);
+                selectedChannelId.set(nextId);
+                subscribeWS([gid], nextId);
+                lastChannelByGuild.update((map) => ({ ...map, [gid]: nextId }));
+                updateGuildSelectedChannel(gid, nextId);
+                channelReady.set(true);
+        }
 
-	function openChannelMenu(e: MouseEvent, ch: any) {
-		const id = String(ch?.id ?? '');
-		const type = (ch as any)?.type;
-		const items = [
-			{ label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id },
-			{ label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 },
-			{ label: m.edit_channel(), action: () => openEditChannel(ch) },
-			{ label: m.delete_channel(), action: () => deleteChannel(id), danger: true }
-		];
-		contextMenu.openFromEvent(e, items);
-	}
+        function openChannelMenu(e: MouseEvent, ch: any) {
+                const id = String(ch?.id ?? '');
+                const type = (ch as any)?.type;
+                const items: ContextMenuItem[] = [];
+                if (type === 0 && id) {
+                        const settings = get(appSettings);
+                        const currentLevel = resolveNotificationLevel(settings.channelNotifications[id]);
+                        items.push({
+                                label: m.ctx_notifications_menu(),
+                                children: buildNotificationMenuItems(currentLevel, (level) =>
+                                        setChannelNotificationLevel(id, level)
+                                )
+                        });
+                }
+                items.push({ label: m.copy_channel_id(), action: () => copyToClipboard(id), disabled: !id });
+                if (type === 1) {
+                        items.push({
+                                label:
+                                        voiceStateForChannel(id, ch) === 'connected' ||
+                                        voiceStateForChannel(id, ch) === 'connecting'
+                                                ? m.voice_leave_channel()
+                                                : m.voice_join_channel(),
+                                action: () => {
+                                        const state = voiceStateForChannel(id, ch);
+                                        if (state === 'connected' || state === 'connecting') {
+                                                leaveVoiceChannel();
+                                        } else {
+                                                joinVoiceById(id);
+                                        }
+                                }
+                        });
+                }
+                items.push({ label: m.open_channel(), action: () => selectChannel(id), disabled: type !== 0 });
+                items.push({ label: m.edit_channel(), action: () => openEditChannel(ch) });
+                items.push({ label: m.delete_channel(), action: () => deleteChannel(id), danger: true });
+                contextMenu.openFromEvent(e, items);
+        }
 
-	function openCategoryMenu(e: MouseEvent, cat: any) {
-		const id = String(cat?.id ?? '');
-		const items = [
-			{
-				label: m.new_channel(),
-				action: () => {
-					creatingChannel = true;
-					channelError = null;
-					creatingChannelParent = id;
-				}
-			},
-			{ label: m.edit_category(), action: () => openEditCategory(cat) },
-			{ label: m.delete_category(), action: () => deleteCategory(id), danger: true }
-		];
-		contextMenu.openFromEvent(e, items);
-	}
+        function openCategoryMenu(e: MouseEvent, cat: any) {
+                const id = String(cat?.id ?? '');
+                const items = [
+                        {
+                                label: m.new_channel(),
+                                action: () => openCreateChannel(id)
+                        },
+                        { label: m.edit_category(), action: () => openEditCategory(cat) },
+                        { label: m.delete_category(), action: () => deleteCategory(id), danger: true }
+                ];
+                contextMenu.openFromEvent(e, items);
+        }
 
-	function openPaneMenu(e: MouseEvent) {
-		const items = [
-			{
-				label: m.new_channel(),
-				action: () => {
-					creatingChannel = true;
-					channelError = null;
-					creatingChannelParent = null;
-				}
-			},
-			{
-				label: m.new_category(),
-				action: () => {
-					creatingCategory = true;
+        function openPaneMenu(e: MouseEvent) {
+                const items = [
+                        {
+                                label: m.new_channel(),
+                                action: () => openCreateChannel(null)
+                        },
+                        {
+                                label: m.new_category(),
+                                action: () => {
+                                        creatingCategory = true;
 					categoryError = null;
 				}
 			}
@@ -492,32 +911,32 @@
 		contextMenu.openFromEvent(e, items);
 	}
 
-        function openEditChannel(ch: DtoChannel) {
-                editingChannel = ch;
-                const name = ch.name ?? '';
-                const topic = (ch as any).topic ?? '';
-                const isPrivate = !!(ch as any).private;
-                editChannelName = name;
-                editChannelTopic = topic;
-                editChannelPrivate = isPrivate;
-                editChannelInitialName = name;
-                editChannelInitialTopic = topic;
-                editChannelInitialPrivate = isPrivate;
-                editChannelError = null;
-                editChannelTab = 'overview';
-                editChannelRoleToAdd = '';
-                editChannelPermissionsError = null;
-                editChannelOverrides = {};
-                editChannelOverridesInitial = {};
-                editChannelSelectedOverride = null;
-                editChannelOrderedOverrideRoleIds = [];
-                editChannelRoles = [];
-                editChannelSaving = false;
-                const channelId = String((ch as any)?.id ?? '');
-                if (channelId) {
-                        loadChannelPermissions(channelId);
-                }
-        }
+	function openEditChannel(ch: DtoChannel) {
+		editingChannel = ch;
+		const name = ch.name ?? '';
+		const topic = (ch as any).topic ?? '';
+		const isPrivate = !!(ch as any).private;
+		editChannelName = name;
+		editChannelTopic = topic;
+		editChannelPrivate = isPrivate;
+		editChannelInitialName = name;
+		editChannelInitialTopic = topic;
+		editChannelInitialPrivate = isPrivate;
+		editChannelError = null;
+		editChannelTab = 'overview';
+		editChannelRoleToAdd = '';
+		editChannelPermissionsError = null;
+		editChannelOverrides = {};
+		editChannelOverridesInitial = {};
+		editChannelSelectedOverride = null;
+		editChannelOrderedOverrideRoleIds = [];
+		editChannelRoles = [];
+		editChannelSaving = false;
+		const channelId = String((ch as any)?.id ?? '');
+		if (channelId) {
+			loadChannelPermissions(channelId);
+		}
+	}
 
 	function channelPermissionState(roleId: string, value: number): 'deny' | 'inherit' | 'allow' {
 		const override = editChannelOverrides[roleId];
@@ -598,11 +1017,11 @@
 		});
 	}
 
-        function orderedOverrideRoleIds(): string[] {
-                const ids = Object.keys(editChannelOverrides);
-                if (!ids.length) {
-                        if (editChannelOrderedOverrideRoleIds.length) {
-                                editChannelOrderedOverrideRoleIds = [];
+	function orderedOverrideRoleIds(): string[] {
+		const ids = Object.keys(editChannelOverrides);
+		if (!ids.length) {
+			if (editChannelOrderedOverrideRoleIds.length) {
+				editChannelOrderedOverrideRoleIds = [];
 			}
 			return ids;
 		}
@@ -621,87 +1040,87 @@
 		}
 		for (const id of remaining) {
 			next.push(id);
-                }
-                if (
-                        next.length !== editChannelOrderedOverrideRoleIds.length ||
-                        next.some((id, index) => editChannelOrderedOverrideRoleIds[index] !== id)
-                ) {
-                        editChannelOrderedOverrideRoleIds = next;
-                }
-                return next;
-        }
+		}
+		if (
+			next.length !== editChannelOrderedOverrideRoleIds.length ||
+			next.some((id, index) => editChannelOrderedOverrideRoleIds[index] !== id)
+		) {
+			editChannelOrderedOverrideRoleIds = next;
+		}
+		return next;
+	}
 
-        function hasEditChannelChanges(): boolean {
-                if (!editingChannel) return false;
-                if (editChannelName !== editChannelInitialName) return true;
-                if (editChannelTopic !== editChannelInitialTopic) return true;
-                if (editChannelPrivate !== editChannelInitialPrivate) return true;
-                const currentIds = Object.keys(editChannelOverrides);
-                const initialIds = Object.keys(editChannelOverridesInitial);
-                if (currentIds.length !== initialIds.length) return true;
-                for (const roleId of new Set([...currentIds, ...initialIds])) {
-                        const current = editChannelOverrides[roleId];
-                        const initial = editChannelOverridesInitial[roleId];
-                        if (!current && initial) return true;
-                        if (current && !initial) return true;
-                        if (!current || !initial) continue;
-                        if (current.accept !== initial.accept || current.deny !== initial.deny) {
-                                return true;
-                        }
-                }
-                return false;
-        }
+	function hasEditChannelChanges(): boolean {
+		if (!editingChannel) return false;
+		if (editChannelName !== editChannelInitialName) return true;
+		if (editChannelTopic !== editChannelInitialTopic) return true;
+		if (editChannelPrivate !== editChannelInitialPrivate) return true;
+		const currentIds = Object.keys(editChannelOverrides);
+		const initialIds = Object.keys(editChannelOverridesInitial);
+		if (currentIds.length !== initialIds.length) return true;
+		for (const roleId of new Set([...currentIds, ...initialIds])) {
+			const current = editChannelOverrides[roleId];
+			const initial = editChannelOverridesInitial[roleId];
+			if (!current && initial) return true;
+			if (current && !initial) return true;
+			if (!current || !initial) continue;
+			if (current.accept !== initial.accept || current.deny !== initial.deny) {
+				return true;
+			}
+		}
+		return false;
+	}
 
-        const editChannelHasChanges = $derived.by(() => hasEditChannelChanges());
+	const editChannelHasChanges = $derived.by(() => hasEditChannelChanges());
 
-        async function saveChannelPermissionOverrides(gid: string, channelId: string) {
-                const updates: Promise<any>[] = [];
-                const roleIds = new Set([
-                        ...Object.keys(editChannelOverridesInitial),
-                        ...Object.keys(editChannelOverrides)
-                ]);
-                for (const roleId of roleIds) {
-                        if (!roleId) continue;
-                        const next = editChannelOverrides[roleId];
-                        const initial = editChannelOverridesInitial[roleId];
-                        const hasNext = next != null;
-                        const hasInitial = initial != null;
-                        const nextAccept = next?.accept ?? 0;
-                        const nextDeny = next?.deny ?? 0;
-                        const initialAccept = initial?.accept ?? 0;
-                        const initialDeny = initial?.deny ?? 0;
-                        const baseParams = {
-                                guildId: toApiSnowflake(gid),
-                                channelId: toApiSnowflake(channelId),
-                                roleId: toApiSnowflake(roleId)
-                        } as const;
-                        if (!hasNext && hasInitial) {
-                                updates.push(
-                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
-                                                ...baseParams
-                                        })
-                                );
-                                continue;
-                        }
-                        if (hasNext && !hasInitial) {
-                                updates.push(
-                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdPut({
-                                                ...baseParams,
-                                                guildChannelRolePermissionRequest: {
-                                                        accept: nextAccept,
-                                                        deny: nextDeny
-                                                } as any
-                                        })
-                                );
-                                continue;
-                        }
-                        if (!hasNext && !hasInitial) continue;
-                        if (nextAccept === initialAccept && nextDeny === initialDeny) continue;
-                        if (nextAccept === 0 && nextDeny === 0) {
-                                updates.push(
-                                        auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
-                                                ...baseParams
-                                        })
+	async function saveChannelPermissionOverrides(gid: string, channelId: string) {
+		const updates: Promise<any>[] = [];
+		const roleIds = new Set([
+			...Object.keys(editChannelOverridesInitial),
+			...Object.keys(editChannelOverrides)
+		]);
+		for (const roleId of roleIds) {
+			if (!roleId) continue;
+			const next = editChannelOverrides[roleId];
+			const initial = editChannelOverridesInitial[roleId];
+			const hasNext = next != null;
+			const hasInitial = initial != null;
+			const nextAccept = next?.accept ?? 0;
+			const nextDeny = next?.deny ?? 0;
+			const initialAccept = initial?.accept ?? 0;
+			const initialDeny = initial?.deny ?? 0;
+			const baseParams = {
+				guildId: toApiSnowflake(gid),
+				channelId: toApiSnowflake(channelId),
+				roleId: toApiSnowflake(roleId)
+			} as const;
+			if (!hasNext && hasInitial) {
+				updates.push(
+					auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
+						...baseParams
+					})
+				);
+				continue;
+			}
+			if (hasNext && !hasInitial) {
+				updates.push(
+					auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdPut({
+						...baseParams,
+						guildChannelRolePermissionRequest: {
+							accept: nextAccept,
+							deny: nextDeny
+						} as any
+					})
+				);
+				continue;
+			}
+			if (!hasNext && !hasInitial) continue;
+			if (nextAccept === initialAccept && nextDeny === initialDeny) continue;
+			if (nextAccept === 0 && nextDeny === 0) {
+				updates.push(
+					auth.api.guildRoles.guildGuildIdChannelChannelIdRolesRoleIdDelete({
+						...baseParams
+					})
 				);
 			} else {
 				updates.push(
@@ -720,58 +1139,58 @@
 		}
 	}
 
-        function closeEditChannel() {
-                editChannelPermissionsLoadToken += 1;
-                editingChannel = null;
-                editChannelError = null;
-                editChannelTab = 'overview';
-                editChannelRoles = [];
-                editChannelRoleToAdd = '';
-                editChannelOverrides = {};
-                editChannelOverridesInitial = {};
-                editChannelPermissionsLoading = false;
-                editChannelPermissionsError = null;
-                editChannelSelectedOverride = null;
-                editChannelOrderedOverrideRoleIds = [];
-                editChannelInitialName = '';
-                editChannelInitialTopic = '';
-                editChannelInitialPrivate = false;
-                editChannelSaving = false;
-        }
+	function closeEditChannel() {
+		editChannelPermissionsLoadToken += 1;
+		editingChannel = null;
+		editChannelError = null;
+		editChannelTab = 'overview';
+		editChannelRoles = [];
+		editChannelRoleToAdd = '';
+		editChannelOverrides = {};
+		editChannelOverridesInitial = {};
+		editChannelPermissionsLoading = false;
+		editChannelPermissionsError = null;
+		editChannelSelectedOverride = null;
+		editChannelOrderedOverrideRoleIds = [];
+		editChannelInitialName = '';
+		editChannelInitialTopic = '';
+		editChannelInitialPrivate = false;
+		editChannelSaving = false;
+	}
 
-        async function saveEditChannel() {
-                if (!editingChannel || !$selectedGuildId || editChannelSaving) return;
-                if (!hasEditChannelChanges()) return;
-                const channelId = String((editingChannel as any)?.id ?? '');
-                if (!channelId) return;
-                editChannelSaving = true;
-                try {
-                        const shouldPatchChannel =
-                                editChannelName !== editChannelInitialName ||
-                                editChannelTopic !== editChannelInitialTopic ||
-                                editChannelPrivate !== editChannelInitialPrivate;
-                        if (shouldPatchChannel) {
-                                await auth.api.guild.guildGuildIdChannelChannelIdPatch({
-                                        guildId: BigInt($selectedGuildId) as any,
-                                        channelId: BigInt((editingChannel as any).id) as any,
-                                        guildPatchGuildChannelRequest: {
-                                                name: editChannelName,
-                                                topic: editChannelTopic,
-                                                private: editChannelPrivate
-                                        } as any
-                                });
-                        }
-                        await saveChannelPermissionOverrides($selectedGuildId, channelId);
-                        closeEditChannel();
-                        await refreshChannels();
-                } catch (e: any) {
-                        editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
-                } finally {
-                        if (editingChannel) {
-                                editChannelSaving = false;
-                        }
-                }
-        }
+	async function saveEditChannel() {
+		if (!editingChannel || !$selectedGuildId || editChannelSaving) return;
+		if (!hasEditChannelChanges()) return;
+		const channelId = String((editingChannel as any)?.id ?? '');
+		if (!channelId) return;
+		editChannelSaving = true;
+		try {
+			const shouldPatchChannel =
+				editChannelName !== editChannelInitialName ||
+				editChannelTopic !== editChannelInitialTopic ||
+				editChannelPrivate !== editChannelInitialPrivate;
+			if (shouldPatchChannel) {
+				await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+					guildId: BigInt($selectedGuildId) as any,
+					channelId: BigInt((editingChannel as any).id) as any,
+					guildPatchGuildChannelRequest: {
+						name: editChannelName,
+						topic: editChannelTopic,
+						private: editChannelPrivate
+					} as any
+				});
+			}
+			await saveChannelPermissionOverrides($selectedGuildId, channelId);
+			closeEditChannel();
+			await refreshChannels();
+		} catch (e: any) {
+			editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
+		} finally {
+			if (editingChannel) {
+				editChannelSaving = false;
+			}
+		}
+	}
 
 	function openEditCategory(cat: DtoChannel) {
 		editingCategory = cat;
@@ -836,73 +1255,27 @@
 	}
 </script>
 
-<svelte:window on:keydown={(e) => editingChannel && e.key === 'Escape' && closeEditChannel()} />
+<svelte:window onkeydown={(e) => editingChannel && e.key === 'Escape' && closeEditChannel()} />
 
 <div
 	class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-hidden border-r border-[var(--stroke)]"
 >
-	<div
-		class="box-border flex h-[var(--header-h)] flex-shrink-0 items-center justify-between overflow-hidden border-b border-[var(--stroke)] px-3"
-	>
-		<div class="truncate font-semibold">
-			{$guilds.find((g) => String((g as any).id) === $selectedGuildId)?.name ?? m.select_server()}
-		</div>
-		{#if $selectedGuildId}
-			<div class="flex items-center gap-2">
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => {
-						creatingChannel = true;
-						channelError = null;
-						creatingChannelParent = null;
-					}}
-					title={m.new_channel()}
-					aria-label={m.new_channel()}
-				>
-					<Plus class="h-4 w-4" stroke-width={2} />
-				</button>
-				<button
-					class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-					onclick={() => {
-						creatingCategory = true;
-						categoryError = null;
-					}}
-					title={m.new_category()}
-					aria-label={m.new_category()}
-				>
-					<FolderPlus class="h-4 w-4" stroke-width={2} />
-				</button>
-				{#if canAccessSelectedGuildSettings}
-					<button
-						class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-						onclick={() => {
-							if (!canAccessSelectedGuildSettings) return;
-							guildSettingsOpen.set(true);
-						}}
-						title={m.server_settings()}
-						aria-label={m.server_settings()}
-					>
-						<Settings class="h-4 w-4" stroke-width={2} />
-					</button>
-				{/if}
-			</div>
-		{/if}
-	</div>
-	<div class="border-b border-[var(--stroke)] p-2">
-		<input
-			class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm"
+        <div class="border-b border-[var(--stroke)] p-2">
+                <input
+                        class="w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-1 text-sm"
 			placeholder={m.filter_channels()}
 			bind:value={filter}
 		/>
 	</div>
-	<div
-		class="scroll-area flex-1 space-y-2 overflow-y-auto p-2"
-		role="region"
-		oncontextmenu={(e: MouseEvent) => {
-			e.preventDefault();
-			openPaneMenu(e);
-		}}
-	>
+        <div
+                class="scroll-area channel-scroll flex-1 space-y-2 overflow-y-auto p-2"
+                role="region"
+                use:customContextMenuTarget
+                oncontextmenu={(e: MouseEvent) => {
+                        e.preventDefault();
+                        openPaneMenu(e);
+                }}
+        >
 		{#if $selectedGuildId}
 			{@const sections = computeSections(currentGuildChannels())}
 			<div
@@ -914,51 +1287,90 @@
 				role="list"
 			>
 				{#each sections as sec (String(sec.type === 'category' ? (sec.cat as any)?.id : (sec.ch as any)?.id))}
-					{#if sec.type === 'channel'}
-						{#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
-							<div
-								role="listitem"
-								class="relative"
-								ondragover={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									dragOverChannel(String((sec.ch as any).id), null);
-								}}
-								ondrop={(e) => {
-									e.stopPropagation();
-									dropOnChannel(String((sec.ch as any).id), null);
-								}}
-							>
-								{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((sec.ch as any).id) && dragIndicator.parent === null}
-									<div
-										class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-									></div>
-								{/if}
-								<div
-									class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-									String((sec.ch as any).id)
-										? 'bg-[var(--panel)]'
-										: ''}"
-									role="button"
-									tabindex="0"
-									draggable="true"
-									ondragstart={() => startDrag(sec.ch, null)}
-									onclick={() => selectChannel(String((sec.ch as any).id))}
-									onkeydown={(e) =>
-										(e.key === 'Enter' || e.key === ' ') &&
-										selectChannel(String((sec.ch as any).id))}
-									oncontextmenu={(e: MouseEvent) => {
-										e.preventDefault();
-										e.stopPropagation();
-										openChannelMenu(e, sec.ch);
-									}}
-								>
-									<div class="flex items-center gap-2 truncate">
-										<span class="opacity-70">#</span>
-										{sec.ch.name}
-									</div>
-								</div>
-							</div>
+                                        {#if sec.type === 'channel'}
+                                                {@const channelId = String((sec.ch as any).id)}
+                                                {@const channelUnread = isChannelUnread($selectedGuildId, channelId)}
+                                                {@const channelMentionCount = channelMentionCountFor($selectedGuildId, channelId)}
+                                                {@const voiceState = voiceStateForChannel(channelId, sec.ch)}
+                                                {#if (sec.ch.name || '').toLowerCase().includes(filter.toLowerCase())}
+                                                        <div
+                                                                role="listitem"
+                                                                class="relative"
+                                                                ondragover={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        dragOverChannel(channelId, null);
+                                                                }}
+                                                                ondrop={(e) => {
+                                                                        e.stopPropagation();
+                                                                        dropOnChannel(channelId, null);
+                                                                }}
+                                                        >
+                                                                {#if dragIndicator?.mode === 'before' && dragIndicator.target === channelId && dragIndicator.parent === null}
+                                                                        <div
+                                                                                class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                        ></div>
+                                                                {/if}
+                                                                <div
+                                                                        class={channelRowClasses(channelId, sec.ch, channelUnread, channelMentionCount, voiceState)}
+                                                                        role="button"
+                                                                        tabindex="0"
+                                                                        use:customContextMenuTarget
+                                                                        draggable="true"
+                                                                        ondragstart={() => startDrag(sec.ch, null)}
+                                                                        onclick={() => activateChannel(sec.ch)}
+                                                                        onkeydown={(e) => handleChannelKey(e, sec.ch)}
+                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                openChannelMenu(e, sec.ch);
+                                                                        }}
+                                                                >
+                                                                        {#if channelMentionCount > 0}
+                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: channelMentionCount })}</span>
+                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(channelMentionCount)}</span>
+                                                                        {:else if channelUnread}
+                                                                                <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                        {/if}
+                                                                        <div class="flex w-full items-center gap-2">
+                                                                                <div class="flex min-w-0 flex-1 items-center gap-2 truncate">
+                                                                                        {#if isVoiceChannel(sec.ch)}
+                                                                                                <Volume2 class="opacity-70" size={16} />
+                                                                                        {:else}
+                                                                                                <span class="opacity-70">#</span>
+                                                                                        {/if}
+                                                                                <span class="truncate">{sec.ch.name}</span>
+                                                                                </div>
+                                                                                {#if voiceState === 'connecting' || voiceState === 'connected'}
+                                                                                        <span class={`text-xs ${voiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>
+                                                                                                {voiceState === 'connecting'
+                                                                                                        ? m.voice_channel_status_connecting()
+                                                                                                        : m.voice_channel_status_connected()}
+                                                                                        </span>
+                                                                                        <button
+                                                                                                type="button"
+                                                                                                class="grid h-6 w-6 place-items-center rounded text-[var(--brand)] hover:bg-[var(--panel-strong)]"
+                                                                                                onclick={(event) => {
+                                                                                                        event.preventDefault();
+                                                                                                        event.stopPropagation();
+                                                                                                        leaveVoiceChannel();
+                                                                                                }}
+                                                                                                aria-label={m.voice_leave_channel()}
+                                                                                        >
+                                                                                                <PhoneOff class="h-4 w-4" stroke-width={2} />
+                                                                                        </button>
+                                                                                {/if}
+                                                                        </div>
+                                                                </div>
+                                                                {#if isVoiceChannel(sec.ch)}
+                                                                        <VoiceChannelParticipants
+                                                                                guildId={selectedGuildIdValue}
+                                                                                channelId={channelId}
+                                                                                indentClass="ml-9"
+                                                                        />
+                                                                {/if}
+                                                        </div>
                                                 {/if}
                                         {:else}
                                                 <div
@@ -981,9 +1393,10 @@
 										'inside' && dragIndicator.parent === String((sec.cat as any)?.id)
 										? 'rounded-md ring-2 ring-[var(--brand)]'
 										: ''}"
-									role="button"
-									tabindex="0"
-									draggable="true"
+                                                                        role="button"
+                                                                        tabindex="0"
+                                                                        use:customContextMenuTarget
+                                                                        draggable="true"
 									ondragstart={() => startDrag(sec.cat, null)}
 									ondragover={(e) => {
 										e.preventDefault();
@@ -1019,55 +1432,98 @@
 									</button>
 								</div>
 							</div>
-							{#if !collapsed[String((sec.cat as any)?.id)]}
-								{#each sec.items.filter((c) => (c.name || '')
-										.toLowerCase()
-										.includes(filter.toLowerCase())) as ch (String((ch as any).id))}
-									<div
-										role="listitem"
-										class="relative"
-										ondragover={(e) => {
-											e.preventDefault();
-											e.stopPropagation();
-											dragOverChannel(String((ch as any).id), String((sec.cat as any)?.id));
-										}}
-										ondrop={(e) => {
-											e.stopPropagation();
-											dropOnChannel(String((ch as any).id), String((sec.cat as any)?.id));
-										}}
-									>
-										{#if dragIndicator?.mode === 'before' && dragIndicator.target === String((ch as any).id) && dragIndicator.parent === String((sec.cat as any)?.id)}
-											<div
-												class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
-											></div>
-										{/if}
-										<div
-											class="flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)] {$selectedChannelId ===
-											String((ch as any).id)
-												? 'bg-[var(--panel)]'
-												: ''}"
-											role="button"
-											tabindex="0"
-											draggable="true"
-											ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
-											onclick={() => selectChannel(String((ch as any).id))}
-											onkeydown={(e) =>
-												(e.key === 'Enter' || e.key === ' ') &&
-												selectChannel(String((ch as any).id))}
-											oncontextmenu={(e: MouseEvent) => {
-												e.preventDefault();
-												e.stopPropagation();
-												openChannelMenu(e, ch);
-											}}
-										>
-											<div class="flex items-center gap-2 truncate">
-												<span class="opacity-70">#</span>
-												{ch.name}
-											</div>
-										</div>
-									</div>
-								{/each}
-							{/if}
+                                                        {#if !collapsed[String((sec.cat as any)?.id)]}
+                                                                {#each sec.items.filter((c) => (c.name || '')
+                                                                                .toLowerCase()
+                                                                                .includes(filter.toLowerCase())) as ch (String((ch as any).id))}
+                                                                        {@const nestedChannelId = String((ch as any).id)}
+                                                                        {@const nestedChannelUnread = isChannelUnread($selectedGuildId, nestedChannelId)}
+                                                                        {@const nestedMentionCount = channelMentionCountFor($selectedGuildId, nestedChannelId)}
+                                                                        {@const nestedVoiceState = voiceStateForChannel(nestedChannelId, ch)}
+                                                                        <div
+                                                                                role="listitem"
+                                                                                class="relative"
+                                                                                ondragover={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        dragOverChannel(nestedChannelId, String((sec.cat as any)?.id));
+                                                                                }}
+                                                                                ondrop={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        dropOnChannel(nestedChannelId, String((sec.cat as any)?.id));
+                                                                                }}
+                                                                        >
+                                                                                {#if dragIndicator?.mode === 'before' && dragIndicator.target === nestedChannelId && dragIndicator.parent === String((sec.cat as any)?.id)}
+                                                                                        <div
+                                                                                                class="pointer-events-none absolute top-0 right-0 left-0 h-0.5 -translate-y-1/2 rounded-full bg-[var(--brand)]"
+                                                                                        ></div>
+                                                                                {/if}
+                                                                                <div
+                                                                                        class={nestedChannelRowClasses(nestedChannelId, ch, nestedVoiceState)}
+                                                                                        role="button"
+                                                                                        tabindex="0"
+                                                                                        use:customContextMenuTarget
+                                                                                        draggable="true"
+                                                                                        ondragstart={() => startDrag(ch, String((sec.cat as any)?.id))}
+                                                                                        onclick={() => activateChannel(ch)}
+                                                                                        onkeydown={(e) => handleChannelKey(e, ch)}
+                                                                                        oncontextmenu={(e: MouseEvent) => {
+                                                                                                e.preventDefault();
+                                                                                                e.stopPropagation();
+                                                                                                openChannelMenu(e, ch);
+                                                                                        }}
+                                                                                >
+                                                                                        <div class="relative flex w-full items-center gap-2">
+                                                                                                <div
+                                                                                                        class={`relative flex min-w-0 flex-1 items-center gap-2 truncate ${
+                                                                                                                nestedChannelUnread || nestedMentionCount > 0 ? 'pl-6' : 'pl-3'
+                                                                                                        }`}
+                                                                                                >
+                                                                                                        {#if nestedMentionCount > 0}
+                                                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: nestedMentionCount })}</span>
+                                                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedMentionCount)}</span>
+                                                                                                        {:else if nestedChannelUnread}
+                                                                                                                <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                                                        {/if}
+                                                                                                        {#if isVoiceChannel(ch)}
+                                                                                                                <Volume2 class="opacity-70" size={16} />
+                                                                                                        {:else}
+                                                                                                                <span class="opacity-70">#</span>
+                                                                                                        {/if}
+                                        <span class="truncate">{ch.name}</span>
+                                                                                                </div>
+                                                                                                {#if nestedVoiceState === 'connecting' || nestedVoiceState === 'connected'}
+                                                                                                        <span class={`text-xs ${nestedVoiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>
+                                                                                                                {nestedVoiceState === 'connecting'
+                                                                                                                        ? m.voice_channel_status_connecting()
+                                                                                                                        : m.voice_channel_status_connected()}
+                                                                                                        </span>
+                                                                                                        <button
+                                                                                                                type="button"
+                                                                                                                class="grid h-6 w-6 place-items-center rounded text-[var(--brand)] hover:bg-[var(--panel-strong)]"
+                                                                                                                onclick={(event) => {
+                                                                                                                        event.preventDefault();
+                                                                                                                        event.stopPropagation();
+                                                                                                                        leaveVoiceChannel();
+                                                                                                                }}
+                                                                                                                aria-label={m.voice_leave_channel()}
+                                                                                                        >
+                                                                                                                <PhoneOff class="h-4 w-4" stroke-width={2} />
+                                                                                                        </button>
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                </div>
+                                                                                {#if isVoiceChannel(ch)}
+                                                                                        <VoiceChannelParticipants
+                                                                                                guildId={selectedGuildIdValue}
+                                                                                                channelId={nestedChannelId}
+                                                                                                indentClass="ml-12"
+                                                                                        />
+                                                                                {/if}
+                                                                        </div>
+                                                                {/each}
+                                                        {/if}
 							<div
 								class="h-4"
 								role="listitem"
@@ -1098,415 +1554,465 @@
 	<UserPanel />
 
 	{#if editingChannel}
-		<div
-			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-			role="dialog"
-			aria-modal="true"
-			onpointerdown={closeEditChannel}
-		>
-			<div
-				class="relative flex h-[80vh] w-full max-w-4xl overflow-hidden rounded-lg bg-[var(--bg)] shadow-xl"
-				role="document"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
+		<SettingsPanel maxWidthClass="max-w-4xl" on:close={closeEditChannel} let:close={dismissPanel}>
+			<svelte:fragment slot="sidebar">
+				<div class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
+					{m.channel_settings()}
+				</div>
 				<button
-					aria-label={m.close()}
-					class="absolute top-3 right-3 rounded p-1 text-xl leading-none hover:bg-[var(--panel)]"
-					onclick={closeEditChannel}
+					class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
+						editChannelTab === 'overview' ? 'bg-[var(--panel)] font-semibold' : ''
+					}`}
+					onclick={() => (editChannelTab = 'overview')}
 				>
-					&times;
+					{m.channel_tab_overview()}
 				</button>
-				<aside class="w-48 space-y-2 border-r border-[var(--stroke)] p-4">
-					<div class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
-						{m.channel_settings()}
+				<button
+					class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
+						editChannelTab === 'permissions' ? 'bg-[var(--panel)] font-semibold' : ''
+					}`}
+					onclick={() => (editChannelTab = 'permissions')}
+				>
+					{m.channel_tab_permissions()}
+				</button>
+			</svelte:fragment>
+
+			<h2 class="text-lg font-semibold">{m.edit_channel()}</h2>
+			{#if editChannelError}
+				<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
+					{editChannelError}
+				</div>
+			{/if}
+			{#if editChannelTab === 'overview'}
+				<div class="space-y-4">
+					<div>
+						<label for="channel-name" class="mb-1 block text-sm font-medium">
+							{m.channel_name()}
+						</label>
+						<input
+							id="channel-name"
+							class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
+							placeholder={m.channel_name()}
+							bind:value={editChannelName}
+						/>
 					</div>
-					<button
-						class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
-							editChannelTab === 'overview' ? 'bg-[var(--panel)] font-semibold' : ''
-						}`}
-						onclick={() => (editChannelTab = 'overview')}
-					>
-						{m.channel_tab_overview()}
-					</button>
-					<button
-						class={`w-full rounded px-2 py-1 text-left hover:bg-[var(--panel)] ${
-							editChannelTab === 'permissions' ? 'bg-[var(--panel)] font-semibold' : ''
-						}`}
-						onclick={() => (editChannelTab = 'permissions')}
-					>
-						{m.channel_tab_permissions()}
-					</button>
-				</aside>
-                                <section class="flex flex-1 flex-col">
-                                        <div class="scroll-area flex-1 space-y-4 overflow-y-auto p-4">
-                                                <h2 class="text-lg font-semibold">{m.edit_channel()}</h2>
-                                                {#if editChannelError}
-                                                        <div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
-                                                                {editChannelError}
-							</div>
+					<div>
+						<label for="channel-topic" class="mb-1 block text-sm font-medium">
+							{m.channel_topic()}
+						</label>
+						<input
+							id="channel-topic"
+							class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
+							placeholder={m.channel_topic()}
+							bind:value={editChannelTopic}
+						/>
+					</div>
+				</div>
+			{:else if editChannelTab === 'permissions'}
+				{@const availableRoleOptions = availableRolesForOverrides()}
+				{@const overrideRoleIds = orderedOverrideRoleIds()}
+				<div class="space-y-4">
+					{#if editChannelPermissionsError}
+						<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
+							{editChannelPermissionsError}
+						</div>
+					{/if}
+					<div class="rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
+						<label class="flex items-center gap-2 text-sm font-medium">
+							<input type="checkbox" bind:checked={editChannelPrivate} />
+							{m.channel_permissions_private_label()}
+						</label>
+						<p class="mt-1 text-xs text-[var(--muted)]">
+							{m.channel_permissions_private_desc()}
+						</p>
+					</div>
+					<div class="space-y-4 rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
+						<div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+							<select
+								class="flex-1 rounded border border-[var(--stroke)] bg-[var(--bg)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
+								bind:value={editChannelRoleToAdd}
+								disabled={editChannelPermissionsLoading || availableRoleOptions.length === 0}
+							>
+								<option value="">{m.channel_permissions_select_role()}</option>
+								{#each availableRoleOptions as role}
+									{@const rid = getRoleId(role)!}
+									<option value={rid}>{roleDisplayName(role, rid)}</option>
+								{/each}
+							</select>
+							<button
+								class="rounded bg-[var(--brand)] px-3 py-2 text-[var(--bg)] disabled:opacity-50"
+								onclick={addRoleOverride}
+								disabled={!editChannelRoleToAdd}
+							>
+								{m.channel_permissions_add_role()}
+							</button>
+						</div>
+						{#if editChannelPermissionsLoading}
+							<p class="text-sm text-[var(--muted)]">{m.loading()}</p>
 						{/if}
-						{#if editChannelTab === 'overview'}
-							<div class="space-y-4">
-								<div>
-									<label for="channel-name" class="mb-1 block text-sm font-medium">
-										{m.channel_name()}
-									</label>
-									<input
-										id="channel-name"
-										class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
-										placeholder={m.channel_name()}
-										bind:value={editChannelName}
-									/>
-								</div>
-								<div>
-									<label for="channel-topic" class="mb-1 block text-sm font-medium">
-										{m.channel_topic()}
-									</label>
-									<input
-										id="channel-topic"
-										class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
-										placeholder={m.channel_topic()}
-										bind:value={editChannelTopic}
-									/>
-								</div>
-							</div>
-						{:else if editChannelTab === 'permissions'}
-							{@const availableRoleOptions = availableRolesForOverrides()}
-							{@const overrideRoleIds = orderedOverrideRoleIds()}
-							<div class="space-y-4">
-								{#if editChannelPermissionsError}
-									<div class="rounded border border-red-500 bg-red-500/10 p-2 text-sm text-red-400">
-										{editChannelPermissionsError}
+						{#if overrideRoleIds.length > 0}
+							<div class="space-y-3">
+								<div class="space-y-2">
+									<div class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
+										{m.channel_permissions_role_overrides_label()}
 									</div>
-								{/if}
-								<div class="rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
-									<label class="flex items-center gap-2 text-sm font-medium">
-										<input type="checkbox" bind:checked={editChannelPrivate} />
-										{m.channel_permissions_private_label()}
-									</label>
-									<p class="mt-1 text-xs text-[var(--muted)]">
-										{m.channel_permissions_private_desc()}
-									</p>
-								</div>
-								<div class="space-y-4 rounded border border-[var(--stroke)] bg-[var(--panel)] p-4">
-									<div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-										<select
-											class="flex-1 rounded border border-[var(--stroke)] bg-[var(--bg)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
-											bind:value={editChannelRoleToAdd}
-											disabled={editChannelPermissionsLoading || availableRoleOptions.length === 0}
-										>
-											<option value="">{m.channel_permissions_select_role()}</option>
-											{#each availableRoleOptions as role}
-												{@const rid = getRoleId(role)!}
-												<option value={rid}>{roleDisplayName(role, rid)}</option>
-											{/each}
-										</select>
-										<button
-											class="rounded bg-[var(--brand)] px-3 py-2 text-[var(--bg)] disabled:opacity-50"
-											onclick={addRoleOverride}
-											disabled={!editChannelRoleToAdd}
-										>
-											{m.channel_permissions_add_role()}
-										</button>
+									<div class="flex gap-2 overflow-x-auto pb-1">
+										{#each overrideRoleIds as roleId}
+											{@const role = editChannelRoles.find((r) => getRoleId(r) === roleId)}
+											<button
+												type="button"
+												class={`rounded-full border border-[var(--stroke)] px-3 py-1 text-sm whitespace-nowrap transition ${
+													editChannelSelectedOverride === roleId
+														? 'bg-[var(--brand)] text-[var(--bg)]'
+														: 'bg-[var(--bg)] hover:bg-[var(--panel-strong)]'
+												}`}
+												onclick={() => (editChannelSelectedOverride = roleId)}
+												aria-pressed={editChannelSelectedOverride === roleId}
+											>
+												{roleDisplayName(role, roleId)}
+											</button>
+										{/each}
 									</div>
-									{#if editChannelPermissionsLoading}
-										<p class="text-sm text-[var(--muted)]">{m.loading()}</p>
-									{/if}
-									{#if overrideRoleIds.length > 0}
-										<div class="space-y-3">
-											<div class="space-y-2">
+								</div>
+								{#if editChannelSelectedOverride && overrideRoleIds.includes(editChannelSelectedOverride)}
+									{@const selectedOverrideId = editChannelSelectedOverride as string}
+									{@const selectedRole = editChannelRoles.find(
+										(r) => getRoleId(r) === selectedOverrideId
+									)}
+									<div class="space-y-3 rounded border border-[var(--stroke)] bg-[var(--bg)] p-4">
+										<div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+											<div class="text-sm font-semibold">
+												{roleDisplayName(selectedRole, selectedOverrideId)}
+											</div>
+											<button
+												type="button"
+												class="text-xs text-red-500 hover:underline"
+												onclick={() => removeRoleOverride(selectedOverrideId)}
+											>
+												{m.channel_permissions_remove_role()}
+											</button>
+										</div>
+										{#each CHANNEL_PERMISSION_CATEGORIES as category}
+											<div>
 												<div
-													class="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
+													class="mb-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
 												>
-													{m.channel_permissions_role_overrides_label()}
+													{category.label()}
 												</div>
-												<div class="flex gap-2 overflow-x-auto pb-1">
-													{#each overrideRoleIds as roleId}
-														{@const role = editChannelRoles.find((r) => getRoleId(r) === roleId)}
-														<button
-															type="button"
-															class={`rounded-full border border-[var(--stroke)] px-3 py-1 text-sm whitespace-nowrap transition ${
-																editChannelSelectedOverride === roleId
-																	? 'bg-[var(--brand)] text-[var(--bg)]'
-																	: 'bg-[var(--bg)] hover:bg-[var(--panel-strong)]'
-															}`}
-															onclick={() => (editChannelSelectedOverride = roleId)}
-															aria-pressed={editChannelSelectedOverride === roleId}
-														>
-															{roleDisplayName(role, roleId)}
-														</button>
+												<div class="space-y-3">
+													{#each category.permissions as perm}
+														{@const state = channelPermissionState(selectedOverrideId, perm.value)}
+														<div class="rounded border border-[var(--stroke)] bg-[var(--bg)] p-3">
+															<div class="flex items-start justify-between gap-4">
+																<div>
+																	<div class="text-sm font-medium">{perm.label()}</div>
+																	<div class="text-xs text-[var(--muted)]">
+																		{perm.description()}
+																	</div>
+																</div>
+																<div
+																	class="flex overflow-hidden rounded border border-[var(--stroke)] text-xs font-semibold"
+																>
+																	<button
+																		class={`px-2 py-1 transition ${
+																			state === 'deny'
+																				? 'bg-red-500 text-white'
+																				: 'bg-transparent hover:bg-red-500/10'
+																		}`}
+																		onclick={() =>
+																			setChannelPermission(selectedOverrideId, perm.value, 'deny')}
+                                                                                                                                aria-label={m.permission_deny()}
+																	>
+																		<X class="h-4 w-4" stroke-width={2} />
+																	</button>
+																	<button
+																		class={`px-2 py-1 transition ${
+																			state === 'inherit'
+																				? 'bg-[var(--panel)]'
+																				: 'bg-transparent hover:bg-[var(--panel)]/60'
+																		}`}
+																		onclick={() =>
+																			setChannelPermission(
+																				selectedOverrideId,
+																				perm.value,
+																				'inherit'
+																			)}
+                                                                                                                                aria-label={m.permission_default()}
+																	>
+																		<Slash class="h-4 w-4" stroke-width={2} />
+																	</button>
+																	<button
+																		class={`px-2 py-1 transition ${
+																			state === 'allow'
+																				? 'bg-green-500 text-white'
+																				: 'bg-transparent hover:bg-green-500/10'
+																		}`}
+																		onclick={() =>
+																			setChannelPermission(selectedOverrideId, perm.value, 'allow')}
+                                                                                                                                aria-label={m.permission_allow()}
+																	>
+																		<Check class="h-4 w-4" stroke-width={2} />
+																	</button>
+																</div>
+															</div>
+														</div>
 													{/each}
 												</div>
 											</div>
-											{#if editChannelSelectedOverride && overrideRoleIds.includes(editChannelSelectedOverride)}
-												{@const selectedOverrideId = editChannelSelectedOverride as string}
-												{@const selectedRole = editChannelRoles.find(
-													(r) => getRoleId(r) === selectedOverrideId
-												)}
-												<div
-													class="space-y-3 rounded border border-[var(--stroke)] bg-[var(--bg)] p-4"
-												>
-													<div
-														class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
-													>
-														<div class="text-sm font-semibold">
-															{roleDisplayName(selectedRole, selectedOverrideId)}
-														</div>
-														<button
-															type="button"
-															class="text-xs text-red-500 hover:underline"
-															onclick={() => removeRoleOverride(selectedOverrideId)}
-														>
-															{m.channel_permissions_remove_role()}
-														</button>
-													</div>
-													{#each CHANNEL_PERMISSION_CATEGORIES as category}
-														<div>
-															<div
-																class="mb-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase"
-															>
-																{category.label()}
-															</div>
-															<div class="space-y-3">
-																{#each category.permissions as perm}
-																	{@const state = channelPermissionState(
-																		selectedOverrideId,
-																		perm.value
-																	)}
-																	<div
-																		class="rounded border border-[var(--stroke)] bg-[var(--bg)] p-3"
-																	>
-																		<div class="flex items-start justify-between gap-4">
-																			<div>
-																				<div class="text-sm font-medium">{perm.label()}</div>
-																				<div class="text-xs text-[var(--muted)]">
-																					{perm.description()}
-																				</div>
-																			</div>
-																			<div
-																				class="flex overflow-hidden rounded border border-[var(--stroke)] text-xs font-semibold"
-																			>
-																				<button
-																					class={`px-2 py-1 transition ${
-																						state === 'deny'
-																							? 'bg-red-500 text-white'
-																							: 'bg-transparent hover:bg-red-500/10'
-																					}`}
-																					onclick={() =>
-																						setChannelPermission(
-																							selectedOverrideId,
-																							perm.value,
-																							'deny'
-																						)}
-																					aria-label={m.permission_deny()}
-																					title={m.permission_deny()}
-																				>
-																					<X class="h-4 w-4" stroke-width={2} />
-																				</button>
-																				<button
-																					class={`px-2 py-1 transition ${
-																						state === 'inherit'
-																							? 'bg-[var(--panel)]'
-																							: 'bg-transparent hover:bg-[var(--panel)]/60'
-																					}`}
-																					onclick={() =>
-																						setChannelPermission(
-																							selectedOverrideId,
-																							perm.value,
-																							'inherit'
-																						)}
-																					aria-label={m.permission_default()}
-																					title={m.permission_default()}
-																				>
-																					<Slash class="h-4 w-4" stroke-width={2} />
-																				</button>
-																				<button
-																					class={`px-2 py-1 transition ${
-																						state === 'allow'
-																							? 'bg-green-500 text-white'
-																							: 'bg-transparent hover:bg-green-500/10'
-																					}`}
-																					onclick={() =>
-																						setChannelPermission(
-																							selectedOverrideId,
-																							perm.value,
-																							'allow'
-																						)}
-																					aria-label={m.permission_allow()}
-																					title={m.permission_allow()}
-																				>
-																					<Check class="h-4 w-4" stroke-width={2} />
-																				</button>
-																			</div>
-																		</div>
-																	</div>
-																{/each}
-															</div>
-														</div>
-													{/each}
-												</div>
-											{:else}
-												<p class="text-sm text-[var(--muted)]">
-													{m.channel_permissions_select_override_prompt()}
-												</p>
-											{/if}
-										</div>
-									{:else if !editChannelPermissionsLoading}
-										<p class="text-sm text-[var(--muted)]">
-											{m.channel_permissions_empty()}
-										</p>
-									{/if}
-								</div>
-                                                        </div>
-                                                {/if}
-                                        </div>
-                                        <div class="flex justify-end gap-2 border-t border-[var(--stroke)] bg-[var(--panel)] p-4">
-                                                <button
-                                                        class="rounded-md border border-[var(--stroke)] px-3 py-1"
-                                                        onclick={closeEditChannel}
-                                                >
-                                                        {m.cancel()}
-                                                </button>
-                                                <button
-                                                        class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:cursor-not-allowed disabled:opacity-50"
-                                                        onclick={saveEditChannel}
-                                                        disabled={!editChannelHasChanges || editChannelSaving}
-                                                >
-                                                        {m.save()}
-                                                </button>
-                                        </div>
-                                </section>
-                        </div>
-                </div>
-        {/if}
+										{/each}
+									</div>
+								{:else}
+									<p class="text-sm text-[var(--muted)]">
+										{m.channel_permissions_select_override_prompt()}
+									</p>
+								{/if}
+							</div>
+						{:else if !editChannelPermissionsLoading}
+							<p class="text-sm text-[var(--muted)]">
+								{m.channel_permissions_empty()}
+							</p>
+						{/if}
+					</div>
+				</div>
+			{/if}
 
-	{#if editingCategory}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (editingCategory = null)}
+			<svelte:fragment slot="footer">
+				<div class="flex justify-end gap-2">
+                                        <button
+                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                onclick={() => {
+                                                        dismissPanel?.();
+                                                        closeEditChannel();
+                                                }}
+                                        >
+                                                {m.cancel()}
+                                        </button>
+					<button
+						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)] disabled:cursor-not-allowed disabled:opacity-50"
+						onclick={saveEditChannel}
+						disabled={!editChannelHasChanges || editChannelSaving}
+					>
+						{m.save()}
+					</button>
+				</div>
+			</svelte:fragment>
+		</SettingsPanel>
+	{/if}
+
+        {#if editingCategory}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                editingCategory = null;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') editingCategory = null;
 				if (e.key === 'Enter') saveEditCategory();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
-			<div
-				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<div class="mb-2 text-sm font-medium">{m.edit_category()}</div>
-				{#if editCategoryError}
-					<div class="mb-2 text-sm text-red-500">{editCategoryError}</div>
-				{/if}
-				<input
-					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					placeholder={m.category_name()}
-					bind:value={editCategoryName}
-				/>
-				<div class="flex justify-end gap-2">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-3 py-1"
-						onclick={() => (editingCategory = null)}>{m.cancel()}</button
-					>
-					<button
-						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-						onclick={saveEditCategory}>{m.save()}</button
-					>
-				</div>
-			</div>
-		</div>
-	{/if}
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+                        <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                                <div class="relative">
+                                        <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
+                                        <div
+                                                class="panel relative z-10 w-72 p-3"
+                                                role="document"
+                                                tabindex="-1"
+                                                onpointerdown={(e) => e.stopPropagation()}
+                                        >
+                                                <div class="mb-2 text-sm font-medium">{m.edit_category()}</div>
+                                                {#if editCategoryError}
+                                                        <div class="mb-2 text-sm text-red-500">{editCategoryError}</div>
+                                                {/if}
+                                                <input
+                                                        class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                        placeholder={m.category_name()}
+                                                        bind:value={editCategoryName}
+                                                />
+                                                <div class="flex justify-end gap-2">
+                                                        <button
+                                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                                onclick={() => (editingCategory = null)}>{m.cancel()}</button
+                                                        >
+                                                        <button
+                                                                class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                                onclick={saveEditCategory}>{m.save()}</button
+                                                        >
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 
-	{#if creatingChannel}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creatingChannel = false)}
+        {#if creatingChannel}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creatingChannel = false;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingChannel = false;
 				if (e.key === 'Enter') createChannel();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
-			<div
-				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
-				{#if channelError}
-					<div class="mb-2 text-sm text-red-500">{channelError}</div>
-				{/if}
-				<input
-					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					placeholder={m.channel_name()}
-					bind:value={newChannelName}
-				/>
-				{#if creatingChannelParent}
-					<div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
-				{/if}
-				<label class="mb-2 flex items-center gap-2 text-sm">
-					<input type="checkbox" bind:checked={newChannelPrivate} />
-					{m.channel_private()}
-				</label>
-				<div class="flex justify-end gap-2">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-3 py-1"
-						onclick={() => (creatingChannel = false)}>{m.cancel()}</button
-					>
-					<button
-						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-						onclick={createChannel}>{m.create()}</button
-					>
-				</div>
-			</div>
-		</div>
-	{/if}
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+                        <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                                <div class="relative">
+                                        <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
+                                        <div
+                                                class="panel relative z-10 w-72 p-3"
+                                                role="document"
+                                                tabindex="-1"
+                                                onpointerdown={(e) => e.stopPropagation()}
+                                        >
+                                                <div class="mb-2 text-sm font-medium">{m.new_channel()}</div>
+                                                {#if channelError}
+                                                        <div class="mb-2 text-sm text-red-500">{channelError}</div>
+                                                {/if}
+                                                <input
+                                                        class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                        placeholder={m.channel_name()}
+                                                        bind:value={newChannelName}
+                                                />
+                                                <div class="mb-2">
+                                                        <div class="mb-1 text-xs uppercase tracking-wide text-[var(--muted)]">
+                                                                {m.channel_type()}
+                                                        </div>
+                                                        <div class="flex flex-col gap-1">
+                                                                <label class="flex items-center gap-2 text-sm">
+                                                                        <input
+                                                                                type="radio"
+                                                                                bind:group={newChannelType}
+                                                                                value="text"
+                                                                        />
+                                                                        {m.channel_type_text()}
+                                                                </label>
+                                                                <label class="flex items-center gap-2 text-sm">
+                                                                        <input
+                                                                                type="radio"
+                                                                                bind:group={newChannelType}
+                                                                                value="voice"
+                                                                        />
+                                                                        {m.channel_type_voice()}
+                                                                </label>
+                                                        </div>
+                                                        <div class="mt-1 text-xs text-[var(--muted)]">
+                                                                {m.channel_voice_hint()}
+                                                        </div>
+                                                </div>
+                                                {#if creatingChannelParent}
+                                                        <div class="mb-2 text-xs text-[var(--muted)]">in category #{creatingChannelParent}</div>
+                                                {/if}
+                                                <label class="mb-2 flex items-center gap-2 text-sm">
+                                                        <input type="checkbox" bind:checked={newChannelPrivate} />
+                                                        {m.channel_private()}
+                                                </label>
+                                                <div class="flex justify-end gap-2">
+                                                        <button
+                                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                                onclick={() => (creatingChannel = false)}>{m.cancel()}</button
+                                                        >
+                                                        <button
+                                                                class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                                onclick={createChannel}>{m.create()}</button
+                                                        >
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 
-	{#if creatingCategory}
-		<div
-			class="fixed inset-0 z-50"
-			role="dialog"
-			tabindex="0"
-			onpointerdown={() => (creatingCategory = false)}
+        {#if creatingCategory}
+                <div
+                        class="fixed inset-0 z-50"
+                        role="dialog"
+                        tabindex="0"
+                        onclick={(event) => {
+                                if (event.target !== event.currentTarget) return;
+                                creatingCategory = false;
+                        }}
 			onkeydown={(e) => {
 				if (e.key === 'Escape') creatingCategory = false;
 				if (e.key === 'Enter') createCategory();
 			}}
 		>
-			<div class="absolute inset-0 bg-black/40"></div>
-			<div
-				class="panel absolute top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2 p-3"
-				role="document"
-				tabindex="-1"
-				onpointerdown={(e) => e.stopPropagation()}
-			>
-				<div class="mb-2 text-sm font-medium">{m.new_category()}</div>
-				{#if categoryError}
-					<div class="mb-2 text-sm text-red-500">{categoryError}</div>
-				{/if}
-				<input
-					class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
-					placeholder={m.category_name()}
-					bind:value={newCategoryName}
-				/>
-				<div class="flex justify-end gap-2">
-					<button
-						class="rounded-md border border-[var(--stroke)] px-3 py-1"
-						onclick={() => (creatingCategory = false)}>{m.cancel()}</button
-					>
-					<button
-						class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
-						onclick={createCategory}>{m.create()}</button
-					>
-				</div>
-			</div>
-		</div>
-	{/if}
+                        <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+                        <div class="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                                <div class="relative">
+                                        <div class="pointer-events-none absolute inset-0 z-0 rounded-lg bg-[var(--panel)]/30 backdrop-blur-sm"></div>
+                                        <div
+                                                class="panel relative z-10 w-72 p-3"
+                                                role="document"
+                                                tabindex="-1"
+                                                onpointerdown={(e) => e.stopPropagation()}
+                                        >
+                                                <div class="mb-2 text-sm font-medium">{m.new_category()}</div>
+                                                {#if categoryError}
+                                                        <div class="mb-2 text-sm text-red-500">{categoryError}</div>
+                                                {/if}
+                                                <input
+                                                        class="mb-2 w-full rounded-md border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2"
+                                                        placeholder={m.category_name()}
+                                                        bind:value={newCategoryName}
+                                                />
+                                                <div class="flex justify-end gap-2">
+                                                        <button
+                                                                class="rounded-md border border-[var(--stroke)] px-3 py-1"
+                                                                onclick={() => (creatingCategory = false)}>{m.cancel()}</button
+                                                        >
+                                                        <button
+                                                                class="rounded-md bg-[var(--brand)] px-3 py-1 text-[var(--bg)]"
+                                                                onclick={createCategory}>{m.create()}</button
+                                                        >
+                                                </div>
+                                        </div>
+                                </div>
+                        </div>
+                </div>
+        {/if}
 </div>
+
+<style lang="postcss">
+        .channel-scroll {
+                scrollbar-gutter: stable;
+                scrollbar-width: thin;
+                scrollbar-color: transparent transparent;
+        }
+
+        .channel-scroll:hover {
+                scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        }
+
+        .channel-scroll::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+                background: transparent;
+        }
+
+        .channel-scroll::-webkit-scrollbar-button {
+                width: 0;
+                height: 0;
+                display: none;
+        }
+
+        .channel-scroll::-webkit-scrollbar-thumb {
+                background-color: transparent;
+                border-radius: 9999px;
+        }
+
+        .channel-scroll:hover::-webkit-scrollbar-thumb {
+                background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .channel-scroll::-webkit-scrollbar-track {
+                background: transparent;
+        }
+</style>

@@ -6,11 +6,17 @@
                 searchOpen,
                 searchAnchor,
                 selectedChannelId,
-                channelsByGuild
+                channelsByGuild,
+                channelReady,
+                lastChannelByGuild,
+                messageJumpRequest
         } from '$lib/stores/appState';
         import { tick } from 'svelte';
         import { m } from '$lib/paraglide/messages.js';
         import { Search } from 'lucide-svelte';
+        import { tooltip } from '$lib/actions/tooltip';
+        import MessageAttachments from '../chat/MessageAttachments.svelte';
+        import type { MessageAttachment } from '../chat/messageAttachments';
 
         type FilterType = 'from' | 'mentions' | 'has';
         interface TextFilterToken {
@@ -357,9 +363,37 @@
                 }
         }
 
+        function normalizeId(value: any): string | null {
+                if (value == null) return null;
+                const str = String(value);
+                const digits = str.replace(/[^0-9]/g, '');
+                return digits || str;
+        }
+
         function openMessage(m: DtoMessage) {
-                if (!m.channel_id) return;
-                selectedChannelId.set(String(m.channel_id));
+                const channelId = normalizeId((m as any)?.channel_id);
+                const messageId = normalizeId((m as any)?.id);
+                if (!channelId || !messageId) return;
+
+                selectedChannelId.set(channelId);
+                channelReady.set(true);
+
+                const gid = $selectedGuildId ? String($selectedGuildId) : '';
+                if (gid) {
+                        lastChannelByGuild.update((map) => ({ ...map, [gid]: channelId }));
+                        if (typeof localStorage !== 'undefined') {
+                                try {
+                                        const raw = localStorage.getItem('lastChannels');
+                                        const saved = raw ? JSON.parse(raw) : {};
+                                        saved[gid] = channelId;
+                                        localStorage.setItem('lastChannels', JSON.stringify(saved));
+                                } catch {
+                                        /* ignore */
+                                }
+                        }
+                }
+
+                messageJumpRequest.set({ channelId, messageId });
                 searchOpen.set(false);
         }
 
@@ -420,7 +454,8 @@
                 class="fixed inset-0 z-[1000]"
                 role="button"
                 tabindex="0"
-                onpointerdown={() => {
+                onclick={(event) => {
+                        if (event.target !== event.currentTarget) return;
                         if (pendingFilter) {
                                 closeFilterPrompt();
                         } else if (showKeywordHelp) {
@@ -441,94 +476,100 @@
                         }
                 }}
         >
+                <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
                 <div
-                        bind:this={panelEl}
-                        class="panel absolute w-[min(90vw,720px)] p-5"
-                        role="dialog"
-                        tabindex="-1"
+                        class="absolute z-10"
                         style={`left:${posX}px; top:${posY}px`}
-                        onpointerdown={(e) => e.stopPropagation()}
                 >
-                        <div class="flex flex-col gap-3">
+                        <div class="relative">
+                                <div class="pointer-events-none absolute inset-0 z-0 rounded-xl bg-[var(--panel)]/30 backdrop-blur-sm"></div>
                                 <div
-                                        class="relative"
-                                        onpointerdown={(event) => {
-                                                if (
-                                                        showKeywordHelp &&
-                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help') &&
-                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help-button')
-                                                ) {
-                                                        showKeywordHelp = false;
-                                                }
-                                        }}
+                                        bind:this={panelEl}
+                                        class="panel relative z-10 w-[min(90vw,720px)] p-5"
+                                        role="dialog"
+                                        tabindex="-1"
+                                        onpointerdown={(e) => e.stopPropagation()}
                                 >
-                                        <div
-                                                class="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm shadow-sm transition focus-within:border-[var(--brand)] focus-within:shadow-[0_0_0_2px_var(--brand)]"
-                                        >
-                                                <Search class="h-5 w-5 text-[var(--muted)]" stroke-width={2} />
-                                                {#if authorFilter}
-                                                        <span
-                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                        <div class="flex flex-col gap-3">
+                                                <div
+                                                        class="relative"
+                                                        onpointerdown={(event) => {
+                                                                if (
+                                                                        showKeywordHelp &&
+                                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help') &&
+                                                                        !(event.target as HTMLElement | null)?.closest('#search-filter-help-button')
+                                                                ) {
+                                                                        showKeywordHelp = false;
+                                                                }
+                                                        }}
+                                                >
+                                                        <div
+                                                                class="flex min-h-12 flex-wrap items-center gap-2 rounded-lg border border-[var(--stroke)] bg-[var(--panel-strong)] px-3 py-2 text-sm shadow-sm transition focus-within:border-[var(--brand)] focus-within:shadow-[0_0_0_2px_var(--brand)]"
                                                         >
-                                                                <span class="font-semibold text-[var(--muted)]">
-                                                                        {m.search_filter_from()}
-                                                                </span>
-                                                                <span>{authorFilter.display}</span>
-                                                                <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
-                                                                        type="button"
-                                                                        aria-label={m.search_filter_remove()}
-                                                                        onclick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                removeAuthor();
-                                                                        }}
-                                                                >
-                                                                        ×
-                                                                </button>
-                                                        </span>
-                                                {/if}
-                                                {#each mentionFilters as mention, index}
-                                                        <span
-                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
-                                                        >
-                                                                <span class="font-semibold text-[var(--muted)]">
-                                                                        {m.search_filter_mentions()}
-                                                                </span>
-                                                                <span>{mention.display}</span>
-                                                                <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
-                                                                        type="button"
-                                                                        aria-label={m.search_filter_remove()}
-                                                                        onclick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                removeMention(index);
-                                                                        }}
-                                                                >
-                                                                        ×
-                                                                </button>
-                                                        </span>
-                                                {/each}
-                                                {#each hasSelected as option}
-                                                        <span
-                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
-                                                        >
-                                                                <span class="font-semibold text-[var(--muted)]">
-                                                                        {m.search_filter_has()}
-                                                                </span>
-                                                                <span>{hasLabel(option)}</span>
-                                                                <button
-                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
-                                                                        type="button"
-                                                                        aria-label={m.search_filter_remove()}
-                                                                        onclick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                removeHas(option);
-                                                                        }}
-                                                                >
-                                                                        ×
-                                                                </button>
-                                                        </span>
-                                                {/each}
+                                                                <Search class="h-5 w-5 text-[var(--muted)]" stroke-width={2} />
+                                                                {#if authorFilter}
+                                                                        <span
+                                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        >
+                                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                                        {m.search_filter_from()}
+                                                                                </span>
+                                                                                <span>{authorFilter.display}</span>
+                                                                                <button
+                                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+                                                                                        type="button"
+                                                                                        aria-label={m.search_filter_remove()}
+                                                                                        onclick={(event) => {
+                                                                                                event.stopPropagation();
+                                                                                                removeAuthor();
+                                                                                        }}
+                                                                                >
+                                                                                        ×
+                                                                                </button>
+                                                                        </span>
+                                                                {/if}
+                                                                {#each mentionFilters as mention, index}
+                                                                        <span
+                                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        >
+                                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                                        {m.search_filter_mentions()}
+                                                                                </span>
+                                                                                <span>{mention.display}</span>
+                                                                                <button
+                                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+                                                                                        type="button"
+                                                                                        aria-label={m.search_filter_remove()}
+                                                                                        onclick={(event) => {
+                                                                                                event.stopPropagation();
+                                                                                                removeMention(index);
+                                                                                        }}
+                                                                                >
+                                                                                        ×
+                                                                                </button>
+                                                                        </span>
+                                                                {/each}
+                                                                {#each hasSelected as option}
+                                                                        <span
+                                                                                class="flex items-center gap-1 rounded-full bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]"
+                                                                        >
+                                                                                <span class="font-semibold text-[var(--muted)]">
+                                                                                        {m.search_filter_has()}
+                                                                                </span>
+                                                                                <span>{hasLabel(option)}</span>
+                                                                                <button
+                                                                                        class="rounded-full bg-transparent p-1 text-[var(--muted)] hover:bg-[var(--panel-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+                                                                                        type="button"
+                                                                                        aria-label={m.search_filter_remove()}
+                                                                                        onclick={(event) => {
+                                                                                                event.stopPropagation();
+                                                                                                removeHas(option);
+                                                                                        }}
+                                                                                >
+                                                                                        ×
+                                                                                </button>
+                                                                        </span>
+                                                                {/each}
                                                 {#if pendingFilter === 'from' || pendingFilter === 'mentions'}
                                                         <div class="flex items-center gap-2 rounded-md border border-[var(--stroke)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--fg)]">
                                                                 <span class="font-semibold text-[var(--muted)]">
@@ -723,7 +764,7 @@
                                                                                                 </span>
                                                                                         {/if}
                                                                                 </div>
-                                                                                <div class="text-xs text-[var(--muted)]" title={formatMsgFull(message)}>
+                                                                                <div class="text-xs text-[var(--muted)]" use:tooltip={() => formatMsgFull(message)}>
                                                                                         {formatMsgTime(message)}
                                                                                 </div>
                                                                                 {#if resolveChannelName(message.channel_id)}
@@ -732,17 +773,21 @@
                                                                                         </div>
                                                                                 {/if}
                                                                         </div>
-                                                                        <div class="mt-1 whitespace-pre-line text-sm leading-snug text-[var(--fg)]">
-                                                                                {message.content?.trim() || m.search_result_no_content()}
-                                                                        </div>
-                                                                        {#if message.attachments && message.attachments.length > 0}
-                                                                                <div class="mt-2 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-                                                                                        <span>
-                                                                                                {m.search_result_attachments({
-                                                                                                        count: String(message.attachments.length)
-                                                                                                })}
-                                                                                        </span>
+                                                                        {#if message.content?.trim()}
+                                                                                <div class="mt-1 whitespace-pre-line text-sm leading-snug text-[var(--fg)]">
+                                                                                        {message.content?.trim() ?? ''}
                                                                                 </div>
+                                                                        {:else if !message.attachments?.length}
+                                                                                <div class="mt-1 whitespace-pre-line text-sm leading-snug text-[var(--fg)]">
+                                                                                        {m.search_result_no_content()}
+                                                                                </div>
+                                                                        {/if}
+                                                                        {#if message.attachments?.length}
+                                                                                <MessageAttachments
+                                                                                        attachments={(message.attachments ?? []) as MessageAttachment[]}
+                                                                                        messageId={message.id}
+                                                                                        compact={true}
+                                                                                />
                                                                         {/if}
                                                                 </div>
                                                         </div>
@@ -800,6 +845,8 @@
                                                 </button>
                                         </div>
                                 {/if}
+                        </div>
+                                </div>
                         </div>
                 </div>
         </div>

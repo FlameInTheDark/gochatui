@@ -64,12 +64,11 @@
 </script>
 
 <div>
-	<button
-		class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
-		onclick={() => (open = true)}
-		title={m.new_dm()}
-		aria-label={m.new_dm()}
-	>
+        <button
+                class="grid h-8 w-8 place-items-center rounded-md border border-[var(--stroke)] hover:bg-[var(--panel)]"
+                onclick={() => (open = true)}
+                aria-label={m.new_dm()}
+        >
                 <MessageCirclePlus class="h-4 w-4" stroke-width={2} />
         </button>
 	{#if open}
