@@ -1341,7 +1341,7 @@
 <svelte:window onkeydown={(e) => editingChannel && e.key === 'Escape' && closeEditChannel()} />
 
 <div
-	class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-hidden border-r border-[var(--stroke)]"
+        class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)]"
 >
         <div class="border-b border-[var(--stroke)] p-2">
                 <input
@@ -1351,7 +1351,7 @@
 		/>
 	</div>
         <div
-                class="scroll-area channel-scroll flex-1 space-y-2 overflow-y-auto p-2"
+                class="scroll-area channel-scroll flex-1 space-y-2 overflow-x-visible overflow-y-auto p-2"
                 role="region"
                 use:customContextMenuTarget
                 oncontextmenu={(e: MouseEvent) => {

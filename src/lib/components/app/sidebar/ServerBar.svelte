@@ -606,7 +606,7 @@
                         <User class="h-5 w-5" stroke-width={2} />
                 </button>
 	</div>
-        <div class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
+        <div class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto pt-1">
 		<div
 			class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 				topDropIndex === 0 ? 'opacity-80' : 'opacity-0'

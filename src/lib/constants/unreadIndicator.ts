@@ -1,5 +1,5 @@
 export const SERVER_UNREAD_BADGE_CLASSES =
-	'pointer-events-none absolute left-0 top-1/2 h-6 w-1 -translate-x-[calc(100%+0.5rem)] -translate-y-1/2 rounded-r-full bg-[var(--brand)] shadow-[0_0_0_1px_var(--panel-strong)]';
+        'pointer-events-none absolute left-0 top-1/2 h-6 w-1 -translate-x-[calc(100%+1rem)] -translate-y-1/2 rounded-r-full bg-[var(--brand)] shadow-[0_0_0_1px_var(--panel-strong)]';
 
 export const FOLDER_UNREAD_BADGE_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
 
