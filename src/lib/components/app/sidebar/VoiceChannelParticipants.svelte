@@ -56,6 +56,64 @@
                 );
         }
 
+        function fallbackInitial(label: string): string {
+                return label.trim().charAt(0).toUpperCase() || '?';
+        }
+
+        function displayNameFor(
+                userId: string | null,
+                isSelf: boolean,
+                member: DtoMember | null,
+                presenceEntry: any
+        ): string {
+                if (isSelf) {
+                        const self = $me;
+                        const candidates = [
+                                (self as any)?.display_name,
+                                (self as any)?.global_name,
+                                (self as any)?.name,
+                                (self as any)?.username
+                        ];
+                        for (const candidate of candidates) {
+                                if (typeof candidate === 'string' && candidate.trim()) {
+                                        return candidate.trim();
+                                }
+                        }
+                        if (userId) {
+                                return `${m.user_default_name()} ${userId}`;
+                        }
+                        return m.user_default_name();
+                }
+
+                if (member) {
+                        const label = memberPrimaryName(member);
+                        if (label) return label;
+                }
+
+                if (presenceEntry) {
+                        const candidates = [
+                                presenceEntry?.displayName,
+                                presenceEntry?.name,
+                                presenceEntry?.username,
+                                presenceEntry?.user?.display_name,
+                                presenceEntry?.user?.global_name,
+                                presenceEntry?.user?.name,
+                                presenceEntry?.user?.username
+                        ];
+                        for (const candidate of candidates) {
+                                if (typeof candidate === 'string' && candidate.trim()) {
+                                        return candidate.trim();
+                                }
+                        }
+                }
+
+                if (userId) {
+                        return `${m.user_default_name()} ${userId}`;
+                }
+
+                return m.user_default_name();
+        }
+
         function getParticipants(): ParticipantEntry[] {
                 const targetChannel = normalizedId(props.channelId);
                 if (!targetChannel) return [];
@@ -76,16 +134,23 @@
                         const normalized = normalizedId(userId);
                         if (!normalized || participantMap.has(normalized)) return;
                         const member = findMember(normalized);
-                        const displayName = memberPrimaryName(member) || `User ${normalized}`;
-                        const avatarUrl = resolveAvatarUrl(member?.user, 64);
-                        const initial = memberInitial(member);
+                        const presenceEntry = presence[normalized] as any;
+                        const isSelf = normalized === currentUserId;
+                        const displayName = displayNameFor(normalized, isSelf, member, presenceEntry);
+                        const avatarUrl =
+                                resolveAvatarUrl(
+                                        isSelf ? $me : null,
+                                        member?.user ?? member ?? undefined,
+                                        presenceEntry?.user ?? presenceEntry ?? undefined
+                                ) ?? null;
+                        const initial = member ? memberInitial(member) : fallbackInitial(displayName);
                         const settings = remoteSettings[normalized] ?? { volume: 1, muted: false };
                         participantMap.set(normalized, {
                                 userId: normalized,
                                 displayName,
                                 avatarUrl,
                                 initial,
-                                isSelf: normalized === currentUserId,
+                                isSelf,
                                 speaking: speakingSet.has(normalized),
                                 canControl: isConnected && normalized !== currentUserId,
                                 volume: settings.volume ?? 1,
