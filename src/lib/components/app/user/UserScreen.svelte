@@ -1814,7 +1814,7 @@
                                                                         <div class={`group relative ${isLoading ? 'opacity-70' : ''}`}>
                                                                                 <button
                                                                                         type="button"
-                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pl-3 pr-12 text-left transition ${
+                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pl-6 pr-12 text-left transition ${
                                                                                                 isActive
                                                                                                         ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
