@@ -412,14 +412,12 @@
         function channelRowClasses(
                 channelId: string,
                 channel: DtoChannel,
-                channelUnread: boolean,
-                mentionCount: number,
+                _channelUnread: boolean,
+                _mentionCount: number,
                 voiceState?: 'none' | 'connecting' | 'connected'
         ): string {
-                const hasBadge = channelUnread || mentionCount > 0;
                 const classes = [
-                        'relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)]',
-                        hasBadge ? 'pl-6' : 'pl-3'
+                        'relative flex cursor-pointer items-center rounded py-1 pl-3 pr-2 hover:bg-[var(--panel)]'
                 ];
                 const state = voiceState ?? voiceStateForChannel(channelId, channel);
                 const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
@@ -1343,7 +1341,7 @@
 <svelte:window onkeydown={(e) => editingChannel && e.key === 'Escape' && closeEditChannel()} />
 
 <div
-	class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-hidden border-r border-[var(--stroke)]"
+        class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)]"
 >
         <div class="border-b border-[var(--stroke)] p-2">
                 <input
@@ -1353,7 +1351,7 @@
 		/>
 	</div>
         <div
-                class="scroll-area channel-scroll flex-1 space-y-2 overflow-y-auto p-2"
+                class="scroll-area channel-scroll flex-1 space-y-2 overflow-x-visible overflow-y-auto p-2"
                 role="region"
                 use:customContextMenuTarget
                 oncontextmenu={(e: MouseEvent) => {
@@ -1559,11 +1557,7 @@
                                                                                         }}
                                                                                 >
                                                                                         <div class="relative flex w-full items-center gap-2">
-                                                                                                <div
-                                                                                                        class={`relative flex min-w-0 flex-1 items-center gap-2 truncate ${
-                                                                                                                nestedChannelUnread || nestedMentionCount > 0 ? 'pl-6' : 'pl-3'
-                                                                                                        }`}
-                                                                                                >
+                                                                                                <div class="relative flex min-w-0 flex-1 items-center gap-2 truncate pl-3">
                                                                                                         {#if nestedMentionCount > 0}
                                                                                                                 <span class="sr-only">{m.unread_mentions_indicator({ count: nestedMentionCount })}</span>
                                                                                                                 <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedMentionCount)}</span>
