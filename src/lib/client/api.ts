@@ -8,6 +8,7 @@ import {
         SearchApi,
         UploadApi,
         UserApi,
+        VoiceApi,
         SearchApiFactory
 } from '$lib/api';
 import axios, { type AxiosInstance } from 'axios';
@@ -32,6 +33,7 @@ export type ApiGroup = {
         search: ReturnType<typeof SearchApiFactory>;
         upload: UploadApi;
         user: UserApi;
+        voice: VoiceApi;
 };
 
 export function createApi(
@@ -231,6 +233,7 @@ export function createApi(
                 message: new MessageApi(config, base, ax),
                 search,
                 upload: new UploadApi(config, base, ax),
-                user: new UserApi(config, base, ax)
+                user: new UserApi(config, base, ax),
+                voice: new VoiceApi(config, base, ax)
         };
 }

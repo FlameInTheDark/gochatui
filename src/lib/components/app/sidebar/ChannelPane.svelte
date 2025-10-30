@@ -19,13 +19,14 @@
 		myGuildRoleIdsByGuild,
 		channelRolesByGuild
 	} from '$lib/stores/appState';
-	import type {
-		DtoChannel,
-		DtoMember,
-		DtoRole,
-		GuildChannelOrder,
-		GuildChannelRolePermission
-	} from '$lib/api';
+        import type {
+                DtoChannel,
+                DtoMember,
+                DtoRole,
+                GuildChannelOrder,
+                GuildChannelRolePermission,
+                VoiceRegion
+        } from '$lib/api';
         import { subscribeWS, wsEvent } from '$lib/client/ws';
         import { contextMenu, copyToClipboard } from '$lib/stores/contextMenu';
         import type { ContextMenuActionItem, ContextMenuItem } from '$lib/stores/contextMenu';
@@ -111,13 +112,19 @@
 	let editChannelOrderedOverrideRoleIds = $state<string[]>([]);
 	let editChannelPermissionsLoading = $state(false);
 	let editChannelPermissionsError: string | null = $state(null);
-	let editChannelInitialName = $state('');
-	let editChannelInitialTopic = $state('');
-	let editChannelInitialPrivate = $state(false);
-	let editChannelSaving = $state(false);
-	let editCategoryName = $state('');
-	let editCategoryError: string | null = $state(null);
-	let dragging: { id: string; parent: string | null; type: number } | null = null;
+        let editChannelInitialName = $state('');
+        let editChannelInitialTopic = $state('');
+        let editChannelInitialPrivate = $state(false);
+        let editChannelVoiceRegion = $state('auto');
+        let editChannelInitialVoiceRegion = $state('auto');
+        let editChannelSaving = $state(false);
+        let editCategoryName = $state('');
+        let editCategoryError: string | null = $state(null);
+        let dragging: { id: string; parent: string | null; type: number } | null = null;
+        let voiceRegions = $state<VoiceRegion[] | null>(null);
+        let voiceRegionsLoading = $state(false);
+        let voiceRegionsError: string | null = $state(null);
+        let voiceRegionsRequestToken = 0;
 	let dragIndicator = $state<{
 		target: string | null;
 		parent: string | null;
@@ -285,6 +292,54 @@
                 if (state.status === 'connecting') return 'connecting';
                 if (state.status === 'connected') return 'connected';
                 return 'none';
+        }
+
+        function normalizeVoiceRegion(value: unknown): string {
+                if (typeof value === 'string') {
+                        const trimmed = value.trim();
+                        if (trimmed) return trimmed;
+                }
+                return 'auto';
+        }
+
+        function sanitizeVoiceRegions(list: VoiceRegion[] | null | undefined): VoiceRegion[] {
+                if (!Array.isArray(list)) return [];
+                const result: VoiceRegion[] = [];
+                for (const region of list) {
+                        const id = typeof region?.id === 'string' ? region.id : '';
+                        if (!id) continue;
+                        const name =
+                                typeof region?.name === 'string' && region.name.trim()
+                                        ? region.name
+                                        : id;
+                        result.push({ id, name });
+                }
+                return result;
+        }
+
+        async function ensureVoiceRegionsLoaded(force = false) {
+                if (voiceRegionsLoading) return;
+                if (!force && voiceRegions && voiceRegions.length) return;
+                const requestId = ++voiceRegionsRequestToken;
+                voiceRegionsLoading = true;
+                voiceRegionsError = null;
+                try {
+                        const response = await auth.api.voice.voiceRegionsGet();
+                        if (voiceRegionsRequestToken !== requestId) return;
+                        const data = (response as any)?.data ?? response;
+                        const list = (data?.regions ?? data ?? []) as VoiceRegion[];
+                        voiceRegions = sanitizeVoiceRegions(list);
+                } catch (error: any) {
+                        if (voiceRegionsRequestToken !== requestId) return;
+                        voiceRegionsError =
+                                error?.response?.data?.message ??
+                                error?.message ??
+                                m.channel_voice_region_error();
+                } finally {
+                        if (voiceRegionsRequestToken === requestId) {
+                                voiceRegionsLoading = false;
+                        }
+                }
         }
 
         $effect(() => {
@@ -911,32 +966,39 @@
 		contextMenu.openFromEvent(e, items);
 	}
 
-	function openEditChannel(ch: DtoChannel) {
-		editingChannel = ch;
-		const name = ch.name ?? '';
-		const topic = (ch as any).topic ?? '';
-		const isPrivate = !!(ch as any).private;
-		editChannelName = name;
-		editChannelTopic = topic;
-		editChannelPrivate = isPrivate;
-		editChannelInitialName = name;
-		editChannelInitialTopic = topic;
-		editChannelInitialPrivate = isPrivate;
-		editChannelError = null;
-		editChannelTab = 'overview';
-		editChannelRoleToAdd = '';
-		editChannelPermissionsError = null;
-		editChannelOverrides = {};
-		editChannelOverridesInitial = {};
-		editChannelSelectedOverride = null;
-		editChannelOrderedOverrideRoleIds = [];
-		editChannelRoles = [];
-		editChannelSaving = false;
-		const channelId = String((ch as any)?.id ?? '');
-		if (channelId) {
-			loadChannelPermissions(channelId);
-		}
-	}
+        function openEditChannel(ch: DtoChannel) {
+                editingChannel = ch;
+                const name = ch.name ?? '';
+                const topic = (ch as any).topic ?? '';
+                const isPrivate = !!(ch as any).private;
+                const isVoice = isVoiceChannel(ch);
+                const voiceRegion = normalizeVoiceRegion((ch as any)?.voice_region);
+                editChannelName = name;
+                editChannelTopic = topic;
+                editChannelPrivate = isPrivate;
+                editChannelInitialName = name;
+                editChannelInitialTopic = topic;
+                editChannelInitialPrivate = isPrivate;
+                editChannelVoiceRegion = isVoice ? voiceRegion : 'auto';
+                editChannelInitialVoiceRegion = isVoice ? voiceRegion : 'auto';
+                editChannelError = null;
+                editChannelTab = 'overview';
+                editChannelRoleToAdd = '';
+                editChannelPermissionsError = null;
+                editChannelOverrides = {};
+                editChannelOverridesInitial = {};
+                editChannelSelectedOverride = null;
+                editChannelOrderedOverrideRoleIds = [];
+                editChannelRoles = [];
+                editChannelSaving = false;
+                const channelId = String((ch as any)?.id ?? '');
+                if (isVoice) {
+                        void ensureVoiceRegionsLoaded();
+                }
+                if (channelId) {
+                        loadChannelPermissions(channelId);
+                }
+        }
 
 	function channelPermissionState(roleId: string, value: number): 'deny' | 'inherit' | 'allow' {
 		const override = editChannelOverrides[roleId];
@@ -1050,14 +1112,20 @@
 		return next;
 	}
 
-	function hasEditChannelChanges(): boolean {
-		if (!editingChannel) return false;
-		if (editChannelName !== editChannelInitialName) return true;
-		if (editChannelTopic !== editChannelInitialTopic) return true;
-		if (editChannelPrivate !== editChannelInitialPrivate) return true;
-		const currentIds = Object.keys(editChannelOverrides);
-		const initialIds = Object.keys(editChannelOverridesInitial);
-		if (currentIds.length !== initialIds.length) return true;
+        function hasEditChannelChanges(): boolean {
+                if (!editingChannel) return false;
+                if (editChannelName !== editChannelInitialName) return true;
+                if (editChannelTopic !== editChannelInitialTopic) return true;
+                if (editChannelPrivate !== editChannelInitialPrivate) return true;
+                if (
+                        isVoiceChannel(editingChannel) &&
+                        editChannelVoiceRegion !== editChannelInitialVoiceRegion
+                ) {
+                        return true;
+                }
+                const currentIds = Object.keys(editChannelOverrides);
+                const initialIds = Object.keys(editChannelOverridesInitial);
+                if (currentIds.length !== initialIds.length) return true;
 		for (const roleId of new Set([...currentIds, ...initialIds])) {
 			const current = editChannelOverrides[roleId];
 			const initial = editChannelOverridesInitial[roleId];
@@ -1152,38 +1220,55 @@
 		editChannelPermissionsError = null;
 		editChannelSelectedOverride = null;
 		editChannelOrderedOverrideRoleIds = [];
-		editChannelInitialName = '';
-		editChannelInitialTopic = '';
-		editChannelInitialPrivate = false;
-		editChannelSaving = false;
-	}
+                editChannelInitialName = '';
+                editChannelInitialTopic = '';
+                editChannelInitialPrivate = false;
+                editChannelVoiceRegion = 'auto';
+                editChannelInitialVoiceRegion = 'auto';
+                editChannelSaving = false;
+        }
 
-	async function saveEditChannel() {
-		if (!editingChannel || !$selectedGuildId || editChannelSaving) return;
-		if (!hasEditChannelChanges()) return;
-		const channelId = String((editingChannel as any)?.id ?? '');
-		if (!channelId) return;
-		editChannelSaving = true;
-		try {
-			const shouldPatchChannel =
-				editChannelName !== editChannelInitialName ||
-				editChannelTopic !== editChannelInitialTopic ||
-				editChannelPrivate !== editChannelInitialPrivate;
-			if (shouldPatchChannel) {
-				await auth.api.guild.guildGuildIdChannelChannelIdPatch({
-					guildId: BigInt($selectedGuildId) as any,
-					channelId: BigInt((editingChannel as any).id) as any,
-					guildPatchGuildChannelRequest: {
-						name: editChannelName,
-						topic: editChannelTopic,
-						private: editChannelPrivate
-					} as any
-				});
-			}
-			await saveChannelPermissionOverrides($selectedGuildId, channelId);
-			closeEditChannel();
-			await refreshChannels();
-		} catch (e: any) {
+        async function saveEditChannel() {
+                if (!editingChannel || !$selectedGuildId || editChannelSaving) return;
+                if (!hasEditChannelChanges()) return;
+                const channelId = String((editingChannel as any)?.id ?? '');
+                if (!channelId) return;
+                const currentChannel = editingChannel;
+                const nextVoiceRegion = editChannelVoiceRegion;
+                const initialVoiceRegion = editChannelInitialVoiceRegion;
+                const shouldUpdateVoiceRegion =
+                        isVoiceChannel(currentChannel) && nextVoiceRegion !== initialVoiceRegion;
+                editChannelSaving = true;
+                try {
+                        const shouldPatchChannel =
+                                editChannelName !== editChannelInitialName ||
+                                editChannelTopic !== editChannelInitialTopic ||
+                                editChannelPrivate !== editChannelInitialPrivate;
+                        if (shouldPatchChannel) {
+                                await auth.api.guild.guildGuildIdChannelChannelIdPatch({
+                                        guildId: BigInt($selectedGuildId) as any,
+                                        channelId: BigInt((editingChannel as any).id) as any,
+                                        guildPatchGuildChannelRequest: {
+                                                name: editChannelName,
+                                                topic: editChannelTopic,
+                                                private: editChannelPrivate
+                                        } as any
+                                });
+                        }
+                        if (shouldUpdateVoiceRegion) {
+                                const regionToSend = normalizeVoiceRegion(nextVoiceRegion);
+                                await auth.api.guild.guildGuildIdVoiceChannelIdRegionPatch({
+                                        guildId: BigInt($selectedGuildId) as any,
+                                        channelId: BigInt((currentChannel as any).id) as any,
+                                        guildSetVoiceRegionRequest: {
+                                                region: regionToSend
+                                        } as any
+                                });
+                        }
+                        await saveChannelPermissionOverrides($selectedGuildId, channelId);
+                        closeEditChannel();
+                        await refreshChannels();
+                } catch (e: any) {
 			editChannelError = e?.response?.data?.message ?? e?.message ?? 'Failed to update channel';
 		} finally {
 			if (editingChannel) {
@@ -1596,19 +1681,56 @@
 							bind:value={editChannelName}
 						/>
 					</div>
-					<div>
-						<label for="channel-topic" class="mb-1 block text-sm font-medium">
-							{m.channel_topic()}
-						</label>
-						<input
-							id="channel-topic"
-							class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
-							placeholder={m.channel_topic()}
-							bind:value={editChannelTopic}
-						/>
-					</div>
-				</div>
-			{:else if editChannelTab === 'permissions'}
+                                        <div>
+                                                <label for="channel-topic" class="mb-1 block text-sm font-medium">
+                                                        {m.channel_topic()}
+                                                </label>
+                                                <input
+                                                        id="channel-topic"
+                                                        class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
+                                                        placeholder={m.channel_topic()}
+                                                        bind:value={editChannelTopic}
+                                                />
+                                        </div>
+                                        {#if editingChannel && isVoiceChannel(editingChannel)}
+                                                <div>
+                                                        <label for="channel-voice-region" class="mb-1 block text-sm font-medium">
+                                                                {m.channel_voice_region_label()}
+                                                        </label>
+                                                        <select
+                                                                id="channel-voice-region"
+                                                                class="w-full rounded border border-[var(--stroke)] bg-[var(--panel)] px-3 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:outline-none"
+                                                                bind:value={editChannelVoiceRegion}
+                                                                disabled={voiceRegionsLoading && (!voiceRegions || voiceRegions.length === 0)}
+                                                        >
+                                                                <option value="auto">{m.channel_voice_region_auto()}</option>
+                                                                {#if voiceRegions}
+                                                                        {#each voiceRegions as region (region.id)}
+                                                                                {#if region.id !== 'auto'}
+                                                                                        <option value={region.id}>
+                                                                                                {region.name ?? region.id}
+                                                                                        </option>
+                                                                                {/if}
+                                                                        {/each}
+                                                                {/if}
+                                                        </select>
+                                                        {#if voiceRegionsLoading}
+                                                                <p class="mt-1 text-xs text-[var(--muted)]">{m.loading()}</p>
+                                                        {:else if voiceRegionsError}
+                                                                <div class="mt-1 flex items-center gap-2 text-xs text-[var(--warning)]">
+                                                                        <span>{voiceRegionsError}</span>
+                                                                        <button
+                                                                                class="rounded border border-[var(--stroke)] px-2 py-0.5 text-xs"
+                                                                                onclick={() => ensureVoiceRegionsLoaded(true)}
+                                                                        >
+                                                                                {m.channel_voice_region_retry()}
+                                                                        </button>
+                                                                </div>
+                                                        {/if}
+                                                </div>
+                                        {/if}
+                                </div>
+                        {:else if editChannelTab === 'permissions'}
 				{@const availableRoleOptions = availableRolesForOverrides()}
 				{@const overrideRoleIds = orderedOverrideRoleIds()}
 				<div class="space-y-4">
