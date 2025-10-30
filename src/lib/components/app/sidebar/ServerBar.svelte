@@ -580,7 +580,7 @@
 </script>
 
 <div
-	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-hidden border-r border-[var(--stroke)] p-2"
+	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)] p-2"
 >
         <div class="group relative flex justify-center">
                 <button
@@ -606,7 +606,7 @@
                         <User class="h-5 w-5" stroke-width={2} />
                 </button>
 	</div>
-        <div class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pt-1">
+        <div class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto pt-1">
 		<div
 			class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 				topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
@@ -782,8 +782,8 @@
                                                                 {@const nestedGuildMention = guildMentionCount(nestedGuild.guildId)}
                                                                 {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
                                                                 <div class="group relative flex justify-center">
-                                                                  <button
-                                                                          class={`relative flex h-12 w-12 transform items-center justify-center overflow-hidden rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                        <button
+                                                                                class={`relative flex h-12 w-12 transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                                          isGuildSelected(nestedGuild.guildId)
                                                                                                  ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
                                                                                                  : ''
