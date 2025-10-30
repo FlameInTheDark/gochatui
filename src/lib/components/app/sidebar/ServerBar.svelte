@@ -63,7 +63,7 @@
         const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
         const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
         const UNREAD_INDICATOR_POSITION_CLASSES =
-                'pointer-events-none absolute left-0 top-1/2 z-40 flex w-5 -translate-x-1/2 -translate-y-1/2 justify-center';
+                'pointer-events-none absolute left-0 top-1/2 z-40 flex w-0 -translate-y-1/2 justify-center';
         const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
 
 	type DisplayGuild = {
