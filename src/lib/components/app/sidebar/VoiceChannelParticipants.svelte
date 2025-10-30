@@ -1,6 +1,6 @@
 <script lang="ts">
         import type { DtoMember } from '$lib/api';
-        import { presenceByUser, type PresenceInfo } from '$lib/stores/presence';
+        import { createPresenceSubscription, presenceByUser, type PresenceInfo } from '$lib/stores/presence';
         import { membersByGuild } from '$lib/stores/appState';
         import { auth } from '$lib/stores/auth';
         import {
@@ -14,10 +14,12 @@
         import { m } from '$lib/paraglide/messages.js';
         import { contextMenu, type ContextMenuItem } from '$lib/stores/contextMenu';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import { onDestroy } from 'svelte';
 
         const props = $props<{ guildId: string; channelId: string; indentClass?: string }>();
 
         const presenceMap = presenceByUser;
+        const presenceSubscription = createPresenceSubscription();
         const guildMembers = membersByGuild;
         const me = auth.user;
         const voice = voiceSession;
@@ -190,6 +192,26 @@
         }
 
         const participants = $derived(getParticipants());
+        let lastPresenceSignature = '';
+
+        $effect(() => {
+                const trackedIds = new Set<string>();
+                for (const entry of participants) {
+                        if (!entry?.userId) continue;
+                        trackedIds.add(entry.userId);
+                }
+                const ids = Array.from(trackedIds).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+                const signature = ids.join(',');
+                if (signature === lastPresenceSignature) {
+                        return;
+                }
+                lastPresenceSignature = signature;
+                presenceSubscription.update(ids);
+        });
+
+        onDestroy(() => {
+                presenceSubscription.destroy();
+        });
 
         $effect(() => {
                 const gid = normalizedId(props.guildId);
