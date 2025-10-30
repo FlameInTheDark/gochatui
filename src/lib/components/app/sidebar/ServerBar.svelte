@@ -62,6 +62,9 @@
         const FOLDER_UNREAD_INDICATOR_CLASSES = FOLDER_UNREAD_BADGE_CLASSES;
         const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
         const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
+        const UNREAD_INDICATOR_POSITION_CLASSES =
+                'pointer-events-none absolute left-0 top-1/2 z-40 flex w-5 -translate-x-1/2 -translate-y-1/2 justify-center';
+        const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
 
 	type DisplayGuild = {
 		type: 'guild';
@@ -582,10 +585,15 @@
 <div
 	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)] p-2"
 >
-        <div class="group relative flex w-full justify-center">
-                <div class="relative h-12 w-12">
+        <div class="group relative flex w-full justify-center overflow-visible">
+                {#if homeMentionCount === 0 && userHomeHasUnread()}
+                        <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                <span class={UNREAD_INDICATOR_CLASSES}></span>
+                        </span>
+                {/if}
+                <div class="relative h-12 w-12 overflow-visible">
                         <button
-                                class={`relative grid h-full w-full place-items-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                class={`relative grid h-full w-full place-items-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                         $view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                 }`}
                                 data-tooltip-disabled
@@ -608,9 +616,6 @@
                                 <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(homeMentionCount)}</span>
                         {/if}
                 </div>
-                {#if homeMentionCount === 0 && userHomeHasUnread()}
-                        <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
-                {/if}
         </div>
         <div class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto pt-1">
 		<div
@@ -626,8 +631,13 @@
                                 {@const guildUnread = guildHasUnread(item.guildId)}
                                 {@const guildMentionTotal = guildMentionCount(item.guildId)}
                                 {@const guildIcon = guildIconUrl(item.guild)}
-                                <div class="group relative flex w-full justify-center">
-                                        <div class="relative h-12 w-12">
+                                <div class="group relative flex w-full justify-center overflow-visible">
+                                        {#if guildMentionTotal === 0 && guildUnread}
+                                                <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                        <span class={UNREAD_INDICATOR_CLASSES}></span>
+                                                </span>
+                                        {/if}
+                                        <div class="relative h-12 w-12 overflow-visible">
                                                 <button
                                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                 isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
@@ -670,9 +680,6 @@
                                                         <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(guildMentionTotal)}</span>
                                                 {/if}
                                         </div>
-                                        {#if guildMentionTotal === 0 && guildUnread}
-                                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
-                                        {/if}
                                 </div>
 			{:else}
                                 {@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
@@ -684,100 +691,101 @@
 				{@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
                                 <div
                                         class="group relative flex w-full flex-col items-center gap-2 rounded-2xl"
-					style:--folder-collapsed-border={folderColorTokens?.collapsedBorder ?? 'var(--stroke)'}
-					style:--folder-collapsed-bg={folderColorTokens?.collapsedBackground ??
-						'var(--panel-strong)'}
-					style:--folder-hover-bg={folderColorTokens?.hoverBackground ?? 'var(--panel)'}
-					style:--folder-expanded-border={folderColorTokens?.expandedBorder ?? 'var(--stroke)'}
-					style:--folder-expanded-bg={folderColorTokens?.expandedBackground ??
-						'color-mix(in srgb, var(--panel-strong) 70%, transparent)'}
-				>
-                                        <div class="relative h-12 w-12">
-                                                <button
-                                                        class={`relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-                                                                folderIsDropTarget
-                                                                        ? 'ring-2 ring-[var(--brand)]'
-                                                                        : folderHasSelection
-                                                                                ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
-                                                                                : ''
-                                                        }`}
-                                                        type="button"
-                                                        draggable="true"
-                                                        data-tooltip-disabled
-                                                        use:tooltip={{
-                                                                content: () => folderLabel,
-                                                                placement: 'right'
-                                                        }}
-                                                        aria-label={folderLabel}
-                                                        use:customContextMenuTarget
-                                                        ondragstart={(event) => startFolderDrag(event, item.folder.id)}
-							ondragend={endDrag}
-							oncontextmenu={(event) => openFolderMenu(event, item)}
-							ondragover={(event) =>
-								onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
-							ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
-							onclick={() =>
-								(expandedFolders = {
-									...expandedFolders,
-									[item.folder.id]: !expandedFolders[item.folder.id]
-								})}
-							style:--folder-collapsed-border={folderHasUnread &&
-							!folderIsDropTarget &&
-							!folderHasSelection
-								? 'var(--brand)'
-								: null}
-						>
-							{#if expandedFolders[item.folder.id]}
-								<Folder class="h-5 w-5" stroke-width={2} />
-							{:else}
-								<div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
-                                                                        {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
-                                                                                {@const previewUnread = guildHasUnread(guildPreview.guildId)}
-                                                                                {@const previewIcon = guildIconUrl(guildPreview.guild)}
-                                                                                <div
-                                                                                        class={`relative flex items-center justify-center overflow-hidden rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
-                                                                                                guildPreview.guildId === $selectedGuildId ? 'border-[var(--brand)]' : ''
-                                                                                        } ${previewUnread ? 'border-[var(--brand)] bg-[var(--brand)]/10' : ''}`}
-                                                                                >
-                                                                                        {#if previewIcon}
-                                                                                                <img
-                                                                                                        src={previewIcon}
-                                                                                                        alt=""
-                                                                                                        aria-hidden="true"
-                                                                                                        class="h-full w-full object-cover"
-                                                                                                        loading="lazy"
-                                                                                                />
-                                                                                        {:else}
-                                                                                                {guildInitials(guildPreview.guild)}
-                                                                                        {/if}
-                                                                                </div>
-                                                                        {/each}
-									{#if item.guilds.length < 4}
-										{#each Array(4 - item.guilds.length) as _, fillerIdx (fillerIdx)}
-											<div class="rounded-lg border border-dashed border-[var(--stroke)]"></div>
-										{/each}
-									{/if}
-								</div>
-							{/if}
-                                                        {#if folderMentionTotal > 0}
-                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: folderMentionTotal })}</span>
-                                                        {:else if folderHasUnread}
-                                                                <span class="sr-only">{m.unread_indicator()}</span>
-                                                        {/if}
-                                                </button>
-                                                {#if folderMentionTotal > 0}
-                                                        <span
-                                                                aria-hidden="true"
-                                                                class={FOLDER_MENTION_INDICATOR_CLASSES}
-                                                        >{formatMentionCount(folderMentionTotal)}</span>
+                                        style:--folder-collapsed-border={folderColorTokens?.collapsedBorder ?? 'var(--stroke)'}
+                                        style:--folder-collapsed-bg={folderColorTokens?.collapsedBackground ??
+                                                'var(--panel-strong)'}
+                                        style:--folder-hover-bg={folderColorTokens?.hoverBackground ?? 'var(--panel)'}
+                                        style:--folder-expanded-border={folderColorTokens?.expandedBorder ?? 'var(--stroke)'}
+                                        style:--folder-expanded-bg={folderColorTokens?.expandedBackground ??
+                                                'color-mix(in srgb, var(--panel-strong) 70%, transparent)'}
+                                >
+                                        <div class="group relative flex w-full justify-center overflow-visible">
+                                                {#if folderMentionTotal === 0 && folderHasUnread}
+                                                        <span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                <span class={FOLDER_UNREAD_INDICATOR_CLASSES}></span>
+                                                        </span>
                                                 {/if}
+                                                <div class="relative h-12 w-12 overflow-visible">
+                                                        <button
+                                                                class={`relative flex h-full w-full flex-col items-center justify-center gap-1 overflow-visible rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                                folderIsDropTarget
+                                                                                        ? 'ring-2 ring-[var(--brand)]'
+                                                                                        : folderHasSelection
+                                                                                                ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                                                : ''
+                                                                        }`}
+                                                                type="button"
+                                                                draggable="true"
+                                                                data-tooltip-disabled
+                                                                use:tooltip={{
+                                                                        content: () => folderLabel,
+                                                                        placement: 'right'
+                                                                }}
+                                                                aria-label={folderLabel}
+                                                                use:customContextMenuTarget
+                                                                ondragstart={(event) => startFolderDrag(event, item.folder.id)}
+                                                                ondragend={endDrag}
+                                                                oncontextmenu={(event) => openFolderMenu(event, item)}
+                                                                ondragover={(event) =>
+                                                                        onFolderDropZoneOver(event, item.folder.id, item.guilds.length)}
+                                                                ondrop={(event) => onFolderDrop(event, item.folder.id, item.guilds.length)}
+                                                                onclick={() =>
+                                                                        (expandedFolders = {
+                                                                                ...expandedFolders,
+                                                                                [item.folder.id]: !expandedFolders[item.folder.id]
+                                                                        })}
+                                                                style:--folder-collapsed-border={folderHasUnread &&
+                                                                !folderIsDropTarget &&
+                                                                !folderHasSelection
+                                                                        ? 'var(--brand)'
+                                                                        : null}
+                                                        >
+                                                                {#if expandedFolders[item.folder.id]}
+                                                                        <Folder class="h-5 w-5" stroke-width={2} />
+                                                                {:else}
+                                                                        <div class="grid h-full w-full grid-cols-2 grid-rows-2 gap-1">
+                                                                                {#each item.guilds.slice(0, 4) as guildPreview, idx (guildPreview.guildId)}
+                                                                                        {@const previewUnread = guildHasUnread(guildPreview.guildId)}
+                                                                                        {@const previewIcon = guildIconUrl(guildPreview.guild)}
+                                                                                        <div
+                                                                                                class={`relative flex items-center justify-center overflow-hidden rounded-lg border border-[var(--stroke)] bg-[var(--panel)] text-xs font-semibold ${
+                                                                                                        guildPreview.guildId === $selectedGuildId ? 'border-[var(--brand)]' : ''
+                                                                                                } ${previewUnread ? 'border-[var(--brand)] bg-[var(--brand)]/10' : ''}`}
+                                                                                        >
+                                                                                                {#if previewIcon}
+                                                                                                        <img
+                                                                                                                src={previewIcon}
+                                                                                                                alt=""
+                                                                                                                aria-hidden="true"
+                                                                                                                class="h-full w-full object-cover"
+                                                                                                                loading="lazy"
+                                                                                                        />
+                                                                                                {:else}
+                                                                                                        {guildInitials(guildPreview.guild)}
+                                                                                                {/if}
+                                                                                        </div>
+                                                                                {/each}
+                                                                                {#if item.guilds.length < 4}
+                                                                                        {#each Array(4 - item.guilds.length) as _, fillerIdx (fillerIdx)}
+                                                                                                <div class="rounded-lg border border-dashed border-[var(--stroke)]"></div>
+                                                                                        {/each}
+                                                                                {/if}
+                                                                        </div>
+                                                                {/if}
+                                                                {#if folderMentionTotal > 0}
+                                                                        <span class="sr-only">{m.unread_mentions_indicator({ count: folderMentionTotal })}</span>
+                                                                {:else if folderHasUnread}
+                                                                        <span class="sr-only">{m.unread_indicator()}</span>
+                                                                {/if}
+                                                        </button>
+                                                        {#if folderMentionTotal > 0}
+                                                                <span
+                                                                        aria-hidden="true"
+                                                                        class={FOLDER_MENTION_INDICATOR_CLASSES}
+                                                                >{formatMentionCount(folderMentionTotal)}</span>
+                                                        {/if}
+                                                </div>
                                         </div>
-                                        {#if folderMentionTotal === 0 && folderHasUnread}
-                                                <span
-                                                        aria-hidden="true"
-                                                        class={FOLDER_UNREAD_INDICATOR_CLASSES}
-                                                ></span>
-                                        {/if}
 
 					{#if expandedFolders[item.folder.id]}
 						<div
@@ -797,8 +805,13 @@
                                                                 {@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
                                                                 {@const nestedGuildMention = guildMentionCount(nestedGuild.guildId)}
                                                                 {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
-                                                                <div class="group relative flex w-full justify-center">
-                                                                        <div class="relative h-12 w-12">
+                                                                <div class="group relative flex w-full justify-center overflow-visible">
+                                                                        {#if nestedGuildMention === 0 && nestedGuildUnread}
+                                                                                <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                                        <span class={UNREAD_INDICATOR_CLASSES}></span>
+                                                                                </span>
+                                                                        {/if}
+                                                                        <div class="relative h-12 w-12 overflow-visible">
                                                                                 <button
                                                                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                                                  isGuildSelected(nestedGuild.guildId)
@@ -855,9 +868,6 @@
                                                                                         <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedGuildMention)}</span>
                                                                                 {/if}
                                                                         </div>
-                                                                        {#if nestedGuildMention === 0 && nestedGuildUnread}
-                                                                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
-                                                                        {/if}
                                                                 </div>
 							{/each}
 						</div>
