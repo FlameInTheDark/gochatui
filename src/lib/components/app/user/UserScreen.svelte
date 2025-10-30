@@ -110,6 +110,26 @@
         const pendingDmRequests = new Map<string, Promise<string | null>>();
         let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
+        let lastDmChannelMetadataFetchKey = $state<string | null>(null);
+        let dmChannelMetadataRetryTimer: ReturnType<typeof setTimeout> | null = null;
+        const DM_CHANNEL_METADATA_RETRY_DELAY = 5_000;
+
+        function cancelDmChannelMetadataRetry(): void {
+                if (dmChannelMetadataRetryTimer) {
+                        clearTimeout(dmChannelMetadataRetryTimer);
+                        dmChannelMetadataRetryTimer = null;
+                }
+        }
+
+        function scheduleDmChannelMetadataRetryReset(expectedKey: string | null): void {
+                cancelDmChannelMetadataRetry();
+                dmChannelMetadataRetryTimer = setTimeout(() => {
+                        if (expectedKey == null || lastDmChannelMetadataFetchKey === expectedKey) {
+                                lastDmChannelMetadataFetchKey = null;
+                        }
+                        dmChannelMetadataRetryTimer = null;
+                }, DM_CHANNEL_METADATA_RETRY_DELAY);
+        }
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
         const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
 
@@ -605,6 +625,7 @@
 
         onDestroy(() => {
                 presenceSubscription.destroy();
+                cancelDmChannelMetadataRetry();
         });
 
         $effect(() => {
@@ -1327,7 +1348,7 @@
                 }
         });
 
-        async function ensureVisibleDmChannelMetadata(): Promise<void> {
+        async function ensureVisibleDmChannelMetadata(): Promise<boolean> {
                 const settings = $settingsStore;
                 const map = $channelsByGuild;
                 const visible = Array.isArray(settings.dmChannels)
@@ -1335,7 +1356,7 @@
                                         .map((entry) => toSnowflakeString(entry.channelId))
                                         .filter((id): id is string => Boolean(id))
                         : [];
-                if (!visible.length) return;
+                if (!visible.length) return false;
                 const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
                 const existing = new Set(
                         existingList
@@ -1343,13 +1364,15 @@
                                 .filter((id): id is string => Boolean(id))
                 );
                 const missing = visible.filter((id) => !existing.has(id));
-                if (!missing.length) return;
+                if (!missing.length) return false;
+                const missingSet = new Set(missing);
                 const token = ++dmChannelMetadataToken;
                 try {
                         const response = await api.user.userMeChannelsGet();
-                        if (dmChannelMetadataToken !== token) return;
+                        if (dmChannelMetadataToken !== token) return false;
                         const fetched = Array.isArray(response?.data) ? response.data : [];
-                        if (!fetched.length) return;
+                        if (!fetched.length) return false;
+                        let didUpdate = false;
                         channelsByGuild.update((current) => {
                                 const existingChannels = Array.isArray(current['@me']) ? current['@me'] : [];
                                 const byId = new Map<string, DtoChannel>();
@@ -1362,30 +1385,59 @@
                                         const normalized = normalizeDtoChannel(entry) as DtoChannel;
                                         const id = toSnowflakeString((normalized as any)?.id);
                                         if (!id) continue;
+                                        if (!byId.has(id) || missingSet.has(id)) {
+                                                didUpdate = true;
+                                        }
                                         byId.set(id, normalized);
+                                }
+                                if (!didUpdate) {
+                                        return current;
                                 }
                                 return { ...current, ['@me']: Array.from(byId.values()) };
                         });
+                        return didUpdate;
                 } catch (error) {
                         console.error('Failed to load DM channels', error);
+                        return false;
                 }
         }
 
         $effect(() => {
-                const dmEntries = $settingsStore.dmChannels;
+                const dmEntries = Array.isArray($settingsStore.dmChannels)
+                        ? $settingsStore.dmChannels
+                        : [];
                 const dmList = $channelsByGuild['@me'] ?? [];
-                const missing = dmEntries.some((entry) => {
-                        const id = toSnowflakeString(entry.channelId);
-                        if (!id) return false;
-                        return !dmList.some((channel: any) => toSnowflakeString((channel as any)?.id) === id);
-                });
-                if (!missing) return;
+                const missingIds = dmEntries
+                        .map((entry) => toSnowflakeString(entry.channelId))
+                        .filter((id): id is string => {
+                                if (!id) return false;
+                                return !dmList.some((channel: any) => toSnowflakeString((channel as any)?.id) === id);
+                        });
+                if (!missingIds.length) {
+                        lastDmChannelMetadataFetchKey = null;
+                        cancelDmChannelMetadataRetry();
+                        return;
+                }
+                const nextKey = missingIds.slice().sort().join(',');
+                if (lastDmChannelMetadataFetchKey === nextKey) return;
                 if (dmChannelMetadataRequest) return;
-                const request = ensureVisibleDmChannelMetadata().finally(() => {
-                        if (dmChannelMetadataRequest === request) {
-                                dmChannelMetadataRequest = null;
-                        }
-                });
+                lastDmChannelMetadataFetchKey = nextKey;
+                cancelDmChannelMetadataRetry();
+                const request = ensureVisibleDmChannelMetadata()
+                        .then((updated) => {
+                                if (!updated) {
+                                        scheduleDmChannelMetadataRetryReset(nextKey);
+                                }
+                        })
+                        .catch((error) => {
+                                console.error('Failed to ensure DM channel metadata', error);
+                                scheduleDmChannelMetadataRetryReset(nextKey);
+                        })
+                        .finally(() => {
+                                if (dmChannelMetadataRequest === request) {
+                                        dmChannelMetadataRequest = null;
+                                }
+                        });
                 dmChannelMetadataRequest = request;
         });
 
