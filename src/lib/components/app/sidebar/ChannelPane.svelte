@@ -1452,7 +1452,7 @@
                                                                         <VoiceChannelParticipants
                                                                                 guildId={selectedGuildIdValue}
                                                                                 channelId={channelId}
-                                                                                indentClass="ml-9"
+                                                                                indentClass="pl-9"
                                                                         />
                                                                 {/if}
                                                         </div>
@@ -1603,7 +1603,7 @@
                                                                                         <VoiceChannelParticipants
                                                                                                 guildId={selectedGuildIdValue}
                                                                                                 channelId={nestedChannelId}
-                                                                                                indentClass="ml-12"
+                                                                                                indentClass="pl-12"
                                                                                         />
                                                                                 {/if}
                                                                         </div>

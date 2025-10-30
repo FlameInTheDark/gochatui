@@ -22,7 +22,7 @@
         const me = auth.user;
         const voice = voiceSession;
 
-        const indentClass = $derived(props.indentClass ?? 'ml-8');
+        const indentClass = $derived(props.indentClass ?? 'pl-8');
 
         type ParticipantEntry = {
                 userId: string;
@@ -158,9 +158,30 @@
                         });
                 }
 
+                function registerCandidate(userId: string | null | undefined) {
+                        if (!userId) return;
+                        register(userId);
+                }
+
                 for (const [userId, info] of Object.entries(presence)) {
                         if (info?.voiceChannelId !== targetChannel) continue;
-                        register(userId);
+                        registerCandidate(userId);
+                }
+
+                if (isConnected) {
+                        registerCandidate(currentUserId);
+
+                        for (const entry of voiceState.remoteStreams ?? []) {
+                                registerCandidate(entry?.userId ?? null);
+                        }
+
+                        for (const key of Object.keys(remoteSettings)) {
+                                registerCandidate(key);
+                        }
+
+                        for (const id of speakingSet) {
+                                registerCandidate(id);
+                        }
                 }
 
                 return Array.from(participantMap.values()).sort((a, b) =>
@@ -200,11 +221,11 @@
 </script>
 
 {#if participants.length}
-        <div class={`flex flex-col gap-1 ${indentClass}`}>
+        <div class="flex flex-col gap-1">
                 {#each participants as participant (participant.userId)}
                         <button
                                 type="button"
-                                class={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm transition-colors ${
+                                class={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm transition-colors ${indentClass} ${
                                         participant.canControl ? 'cursor-pointer hover:bg-[var(--panel)]' : 'cursor-default'
                                 }`}
                                 use:customContextMenuTarget
