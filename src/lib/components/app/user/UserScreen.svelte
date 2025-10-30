@@ -110,7 +110,7 @@
         const pendingDmRequests = new Map<string, Promise<string | null>>();
         let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
-        let lastDmChannelMetadataFetchKey = $state<string | null>(null);
+        let dmChannelMetadataRetryAt = $state<number | null>(null);
         let dmChannelMetadataRetryTimer: ReturnType<typeof setTimeout> | null = null;
         const DM_CHANNEL_METADATA_RETRY_DELAY = 5_000;
 
@@ -119,15 +119,18 @@
                         clearTimeout(dmChannelMetadataRetryTimer);
                         dmChannelMetadataRetryTimer = null;
                 }
+                dmChannelMetadataRetryAt = null;
         }
 
-        function scheduleDmChannelMetadataRetryReset(expectedKey: string | null): void {
-                cancelDmChannelMetadataRetry();
+        function scheduleDmChannelMetadataRetry(): void {
+                const target = Date.now() + DM_CHANNEL_METADATA_RETRY_DELAY;
+                dmChannelMetadataRetryAt = target;
+                if (dmChannelMetadataRetryTimer) {
+                        clearTimeout(dmChannelMetadataRetryTimer);
+                }
                 dmChannelMetadataRetryTimer = setTimeout(() => {
-                        if (expectedKey == null || lastDmChannelMetadataFetchKey === expectedKey) {
-                                lastDmChannelMetadataFetchKey = null;
-                        }
                         dmChannelMetadataRetryTimer = null;
+                        dmChannelMetadataRetryAt = null;
                 }, DM_CHANNEL_METADATA_RETRY_DELAY);
         }
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
@@ -1414,24 +1417,29 @@
                                 return !dmList.some((channel: any) => toSnowflakeString((channel as any)?.id) === id);
                         });
                 if (!missingIds.length) {
-                        lastDmChannelMetadataFetchKey = null;
                         cancelDmChannelMetadataRetry();
                         return;
                 }
-                const nextKey = missingIds.slice().sort().join(',');
-                if (lastDmChannelMetadataFetchKey === nextKey) return;
+                const retryAt = dmChannelMetadataRetryAt;
+                const now = Date.now();
+                if (retryAt && retryAt > now) {
+                        return;
+                }
+                if (retryAt && retryAt <= now) {
+                        cancelDmChannelMetadataRetry();
+                }
                 if (dmChannelMetadataRequest) return;
-                lastDmChannelMetadataFetchKey = nextKey;
-                cancelDmChannelMetadataRetry();
                 const request = ensureVisibleDmChannelMetadata()
                         .then((updated) => {
-                                if (!updated) {
-                                        scheduleDmChannelMetadataRetryReset(nextKey);
+                                if (updated) {
+                                        cancelDmChannelMetadataRetry();
+                                } else {
+                                        scheduleDmChannelMetadataRetry();
                                 }
                         })
                         .catch((error) => {
                                 console.error('Failed to ensure DM channel metadata', error);
-                                scheduleDmChannelMetadataRetryReset(nextKey);
+                                scheduleDmChannelMetadataRetry();
                         })
                         .finally(() => {
                                 if (dmChannelMetadataRequest === request) {

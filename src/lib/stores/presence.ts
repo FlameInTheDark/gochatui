@@ -9,6 +9,9 @@ import type { PresenceMode, PresenceStatus } from '$lib/types/presence';
 
 type AnyRecord = Record<string, unknown>;
 
+const WS_EVENT_VOICE_CHANNEL_JOIN = 205;
+const WS_EVENT_VOICE_CHANNEL_LEAVE = 206;
+
 export type { PresenceMode, PresenceStatus } from '$lib/types/presence';
 
 export interface PresenceInfo {
@@ -228,11 +231,103 @@ function flushPresenceSubscription(force: boolean) {
         const ready = get(wsAuthenticated);
         if (!ready) return;
         if (!force && desiredSubscriptionSignature === lastSentSubscriptionSignature) return;
-	const payload = desiredSubscriptionIds.length
-		? `{"op":6,"d":{"set":[${desiredSubscriptionIds.join(',')}]}}`
-		: '{"op":6,"d":{"clear":true}}';
-	sendWSRaw(payload);
-	lastSentSubscriptionSignature = desiredSubscriptionSignature;
+        const payload = desiredSubscriptionIds.length
+                ? `{"op":6,"d":{"set":[${desiredSubscriptionIds.join(',')}]}}`
+                : '{"op":6,"d":{"clear":true}}';
+        sendWSRaw(payload);
+        lastSentSubscriptionSignature = desiredSubscriptionSignature;
+}
+
+function normalizeVoiceChannelId(value: unknown): string | null {
+        const candidate = toSnowflakeString(value);
+        if (!candidate) return null;
+        return /^[0-9]+$/.test(candidate) ? candidate : null;
+}
+
+function updatePresenceVoiceChannel(
+        userId: string,
+        voiceChannelId: string | null,
+        eventType: number,
+        reportedChannelId: string | null
+) {
+        let changed = false;
+        presenceStore.update((map) => {
+                const prev = map[userId] as (PresenceInfo & AnyRecord) | undefined;
+                if (!prev && voiceChannelId == null) {
+                        return map;
+                }
+                if (
+                        eventType === WS_EVENT_VOICE_CHANNEL_LEAVE &&
+                        prev?.voiceChannelId &&
+                        reportedChannelId &&
+                        prev.voiceChannelId !== reportedChannelId
+                ) {
+                        return map;
+                }
+                if (prev?.voiceChannelId === voiceChannelId) {
+                        return map;
+                }
+                const nextRecord: PresenceInfo & AnyRecord = {
+                        ...(prev ?? {}),
+                        status: (prev?.status ?? 'offline') as PresenceStatus,
+                        since: (prev?.since ?? null) as number | null,
+                        customStatusText: (prev?.customStatusText ?? null) as string | null,
+                        voiceChannelId
+                };
+                changed = true;
+                return { ...map, [userId]: nextRecord };
+        });
+        if (changed && userId === currentUserId) {
+                currentVoiceChannelId = voiceChannelId;
+                if (lastSentPresence) {
+                        lastSentPresence = {
+                                status: lastSentPresence.status,
+                                customStatusText: lastSentPresence.customStatusText,
+                                voiceChannelId
+                        };
+                }
+        }
+}
+
+function applyVoiceChannelEvent(event: AnyRecord | null | undefined) {
+        if (!event || event.op !== 0) return;
+        const eventType = typeof event.t === 'number' ? event.t : null;
+        if (
+                eventType !== WS_EVENT_VOICE_CHANNEL_JOIN &&
+                eventType !== WS_EVENT_VOICE_CHANNEL_LEAVE
+        ) {
+                return;
+        }
+
+        const payload = ((event.d as AnyRecord | undefined) ?? {}) as AnyRecord;
+        const memberPayload = (payload.member as AnyRecord | undefined) ?? undefined;
+        const userPayload = (payload.user as AnyRecord | undefined) ?? undefined;
+        const userId =
+                toSnowflakeString(payload.user_id) ??
+                toSnowflakeString(payload.userId) ??
+                toSnowflakeString(memberPayload?.user_id) ??
+                toSnowflakeString((memberPayload?.user as AnyRecord | undefined)?.id) ??
+                toSnowflakeString(userPayload?.id);
+        if (!userId) {
+                return;
+        }
+
+        const channelCandidate =
+                payload.channel_id ??
+                payload.channelId ??
+                (payload.channel as AnyRecord | undefined)?.id ??
+                payload.voice_channel_id ??
+                payload.voiceChannelId;
+        const normalizedChannelId = normalizeVoiceChannelId(channelCandidate);
+        const nextVoiceChannelId =
+                eventType === WS_EVENT_VOICE_CHANNEL_JOIN ? normalizedChannelId : null;
+
+        updatePresenceVoiceChannel(
+                userId,
+                nextVoiceChannelId,
+                eventType ?? -1,
+                normalizedChannelId
+        );
 }
 
 export function createPresenceSubscription() {
@@ -608,12 +703,15 @@ if (browser) {
 		if (focused) recordActivity(true);
 	});
 
-	wsEvent.subscribe((event) => {
-		if (!event) return;
-		if (event.op === 3) {
-			applyPresencePayload((event as AnyRecord).d as AnyRecord);
-		}
-	});
+        wsEvent.subscribe((event) => {
+                if (!event) return;
+                if (event.op === 0) {
+                        applyVoiceChannelEvent(event as AnyRecord);
+                }
+                if (event.op === 3) {
+                        applyPresencePayload((event as AnyRecord).d as AnyRecord);
+                }
+        });
 
         wsAuthenticated.subscribe((ready) => {
                 if (ready) {

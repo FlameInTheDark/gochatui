@@ -1,6 +1,6 @@
 <script lang="ts">
         import type { DtoMember } from '$lib/api';
-        import { presenceByUser, type PresenceInfo } from '$lib/stores/presence';
+        import { createPresenceSubscription, presenceByUser, type PresenceInfo } from '$lib/stores/presence';
         import { membersByGuild } from '$lib/stores/appState';
         import { auth } from '$lib/stores/auth';
         import {
@@ -14,15 +14,17 @@
         import { m } from '$lib/paraglide/messages.js';
         import { contextMenu, type ContextMenuItem } from '$lib/stores/contextMenu';
         import { customContextMenuTarget } from '$lib/actions/customContextMenuTarget';
+        import { onDestroy } from 'svelte';
 
         const props = $props<{ guildId: string; channelId: string; indentClass?: string }>();
 
         const presenceMap = presenceByUser;
+        const presenceSubscription = createPresenceSubscription();
         const guildMembers = membersByGuild;
         const me = auth.user;
         const voice = voiceSession;
 
-        const indentClass = $derived(props.indentClass ?? 'ml-8');
+        const indentClass = $derived(props.indentClass ?? 'pl-8');
 
         type ParticipantEntry = {
                 userId: string;
@@ -56,6 +58,64 @@
                 );
         }
 
+        function fallbackInitial(label: string): string {
+                return label.trim().charAt(0).toUpperCase() || '?';
+        }
+
+        function displayNameFor(
+                userId: string | null,
+                isSelf: boolean,
+                member: DtoMember | null,
+                presenceEntry: any
+        ): string {
+                if (isSelf) {
+                        const self = $me;
+                        const candidates = [
+                                (self as any)?.display_name,
+                                (self as any)?.global_name,
+                                (self as any)?.name,
+                                (self as any)?.username
+                        ];
+                        for (const candidate of candidates) {
+                                if (typeof candidate === 'string' && candidate.trim()) {
+                                        return candidate.trim();
+                                }
+                        }
+                        if (userId) {
+                                return `${m.user_default_name()} ${userId}`;
+                        }
+                        return m.user_default_name();
+                }
+
+                if (member) {
+                        const label = memberPrimaryName(member);
+                        if (label) return label;
+                }
+
+                if (presenceEntry) {
+                        const candidates = [
+                                presenceEntry?.displayName,
+                                presenceEntry?.name,
+                                presenceEntry?.username,
+                                presenceEntry?.user?.display_name,
+                                presenceEntry?.user?.global_name,
+                                presenceEntry?.user?.name,
+                                presenceEntry?.user?.username
+                        ];
+                        for (const candidate of candidates) {
+                                if (typeof candidate === 'string' && candidate.trim()) {
+                                        return candidate.trim();
+                                }
+                        }
+                }
+
+                if (userId) {
+                        return `${m.user_default_name()} ${userId}`;
+                }
+
+                return m.user_default_name();
+        }
+
         function getParticipants(): ParticipantEntry[] {
                 const targetChannel = normalizedId(props.channelId);
                 if (!targetChannel) return [];
@@ -76,16 +136,23 @@
                         const normalized = normalizedId(userId);
                         if (!normalized || participantMap.has(normalized)) return;
                         const member = findMember(normalized);
-                        const displayName = memberPrimaryName(member) || `User ${normalized}`;
-                        const avatarUrl = resolveAvatarUrl(member?.user, 64);
-                        const initial = memberInitial(member);
+                        const presenceEntry = presence[normalized] as any;
+                        const isSelf = normalized === currentUserId;
+                        const displayName = displayNameFor(normalized, isSelf, member, presenceEntry);
+                        const avatarUrl =
+                                resolveAvatarUrl(
+                                        isSelf ? $me : null,
+                                        member?.user ?? member ?? undefined,
+                                        presenceEntry?.user ?? presenceEntry ?? undefined
+                                ) ?? null;
+                        const initial = member ? memberInitial(member) : fallbackInitial(displayName);
                         const settings = remoteSettings[normalized] ?? { volume: 1, muted: false };
                         participantMap.set(normalized, {
                                 userId: normalized,
                                 displayName,
                                 avatarUrl,
                                 initial,
-                                isSelf: normalized === currentUserId,
+                                isSelf,
                                 speaking: speakingSet.has(normalized),
                                 canControl: isConnected && normalized !== currentUserId,
                                 volume: settings.volume ?? 1,
@@ -93,9 +160,30 @@
                         });
                 }
 
+                function registerCandidate(userId: string | null | undefined) {
+                        if (!userId) return;
+                        register(userId);
+                }
+
                 for (const [userId, info] of Object.entries(presence)) {
                         if (info?.voiceChannelId !== targetChannel) continue;
-                        register(userId);
+                        registerCandidate(userId);
+                }
+
+                if (isConnected) {
+                        registerCandidate(currentUserId);
+
+                        for (const entry of voiceState.remoteStreams ?? []) {
+                                registerCandidate(entry?.userId ?? null);
+                        }
+
+                        for (const key of Object.keys(remoteSettings)) {
+                                registerCandidate(key);
+                        }
+
+                        for (const id of speakingSet) {
+                                registerCandidate(id);
+                        }
                 }
 
                 return Array.from(participantMap.values()).sort((a, b) =>
@@ -104,6 +192,26 @@
         }
 
         const participants = $derived(getParticipants());
+        let lastPresenceSignature = '';
+
+        $effect(() => {
+                const trackedIds = new Set<string>();
+                for (const entry of participants) {
+                        if (!entry?.userId) continue;
+                        trackedIds.add(entry.userId);
+                }
+                const ids = Array.from(trackedIds).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+                const signature = ids.join(',');
+                if (signature === lastPresenceSignature) {
+                        return;
+                }
+                lastPresenceSignature = signature;
+                presenceSubscription.update(ids);
+        });
+
+        onDestroy(() => {
+                presenceSubscription.destroy();
+        });
 
         $effect(() => {
                 const gid = normalizedId(props.guildId);
@@ -135,11 +243,11 @@
 </script>
 
 {#if participants.length}
-        <div class={`flex flex-col gap-1 ${indentClass}`}>
+        <div class="flex flex-col gap-1">
                 {#each participants as participant (participant.userId)}
                         <button
                                 type="button"
-                                class={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm transition-colors ${
+                                class={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm transition-colors ${indentClass} ${
                                         participant.canControl ? 'cursor-pointer hover:bg-[var(--panel)]' : 'cursor-default'
                                 }`}
                                 use:customContextMenuTarget
