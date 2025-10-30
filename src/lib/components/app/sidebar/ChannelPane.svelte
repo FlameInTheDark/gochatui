@@ -84,6 +84,10 @@
 
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
         const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
+        const CHANNEL_INDICATOR_WRAPPER_CLASSES =
+                'pointer-events-none absolute left-0 top-1/2 z-20 flex w-6 -translate-y-1/2 justify-center';
+        const NESTED_CHANNEL_INDICATOR_WRAPPER_CLASSES =
+                'pointer-events-none absolute left-0 top-1/2 z-20 flex w-6 -translate-y-1/2 justify-center';
 
         let dismissPanel: (() => void) | null = null;
         let creatingChannel = $state(false);
@@ -412,14 +416,12 @@
         function channelRowClasses(
                 channelId: string,
                 channel: DtoChannel,
-                channelUnread: boolean,
-                mentionCount: number,
+                _channelUnread: boolean,
+                _mentionCount: number,
                 voiceState?: 'none' | 'connecting' | 'connected'
         ): string {
-                const hasBadge = channelUnread || mentionCount > 0;
                 const classes = [
-                        'relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)]',
-                        hasBadge ? 'pl-6' : 'pl-3'
+                        'relative flex cursor-pointer items-center rounded py-1 pl-6 pr-2 hover:bg-[var(--panel)]'
                 ];
                 const state = voiceState ?? voiceStateForChannel(channelId, channel);
                 const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
@@ -443,7 +445,7 @@
                 channel: DtoChannel,
                 voiceState?: 'none' | 'connecting' | 'connected'
         ): string {
-                const classes = ['flex cursor-pointer items-center rounded px-2 py-1 hover:bg-[var(--panel)]'];
+                const classes = ['relative flex cursor-pointer items-center rounded py-1 pl-9 pr-2 hover:bg-[var(--panel)]'];
                 const state = voiceState ?? voiceStateForChannel(channelId, channel);
                 const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
                 if (isTextChannel && $selectedChannelId === channelId) {
@@ -1343,7 +1345,7 @@
 <svelte:window onkeydown={(e) => editingChannel && e.key === 'Escape' && closeEditChannel()} />
 
 <div
-	class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-hidden border-r border-[var(--stroke)]"
+        class="flex h-full min-h-0 w-[var(--col2)] flex-col overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)]"
 >
         <div class="border-b border-[var(--stroke)] p-2">
                 <input
@@ -1353,7 +1355,7 @@
 		/>
 	</div>
         <div
-                class="scroll-area channel-scroll flex-1 space-y-2 overflow-y-auto p-2"
+                class="scroll-area channel-scroll flex-1 space-y-2 overflow-x-visible overflow-y-auto p-2"
                 role="region"
                 use:customContextMenuTarget
                 oncontextmenu={(e: MouseEvent) => {
@@ -1413,10 +1415,14 @@
                                                                 >
                                                                         {#if channelMentionCount > 0}
                                                                                 <span class="sr-only">{m.unread_mentions_indicator({ count: channelMentionCount })}</span>
-                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(channelMentionCount)}</span>
+                                                                                <span aria-hidden="true" class={CHANNEL_INDICATOR_WRAPPER_CLASSES}>
+                                                                                        <span class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(channelMentionCount)}</span>
+                                                                                </span>
                                                                         {:else if channelUnread}
                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                                <span aria-hidden="true" class={CHANNEL_INDICATOR_WRAPPER_CLASSES}>
+                                                                                        <span class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                                </span>
                                                                         {/if}
                                                                         <div class="flex w-full items-center gap-2">
                                                                                 <div class="flex min-w-0 flex-1 items-center gap-2 truncate">
@@ -1558,25 +1564,25 @@
                                                                                                 openChannelMenu(e, ch);
                                                                                         }}
                                                                                 >
-                                                                                        <div class="relative flex w-full items-center gap-2">
-                                                                                                <div
-                                                                                                        class={`relative flex min-w-0 flex-1 items-center gap-2 truncate ${
-                                                                                                                nestedChannelUnread || nestedMentionCount > 0 ? 'pl-6' : 'pl-3'
-                                                                                                        }`}
-                                                                                                >
-                                                                                                        {#if nestedMentionCount > 0}
-                                                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: nestedMentionCount })}</span>
-                                                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedMentionCount)}</span>
-                                                                                                        {:else if nestedChannelUnread}
-                                                                                                                <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
-                                                                                                        {/if}
+                                                                                        {#if nestedMentionCount > 0}
+                                                                                                <span class="sr-only">{m.unread_mentions_indicator({ count: nestedMentionCount })}</span>
+                                                                                                <span aria-hidden="true" class={NESTED_CHANNEL_INDICATOR_WRAPPER_CLASSES}>
+                                                                                                        <span class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedMentionCount)}</span>
+                                                                                                </span>
+                                                                                        {:else if nestedChannelUnread}
+                                                                                                <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                                <span aria-hidden="true" class={NESTED_CHANNEL_INDICATOR_WRAPPER_CLASSES}>
+                                                                                                        <span class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                                                </span>
+                                                                                        {/if}
+                                                                                        <div class="flex w-full items-center gap-2">
+                                                                                                <div class="flex min-w-0 flex-1 items-center gap-2 truncate">
                                                                                                         {#if isVoiceChannel(ch)}
                                                                                                                 <Volume2 class="opacity-70" size={16} />
                                                                                                         {:else}
                                                                                                                 <span class="opacity-70">#</span>
                                                                                                         {/if}
-                                        <span class="truncate">{ch.name}</span>
+                                                                                                        <span class="truncate">{ch.name}</span>
                                                                                                 </div>
                                                                                                 {#if nestedVoiceState === 'connecting' || nestedVoiceState === 'connected'}
                                                                                                         <span class={`text-xs ${nestedVoiceState === 'connected' ? 'text-[var(--brand)]' : 'text-[var(--muted)]'}`}>
