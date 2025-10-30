@@ -1406,7 +1406,9 @@
         }
 
         $effect(() => {
-                const dmEntries = $settingsStore.dmChannels;
+                const dmEntries = Array.isArray($settingsStore.dmChannels)
+                        ? $settingsStore.dmChannels
+                        : [];
                 const dmList = $channelsByGuild['@me'] ?? [];
                 const missingIds = dmEntries
                         .map((entry) => toSnowflakeString(entry.channelId))
