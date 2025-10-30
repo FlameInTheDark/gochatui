@@ -582,7 +582,7 @@
 <div
 	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)] p-2"
 >
-        <div class="group inline-flex justify-center">
+        <div class="group relative flex w-full justify-center">
                 <div class="relative h-12 w-12">
                         <button
                                 class={`relative grid h-full w-full place-items-center rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
@@ -606,10 +606,11 @@
                         </button>
                         {#if homeMentionCount > 0}
                                 <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(homeMentionCount)}</span>
-                        {:else if userHomeHasUnread()}
-                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                         {/if}
                 </div>
+                {#if homeMentionCount === 0 && userHomeHasUnread()}
+                        <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                {/if}
         </div>
         <div class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto pt-1">
 		<div
@@ -625,7 +626,7 @@
                                 {@const guildUnread = guildHasUnread(item.guildId)}
                                 {@const guildMentionTotal = guildMentionCount(item.guildId)}
                                 {@const guildIcon = guildIconUrl(item.guild)}
-                                <div class="group inline-flex justify-center">
+                                <div class="group relative flex w-full justify-center">
                                         <div class="relative h-12 w-12">
                                                 <button
                                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
@@ -667,10 +668,11 @@
                                                 </button>
                                                 {#if guildMentionTotal > 0}
                                                         <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(guildMentionTotal)}</span>
-                                                {:else if guildUnread}
-                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                                                 {/if}
                                         </div>
+                                        {#if guildMentionTotal === 0 && guildUnread}
+                                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                                        {/if}
                                 </div>
 			{:else}
                                 {@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
@@ -680,8 +682,8 @@
 				{@const folderName = item.folder.name?.trim()}
 				{@const folderLabel = folderName ? folderName : m.guild_folder()}
 				{@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
-				<div
-					class="group relative flex flex-col items-center gap-2 rounded-2xl"
+                                <div
+                                        class="group relative flex w-full flex-col items-center gap-2 rounded-2xl"
 					style:--folder-collapsed-border={folderColorTokens?.collapsedBorder ?? 'var(--stroke)'}
 					style:--folder-collapsed-bg={folderColorTokens?.collapsedBackground ??
 						'var(--panel-strong)'}
@@ -768,13 +770,14 @@
                                                                 aria-hidden="true"
                                                                 class={FOLDER_MENTION_INDICATOR_CLASSES}
                                                         >{formatMentionCount(folderMentionTotal)}</span>
-                                                {:else if folderHasUnread}
-                                                        <span
-                                                                aria-hidden="true"
-                                                                class={FOLDER_UNREAD_INDICATOR_CLASSES}
-                                                        ></span>
                                                 {/if}
                                         </div>
+                                        {#if folderMentionTotal === 0 && folderHasUnread}
+                                                <span
+                                                        aria-hidden="true"
+                                                        class={FOLDER_UNREAD_INDICATOR_CLASSES}
+                                                ></span>
+                                        {/if}
 
 					{#if expandedFolders[item.folder.id]}
 						<div
@@ -794,7 +797,7 @@
                                                                 {@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
                                                                 {@const nestedGuildMention = guildMentionCount(nestedGuild.guildId)}
                                                                 {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
-                                                                <div class="group inline-flex justify-center">
+                                                                <div class="group relative flex w-full justify-center">
                                                                         <div class="relative h-12 w-12">
                                                                                 <button
                                                                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
@@ -844,16 +847,17 @@
                                                                                           {/if}
                                                                                           {#if nestedGuildMention > 0}
                                                                                                   <span class="sr-only">{m.unread_mentions_indicator({ count: nestedGuildMention })}</span>
-                                                                                          {:else if nestedGuildUnread}
-                                                                                                  <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                          {/if}
+                                                                                         {:else if nestedGuildUnread}
+                                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
+                                                                                         {/if}
                                                                                 </button>
                                                                                 {#if nestedGuildMention > 0}
                                                                                         <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedGuildMention)}</span>
-                                                                                {:else if nestedGuildUnread}
-                                                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
                                                                                 {/if}
                                                                         </div>
+                                                                        {#if nestedGuildMention === 0 && nestedGuildUnread}
+                                                                                <span aria-hidden="true" class={UNREAD_INDICATOR_CLASSES}></span>
+                                                                        {/if}
                                                                 </div>
 							{/each}
 						</div>
