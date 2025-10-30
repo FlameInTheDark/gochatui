@@ -1790,12 +1790,6 @@
                                                                 {@const isActive = activeDmChannelId === channel.id}
                                                                 {@const hasUnread = dmChannelHasUnread(channel.id)}
                                                                 {@const mentionCount = dmMentionCount(channel.id)}
-                                                                {@const indicatorPaddingClass =
-                                                                        mentionCount > 0
-                                                                                ? 'pl-9'
-                                                                                : hasUnread
-                                                                                        ? 'pl-6'
-                                                                                        : 'pl-3'}
                                                                 {@const showUnreadDot = mentionCount === 0 && hasUnread}
                                                                 {@const recipient =
                                                                         channel.recipients.length === 1
@@ -1820,11 +1814,11 @@
                                                                         <div class={`group relative ${isLoading ? 'opacity-70' : ''}`}>
                                                                                 <button
                                                                                         type="button"
-                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pr-12 text-left transition ${
+                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pl-3 pr-12 text-left transition ${
                                                                                                 isActive
                                                                                                         ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                                        } ${indicatorPaddingClass} ${isLoading ? 'cursor-wait' : ''}`}
+                                                                                        } ${isLoading ? 'cursor-wait' : ''}`}
                                                                                         disabled={isLoading}
                                                                                         aria-busy={isLoading}
                                                                                         aria-pressed={isActive}

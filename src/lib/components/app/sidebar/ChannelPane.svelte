@@ -412,14 +412,12 @@
         function channelRowClasses(
                 channelId: string,
                 channel: DtoChannel,
-                channelUnread: boolean,
-                mentionCount: number,
+                _channelUnread: boolean,
+                _mentionCount: number,
                 voiceState?: 'none' | 'connecting' | 'connected'
         ): string {
-                const hasBadge = channelUnread || mentionCount > 0;
                 const classes = [
-                        'relative flex cursor-pointer items-center rounded py-1 pr-2 hover:bg-[var(--panel)]',
-                        hasBadge ? 'pl-6' : 'pl-3'
+                        'relative flex cursor-pointer items-center rounded py-1 pl-3 pr-2 hover:bg-[var(--panel)]'
                 ];
                 const state = voiceState ?? voiceStateForChannel(channelId, channel);
                 const isTextChannel = Number((channel as any)?.type ?? 0) === 0;
@@ -1559,11 +1557,7 @@
                                                                                         }}
                                                                                 >
                                                                                         <div class="relative flex w-full items-center gap-2">
-                                                                                                <div
-                                                                                                        class={`relative flex min-w-0 flex-1 items-center gap-2 truncate ${
-                                                                                                                nestedChannelUnread || nestedMentionCount > 0 ? 'pl-6' : 'pl-3'
-                                                                                                        }`}
-                                                                                                >
+                                                                                                <div class="relative flex min-w-0 flex-1 items-center gap-2 truncate pl-3">
                                                                                                         {#if nestedMentionCount > 0}
                                                                                                                 <span class="sr-only">{m.unread_mentions_indicator({ count: nestedMentionCount })}</span>
                                                                                                                 <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>{formatMentionCount(nestedMentionCount)}</span>
