@@ -135,6 +135,8 @@
         }
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
         const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
+        const CHANNEL_INDICATOR_WRAPPER_CLASSES =
+                'pointer-events-none absolute left-0 top-1/2 z-20 flex w-6 -translate-y-1/2 justify-center';
 
         function buildNotificationMenuItems(
                 current: NotificationLevel,
@@ -1790,12 +1792,6 @@
                                                                 {@const isActive = activeDmChannelId === channel.id}
                                                                 {@const hasUnread = dmChannelHasUnread(channel.id)}
                                                                 {@const mentionCount = dmMentionCount(channel.id)}
-                                                                {@const indicatorPaddingClass =
-                                                                        mentionCount > 0
-                                                                                ? 'pl-9'
-                                                                                : hasUnread
-                                                                                        ? 'pl-6'
-                                                                                        : 'pl-3'}
                                                                 {@const showUnreadDot = mentionCount === 0 && hasUnread}
                                                                 {@const recipient =
                                                                         channel.recipients.length === 1
@@ -1820,11 +1816,11 @@
                                                                         <div class={`group relative ${isLoading ? 'opacity-70' : ''}`}>
                                                                                 <button
                                                                                         type="button"
-                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pr-12 text-left transition ${
+                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pl-6 pr-12 text-left transition ${
                                                                                                 isActive
                                                                                                         ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                                        } ${indicatorPaddingClass} ${isLoading ? 'cursor-wait' : ''}`}
+                                                                                        } ${isLoading ? 'cursor-wait' : ''}`}
                                                                                         disabled={isLoading}
                                                                                         aria-busy={isLoading}
                                                                                         aria-pressed={isActive}
@@ -1832,12 +1828,16 @@
                                                                                 >
                                                                                         {#if mentionCount > 0}
                                                                                                 <span class="sr-only">{m.unread_mentions_indicator({ count: mentionCount })}</span>
-                                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>
-                                                                                                        {formatMentionCount(mentionCount)}
+                                                                                                <span aria-hidden="true" class={CHANNEL_INDICATOR_WRAPPER_CLASSES}>
+                                                                                                        <span class={CHANNEL_MENTION_INDICATOR_CLASSES}>
+                                                                                                                {formatMentionCount(mentionCount)}
+                                                                                                        </span>
                                                                                                 </span>
                                                                                         {:else if showUnreadDot}
                                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                                                <span aria-hidden="true" class={CHANNEL_INDICATOR_WRAPPER_CLASSES}>
+                                                                                                        <span class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                                                </span>
                                                                                         {/if}
                                                                                         <div class="relative">
                                                                                                 <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">
