@@ -110,6 +110,7 @@
         const pendingDmRequests = new Map<string, Promise<string | null>>();
         let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
+        let lastDmChannelMetadataFetchKey = $state<string | null>(null);
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
         const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
 
@@ -1372,15 +1373,24 @@
         }
 
         $effect(() => {
-                const dmEntries = $settingsStore.dmChannels;
+                const dmEntries = Array.isArray($settingsStore.dmChannels)
+                        ? $settingsStore.dmChannels
+                        : [];
                 const dmList = $channelsByGuild['@me'] ?? [];
-                const missing = dmEntries.some((entry) => {
-                        const id = toSnowflakeString(entry.channelId);
-                        if (!id) return false;
-                        return !dmList.some((channel: any) => toSnowflakeString((channel as any)?.id) === id);
-                });
-                if (!missing) return;
+                const missingIds = dmEntries
+                        .map((entry) => toSnowflakeString(entry.channelId))
+                        .filter((id): id is string => {
+                                if (!id) return false;
+                                return !dmList.some((channel: any) => toSnowflakeString((channel as any)?.id) === id);
+                        });
+                if (!missingIds.length) {
+                        lastDmChannelMetadataFetchKey = null;
+                        return;
+                }
+                const nextKey = missingIds.slice().sort().join(',');
+                if (lastDmChannelMetadataFetchKey === nextKey) return;
                 if (dmChannelMetadataRequest) return;
+                lastDmChannelMetadataFetchKey = nextKey;
                 const request = ensureVisibleDmChannelMetadata().finally(() => {
                         if (dmChannelMetadataRequest === request) {
                                 dmChannelMetadataRequest = null;
