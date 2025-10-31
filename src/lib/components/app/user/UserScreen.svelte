@@ -110,9 +110,33 @@
         const pendingDmRequests = new Map<string, Promise<string | null>>();
         let dmChannelMetadataRequest = $state<Promise<void> | null>(null);
         let dmChannelMetadataToken = 0;
-        let lastDmChannelMetadataFetchKey = $state<string | null>(null);
+        let dmChannelMetadataRetryAt = $state<number | null>(null);
+        let dmChannelMetadataRetryTimer: ReturnType<typeof setTimeout> | null = null;
+        const DM_CHANNEL_METADATA_RETRY_DELAY = 5_000;
+
+        function cancelDmChannelMetadataRetry(): void {
+                if (dmChannelMetadataRetryTimer) {
+                        clearTimeout(dmChannelMetadataRetryTimer);
+                        dmChannelMetadataRetryTimer = null;
+                }
+                dmChannelMetadataRetryAt = null;
+        }
+
+        function scheduleDmChannelMetadataRetry(): void {
+                const target = Date.now() + DM_CHANNEL_METADATA_RETRY_DELAY;
+                dmChannelMetadataRetryAt = target;
+                if (dmChannelMetadataRetryTimer) {
+                        clearTimeout(dmChannelMetadataRetryTimer);
+                }
+                dmChannelMetadataRetryTimer = setTimeout(() => {
+                        dmChannelMetadataRetryTimer = null;
+                        dmChannelMetadataRetryAt = null;
+                }, DM_CHANNEL_METADATA_RETRY_DELAY);
+        }
         const CHANNEL_UNREAD_INDICATOR_CLASSES = CHANNEL_UNREAD_BADGE_CLASSES;
         const CHANNEL_MENTION_INDICATOR_CLASSES = CHANNEL_MENTION_BADGE_CLASSES;
+        const CHANNEL_INDICATOR_WRAPPER_CLASSES =
+                'pointer-events-none absolute left-0 top-1/2 z-20 flex w-6 -translate-y-1/2 justify-center';
 
         function buildNotificationMenuItems(
                 current: NotificationLevel,
@@ -606,6 +630,7 @@
 
         onDestroy(() => {
                 presenceSubscription.destroy();
+                cancelDmChannelMetadataRetry();
         });
 
         $effect(() => {
@@ -1328,7 +1353,7 @@
                 }
         });
 
-        async function ensureVisibleDmChannelMetadata(): Promise<void> {
+        async function ensureVisibleDmChannelMetadata(): Promise<boolean> {
                 const settings = $settingsStore;
                 const map = $channelsByGuild;
                 const visible = Array.isArray(settings.dmChannels)
@@ -1336,7 +1361,7 @@
                                         .map((entry) => toSnowflakeString(entry.channelId))
                                         .filter((id): id is string => Boolean(id))
                         : [];
-                if (!visible.length) return;
+                if (!visible.length) return false;
                 const existingList = Array.isArray(map['@me']) ? map['@me'] : [];
                 const existing = new Set(
                         existingList
@@ -1344,13 +1369,15 @@
                                 .filter((id): id is string => Boolean(id))
                 );
                 const missing = visible.filter((id) => !existing.has(id));
-                if (!missing.length) return;
+                if (!missing.length) return false;
+                const missingSet = new Set(missing);
                 const token = ++dmChannelMetadataToken;
                 try {
                         const response = await api.user.userMeChannelsGet();
-                        if (dmChannelMetadataToken !== token) return;
+                        if (dmChannelMetadataToken !== token) return false;
                         const fetched = Array.isArray(response?.data) ? response.data : [];
-                        if (!fetched.length) return;
+                        if (!fetched.length) return false;
+                        let didUpdate = false;
                         channelsByGuild.update((current) => {
                                 const existingChannels = Array.isArray(current['@me']) ? current['@me'] : [];
                                 const byId = new Map<string, DtoChannel>();
@@ -1363,12 +1390,20 @@
                                         const normalized = normalizeDtoChannel(entry) as DtoChannel;
                                         const id = toSnowflakeString((normalized as any)?.id);
                                         if (!id) continue;
+                                        if (!byId.has(id) || missingSet.has(id)) {
+                                                didUpdate = true;
+                                        }
                                         byId.set(id, normalized);
+                                }
+                                if (!didUpdate) {
+                                        return current;
                                 }
                                 return { ...current, ['@me']: Array.from(byId.values()) };
                         });
+                        return didUpdate;
                 } catch (error) {
                         console.error('Failed to load DM channels', error);
+                        return false;
                 }
         }
 
@@ -1384,18 +1419,35 @@
                                 return !dmList.some((channel: any) => toSnowflakeString((channel as any)?.id) === id);
                         });
                 if (!missingIds.length) {
-                        lastDmChannelMetadataFetchKey = null;
+                        cancelDmChannelMetadataRetry();
                         return;
                 }
-                const nextKey = missingIds.slice().sort().join(',');
-                if (lastDmChannelMetadataFetchKey === nextKey) return;
+                const retryAt = dmChannelMetadataRetryAt;
+                const now = Date.now();
+                if (retryAt && retryAt > now) {
+                        return;
+                }
+                if (retryAt && retryAt <= now) {
+                        cancelDmChannelMetadataRetry();
+                }
                 if (dmChannelMetadataRequest) return;
-                lastDmChannelMetadataFetchKey = nextKey;
-                const request = ensureVisibleDmChannelMetadata().finally(() => {
-                        if (dmChannelMetadataRequest === request) {
-                                dmChannelMetadataRequest = null;
-                        }
-                });
+                const request = ensureVisibleDmChannelMetadata()
+                        .then((updated) => {
+                                if (updated) {
+                                        cancelDmChannelMetadataRetry();
+                                } else {
+                                        scheduleDmChannelMetadataRetry();
+                                }
+                        })
+                        .catch((error) => {
+                                console.error('Failed to ensure DM channel metadata', error);
+                                scheduleDmChannelMetadataRetry();
+                        })
+                        .finally(() => {
+                                if (dmChannelMetadataRequest === request) {
+                                        dmChannelMetadataRequest = null;
+                                }
+                        });
                 dmChannelMetadataRequest = request;
         });
 
@@ -1740,12 +1792,6 @@
                                                                 {@const isActive = activeDmChannelId === channel.id}
                                                                 {@const hasUnread = dmChannelHasUnread(channel.id)}
                                                                 {@const mentionCount = dmMentionCount(channel.id)}
-                                                                {@const indicatorPaddingClass =
-                                                                        mentionCount > 0
-                                                                                ? 'pl-9'
-                                                                                : hasUnread
-                                                                                        ? 'pl-6'
-                                                                                        : 'pl-3'}
                                                                 {@const showUnreadDot = mentionCount === 0 && hasUnread}
                                                                 {@const recipient =
                                                                         channel.recipients.length === 1
@@ -1770,11 +1816,11 @@
                                                                         <div class={`group relative ${isLoading ? 'opacity-70' : ''}`}>
                                                                                 <button
                                                                                         type="button"
-                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pr-12 text-left transition ${
+                                                                                        class={`relative flex w-full items-center gap-3 rounded-md border py-2 pl-6 pr-12 text-left transition ${
                                                                                                 isActive
                                                                                                         ? 'border-[var(--brand)] bg-[var(--panel)] text-[var(--text-strong)]'
                                                                                                         : 'border-[var(--stroke)] bg-[var(--panel-strong)] hover:border-[var(--brand)]/40 hover:bg-[var(--panel)]'
-                                                                                        } ${indicatorPaddingClass} ${isLoading ? 'cursor-wait' : ''}`}
+                                                                                        } ${isLoading ? 'cursor-wait' : ''}`}
                                                                                         disabled={isLoading}
                                                                                         aria-busy={isLoading}
                                                                                         aria-pressed={isActive}
@@ -1782,12 +1828,16 @@
                                                                                 >
                                                                                         {#if mentionCount > 0}
                                                                                                 <span class="sr-only">{m.unread_mentions_indicator({ count: mentionCount })}</span>
-                                                                                                <span aria-hidden="true" class={CHANNEL_MENTION_INDICATOR_CLASSES}>
-                                                                                                        {formatMentionCount(mentionCount)}
+                                                                                                <span aria-hidden="true" class={CHANNEL_INDICATOR_WRAPPER_CLASSES}>
+                                                                                                        <span class={CHANNEL_MENTION_INDICATOR_CLASSES}>
+                                                                                                                {formatMentionCount(mentionCount)}
+                                                                                                        </span>
                                                                                                 </span>
                                                                                         {:else if showUnreadDot}
                                                                                                 <span class="sr-only">{m.unread_indicator()}</span>
-                                                                                                <span aria-hidden="true" class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                                                <span aria-hidden="true" class={CHANNEL_INDICATOR_WRAPPER_CLASSES}>
+                                                                                                        <span class={CHANNEL_UNREAD_INDICATOR_CLASSES}></span>
+                                                                                                </span>
                                                                                         {/if}
                                                                                         <div class="relative">
                                                                                                 <div class="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[var(--panel)] text-sm font-semibold">

@@ -1,4 +1,4 @@
-import { buildAttachmentUrl } from '$lib/utils/cdn';
+import { computeApiBase } from '$lib/runtime/api';
 
 function normalizeAvatarValue(value: unknown, visited = new Set<unknown>()): string | null {
 	if (value == null) {
@@ -51,23 +51,33 @@ function normalizeAvatarValue(value: unknown, visited = new Set<unknown>()): str
         }
 }
 
-	if (typeof value === 'string') {
-		const trimmed = value.trim();
+        if (typeof value === 'string') {
+                const trimmed = value.trim();
 
-		if (!trimmed) {
-			return null;
-		}
+                if (!trimmed) {
+                        return null;
+                }
 
-		if (/^https?:\/\//i.test(trimmed)) {
-			return trimmed;
-		}
+                if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || trimmed.startsWith('//')) {
+                        return trimmed;
+                }
 
-		return buildAttachmentUrl(trimmed);
-	}
+                if (trimmed.startsWith('/')) {
+                        return trimmed;
+                }
 
-	if (typeof value === 'number' || typeof value === 'bigint') {
-		return buildAttachmentUrl(value);
-	}
+                if (trimmed.includes('/')) {
+                        const base = computeApiBase().replace(/\/$/, '');
+                        const path = trimmed.replace(/^\/+/, '');
+                        return `${base}/${path}`;
+                }
+
+                return null;
+        }
+
+        if (typeof value === 'number' || typeof value === 'bigint') {
+                return null;
+        }
 
 	return null;
 }
