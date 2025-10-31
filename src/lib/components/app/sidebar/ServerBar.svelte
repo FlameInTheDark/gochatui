@@ -627,18 +627,19 @@
                         {/if}
                 </div>
         </div>
-        <div
-                class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto pt-1"
-        >
-		<div
-			class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
-				topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
-			}`}
-			ondragover={(event) => onTopDragOver(event, 0)}
-			ondrop={(event) => onTopDrop(event, 0)}
-			role="presentation"
-		></div>
-		{#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
+        <div class="scroll-area flex flex-1 flex-col overflow-visible pt-1">
+                <div
+                        class="server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto"
+                >
+                        <div
+                                class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
+                                        topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
+                                }`}
+                                ondragover={(event) => onTopDragOver(event, 0)}
+                                ondrop={(event) => onTopDrop(event, 0)}
+                                role="presentation"
+                        ></div>
+                        {#each displayItems as item, displayIndex (item.type === 'folder' ? `folder-${item.folder.id}` : `guild-${item.guildId}`)}
 			{#if item.type === 'guild'}
 				{@const guildUnread = guildHasUnread(item.guildId)}
 				{@const guildMentionTotal = guildMentionCount(item.guildId)}
@@ -905,16 +906,17 @@
 					{/if}
 				</div>
 			{/if}
-			<div
-				class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
-					topDropIndex === displayIndex + 1 ? 'opacity-80' : 'opacity-0'
-				}`}
-				ondragover={(event) => onTopDragOver(event, displayIndex + 1)}
-				ondrop={(event) => onTopDrop(event, displayIndex + 1)}
-				role="presentation"
-			></div>
-		{/each}
-	</div>
+                        <div
+                                class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
+                                        topDropIndex === displayIndex + 1 ? 'opacity-80' : 'opacity-0'
+                                }`}
+                                ondragover={(event) => onTopDragOver(event, displayIndex + 1)}
+                                ondrop={(event) => onTopDrop(event, displayIndex + 1)}
+                                role="presentation"
+                        ></div>
+                {/each}
+                </div>
+        </div>
 	<div>
 		<button
 			class="grid h-12 w-12 place-items-center rounded-xl border border-[var(--stroke)] hover:bg-[var(--panel)]"
