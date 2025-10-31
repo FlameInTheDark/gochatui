@@ -602,7 +602,7 @@
                         </span>
                         <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                 <button
-                                        class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                        class={`relative flex h-full w-full items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                 $view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                         }`}
                                         data-tooltip-disabled
@@ -657,7 +657,7 @@
                                                 </span>
                                                 <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                         <button
-                                                        class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                        class={`relative flex h-full w-full items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                 isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
                                                         } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
 							data-tooltip-disabled
@@ -735,7 +735,7 @@
                                                         </span>
                                                         <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                                 <button
-                                                                class={`relative flex h-full w-full flex-col items-center justify-center gap-1 overflow-visible rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                class={`relative flex h-full w-full flex-col items-center justify-center gap-1 overflow-visible rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                         folderIsDropTarget
                                                                                 ? 'ring-2 ring-[var(--brand)]'
 										: folderHasSelection
@@ -848,7 +848,7 @@
                                                                                 </span>
                                                                                 <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                                                         <button
-                                                                                        class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                                        class={`relative flex h-full w-full items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                                                 isGuildSelected(nestedGuild.guildId)
                                                                                                         ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
 													: ''
