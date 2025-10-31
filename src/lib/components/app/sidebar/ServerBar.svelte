@@ -64,7 +64,7 @@
         const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
         const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
         const UNREAD_INDICATOR_POSITION_CLASSES =
-                'pointer-events-none absolute left-0 top-1/2 z-40 flex -translate-y-1/2 justify-center transition-all duration-150';
+                'pointer-events-none absolute left-0 top-1/2 z-40 flex -translate-y-1/2 transform justify-center transition-all duration-150';
         const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
 
 	type DisplayGuild = {
@@ -600,7 +600,7 @@
                         <span
                                 aria-hidden="true"
                                 class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                style="left: calc(-1 * var(--server-indicator-offset));"
+                                style="left: calc(var(--server-indicator-offset, 0rem) * -1);"
                         >
                                 <span
                                         class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
@@ -658,7 +658,7 @@
                                                 <span
                                                         aria-hidden="true"
                                                         class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                                        style="left: calc(-1 * var(--server-indicator-offset));"
+                                                        style="left: calc(var(--server-indicator-offset, 0rem) * -1);"
                                                 >
                                                         <span
                                                                 class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
@@ -739,7 +739,7 @@
                                                         <span
                                                                 aria-hidden="true"
                                                                 class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}
-                                                                style="left: calc(-1 * var(--server-indicator-offset));"
+                                                                style="left: calc(var(--server-indicator-offset, 0rem) * -1);"
                                                         >
                                                                 <span
                                                                         class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
@@ -855,7 +855,7 @@
                                                                                 <span
                                                                                         aria-hidden="true"
                                                                                         class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                                                                        style="left: calc(-1 * var(--nested-indicator-offset));"
+                                                                                        style="left: calc(var(--nested-indicator-offset, 0rem) * -1);"
                                                                                 >
                                                                                         <span
                                                                                                 class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
