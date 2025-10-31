@@ -494,9 +494,10 @@
 
         .server-bar-demo {
                 position: relative;
-                display: inline-flex;
+                min-height: 100vh;
+                display: flex;
                 align-items: stretch;
-                background: transparent;
+                background: linear-gradient(135deg, #0f1115, #111418 40%, #0e1014);
                 color: var(--server-text);
                 font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Inter, Helvetica, Arial,
                         'Apple Color Emoji', 'Segoe UI Emoji';
