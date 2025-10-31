@@ -589,13 +589,13 @@
 <div
         class="flex h-full w-[var(--col1)] flex-col items-center gap-2 border-r border-[var(--stroke)] p-2"
 >
-        <div class="group relative flex w-full justify-center overflow-visible px-3">
+        <div class="group/home relative flex w-full justify-center overflow-visible px-3">
                 <div class="relative h-12 w-12 overflow-visible">
                         {#if homeMentionCount === 0}
                                 <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                         <span
-                                                class={`${UNREAD_INDICATOR_CLASSES} ${
-                                                        homeHasUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                        homeHasUnread ? 'opacity-100' : 'opacity-0 group-hover/home:opacity-100'
                                                 }`}
                                         ></span>
                                 </span>
@@ -643,13 +643,13 @@
 				{@const guildMentionTotal = guildMentionCount(item.guildId)}
 				{@const showGuildIndicator = guildMentionTotal === 0}
 				{@const guildIcon = guildIconUrl(item.guild)}
-                                <div class="group relative flex w-full justify-center overflow-visible">
+                                <div class="group/server relative flex w-full justify-center overflow-visible">
                                         <div class="relative h-12 w-12 overflow-visible">
                                                 {#if showGuildIndicator}
                                                         <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                                                 <span
-                                                                        class={`${UNREAD_INDICATOR_CLASSES} ${
-                                                                                guildUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                                        class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                                guildUnread ? 'opacity-100' : 'opacity-0 group-hover/server:opacity-100'
                                                                         }`}
                                                                 ></span>
                                                         </span>
@@ -711,7 +711,7 @@
 				{@const folderLabel = folderName ? folderName : m.guild_folder()}
 				{@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
                                 <div
-                                        class="group relative flex w-full flex-col items-center gap-2 rounded-2xl"
+                                        class="group/folder relative flex w-full flex-col items-center gap-2 rounded-2xl"
 					style:--folder-collapsed-border={folderColorTokens?.collapsedBorder ?? 'var(--stroke)'}
 					style:--folder-collapsed-bg={folderColorTokens?.collapsedBackground ??
 						'var(--panel-strong)'}
@@ -720,13 +720,13 @@
 					style:--folder-expanded-bg={folderColorTokens?.expandedBackground ??
 						'color-mix(in srgb, var(--panel-strong) 70%, transparent)'}
 				>
-                                        <div class="group relative flex w-full justify-center overflow-visible">
+                                        <div class="group/folder relative flex w-full justify-center overflow-visible">
                                                 <div class="relative h-12 w-12 overflow-visible">
                                                         {#if showFolderIndicator}
                                                                 <span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
                                                                         <span
-                                                                                class={`${FOLDER_UNREAD_INDICATOR_CLASSES} ${
-                                                                                        folderHasUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                                                class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                                        folderHasUnread ? 'opacity-100' : 'opacity-0 group-hover/folder:opacity-100'
                                                                                 }`}
                                                                         ></span>
                                                                 </span>
@@ -832,13 +832,15 @@
 								{@const nestedGuildMention = guildMentionCount(nestedGuild.guildId)}
 								{@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
 								{@const showNestedIndicator = nestedGuildMention === 0}
-                                                                <div class="group relative flex w-full justify-center overflow-visible">
+                                                                <div class="group/nested relative flex w-full justify-center overflow-visible">
                                                                         <div class="relative h-12 w-12 overflow-visible">
                                                                                 {#if showNestedIndicator}
                                                                                         <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                                                                                 <span
-                                                                                                        class={`${UNREAD_INDICATOR_CLASSES} ${
-                                                                                                                nestedGuildUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                                                                        class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                                                                nestedGuildUnread
+                                                                                                                        ? 'opacity-100'
+                                                                                                                        : 'opacity-0 group-hover/nested:opacity-100'
                                                                                                         }`}
                                                                                                 ></span>
                                                                                         </span>

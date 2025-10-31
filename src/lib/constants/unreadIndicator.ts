@@ -1,5 +1,5 @@
 export const SERVER_UNREAD_BADGE_CLASSES =
-        'pointer-events-none block h-2 w-2 rounded-full bg-white shadow-[0_0_0_2px_var(--panel-strong)] transition-all duration-150 group-hover:h-7 group-hover:w-2 group-hover:rounded-lg group-hover:shadow-[0_0_0_2px_var(--panel-strong)]';
+        'pointer-events-none block h-2 w-2 rounded-full bg-white shadow-[0_0_0_2px_var(--panel-strong)] transition-all duration-150';
 
 export const FOLDER_UNREAD_BADGE_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
 
