@@ -594,7 +594,7 @@
                         <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                 <span
                                         class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                homeMentionCount === 0 && homeHasUnread
+                                                homeHasUnread
                                                         ? 'opacity-100'
                                                         : 'opacity-0 group-hover/home:opacity-100'
                                         }`}
@@ -649,7 +649,7 @@
                                                 <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                                         <span
                                                                 class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                        guildMentionTotal === 0 && guildUnread
+                                                                        guildUnread
                                                                                 ? 'opacity-100'
                                                                                 : 'opacity-0 group-hover/server:opacity-100'
                                                                 }`}
@@ -727,7 +727,7 @@
                                                         <span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
                                                                 <span
                                                                         class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                                folderMentionTotal === 0 && folderHasUnread
+                                                                                folderHasUnread
                                                                                         ? 'opacity-100'
                                                                                         : 'opacity-0 group-hover/folder:opacity-100'
                                                                         }`}
@@ -840,7 +840,7 @@
                                                                                 <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                                                                         <span
                                                                                                 class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                                                        nestedGuildMention === 0 && nestedGuildUnread
+                                                                                                        nestedGuildUnread
                                                                                                                 ? 'opacity-100'
                                                                                                                 : 'opacity-0 group-hover/nested:opacity-100'
                                                                                                 }`}
