@@ -293,11 +293,6 @@
                 });
         }
 
-        function handleReset() {
-                state = cloneState(seed);
-                saveState(storageKey, state);
-        }
-
         function handleKeyDown(event: KeyboardEvent) {
                 const active = (event.target as HTMLElement | null)?.closest('[data-id]') as HTMLElement | null;
                 if (!active) return;
@@ -470,14 +465,6 @@
                 </button>
         </nav>
 
-        <header class="helper">
-                Drag to reorder. Drop <b>one server on another</b> at root to create a folder. Drop <b>on a folder</b> to add
-                servers to it. <b>No nested folders</b> — folders live only in the root. State saves to <b>localStorage</b>.
-        </header>
-        <div class="footer-reset">
-                Having fun? <button onclick={handleReset} title="Restore the example structure">Reset Demo</button>
-        </div>
-
         <div
                 class={`drop-line${dropLine.visible ? ' show' : ''}`}
                 style={`top: ${dropLine.top}px; left: ${dropLine.left}px; right: ${dropLine.right}px;`}
@@ -507,10 +494,9 @@
 
         .server-bar-demo {
                 position: relative;
-                min-height: 100vh;
-                display: flex;
+                display: inline-flex;
                 align-items: stretch;
-                background: linear-gradient(135deg, #0f1115, #111418 40%, #0e1014);
+                background: transparent;
                 color: var(--server-text);
                 font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Inter, Helvetica, Arial,
                         'Apple Color Emoji', 'Segoe UI Emoji';
@@ -803,47 +789,6 @@
         .drop-into {
                 outline: 3px dashed #87b0ff;
                 outline-offset: 6px;
-        }
-
-        header.helper {
-                position: fixed;
-                left: 108px;
-                top: 12px;
-                right: 12px;
-                background: #0f1217;
-                border: 1px solid #0b0d11;
-                border-radius: 14px;
-                padding: 10px 12px;
-                color: var(--server-muted);
-                font-size: 13px;
-                box-shadow: var(--server-shadow);
-        }
-
-        header.helper b {
-                color: #cbd5e1;
-        }
-
-        .footer-reset {
-                position: fixed;
-                left: 108px;
-                bottom: 12px;
-                background: #11151c;
-                border: 1px solid #0b0f14;
-                padding: 8px 10px;
-                border-radius: 10px;
-                color: var(--server-muted);
-                font-size: 12px;
-        }
-
-        .footer-reset button {
-                appearance: none;
-                background: #202634;
-                color: #dbe4ff;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 6px 10px;
-                font-weight: 700;
-                cursor: pointer;
         }
 
         .focus-ring:focus-visible {
