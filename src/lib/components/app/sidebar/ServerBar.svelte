@@ -628,7 +628,7 @@
                 </div>
         </div>
         <div
-                class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-y-auto pt-1"
+                class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto pt-1"
         >
 		<div
 			class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
