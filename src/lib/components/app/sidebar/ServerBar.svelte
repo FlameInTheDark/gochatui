@@ -59,13 +59,19 @@
         const homeMentionCount = $derived.by(() => userHomeMentionCount());
         const homeHasUnread = $derived.by(() => userHomeHasUnread());
 
-	const UNREAD_INDICATOR_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
-	const FOLDER_UNREAD_INDICATOR_CLASSES = FOLDER_UNREAD_BADGE_CLASSES;
-	const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
-	const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
-	const UNREAD_INDICATOR_POSITION_CLASSES =
-		'pointer-events-none absolute left-0 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 justify-center transition-all duration-150';
-	const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
+        const UNREAD_INDICATOR_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
+        const FOLDER_UNREAD_INDICATOR_CLASSES = FOLDER_UNREAD_BADGE_CLASSES;
+        const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
+        const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
+        const UNREAD_INDICATOR_POSITION_CLASSES =
+                'pointer-events-none absolute left-0 top-1/2 z-40 flex justify-center transition-all duration-150';
+        const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
+        const INDICATOR_OFFSET_ROOT = '0.75rem';
+        const INDICATOR_OFFSET_NESTED = 'calc(0.75rem + 0.5rem)';
+
+        function indicatorStyle(offset: string): string {
+                return `--indicator-offset:${offset};transform:translate(calc(-50% - var(--indicator-offset)), -50%);`;
+        }
 
 	type DisplayGuild = {
 		type: 'guild';
@@ -592,7 +598,11 @@
         <div class="group/home relative flex w-full justify-center overflow-visible px-3">
                 <div class="relative h-12 w-12 shrink-0 overflow-visible">
                         {#if homeMentionCount === 0}
-                                <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                <span
+                                        aria-hidden="true"
+                                        class={UNREAD_INDICATOR_POSITION_CLASSES}
+                                        style={indicatorStyle(INDICATOR_OFFSET_ROOT)}
+                                >
                                         <span
                                                 class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
                                                         homeHasUnread ? 'opacity-100' : 'opacity-0 group-hover/home:opacity-100'
@@ -646,7 +656,11 @@
                                 <div class="group/server relative flex w-full justify-center overflow-visible">
                                         <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                 {#if showGuildIndicator}
-                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                        <span
+                                                                aria-hidden="true"
+                                                                class={UNREAD_INDICATOR_POSITION_CLASSES}
+                                                                style={indicatorStyle(INDICATOR_OFFSET_ROOT)}
+                                                        >
                                                                 <span
                                                                         class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
                                                                                 guildUnread ? 'opacity-100' : 'opacity-0 group-hover/server:opacity-100'
@@ -723,7 +737,11 @@
                                         <div class="group/folder relative flex w-full justify-center overflow-visible">
                                                 <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                         {#if showFolderIndicator}
-                                                                <span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                <span
+                                                                        aria-hidden="true"
+                                                                        class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}
+                                                                        style={indicatorStyle(INDICATOR_OFFSET_ROOT)}
+                                                                >
                                                                         <span
                                                                                 class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
                                                                                         folderHasUnread ? 'opacity-100' : 'opacity-0 group-hover/folder:opacity-100'
@@ -835,7 +853,11 @@
                                                                 <div class="group/nested relative flex w-full justify-center overflow-visible">
                                                                         <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                                                 {#if showNestedIndicator}
-                                                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                                        <span
+                                                                                                aria-hidden="true"
+                                                                                                class={UNREAD_INDICATOR_POSITION_CLASSES}
+                                                                                                style={indicatorStyle(INDICATOR_OFFSET_NESTED)}
+                                                                                        >
                                                                                                 <span
                                                                                                         class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
                                                                                                                 nestedGuildUnread
