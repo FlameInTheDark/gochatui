@@ -539,7 +539,7 @@
                 border-radius: 2px;
         }
 
-        .circle {
+        :global(.circle) {
                 width: 60px;
                 height: 60px;
                 border-radius: 50%;
@@ -554,9 +554,10 @@
                 outline: none;
                 border: none;
                 box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 20px rgba(0, 0, 0, 0.35);
+                box-sizing: border-box;
         }
 
-        .circle:hover {
+        :global(.circle:hover) {
                 border-radius: 30%;
         }
 
@@ -601,6 +602,9 @@
 
         :global(.guild) {
                 position: relative;
+                display: flex;
+                justify-content: center;
+                align-items: center;
         }
 
         :global(.guild .circle) {
@@ -692,6 +696,10 @@
 
         :global(.folder) {
                 position: relative;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
         }
 
         :global(.folder > .folder-toggle) {
@@ -720,6 +728,7 @@
                 display: grid;
                 place-items: center;
                 padding: 6px;
+                box-sizing: border-box;
         }
 
         :global(.folder-grid) {
@@ -787,12 +796,12 @@
                 display: block;
         }
 
-        .drop-into {
+        :global(.drop-into) {
                 outline: 3px dashed #87b0ff;
                 outline-offset: 6px;
         }
 
-        .focus-ring:focus-visible {
+        :global(.focus-ring:focus-visible) {
                 outline: 3px solid #87b0ff;
                 outline-offset: 4px;
         }
