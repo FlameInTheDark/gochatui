@@ -591,15 +591,15 @@
 >
         <div class="flex w-full justify-center overflow-visible px-3">
                 <div class="group/home relative flex w-fit justify-center overflow-visible">
-                        {#if homeMentionCount === 0}
-                                <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
-                                        <span
-                                                class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                        homeHasUnread ? 'opacity-100' : 'opacity-0 group-hover/home:opacity-100'
-                                                }`}
-                                        ></span>
-                                </span>
-                        {/if}
+                        <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                <span
+                                        class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                homeMentionCount === 0 && homeHasUnread
+                                                        ? 'opacity-100'
+                                                        : 'opacity-0 group-hover/home:opacity-100'
+                                        }`}
+                                ></span>
+                        </span>
                         <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                 <button
                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
@@ -643,21 +643,18 @@
 			{#if item.type === 'guild'}
 				{@const guildUnread = guildHasUnread(item.guildId)}
 				{@const guildMentionTotal = guildMentionCount(item.guildId)}
-				{@const showGuildIndicator = guildMentionTotal === 0}
-				{@const guildIcon = guildIconUrl(item.guild)}
+                                {@const guildIcon = guildIconUrl(item.guild)}
                                 <div class="flex w-full justify-center overflow-visible">
                                         <div class="group/server relative flex w-fit justify-center overflow-visible">
-                                                {#if showGuildIndicator}
-                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
-                                                                <span
-                                                                        class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                                guildUnread
-                                                                                        ? 'opacity-100'
-                                                                                        : 'opacity-0 group-hover/server:opacity-100'
-                                                                        }`}
-                                                                ></span>
-                                                        </span>
-                                                {/if}
+                                                <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                        <span
+                                                                class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                        guildMentionTotal === 0 && guildUnread
+                                                                                ? 'opacity-100'
+                                                                                : 'opacity-0 group-hover/server:opacity-100'
+                                                                }`}
+                                                        ></span>
+                                                </span>
                                                 <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                         <button
                                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
@@ -711,8 +708,7 @@
 				{@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
 				{@const folderHasUnread = item.guilds.some((g) => guildHasUnread(g.guildId))}
 				{@const folderMentionTotal = folderMentionCount(item)}
-				{@const showFolderIndicator = folderMentionTotal === 0}
-				{@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
+                                {@const folderIsDropTarget = folderDropTarget?.folderId === item.folder.id}
 				{@const folderName = item.folder.name?.trim()}
 				{@const folderLabel = folderName ? folderName : m.guild_folder()}
 				{@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
@@ -728,17 +724,15 @@
 				>
                                         <div class="flex w-full justify-center overflow-visible">
                                                 <div class="group/folder relative flex w-fit justify-center overflow-visible">
-                                                        {#if showFolderIndicator}
-                                                                <span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
-                                                                        <span
-                                                                                class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                                        folderHasUnread
-                                                                                                ? 'opacity-100'
-                                                                                                : 'opacity-0 group-hover/folder:opacity-100'
-                                                                                }`}
-                                                                        ></span>
-                                                                </span>
-                                                        {/if}
+                                                        <span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                <span
+                                                                        class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                                folderMentionTotal === 0 && folderHasUnread
+                                                                                        ? 'opacity-100'
+                                                                                        : 'opacity-0 group-hover/folder:opacity-100'
+                                                                        }`}
+                                                                ></span>
+                                                        </span>
                                                         <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                                 <button
                                                                 class={`relative flex h-full w-full flex-col items-center justify-center gap-1 overflow-visible rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
@@ -841,20 +835,17 @@
                                                                 {@const nestedGuildUnread = guildHasUnread(nestedGuild.guildId)}
                                                                 {@const nestedGuildMention = guildMentionCount(nestedGuild.guildId)}
                                                                 {@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
-                                                                {@const showNestedIndicator = nestedGuildMention === 0}
                                                                 <div class="flex w-full justify-center overflow-visible">
                                                                         <div class="group/nested relative flex w-fit justify-center overflow-visible">
-                                                                                {#if showNestedIndicator}
-                                                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
-                                                                                                <span
-                                                                                                        class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                                                                nestedGuildUnread
-                                                                                                                        ? 'opacity-100'
-                                                                                                                        : 'opacity-0 group-hover/nested:opacity-100'
-                                                                                                        }`}
-                                                                                                ></span>
-                                                                                        </span>
-                                                                                {/if}
+                                                                                <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                                        <span
+                                                                                                class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                                                        nestedGuildMention === 0 && nestedGuildUnread
+                                                                                                                ? 'opacity-100'
+                                                                                                                : 'opacity-0 group-hover/nested:opacity-100'
+                                                                                                }`}
+                                                                                        ></span>
+                                                                                </span>
                                                                                 <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                                                         <button
                                                                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
