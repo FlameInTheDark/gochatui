@@ -66,8 +66,12 @@
         const UNREAD_INDICATOR_POSITION_CLASSES =
                 'pointer-events-none absolute left-0 top-1/2 z-40 flex justify-center transition-all duration-150';
         const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
-        const INDICATOR_OFFSET_ROOT = '0.75rem';
-        const INDICATOR_OFFSET_NESTED = '1.25rem';
+        // Offset unread dots by the combined horizontal padding of the sidebar column (0.5rem)
+        // and the server list viewport (0.75rem) so the track lines up with the list border.
+        const INDICATOR_OFFSET_ROOT = '1.25rem';
+        // Nested guilds sit inside an expanded folder container that adds 0.5rem padding and a
+        // 1px border, so we advance their indicator the additional 9px (0.5625rem) to stay aligned.
+        const INDICATOR_OFFSET_NESTED = '1.8125rem';
 
         function indicatorStyle(offset: string): string {
                 return `transform: translate(calc(-1 * (${offset})), -50%);`;
