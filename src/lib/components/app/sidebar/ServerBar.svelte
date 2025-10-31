@@ -64,13 +64,13 @@
         const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
         const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
         const UNREAD_INDICATOR_POSITION_CLASSES =
-                'pointer-events-none absolute left-0 top-1/2 z-40 flex justify-center transition-all duration-150';
+                'pointer-events-none absolute left-0 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 justify-center transition-all duration-150';
         const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
-        const INDICATOR_OFFSET_ROOT = '0.75rem';
-        const INDICATOR_OFFSET_NESTED = 'calc(0.75rem + 0.5rem)';
+        const INDICATOR_OFFSET_ROOT = '0.75rem + 0.5rem';
+        const INDICATOR_OFFSET_NESTED = '0.75rem + 0.5rem + 0.5rem';
 
         function indicatorStyle(offset: string): string {
-                return `--indicator-offset:${offset};transform:translate(calc(-50% - var(--indicator-offset)), -50%);`;
+                return `margin-left: calc(-1 * (${offset}));`;
         }
 
 	type DisplayGuild = {
