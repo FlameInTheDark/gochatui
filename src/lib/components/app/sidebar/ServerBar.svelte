@@ -590,7 +590,7 @@
         class="flex h-full w-[var(--col1)] flex-col items-center gap-2 border-r border-[var(--stroke)] p-2"
 >
         <div class="group/home relative flex w-full justify-center overflow-visible px-3">
-                <div class="relative h-12 w-12 overflow-visible">
+                <div class="relative h-12 w-12 shrink-0 overflow-visible">
                         {#if homeMentionCount === 0}
                                 <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                         <span
@@ -644,7 +644,7 @@
 				{@const showGuildIndicator = guildMentionTotal === 0}
 				{@const guildIcon = guildIconUrl(item.guild)}
                                 <div class="group/server relative flex w-full justify-center overflow-visible">
-                                        <div class="relative h-12 w-12 overflow-visible">
+                                        <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                 {#if showGuildIndicator}
                                                         <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                                                 <span
@@ -721,7 +721,7 @@
 						'color-mix(in srgb, var(--panel-strong) 70%, transparent)'}
 				>
                                         <div class="group/folder relative flex w-full justify-center overflow-visible">
-                                                <div class="relative h-12 w-12 overflow-visible">
+                                                <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                         {#if showFolderIndicator}
                                                                 <span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
                                                                         <span
@@ -833,7 +833,7 @@
 								{@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
 								{@const showNestedIndicator = nestedGuildMention === 0}
                                                                 <div class="group/nested relative flex w-full justify-center overflow-visible">
-                                                                        <div class="relative h-12 w-12 overflow-visible">
+                                                                        <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                                                 {#if showNestedIndicator}
                                                                                         <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
                                                                                                 <span
