@@ -590,20 +590,20 @@
 	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)] p-2"
 >
         <div class="group relative flex w-full justify-center overflow-visible">
-		{#if homeMentionCount === 0}
-			<span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
-				<span
-					class={`${UNREAD_INDICATOR_CLASSES} ${
-						homeHasUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-					}`}
-				></span>
-			</span>
-		{/if}
-		<div class="relative h-12 w-12 overflow-visible">
-			<button
-				class={`relative grid h-full w-full place-items-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-					$view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
-				}`}
+                <div class="relative h-12 w-12 overflow-visible">
+                        {#if homeMentionCount === 0}
+                                <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                        <span
+                                                class={`${UNREAD_INDICATOR_CLASSES} ${
+                                                        homeHasUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                }`}
+                                        ></span>
+                                </span>
+                        {/if}
+                        <button
+                                class={`relative grid h-full w-full place-items-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                        $view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
+                                }`}
 				data-tooltip-disabled
 				use:tooltip={{
 					content: () => m.user_home_open_label(),
@@ -620,13 +620,13 @@
 				{/if}
 				<User class="h-5 w-5" stroke-width={2} />
 			</button>
-			{#if homeMentionCount > 0}
-				<span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}
-					>{formatMentionCount(homeMentionCount)}</span
-				>
-			{/if}
-		</div>
-	</div>
+                        {#if homeMentionCount > 0}
+                                <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}
+                                        >{formatMentionCount(homeMentionCount)}</span
+                                >
+                        {/if}
+                </div>
+        </div>
 	<div
 		class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto pt-1"
 	>
@@ -644,21 +644,21 @@
 				{@const guildMentionTotal = guildMentionCount(item.guildId)}
 				{@const showGuildIndicator = guildMentionTotal === 0}
 				{@const guildIcon = guildIconUrl(item.guild)}
-				<div class="group relative flex w-full justify-center overflow-visible">
-					{#if showGuildIndicator}
-						<span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
-							<span
-								class={`${UNREAD_INDICATOR_CLASSES} ${
-									guildUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-								}`}
-							></span>
-						</span>
-					{/if}
-					<div class="relative h-12 w-12 overflow-visible">
-						<button
-							class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-								isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
-							} ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
+                                <div class="group relative flex w-full justify-center overflow-visible">
+                                        <div class="relative h-12 w-12 overflow-visible">
+                                                {#if showGuildIndicator}
+                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                <span
+                                                                        class={`${UNREAD_INDICATOR_CLASSES} ${
+                                                                                guildUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                                        }`}
+                                                                ></span>
+                                                        </span>
+                                                {/if}
+                                                <button
+                                                        class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
+                                                        } ${mergeTargetGuild === item.guildId ? 'ring-2 ring-[var(--brand)]' : ''}`}
 							data-tooltip-disabled
 							use:tooltip={{
 								content: () => item.guild.name ?? 'Server',
@@ -695,13 +695,13 @@
 								<span class="sr-only">{m.unread_indicator()}</span>
 							{/if}
 						</button>
-						{#if guildMentionTotal > 0}
-							<span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}
-								>{formatMentionCount(guildMentionTotal)}</span
-							>
-						{/if}
-					</div>
-				</div>
+                                                {#if guildMentionTotal > 0}
+                                                        <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}
+                                                                >{formatMentionCount(guildMentionTotal)}</span
+                                                        >
+                                                {/if}
+                                        </div>
+                                </div>
 			{:else}
 				{@const folderHasSelection = item.guilds.some((g) => isGuildSelected(g.guildId))}
 				{@const folderHasUnread = item.guilds.some((g) => guildHasUnread(g.guildId))}
@@ -721,21 +721,21 @@
 					style:--folder-expanded-bg={folderColorTokens?.expandedBackground ??
 						'color-mix(in srgb, var(--panel-strong) 70%, transparent)'}
 				>
-					<div class="group relative flex w-full justify-center overflow-visible">
-						{#if showFolderIndicator}
-							<span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
-								<span
-									class={`${FOLDER_UNREAD_INDICATOR_CLASSES} ${
-										folderHasUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-									}`}
-								></span>
-							</span>
-						{/if}
-						<div class="relative h-12 w-12 overflow-visible">
-							<button
-								class={`relative flex h-full w-full flex-col items-center justify-center gap-1 overflow-visible rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-									folderIsDropTarget
-										? 'ring-2 ring-[var(--brand)]'
+                                        <div class="group relative flex w-full justify-center overflow-visible">
+                                                <div class="relative h-12 w-12 overflow-visible">
+                                                        {#if showFolderIndicator}
+                                                                <span aria-hidden="true" class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                        <span
+                                                                                class={`${FOLDER_UNREAD_INDICATOR_CLASSES} ${
+                                                                                        folderHasUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                                                }`}
+                                                                        ></span>
+                                                                </span>
+                                                        {/if}
+                                                        <button
+                                                                class={`relative flex h-full w-full flex-col items-center justify-center gap-1 overflow-visible rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                        folderIsDropTarget
+                                                                                ? 'ring-2 ring-[var(--brand)]'
 										: folderHasSelection
 											? 'shadow ring-2 ring-[var(--brand)] ring-inset'
 											: ''
@@ -806,13 +806,13 @@
 									<span class="sr-only">{m.unread_indicator()}</span>
 								{/if}
 							</button>
-							{#if folderMentionTotal > 0}
-								<span aria-hidden="true" class={FOLDER_MENTION_INDICATOR_CLASSES}
-									>{formatMentionCount(folderMentionTotal)}</span
-								>
-							{/if}
-						</div>
-					</div>
+                                                        {#if folderMentionTotal > 0}
+                                                                <span aria-hidden="true" class={FOLDER_MENTION_INDICATOR_CLASSES}
+                                                                        >{formatMentionCount(folderMentionTotal)}</span
+                                                                >
+                                                        {/if}
+                                                </div>
+                                        </div>
 
 					{#if expandedFolders[item.folder.id]}
 						<div
@@ -833,21 +833,21 @@
 								{@const nestedGuildMention = guildMentionCount(nestedGuild.guildId)}
 								{@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
 								{@const showNestedIndicator = nestedGuildMention === 0}
-								<div class="group relative flex w-full justify-center overflow-visible">
-									{#if showNestedIndicator}
-										<span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
-											<span
-												class={`${UNREAD_INDICATOR_CLASSES} ${
-													nestedGuildUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-												}`}
-											></span>
-										</span>
-									{/if}
-									<div class="relative h-12 w-12 overflow-visible">
-										<button
-											class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
-												isGuildSelected(nestedGuild.guildId)
-													? 'shadow ring-2 ring-[var(--brand)] ring-inset'
+                                                                <div class="group relative flex w-full justify-center overflow-visible">
+                                                                        <div class="relative h-12 w-12 overflow-visible">
+                                                                                {#if showNestedIndicator}
+                                                                                        <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
+                                                                                                <span
+                                                                                                        class={`${UNREAD_INDICATOR_CLASSES} ${
+                                                                                                                nestedGuildUnread ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                                                                        }`}
+                                                                                                ></span>
+                                                                                        </span>
+                                                                                {/if}
+                                                                                <button
+                                                                                        class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
+                                                                                                isGuildSelected(nestedGuild.guildId)
+                                                                                                        ? 'shadow ring-2 ring-[var(--brand)] ring-inset'
 													: ''
 											} ${
 												folderDropTarget?.folderId === item.folder.id &&
@@ -893,13 +893,13 @@
 												<span class="sr-only">{m.unread_indicator()}</span>
 											{/if}
 										</button>
-										{#if nestedGuildMention > 0}
-											<span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}
-												>{formatMentionCount(nestedGuildMention)}</span
-											>
-										{/if}
-									</div>
-								</div>
+                                                                                {#if nestedGuildMention > 0}
+                                                                                        <span aria-hidden="true" class={SERVER_MENTION_INDICATOR_CLASSES}
+                                                                                                >{formatMentionCount(nestedGuildMention)}</span
+                                                                                        >
+                                                                                {/if}
+                                                                        </div>
+                                                                </div>
 							{/each}
 						</div>
 					{/if}
