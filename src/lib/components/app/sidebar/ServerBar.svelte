@@ -589,7 +589,7 @@
 <div
         class="flex h-full w-[var(--col1)] flex-col items-center gap-2 border-r border-[var(--stroke)] p-2"
 >
-        <div class="group relative flex w-full justify-center overflow-visible">
+        <div class="group relative flex w-full justify-center overflow-visible px-3">
                 <div class="relative h-12 w-12 overflow-visible">
                         {#if homeMentionCount === 0}
                                 <span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
@@ -627,10 +627,8 @@
                         {/if}
                 </div>
         </div>
-        <div class="scroll-area flex flex-1 flex-col overflow-visible pt-1">
-                <div
-                        class="server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto"
-                >
+        <div class="scroll-area flex flex-1 flex-col overflow-y-auto pt-1">
+                <div class="server-scroll flex flex-1 flex-col gap-2 px-3">
                         <div
                                 class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
                                         topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
@@ -712,8 +710,8 @@
 				{@const folderName = item.folder.name?.trim()}
 				{@const folderLabel = folderName ? folderName : m.guild_folder()}
 				{@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
-				<div
-					class="group relative flex w-full flex-col items-center gap-2 rounded-2xl"
+                                <div
+                                        class="group relative flex w-full flex-col items-center gap-2 rounded-2xl"
 					style:--folder-collapsed-border={folderColorTokens?.collapsedBorder ?? 'var(--stroke)'}
 					style:--folder-collapsed-bg={folderColorTokens?.collapsedBackground ??
 						'var(--panel-strong)'}
@@ -1039,12 +1037,12 @@
 </div>
 
 <style lang="postcss">
-	.server-scroll {
-		scrollbar-width: none;
-		-ms-overflow-style: none;
-	}
+        .scroll-area {
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+        }
 
-	.server-scroll::-webkit-scrollbar {
-		display: none;
-	}
+        .scroll-area::-webkit-scrollbar {
+                display: none;
+        }
 </style>
