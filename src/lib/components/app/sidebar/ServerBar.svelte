@@ -64,18 +64,8 @@
         const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
         const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
         const UNREAD_INDICATOR_POSITION_CLASSES =
-                'pointer-events-none absolute left-0 top-1/2 z-40 flex justify-center transition-all duration-150';
+                'pointer-events-none absolute left-0 top-1/2 z-40 flex -translate-y-1/2 justify-center transition-all duration-150';
         const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
-        // Offset unread dots by the combined horizontal padding of the sidebar column (0.5rem)
-        // and the server list viewport (0.75rem) so the track lines up with the list border.
-        const INDICATOR_OFFSET_ROOT = '1.25rem';
-        // Nested guilds sit inside an expanded folder container that adds 0.5rem padding and a
-        // 1px border, so we advance their indicator the additional 9px (0.5625rem) to stay aligned.
-        const INDICATOR_OFFSET_NESTED = '1.8125rem';
-
-        function indicatorStyle(offset: string): string {
-                return `transform: translate(calc(-1 * (${offset})), -50%);`;
-        }
 
 	type DisplayGuild = {
 		type: 'guild';
@@ -598,22 +588,28 @@
 
 <div
         class="flex h-full w-[var(--col1)] flex-col items-center gap-2 border-r border-[var(--stroke)] p-2"
+        style:--sidebar-padding="0.5rem"
+        style:--server-scroll-padding="0.75rem"
+        style:--server-indicator-offset="calc(var(--sidebar-padding) + var(--server-scroll-padding))"
+        style:--folder-expanded-padding="0.5rem"
+        style:--folder-border-width="1px"
+        style:--nested-indicator-offset="calc(var(--server-indicator-offset) + var(--folder-expanded-padding) + var(--folder-border-width))"
 >
         <div class="group/home relative flex w-full justify-center overflow-visible px-3">
-                <div class="relative h-12 w-12 shrink-0 overflow-visible">
-                        {#if homeMentionCount === 0}
+                {#if homeMentionCount === 0}
+                        <span
+                                aria-hidden="true"
+                                class={UNREAD_INDICATOR_POSITION_CLASSES}
+                                style="left: calc(-1 * var(--server-indicator-offset));"
+                        >
                                 <span
-                                        aria-hidden="true"
-                                        class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                        style={indicatorStyle(INDICATOR_OFFSET_ROOT)}
-                                >
-                                        <span
-                                                class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                        homeHasUnread ? 'opacity-100' : 'opacity-0 group-hover/home:opacity-100'
-                                                }`}
-                                        ></span>
-                                </span>
-                        {/if}
+                                        class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                homeHasUnread ? 'opacity-100' : 'opacity-0 group-hover/home:opacity-100'
+                                        }`}
+                                ></span>
+                        </span>
+                {/if}
+                <div class="relative h-12 w-12 shrink-0 overflow-visible">
                         <button
                                 class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                         $view === 'user' ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
@@ -658,20 +654,20 @@
 				{@const showGuildIndicator = guildMentionTotal === 0}
 				{@const guildIcon = guildIconUrl(item.guild)}
                                 <div class="group/server relative flex w-full justify-center overflow-visible">
-                                        <div class="relative h-12 w-12 shrink-0 overflow-visible">
-                                                {#if showGuildIndicator}
+                                        {#if showGuildIndicator}
+                                                <span
+                                                        aria-hidden="true"
+                                                        class={UNREAD_INDICATOR_POSITION_CLASSES}
+                                                        style="left: calc(-1 * var(--server-indicator-offset));"
+                                                >
                                                         <span
-                                                                aria-hidden="true"
-                                                                class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                                                style={indicatorStyle(INDICATOR_OFFSET_ROOT)}
-                                                        >
-                                                                <span
-                                                                        class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                                guildUnread ? 'opacity-100' : 'opacity-0 group-hover/server:opacity-100'
-                                                                        }`}
-                                                                ></span>
-                                                        </span>
-                                                {/if}
+                                                                class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                        guildUnread ? 'opacity-100' : 'opacity-0 group-hover/server:opacity-100'
+                                                                }`}
+                                                        ></span>
+                                                </span>
+                                        {/if}
+                                        <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                 <button
                                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                 isGuildSelected(item.guildId) ? 'shadow ring-2 ring-[var(--brand)] ring-inset' : ''
@@ -730,7 +726,7 @@
 				{@const folderColorTokens = computeFolderColorTokens(item.folder.color)}
                                 <div
                                         class="group/folder relative flex w-full flex-col items-center gap-2 rounded-2xl"
-					style:--folder-collapsed-border={folderColorTokens?.collapsedBorder ?? 'var(--stroke)'}
+                                        style:--folder-collapsed-border={folderColorTokens?.collapsedBorder ?? 'var(--stroke)'}
 					style:--folder-collapsed-bg={folderColorTokens?.collapsedBackground ??
 						'var(--panel-strong)'}
 					style:--folder-hover-bg={folderColorTokens?.hoverBackground ?? 'var(--panel)'}
@@ -739,20 +735,20 @@
 						'color-mix(in srgb, var(--panel-strong) 70%, transparent)'}
 				>
                                         <div class="group/folder relative flex w-full justify-center overflow-visible">
-                                                <div class="relative h-12 w-12 shrink-0 overflow-visible">
-                                                        {#if showFolderIndicator}
+                                                {#if showFolderIndicator}
+                                                        <span
+                                                                aria-hidden="true"
+                                                                class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}
+                                                                style="left: calc(-1 * var(--server-indicator-offset));"
+                                                        >
                                                                 <span
-                                                                        aria-hidden="true"
-                                                                        class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}
-                                                                        style={indicatorStyle(INDICATOR_OFFSET_ROOT)}
-                                                                >
-                                                                        <span
-                                                                                class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                                        folderHasUnread ? 'opacity-100' : 'opacity-0 group-hover/folder:opacity-100'
-                                                                                }`}
-                                                                        ></span>
-                                                                </span>
-                                                        {/if}
+                                                                        class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                                folderHasUnread ? 'opacity-100' : 'opacity-0 group-hover/folder:opacity-100'
+                                                                        }`}
+                                                                ></span>
+                                                        </span>
+                                                {/if}
+                                                <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                         <button
                                                                 class={`relative flex h-full w-full flex-col items-center justify-center gap-1 overflow-visible rounded-xl border border-[var(--folder-collapsed-border)] bg-[var(--folder-collapsed-bg)] p-1 transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--folder-hover-bg)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                         folderIsDropTarget
@@ -855,22 +851,22 @@
 								{@const nestedGuildIcon = guildIconUrl(nestedGuild.guild)}
 								{@const showNestedIndicator = nestedGuildMention === 0}
                                                                 <div class="group/nested relative flex w-full justify-center overflow-visible">
-                                                                        <div class="relative h-12 w-12 shrink-0 overflow-visible">
-                                                                                {#if showNestedIndicator}
+                                                                        {#if showNestedIndicator}
+                                                                                <span
+                                                                                        aria-hidden="true"
+                                                                                        class={UNREAD_INDICATOR_POSITION_CLASSES}
+                                                                                        style="left: calc(-1 * var(--nested-indicator-offset));"
+                                                                                >
                                                                                         <span
-                                                                                                aria-hidden="true"
-                                                                                                class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                                                                                style={indicatorStyle(INDICATOR_OFFSET_NESTED)}
-                                                                                        >
-                                                                                                <span
-                                                                                                        class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
-                                                                                                                nestedGuildUnread
-                                                                                                                        ? 'opacity-100'
-                                                                                                                        : 'opacity-0 group-hover/nested:opacity-100'
-                                                                                                        }`}
-                                                                                                ></span>
-                                                                                        </span>
-                                                                                {/if}
+                                                                                                class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
+                                                                                                        nestedGuildUnread
+                                                                                                                ? 'opacity-100'
+                                                                                                                : 'opacity-0 group-hover/nested:opacity-100'
+                                                                                                }`}
+                                                                                        ></span>
+                                                                                </span>
+                                                                        {/if}
+                                                                        <div class="relative h-12 w-12 shrink-0 overflow-visible">
                                                                                 <button
                                                                                         class={`relative flex h-full w-full transform items-center justify-center overflow-visible rounded-xl border border-[var(--stroke)] bg-[var(--panel-strong)] transition-all duration-150 hover:-translate-y-0.5 hover:scale-105 hover:bg-[var(--panel)] hover:ring-2 hover:ring-[var(--brand)] hover:ring-inset focus-visible:outline-none ${
                                                                                                 isGuildSelected(nestedGuild.guildId)
