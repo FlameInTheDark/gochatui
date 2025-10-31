@@ -587,7 +587,7 @@
 </script>
 
 <div
-	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)] p-2"
+        class="flex h-full w-[var(--col1)] flex-col items-center gap-2 border-r border-[var(--stroke)] p-2"
 >
         <div class="group relative flex w-full justify-center overflow-visible">
                 <div class="relative h-12 w-12 overflow-visible">
@@ -627,9 +627,9 @@
                         {/if}
                 </div>
         </div>
-	<div
-		class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-x-visible overflow-y-auto pt-1"
-	>
+        <div
+                class="scroll-area server-scroll flex flex-1 flex-col gap-2 overflow-y-auto pt-1"
+        >
 		<div
 			class={`h-2 w-full rounded bg-[var(--brand)] transition-opacity ${
 				topDropIndex === 0 ? 'opacity-80' : 'opacity-0'
