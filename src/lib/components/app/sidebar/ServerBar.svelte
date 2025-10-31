@@ -64,7 +64,7 @@
         const SERVER_MENTION_INDICATOR_CLASSES = SERVER_MENTION_BADGE_CLASSES;
         const FOLDER_MENTION_INDICATOR_CLASSES = FOLDER_MENTION_BADGE_CLASSES;
         const UNREAD_INDICATOR_POSITION_CLASSES =
-                'pointer-events-none absolute left-0 top-1/2 z-40 flex -translate-y-1/2 transform justify-center transition-all duration-150';
+                'pointer-events-none absolute top-1/2 z-40 flex -translate-y-1/2 transform justify-center transition-all duration-150';
         const FOLDER_UNREAD_INDICATOR_POSITION_CLASSES = UNREAD_INDICATOR_POSITION_CLASSES;
 
 	type DisplayGuild = {
@@ -590,17 +590,17 @@
         class="flex h-full w-[var(--col1)] flex-col items-center gap-2 border-r border-[var(--stroke)] p-2"
         style:--sidebar-padding="0.5rem"
         style:--server-scroll-padding="0.75rem"
-        style:--server-indicator-offset="calc(var(--sidebar-padding) + var(--server-scroll-padding))"
+        style:--server-indicator-track="calc(0rem - (var(--sidebar-padding) + var(--server-scroll-padding)))"
         style:--folder-expanded-padding="0.5rem"
         style:--folder-border-width="1px"
-        style:--nested-indicator-offset="calc(var(--server-indicator-offset) + var(--folder-expanded-padding) + var(--folder-border-width))"
+        style:--nested-indicator-track="calc(var(--server-indicator-track) - var(--folder-expanded-padding) - var(--folder-border-width))"
 >
         <div class="group/home relative flex w-full justify-center overflow-visible px-3">
                 {#if homeMentionCount === 0}
                         <span
                                 aria-hidden="true"
                                 class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                style="left: calc(var(--server-indicator-offset, 0rem) * -1);"
+                                style="left: var(--server-indicator-track);"
                         >
                                 <span
                                         class={`${UNREAD_INDICATOR_CLASSES} group-hover/home:h-7 group-hover/home:w-2 group-hover/home:rounded-lg group-hover/home:shadow-[0_0_0_2px_var(--panel-strong)] ${
@@ -658,7 +658,7 @@
                                                 <span
                                                         aria-hidden="true"
                                                         class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                                        style="left: calc(var(--server-indicator-offset, 0rem) * -1);"
+                                                        style="left: var(--server-indicator-track);"
                                                 >
                                                         <span
                                                                 class={`${UNREAD_INDICATOR_CLASSES} group-hover/server:h-7 group-hover/server:w-2 group-hover/server:rounded-lg group-hover/server:shadow-[0_0_0_2px_var(--panel-strong)] ${
@@ -739,7 +739,7 @@
                                                         <span
                                                                 aria-hidden="true"
                                                                 class={FOLDER_UNREAD_INDICATOR_POSITION_CLASSES}
-                                                                style="left: calc(var(--server-indicator-offset, 0rem) * -1);"
+                                                                style="left: var(--server-indicator-track);"
                                                         >
                                                                 <span
                                                                         class={`${FOLDER_UNREAD_INDICATOR_CLASSES} group-hover/folder:h-7 group-hover/folder:w-2 group-hover/folder:rounded-lg group-hover/folder:shadow-[0_0_0_2px_var(--panel-strong)] ${
@@ -855,7 +855,7 @@
                                                                                 <span
                                                                                         aria-hidden="true"
                                                                                         class={UNREAD_INDICATOR_POSITION_CLASSES}
-                                                                                        style="left: calc(var(--nested-indicator-offset, 0rem) * -1);"
+                                                                                        style="left: var(--nested-indicator-track);"
                                                                                 >
                                                                                         <span
                                                                                                 class={`${UNREAD_INDICATOR_CLASSES} group-hover/nested:h-7 group-hover/nested:w-2 group-hover/nested:rounded-lg group-hover/nested:shadow-[0_0_0_2px_var(--panel-strong)] ${
