@@ -56,7 +56,8 @@
 	const unreadSummary = guildUnreadSummary;
 	const mentionSummary = guildMentionSummary;
 	const view = activeView;
-	const homeMentionCount = $derived.by(() => userHomeMentionCount());
+        const homeMentionCount = $derived.by(() => userHomeMentionCount());
+        const homeHasUnread = $derived.by(() => userHomeHasUnread());
 
 	const UNREAD_INDICATOR_CLASSES = SERVER_UNREAD_BADGE_CLASSES;
 	const FOLDER_UNREAD_INDICATOR_CLASSES = FOLDER_UNREAD_BADGE_CLASSES;
@@ -588,8 +589,7 @@
 <div
 	class="flex h-full w-[var(--col1)] flex-col items-center gap-2 overflow-x-visible overflow-y-hidden border-r border-[var(--stroke)] p-2"
 >
-	<div class="group relative flex w-full justify-center overflow-visible">
-		{@const homeHasUnread = userHomeHasUnread()}
+        <div class="group relative flex w-full justify-center overflow-visible">
 		{#if homeMentionCount === 0}
 			<span aria-hidden="true" class={UNREAD_INDICATOR_POSITION_CLASSES}>
 				<span
